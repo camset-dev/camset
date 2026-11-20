@@ -299,7 +299,13 @@
    "help": "The frame rate S&Q Motion captures at: higher than the recording frame rate gives slow motion, lower gives quick motion."
   },
   "global:0x024e": {
-   "help": "The bit rate, colour sampling and bit depth of XAVC HS 4K in S&Q Motion: higher bit rates give better quality and larger files."
+   "help": "The bit rate, colour sampling and bit depth of XAVC HS 4K at 60p in S&Q Motion: higher bit rates give better quality and larger files."
+  },
+  "global:0x0250": {
+   "help": "The bit rate, colour sampling and bit depth of XAVC HS 4K at 24p in S&Q Motion: higher bit rates give better quality and larger files."
+  },
+  "global:0x0252": {
+   "help": "The bit rate, colour sampling and bit depth of XAVC HS 4K at 120p in S&Q Motion: higher bit rates give better quality and larger files."
   },
   "global:0x0254": {
    "help": "The bit rate, colour sampling and bit depth of XAVC S 4K at 60p in S&Q Motion: higher bit rates give better quality and larger files."
@@ -314,7 +320,16 @@
    "help": "The bit rate, colour sampling and bit depth of XAVC S 4K at 120p in S&Q Motion: higher bit rates give better quality and larger files."
   },
   "global:0x025c": {
-   "help": "The bit rate, colour sampling and bit depth of XAVC S HD in S&Q Motion: higher bit rates give better quality and larger files."
+   "help": "The bit rate, colour sampling and bit depth of XAVC S HD at 60p in S&Q Motion: higher bit rates give better quality and larger files."
+  },
+  "global:0x025e": {
+   "help": "The bit rate, colour sampling and bit depth of XAVC S HD at 30p in S&Q Motion: higher bit rates give better quality and larger files."
+  },
+  "global:0x0260": {
+   "help": "The bit rate, colour sampling and bit depth of XAVC S HD at 24p in S&Q Motion: higher bit rates give better quality and larger files."
+  },
+  "global:0x0262": {
+   "help": "The bit rate, colour sampling and bit depth of XAVC S HD at 120p in S&Q Motion: higher bit rates give better quality and larger files."
   },
   "global:0x0280": {
    "help": "Records a small, low bit-rate copy of each movie beside it, for quick editing."
@@ -6037,7 +6052,7 @@
    "help": "The bit rate and colour sampling of time-lapse movies."
   },
   "global:0x116a": {
-   "help": "In movies, crops and stabilises further to hold the framing steady, for example at long focal lengths."
+   "help": "In movies, crops the frame to keep a subject you touch and track at one place in the picture, as if the framing were held steady. Needs Touch Operation On."
   },
   "global:0x116e": {
    "help": "In movies, crops and follows a recognised subject by itself, keeping it well placed in the frame."
@@ -6059,6 +6074,9 @@
   },
   "global:0x117c": {
    "help": "In movies, whether a frame is drawn around a recognised subject."
+  },
+  "global:0x1188": {
+   "help": "With Framing Stabilizer On, where the tracked subject is held: at the centre of the frame (Center) or where you touched it (Manual)."
   },
   "global:0x1195": {
    "help": "With Touch Focus, whether a touch also sets the exposure for the touched spot (AE ON)."

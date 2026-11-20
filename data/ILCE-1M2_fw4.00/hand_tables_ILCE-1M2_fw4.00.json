@@ -244,6 +244,17 @@
     },
     "global:0x0256": {"name": "Record Setting (S&Q, XAVC S 4K, 30p)"},
     "global:0x0254": {"name": "Record Setting (S&Q, XAVC S 4K, 60p)"},
+    "global:0x024e": {"name": "Record Setting (S&Q, XAVC HS 4K, 60p)"},
+    "global:0x025c": {"name": "Record Setting (S&Q, XAVC S HD, 60p)"},
+    "global:0x116a": {
+      "name": "Framing Stabilizer",
+      "note": "On 0, Off 1; the On option's second choice, On: Center or On: Manual, is 0x1188. Greyed while Touch Operation (0x0470) is Off: it opens once Touch Operation is On.",
+      "inactive_when": {"record": 1136, "name": "Touch Operation", "values": [2], "unlock": 0, "unlock_label": "On"}
+    },
+    "global:0x1188": {
+      "name": "Framing Stabilizer: subject position",
+      "note": "The second choice of Framing Stabilizer's On option (0x116a): Center 0, the tracked subject kept at the middle of the frame, or Manual 1, kept where it was touched. A choice, not a flag that stays: On: Center after On: Manual writes 0 again."
+    },
     "global:0x020e": {"name": "Record Setting (XAVC HS 8K, 30p)"},
     "global:0x0212": {"name": "Record Setting (XAVC HS 4K, 60p)"},
     "global:0x0218": {"name": "Record Setting (XAVC S 4K, 60p)"},
@@ -775,6 +786,13 @@
       "values": [[2, "Empty"], [4, "Registered"]],
       "note": "2 in a slot never registered (as Initialize leaves it); registering the slot in any family writes 4. Sets 1-3 are the Stills slots 1-3, 4-6 Movie's, 7-9 S&Q Motion's, 10-12 Time-lapse's; M1-M4 go to the card, not this file. A settings file does not set it."
     },
+    "global:0x023c": {
+      "like": "global:0x1126",
+      "name": "Unknown (follows NTSC/PAL)",
+      "values": [[3, "PAL"], [4, "NTSC"]],
+      "note": "4 under NTSC and 3 under PAL: it follows NTSC/PAL Selector, and no menu row is its own. What it holds is not known. The memory sets' record of this number is another setting, Memory slot filled.",
+      "live_only": true
+    },
     "set:0x11ab": {
       "like": "set:0x0b8d",
       "name": "Memory slot registration family",
@@ -1096,8 +1114,13 @@
     "global:0x0de8": {"like": "global:0x0379", "name": "Zebra Level > Custom 2 > Lower Limit"},
     "global:0x0dea": {"like": "global:0x0379", "name": "Zebra Level > Custom 2 > Standard"},
     "global:0x0dec": {"like": "global:0x0379", "name": "Zebra Level > Custom 2 > Range"},
-    "global:0x024e": {"like": "global:0x0212", "name": "Record Setting (S&Q, XAVC HS 4K)"},
-    "global:0x025c": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD)"},
+    "global:0x024e": {"like": "global:0x0212", "name": "Record Setting (S&Q, XAVC HS 4K, 60p)"},
+    "global:0x025c": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD, 60p)"},
+    "global:0x0250": {"like": "global:0x0212", "name": "Record Setting (S&Q, XAVC HS 4K, 24p)"},
+    "global:0x0252": {"like": "global:0x0212", "name": "Record Setting (S&Q, XAVC HS 4K, 120p)"},
+    "global:0x025e": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD, 30p)"},
+    "global:0x0260": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD, 24p)"},
+    "global:0x0262": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD, 120p)"},
     "global:0x0258": {"like": "global:0x0256", "name": "Record Setting (S&Q, XAVC S 4K, 24p)"},
     "global:0x025a": {"like": "global:0x0256", "name": "Record Setting (S&Q, XAVC S 4K, 120p)"},
     "global:0x0210": {"like": "global:0x020e", "name": "Record Setting (XAVC HS 8K, 24p)"},
@@ -1125,7 +1148,8 @@
     "global:0x01de": {"like": "global:0x01ea", "name": "JPEG/HEIF Quality (one slot)"},
     "global:0x01e0": {"like": "global:0x01ec", "name": "JPEG/HEIF Quality (one slot, copy)"},
     "global:0x01e2": {"like": "global:0x01ee", "name": "JPEG/HEIF Image Size (one slot)"},
-    "global:0x01e4": {"like": "global:0x01f0", "name": "JPEG/HEIF Image Size (one slot, copy)"}
+    "global:0x01e4": {"like": "global:0x01f0", "name": "JPEG/HEIF Image Size (one slot, copy)"},
+    "global:0x1188": {"like": "global:0x116a", "name": "Framing Stabilizer: subject position"}
   },
   "NEW_WHOLE_LABELS": [
     "global:0x1141",
@@ -1148,6 +1172,11 @@
     "global:0x0258",
     "global:0x025a",
     "global:0x025c",
+    "global:0x0250",
+    "global:0x0252",
+    "global:0x025e",
+    "global:0x0260",
+    "global:0x0262",
     "global:0x0e10",
     "global:0x0e14",
     "global:0x12b0",
@@ -3480,7 +3509,8 @@
   ],
   "VIDEO_SYSTEM_VALUES": {
     "global:0x02b3": {"NTSC": [0, 2, 4, 6, 8], "PAL": [7]},
-    "global:0x0202": {"NTSC": [2, 4], "PAL": []}
+    "global:0x0202": {"NTSC": [2, 4], "PAL": []},
+    "global:0x023c": {"NTSC": [4], "PAL": [3]}
   },
   "COPIES": {
     "global:0x04e9[0]": ["global:0x04ff[0]", "global:0x0515[0]"],
@@ -3806,6 +3836,11 @@
     "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": true, "upper_moves_lower": true}
   },
   "UNPROVED": {
+    "global:0x023c": [
+      "state",
+      null,
+      "A value the camera keeps for itself, not a menu setting: it follows NTSC/PAL Selector, 4 under NTSC and 3 under PAL."
+    ],
     "global:0x1672": [
       "state",
       null,
@@ -4001,7 +4036,9 @@
     "Recording Media Slot \\d+": "Recording Media on one slot",
     "Recording Media (?:Sort|Simult\\.) Recording": "Recording Media on both slots",
     "S&Q mode \\((?:Time-lapse|S&Q Motion)\\)": "S&Q mode",
-    "Switch V/H AF Area Off, (?:Spot size|Custom slot) last left: [^\\]]*": "Switch V/H AF Area Off"
+    "Switch V/H AF Area Off, (?:Spot size|Custom slot) last left: [^\\]]*": "Switch V/H AF Area Off",
+    "Recording Media \\(Movie\\)": "Recording Media#1",
+    "S&Q Settings > S&Q Record Setting": "S&Q Settings > Record Setting"
   },
   "ORIENTED": "\\[Switch V/H AF Area = [^,\\]]+, camera (level|grip down|grip up)(?:, Vertical Display (?:On|Off))?\\]$"
 }

@@ -59,6 +59,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's definition takes the evening's proofs of 2026-11-19:** S&Q's Record Setting for XAVC HS 4K at 24p and
+  120p and XAVC S HD at 30p, 24p and 120p, each a record of its own (the two named before for every rate are the 60p
+  ones), and Framing Stabilizer's On: Center or On: Manual, the row greyed while Touch Operation is Off. A record that
+  follows NTSC/PAL carries a reason in place of a proof, and the movie Recording Media row, Bracket Type's options and
+  Playback's Aspect Marker Disp. take the camera's own places.
 - **The a1 II's definition takes the afternoon's proofs of 2026-11-19:** Bracket Type and its options' own records
   (proved with the drive mode dial on BRK), the movie rows of Recording Media and of Dial/Wheel's Separate M mode box,
   single-slot JPEG/HEIF Quality and Image Size, and Playback's Aspect Marker Level, until now an unknown record. Focus

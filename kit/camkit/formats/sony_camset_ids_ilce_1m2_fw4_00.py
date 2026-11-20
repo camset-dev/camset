@@ -106,11 +106,16 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         rec_frame_rate_0246 = 582
         frame_rate = 584
         record_setting_024e = 590
+        record_setting_0250 = 592
+        record_setting_0252 = 594
         record_setting_0254 = 596
         record_setting_0256 = 598
         record_setting_0258 = 600
         record_setting_025a = 602
         record_setting_025c = 604
+        record_setting_025e = 606
+        record_setting_0260 = 608
+        record_setting_0262 = 610
         proxy_recording = 640
         proxy_file_format = 642
         proxy_rec_settings = 644
@@ -816,6 +821,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         face_eye_frame_display = 4474
         sbj_recog_frm_disp = 4476
         shoot_mode_sel_screen = 4479
+        framing_stabilizer_subject_position = 4488
         s_q_shoot_mode_motion_or_time_lapse = 4491
         touch_focus_ae = 4501
         touch_tracking_ae = 4502

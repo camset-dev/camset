@@ -349,7 +349,7 @@ enums:
         live settings; 1 of 1 settings on it proved on the camera.'
     0x023c:
       id: memory_slot_filled
-      doc: 'Memory slot filled [Shooting > Shooting Mode]: 2 Empty, 4 Registered. memory sets; 1 of 1 settings on
+      doc: 'Unknown (follows NTSC/PAL) [Setup > Other settings]: 3 PAL, 4 NTSC. live settings; 0 of 1 settings on
         it proved on the camera.'
     0x023e:
       id: rec_frame_rate_023e
@@ -376,9 +376,18 @@ enums:
       doc: Frame Rate (S&Q) [Shooting > Image Quality/Rec]. live settings; 1 of 1 settings on it proved on the camera.
     0x024e:
       id: record_setting_024e
-      doc: 'Record Setting (S&Q, XAVC HS 4K) [Shooting > Image Quality/Rec]: 8 200M 4:2:2 10bit, 12 150M 4:2:0 10bit,
-        16 100M 4:2:2 10bit, 21 75M 4:2:0 10bit, 26 45M 4:2:0 10bit. live settings; 1 of 1 settings on it proved
-        on the camera.'
+      doc: 'Record Setting (S&Q, XAVC HS 4K, 60p) [Shooting > Image Quality/Rec]: 8 200M 4:2:2 10bit, 12 150M 4:2:0
+        10bit, 16 100M 4:2:2 10bit, 21 75M 4:2:0 10bit, 26 45M 4:2:0 10bit. live settings; 1 of 1 settings on it
+        proved on the camera.'
+    0x0250:
+      id: record_setting_0250
+      doc: 'Record Setting (S&Q, XAVC HS 4K, 24p) [Shooting > Image Quality/Rec]: 16 100M 4:2:2 10bit, 17 100M 4:2:0
+        10bit, 23 50M 4:2:2 10bit, 24 50M 4:2:0 10bit, 28 30M 4:2:0 10bit. live settings; 1 of 1 settings on it
+        proved on the camera.'
+    0x0252:
+      id: record_setting_0252
+      doc: 'Record Setting (S&Q, XAVC HS 4K, 120p) [Shooting > Image Quality/Rec]: 4 280M 4:2:2 10bit, 9 200M 4:2:0
+        10bit. live settings; 1 of 1 settings on it proved on the camera.'
     0x0254:
       id: record_setting_0254
       doc: 'Record Setting (S&Q, XAVC S 4K, 60p) [Shooting > Image Quality/Rec]: 8 200M 4:2:2 10bit, 13 150M 4:2:0
@@ -397,8 +406,20 @@ enums:
         8bit. live settings; 1 of 1 settings on it proved on the camera.'
     0x025c:
       id: record_setting_025c
-      doc: 'Record Setting (S&Q, XAVC S HD) [Shooting > Image Quality/Rec]: 23 50M 4:2:2 10bit, 25 50M 4:2:0 8bit,
-        29 25M 4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+      doc: 'Record Setting (S&Q, XAVC S HD, 60p) [Shooting > Image Quality/Rec]: 23 50M 4:2:2 10bit, 25 50M 4:2:0
+        8bit, 29 25M 4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+    0x025e:
+      id: record_setting_025e
+      doc: 'Record Setting (S&Q, XAVC S HD, 30p) [Shooting > Image Quality/Rec]: 23 50M 4:2:2 10bit, 25 50M 4:2:0
+        8bit, 31 16M 4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+    0x0260:
+      id: record_setting_0260
+      doc: 'Record Setting (S&Q, XAVC S HD, 24p) [Shooting > Image Quality/Rec]: 23 50M 4:2:2 10bit, 25 50M 4:2:0
+        8bit. live settings; 1 of 1 settings on it proved on the camera.'
+    0x0262:
+      id: record_setting_0262
+      doc: 'Record Setting (S&Q, XAVC S HD, 120p) [Shooting > Image Quality/Rec]: 18 100M 4:2:0 8bit, 22 60M 4:2:0
+        8bit. live settings; 1 of 1 settings on it proved on the camera.'
     0x0280:
       id: proxy_recording
       doc: 'Proxy Recording [Shooting > Image Quality/Rec]: 0 On, 1 Off. live settings; 1 of 1 settings on it proved
@@ -3151,6 +3172,10 @@ enums:
       id: shoot_mode_sel_screen
       doc: 'Shoot Mode Sel. Screen [Setup > Display Option]: 0 Display, 1 Not Displayed. live settings; 1 of 1 settings
         on it proved on the camera.'
+    0x1188:
+      id: framing_stabilizer_subject_position
+      doc: 'Framing Stabilizer: subject position [Shooting > Image Stabilization]: 0 Center, 1 Manual. live settings;
+        1 of 1 settings on it proved on the camera.'
     0x118b:
       id: s_q_shoot_mode_motion_or_time_lapse
       doc: 'S&Q Shoot Mode: Motion or Time-lapse [Setup > Other settings]: 0 S&Q Motion, 1 Time-lapse. live settings;
