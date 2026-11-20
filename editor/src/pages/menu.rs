@@ -2168,6 +2168,38 @@ pub(crate) mod facts_tests {
         done(&d2, &u2);
     }
 
+    /// Page file B9: one search path for the window and the page: the same hits in the same order, each titled as the
+    /// window titles it (the definition's name) under the same Where words with the same separator, for three searches
+    /// without menus and in each of the stub's menus. The window's side is what its search page draws.
+    #[test]
+    fn the_pages_search_is_the_windows() {
+        for stub in [crate::test_support::strip_menus as fn(&mut serde_json::Value), crate::test_support::stub_menus] {
+            let (mut app, dir, user) = sample_app("menus_search_one", Some(stub));
+            let menus: Vec<Option<String>> = if app.menus().is_empty() { vec![None] } else { app.menus().iter().map(|m| Some(m.name.clone())).collect() };
+            let mut w = Win::new();
+            for menu in &menus {
+                if let Some(m) = menu { app.set_menu(m); }
+                for q in ["iso", "white balance", "focus area"] {
+                    (app.search, app.view) = (q.to_string(), View::Search);
+                    let drawn = w.drawn(&mut app);
+                    let n: usize = drawn.iter().find_map(|t| t.strip_suffix(" setting(s). Click one to open it in its menu.").and_then(|n| n.parse().ok())).expect("the window's count");
+                    let mut body = serde_json::json!({ "target": 0, "q": q });
+                    if let Some(m) = menu { body["menu"] = serde_json::json!(m); }
+                    let a = crate::web::tests::answer(&mut app, "tab", body);
+                    let j: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+                    let page: Vec<String> = j["groups"].as_array().unwrap().iter()
+                        .flat_map(|g| g["rows"].as_array().unwrap().iter().flat_map(|r| [g["name"].as_str().unwrap().to_string(), r["name"].as_str().unwrap().to_string()]).collect::<Vec<_>>()).collect();
+                    assert_eq!(page.len(), 2 * n, "{menu:?} {q}: as many hits as the window's");
+                    let mut at = drawn.iter();
+                    for want in &page {
+                        assert!(at.any(|t| t == want), "{menu:?} {q}: {want} where the window draws it, in its order");
+                    }
+                }
+            }
+            done(&dir, &user);
+        }
+    }
+
     /// Integration review finding 4: in a camera menu the page's compare CSV, its column picker and its Editing row are
     /// the window's for that menu: the CSV the window exports for the menu and entry (`csv_text_in`), the picker the
     /// window's (`picker_sets` with the columns shown), and, editing a Movie memory with Still's menu picked, the
@@ -2449,6 +2481,14 @@ pub(crate) mod facts_tests {
             for _ in 0..6 {
                 let _ = self.run(app, vec![]);
             }
+        }
+
+        /// The texts the window draws, settled (two frames), in the order it draws them.
+        fn drawn(&mut self, app: &mut App) -> Vec<String> {
+            let _ = self.run(app, vec![]);
+            let frame = &mut self.frame;
+            let out = self.ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(app, ctx, frame));
+            crate::test_support::texts(&out.shapes)
         }
 
         /// An arrow key pressed, then the window settled.

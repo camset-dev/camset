@@ -1027,7 +1027,8 @@ impl App {
         let q = q.trim().to_lowercase();
         match (tab, menu) {
             (Some(t), _) if q.is_empty() => self.web_entry_groups(target, menu, t),
-            (_, Some(m)) if !q.is_empty() => self.web_search(target, m, &q),
+            // a search: the window's (`search_hits_in`), with menus or without
+            _ if !q.is_empty() => self.web_search(target, menu, &q),
             _ => self.web_tab_any(target, tab, &q),
         }
     }
@@ -1084,36 +1085,30 @@ impl App {
     /// in every menu, each once, in the menu a click on it opens for set `target` while the page shows menu `now`
     /// (`search_hits_in`, in its order), as that menu's row shows it, under its menu, tab and group ("Movie › Shooting ›
     /// Audio Recording"); each row says where it opens (`open`: `web_place`, and `where_in`'s words).
-    fn web_search(&self, target: usize, now: &str, q: &str) -> Value {
-        let mut groups: Vec<(String, String, String, Vec<Vec<Setting>>)> = Vec::new();
-        let mut seen: std::collections::HashSet<(String, String)> = Default::default();
-        let mut open: HashMap<String, Value> = HashMap::new();
-        for (s, m) in self.search_hits_in(target, Some(now), q).into_iter().take(MAX_HITS) {
-            let m = m.unwrap_or_else(|| now.to_string());
-            let shown = self.listed_record(&s, target, &m);
-            // a hit the set edited does not hold (a live setting the memories do not keep), or a row listed already
-            let Some(linked) = self.web_linked_in(target, Some(&m), &shown.key) else { continue };
-            if !seen.insert((m.clone(), linked[0].key.clone())) {
-                continue;
-            }
-            let mut place = self.web_place(&s, target, Some(&m));
+    fn web_search(&self, target: usize, now: Option<&str>, q: &str) -> Value {
+        // the window's search page, hit by hit in its order (`search_hits_in`): each hit one row, titled as the window
+        // titles it (the definition's name), under the words the window gives its place (`where_in`, ">" between
+        // them), consecutive hits of one place under one heading; its row the one its menu shows, as that menu lays it
+        // out, with the link a click on it follows (`web_place`)
+        let mut groups: Vec<(String, String, Option<String>, Vec<Value>)> = Vec::new();
+        for (s, m) in self.search_hits_in(target, now, q).into_iter().take(MAX_HITS) {
+            let m = m.or_else(|| now.map(str::to_string));
+            let shown = match &m { Some(m) => self.listed_record(&s, target, m), None => s.clone() };
+            let linked = match &m { Some(m) => self.web_linked_in(target, Some(m), &shown.key), None => self.web_linked(target, &s.key) }.unwrap_or_else(|| vec![shown.clone()]);
+            let mut row = self.web_row_in(target, m.as_deref(), &linked);
+            row["name"] = json!(s.name);
+            let mut place = self.web_place(&s, target, m.as_deref());
             place.insert("key".into(), json!(s.key));
-            place.insert("where".into(), json!(self.where_in(&s, target, Some(&m))));
-            open.insert(format!("{m}\u{1f}{}", linked[0].key), Value::Object(place));
-            let tab = self.layout_tab(&linked[0]).to_string();
-            let title = format!("{m} › {tab} › {}", self.layout_group(&linked[0]));
-            match groups.iter_mut().find(|g| g.0 == title) {
-                Some(g) => g.3.push(linked),
-                None => groups.push((title, tab, m, vec![linked])),
+            let at = self.where_in(&s, target, m.as_deref());
+            place.insert("where".into(), json!(at));
+            row["open"] = Value::Object(place);
+            match groups.last_mut().filter(|g| g.0 == at) {
+                Some(g) => g.3.push(row),
+                None => groups.push((at, self.layout_tab(&shown).to_string(), m, vec![row])),
             }
         }
         let groups: Vec<Value> = groups.into_iter().map(|(name, tab, m, rows)| json!({
-            "name": name, "color": css_color(tab_color(&self.schema.camera, &tab)), "tab": tab, "menu": m,
-            "rows": rows.iter().map(|r| {
-                let mut row = self.web_row_in(target, Some(&m), r);
-                row["open"] = open.remove(&format!("{m}\u{1f}{}", r[0].key)).unwrap_or(Value::Null);
-                row
-            }).collect::<Vec<_>>(),
+            "name": name, "color": css_color(tab_color(&self.schema.camera, &tab)), "tab": tab, "menu": m, "rows": rows,
         })).collect();
         json!({ "groups": groups, "editable": self.editable(), "places": self.places(), "flat": self.prefs.flat_list })
     }
@@ -3978,7 +3973,8 @@ pub(crate) mod tests {
         let j = ask(&mut app, "tab", json!({ "target": 0, "q": word }));
         for g in j["groups"].as_array().unwrap() {
             let tab = g["tab"].as_str().unwrap();
-            assert!(g["name"].as_str().unwrap().starts_with(&format!("{tab} › ")));
+            // a search's groups are headed with the window's words for the place, ">" between them (page file, B9)
+            assert!(g["name"].as_str().unwrap().contains(" > ") && !g["name"].as_str().unwrap().contains('›'), "{}", g["name"]);
             assert_eq!(g["color"], css_color(tab_color(&app.schema.camera, tab)).as_str());
         }
     }
@@ -5544,7 +5540,8 @@ pub(crate) mod tests {
                 .flat_map(|g| g["rows"].as_array().unwrap().iter().map(|r| (g["menu"].as_str().unwrap().to_string(), r.clone())).collect::<Vec<_>>()).collect();
             assert!(!rows.is_empty(), "{q}");
             for g in j["groups"].as_array().unwrap() {
-                assert!(g["name"].as_str().unwrap().starts_with(&format!("{} › ", g["menu"].as_str().unwrap())), "{}", g["name"]);
+                // the window's words for the place, ">" between them (page file, B9)
+                assert!(g["name"].as_str().unwrap().starts_with(&format!("{} > ", g["menu"].as_str().unwrap())), "{}", g["name"]);
             }
             for (m, r) in &rows {
                 let open = &r["open"];
@@ -5554,12 +5551,8 @@ pub(crate) mod tests {
                 let (_, tab, group) = app.jump_place(s, 0, Some(&now));
                 assert_eq!((open["open_tab"].as_str(), open["open_group"].as_str()), (Some(tab.as_str()), Some(group.as_str())));
             }
-            // a row stands for every hit it shows (its setting's, or a copy shown in it), once
-            let mut keys: Vec<(String, String)> = rows.iter().map(|(m, r)| (m.clone(), r["key"].as_str().unwrap().to_string())).collect();
-            let n = keys.len();
-            keys.sort();
-            keys.dedup();
-            assert_eq!(keys.len(), n, "{q}: each row once");
+            // one row per hit, as the window's search page lists them (page file, B9)
+            assert_eq!(rows.len(), hits.len(), "{q}: one row per hit");
         }
         done(&dir, &user);
     }
