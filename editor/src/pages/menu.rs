@@ -42,8 +42,14 @@ pub(crate) struct MenuCache {
     listed: Vec<(MenuKey, std::rc::Rc<Listed>)>,
     ranks: Vec<(MenuKey, MenuRank)>,
     /// The groups each menu's rows hold (`App::menu_groups`), by definition generation and menu.
-    groups: Vec<((u64, String), std::rc::Rc<std::collections::HashSet<(String, String)>>)>,
+    groups: Vec<((u64, String), MenuGroups)>,
 }
+
+/// The (tab, group) of every row one menu places a setting on (`App::menu_groups`).
+type MenuGroups = std::rc::Rc<std::collections::HashSet<(String, String)>>;
+
+/// Where a row sits in a menu, to tell a row alone on its place: its area, labels, sort key, tab and group.
+type PlaceKey = (String, Vec<String>, Vec<i64>, String, String);
 
 /// How many listings of menus are kept (three menus, two ways of picking records, a little room).
 const MENUS_KEPT: usize = 12;
@@ -727,7 +733,8 @@ impl App {
             return list.into_iter().map(|s| (s, None)).collect();
         }
         let menu_idx = |m: &Option<String>| m.as_ref().and_then(|m| self.menus().iter().position(|x| &x.name == m)).unwrap_or(usize::MAX);
-        let mut hits: Vec<((usize, usize, i64), (Setting, Option<String>))> = list.into_iter().map(|s| {
+        type Hit = ((usize, usize, i64), (Setting, Option<String>));
+        let mut hits: Vec<Hit> = list.into_iter().map(|s| {
             let menu = self.jump_place(&s, target, now).0;
             let (tab, at) = match &menu {
                 Some(m) => {
@@ -1005,7 +1012,7 @@ impl App {
 
     /// The (tab, group) of every row menu `menu` places a setting on, as the camera's layout has them
     /// (`menu_rows::camera_tab`, `camera_group`), and of each such setting's own: where a setting placed nowhere joins it.
-    fn menu_groups(&self, menu: &str) -> std::rc::Rc<std::collections::HashSet<(String, String)>> {
+    fn menu_groups(&self, menu: &str) -> MenuGroups {
         let key = (self.schema_gen, menu.to_string());
         if let Some((_, g)) = self.menus_cache.borrow().groups.iter().find(|(k, _)| *k == key) {
             return g.clone();
@@ -1140,7 +1147,7 @@ impl App {
             // a row alone on its place in the camera's menu (among the live settings', or one memory set's, that are
             // not Expert mode's), titled as the camera draws it
             let place = |s: &Setting| (s.area.clone(), s.row.clone(), s.row_at.clone(), menu_rows::camera_tab(s).to_string(), menu_rows::camera_group(s).to_string());
-            let mut on: std::collections::HashMap<(String, Vec<String>, Vec<i64>, String, String), usize> = Default::default();
+            let mut on: std::collections::HashMap<PlaceKey, usize> = Default::default();
             for s in rows.iter().filter(|s| s.placed() && s.under_option.is_none() && !Self::expert_only(s)) {
                 *on.entry(place(s)).or_default() += 1;
             }
