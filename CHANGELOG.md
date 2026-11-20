@@ -204,6 +204,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   maps, the menu tree, each setting's place, the walk patterns, the definition's proof rows, the report, the viewer
   and the ledger), never a safety check, which judges the label the camera draws. Any other entry is refused, the runs'
   lines keep their names, and no camera's file holds the table yet.
+- **`kit/provers/greyrow_run.py --in MODE --row ROW` asks the camera why a menu row is grey:** its Help first, and only
+  where the guide says no more than that the function is disabled, one Right on the row for the camera's notice, then
+  MENU, never on a row the kit may not open, never twice in a run, never Enter. Its lines keep the blocker the notice
+  names, the row label alone, which a hand table's `inactive_when` takes with that row's record in the run's start file.
 - **`drive.py` and `crawl_run.py` start and end through the kit's one session, as the provers do,** and a test fails
   any runner that downloads its start file or uploads a file outside it but the few it names with why. With HDMI eyes
   and a working feed, their check after putting the start file back reconnects once the camera is back from its restart,
