@@ -606,9 +606,12 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             return cam.frame.path.name, axis_title(cam), later(vlm_option, cam)
         chosen, shown, seen_vlm = enter_chosen(cam, (cam.frame.path.name, axis_title(cam), later(vlm_option, cam)),
                                                axis_now)
-        # the screen after OK (proving.commit.after_ok): a refusal or a notice closed with MENU, the menu closed, or back
-        # on the row; no menu page judged as the page (a carousel's row is a top-level row), no information screen taken
-        got = after_ok(cam, name, back=lambda: same_place(place(cam), row_place), info=False)
+        # the screen after OK, by the list job's step (proving.commit.after_ok): a refusal or a notice closed with MENU,
+        # the menu closed, an information screen not the row left by info_notice_ok's rules as prove_row leaves one (the
+        # cursor taken off its "Don't show this again." box by Down, never Enter on the box; MENU, its OK only where the
+        # camera refuses MENU: Framing Stabilizer = On: Manual, Movie mode, 2026-11-19, which info=False failed), or
+        # back on the row by its place (no menu page judged as the row's page)
+        got = after_ok(cam, name, label=vals[k], back=lambda: same_place(place(cam), row_place))
         notice, refused = got.notice, got.refused
         dat = link.download(f"{path[-1]}-axis-{k}")
         done = time.monotonic()
