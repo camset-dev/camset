@@ -83,6 +83,33 @@ def test_the_icon_takes_at_most_four_characters():
     assert why and row is None
 
 
+FACE = {"label": "Face Priority", "readings": {"label": {"ocr": "i Face Priority", "vllm": "Face Priority"}}}
+NEAR = "AF Face Priority"
+
+
+def test_a_longer_row_whose_label_begins_inside_the_icon_letters_is_refused():
+    """A made-up page: "Face Priority", drawn with an icon, beside "AF Face Priority". The near-namesake's own label
+    begins inside the letters taken for the icon, glued or spaced: never the shorter row (the reviewer's case of
+    2026-11-20; main's icon_behind took the spaced one)."""
+    values = {"face priority": ON_OFF, "af face priority": ON_OFF}
+    for lit in ("sAF Face Priority", "iAF Face Priority Off", "S AF Face Priority On", "i AF Face Priority"):
+        why, row = judged(lit, FACE, values, others={NEAR})
+        assert why and row is None, lit
+    # the row's own icon, glued or spaced, is still the row, the near-namesake known beside it
+    for lit in ("iFace Priority Off", "i Face Priority Off", "S Face Priority On"):
+        assert judged(lit, FACE, values, others={NEAR}) == ("", ("Face Priority",)), lit
+
+
+def test_the_lead_check_keeps_the_rows_own_readings_and_names():
+    """A reading the page model keeps of the row itself, or the definition's name of a cut row, begins where the row
+    does: it never refuses the row (mg_3's two readings with those names known beside them)."""
+    assert judged("SRegist. Face Priority On", REGIST, REGIST_VALUES,
+                  others={"in Regist. Face Priority", "Regist. Face Priority"}) == ("", ("Regist. Face Priority",))
+    assert judged("In Face Priority in Multi Mr On", MULTI, MULTI_VALUES,
+                  others={"Face Priority in Multi Metering", "& Face Priority in Mul..."}) == \
+        ("", ("Face Priority in Mul...",))
+
+
 def test_cut_names_are_the_definitions_names_of_the_rows_the_screen_cuts():
     from runner import cut_names
     doc = {"settings": [

@@ -849,6 +849,23 @@ ICON_CUT = 4                # at most this many characters of the lit text taken
 ELLIPSIS = re.compile(r"\s*(?:\.\.\.|…)$")      # the screen's cut of a label too long for its row ("Face Priority in Mul...")
 
 
+def other_in_lead(text: str, lead: str, label: str, row, others=(), own=()) -> bool:
+    """Whether a name the kit knows another row by (`others`) begins inside the letters taken for the icon in front of
+    the row's label (`lead`, the start of the lit text `text`), compared with spacing left out: that name longer than
+    the row's label `label` and holding it, so "sAF Face Priority" and "S AF Face Priority On" are never the row "Face
+    Priority" where "AF Face Priority" is known (the reviewer's made-up pair, 2026-11-20). A reading the page model keeps
+    of the row itself (`row`) and the row's own names (`own`: the definition's name of a cut row) are not another's."""
+    def flat(t):
+        return re.sub(r"\s+", "", safety.plain(t))
+    full, want, n = flat(text), flat(label), len(flat(lead))
+    mine = {flat(r) for r in (row_readings(row) if isinstance(row, dict) else ())} | {flat(o) for o in own}
+    for other in others:
+        p = flat(other) if isinstance(other, str) else ""
+        if len(p) > len(want) and want in p and p not in mine and any(full[i:].startswith(p) for i in range(n)):
+            return True
+    return False
+
+
 def icon_seen(row, want: str) -> bool:
     """Whether the page model saw its row `row`, labelled `want` (compared plain), drawn with an icon: a reading of it is
     that label behind such an icon read as a stray mark or a letter or two (behind: "in Regist. Face Priority")."""
@@ -894,6 +911,8 @@ def glued_icon(lit: str, label: str, row, others=(), values=None, names=None) ->
                 and (not safety.plain(rest) or safety.plain(rest) in {safety.plain(v) for v in fulls.get(want, ())})):
             continue
         icon = re.sub(r"\s+", "", safety.plain(lead))
+        if other_in_lead(text, lead, label, row, others, fulls):
+            return False
         for other in others:
             p = safety.plain(other) if isinstance(other, str) else ""
             if not p or p == want or p in fulls:
@@ -969,6 +988,8 @@ def icon_behind(lit: str, label: str, row, others=()) -> bool:
     if cut == text or not seen.startswith(head) or seen[len(head):len(head) + 1].isalnum():
         return False
     full, icon = safety.plain(text), safety.plain(text[:len(text) - len(cut)])
+    if other_in_lead(text, text[:len(text) - len(cut)], label, row, others):
+        return False                        # a longer row's label begins inside the icon ("S AF Face Priority On")
     for other in others:
         p = safety.plain(other) if isinstance(other, str) else ""
         if not p or p == want:
