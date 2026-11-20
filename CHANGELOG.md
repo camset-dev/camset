@@ -257,6 +257,17 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **A write from a definition read without its evidence keeps every place, menu tree or not:** a pass that proved a
   few rows no longer takes the row off every other setting. The writer's refusal of a Main tile on an Expert-only
   setting now says why that setting is Expert-only, and what to do about it.
+- **Two rows the camera tells apart by an icon alone read apart in the definition:** a camera's `ROW_ICONS` hand table
+  gives each icon's words, and the row's label becomes "label (words)", such as Setup's "Custom Key/Dial Set. (Still)"
+  and "Custom Key/Dial Set. (Movie)". The a1 II's table names its three such pairs, which its definition takes at the
+  next write.
+- **A row's first word counts as an icon's letters only on evidence:** an option names a row without it only where
+  another reading of that same option left it out, which `menu_tree.py` now keeps in the tree (`drawn_options`), so
+  "Shot Mark" names no "Mark". Rebuild a mode's menu with `menu_tree.py` before the next write, or its checklists name
+  only exactly.
+- **The fewer-menus print leaves out a row a menu opens nothing under:** a row whose Right changed nothing there (the
+  Movie and S&Q menus' Recognition Target targets) holds no rows in that menu. The option-tree audit says a row given
+  by hand is one, never that the camera lists those options flat.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.

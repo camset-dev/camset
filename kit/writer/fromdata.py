@@ -188,7 +188,7 @@ KEPT_PLACES = ("the definition was read without its proof paths (its evidence is
                "setting's place on the camera and the camera's menus stay as it has them, though this pass proves a few")
 
 
-def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = True) -> dict | None:
+def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = True, icons: dict = None) -> dict | None:
     """Each setting's place on the camera, from the camera's menu tree (the Stills menu, and the other shooting modes'
     menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths, or its rows
     given by hand (`hand`: HAND_PLACES, {key: [row paths]}, camkit.placement.with_hand) (camkit.placement, the proof
@@ -198,7 +198,9 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = Tru
     menu list telling records that differ by mode apart). None, so the places stay as they are, for a definition read without its
     evidence (no setting holds its proof paths, proved.menu, which are evidence: camkit.definitions; or `rebuild`
     False: places_rebuilt said so of the definition as read, before the pass gave a few settings proof paths) or with no
-    menu tree on this computer (a fresh clone, CI: the places are what is public of the menus)."""
+    menu tree on this computer (a fresh clone, CI: the places are what is public of the menus).
+    Once every place is found and every menu looked up, a row the camera tells from a row of its label beside it by
+    its icon alone takes that icon's words in its label (`icons`: ROW_ICONS, camkit.placement.with_icons)."""
     if not any("menu" in (s.get("proved") or {}) for s in doc["settings"]):
         return None
     if not rebuild:
@@ -215,6 +217,8 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = Tru
     for k in sorted(set(hand) - set(found)):
         print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
     if not menus:
+        for line in placement.with_icons(doc, tree, found, icons or {}):
+            print(line)
         return found
     why = placement.menus_refusal(tree, menus)
     if why:
@@ -226,6 +230,8 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = Tru
     by = placement.by_menu(doc, tree, menus, boxes, hand, found, guide, modes)
     out = {k: {**v, **by.get(k, {})} for k, v in found.items()}
     say_fewer_menus(placement.fewer_menus(doc, tree, menus, out), [m["name"] for m in menus])
+    for line in placement.with_icons(doc, tree, out, icons or {}, menus):          # last: the tree's labels matched first
+        print(line)
     return out
 
 
@@ -471,7 +477,8 @@ def from_data(doc: dict, rebuild: bool = None) -> dict:
     mirror_names(doc)
     own_help(doc)
     doc["layouts"] = [with_evidence_apart(with_tidy_note(lay)) for lay in doc["layouts"]]
-    found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}, rebuild)
+    found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}, rebuild,
+                   tables.ROW_ICONS)
     if found is None and kept is None:
         kept = menus_named(doc, menus)
     if "camera" in doc:

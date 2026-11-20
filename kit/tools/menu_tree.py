@@ -78,6 +78,33 @@ def crawl_rows(crawl: Path) -> dict:
     return {(r.get("page"), r.get("slot")): camed(r) for r in jsonl.read(crawl / "rows.jsonl")}
 
 
+def crawl_readings(crawl: Path) -> dict:
+    """{path tuple: {an option's label: every reading of it}} from the crawl's options.jsonl (kit/crawl_run.py, read by
+    kit/pass1_labels.py: the label agreed, OCR's, the vision reader's "selected"), each path as the camera draws it
+    (camkit.row_names); none without that file."""
+    out = collections.defaultdict(lambda: collections.defaultdict(set))
+    for r in jsonl.read(crawl / "options.jsonl", bad="skip") if (crawl / "options.jsonl").exists() else []:
+        path, label = r.get("path"), r.get("label")
+        if not isinstance(path, list) or not isinstance(label, str) or not label.strip():
+            continue
+        vlm = r.get("vlm") if isinstance(r.get("vlm"), dict) else {}
+        out[row_names.renamed(path)][label] |= {x for x in (label, r.get("ocr"), vlm.get("selected")) if isinstance(x, str) and x.strip()}
+    return out
+
+
+def drawn_options(opts: list, readings: dict) -> dict:
+    """{option: its label as the camera draws it} for the options whose leading token (at most row_names.ICON_LEAD
+    characters) another reading of the same option left out (`readings`: crawl_readings' for the row): the evidence
+    that the token is an icon's letters ("W Rating", which the vision reader read "Rating"); none on length alone."""
+    out = {}
+    for o in opts:
+        token, _, rest = o.partition(" ")
+        if rest and 0 < len(token) <= row_names.ICON_LEAD and any(placement.norm(x) == placement.norm(rest)
+                                                                    for x in readings.get(o, ())):
+            out[o] = rest
+    return out
+
+
 def crawl_map(crawl: Path) -> dict:
     """{path tuple: the map's row} from the crawl's map.json (kit/pass1_map.py), when there is one, each path as the
     camera draws it (camkit.row_names)."""
@@ -224,10 +251,13 @@ def state_of(summary: dict, greyed: bool) -> tuple:
     return state, why
 
 
-def row_of(label: str, summary: dict | None, path: tuple, maps: dict, greyed: bool = False, never: str = None) -> dict:
+def row_of(label: str, summary: dict | None, path: tuple, maps: dict, greyed: bool = False, never: str = None,
+           readings: dict = None) -> dict:
     """One row of the tree, with its children when the crawl walked a submenu. A row the walk found a notice on, never
     opening it, takes no options or fields from the map, which keeps one row per label path: those are its twin's of
-    one label (the S&Q menu's second Shoot Mode row beside the walked first)."""
+    one label (the S&Q menu's second Shoot Mode row beside the walked first). An option whose leading token another
+    reading of it left out has its label as the camera draws it in "drawn_options" (drawn_options; `readings`:
+    crawl_readings')."""
     if summary is None:
         state, why = (("never", never) if never else ("greyed", "") if greyed else ("seen", "not walked"))
         return {"label": label, "state": state, "why": why or "", "kind": ""}
@@ -241,14 +271,18 @@ def row_of(label: str, summary: dict | None, path: tuple, maps: dict, greyed: bo
         opts = labels_of(m)
         if opts:
             out["options"] = carousel_names(opts) if kind == "dialog" else opts
+            drawn = drawn_options(out["options"], (readings or {}).get(path) or {})
+            if drawn:
+                out["drawn_options"] = drawn
     subs = summary.get("submenu") or []
     if subs:
         out["kind"] = "submenu"
-        out["children"] = [row_of(s.get("label") or "", s, path + (s.get("label") or "",), maps) for s in subs]
+        out["children"] = [row_of(s.get("label") or "", s, path + (s.get("label") or "",), maps, readings=readings)
+                           for s in subs]
     return out
 
 
-def page_rows(page: dict, visited: dict, maps: dict) -> list:
+def page_rows(page: dict, visited: dict, maps: dict, readings: dict = None) -> list:
     """A scanned page's rows as the tree holds them: each label as the camera draws it (camkit.row_names), and what the
     crawls (`visited`, by page counter and slot; `maps`, by path) found there, else seen, greyed or never."""
     rows = []
@@ -258,7 +292,7 @@ def page_rows(page: dict, visited: dict, maps: dict) -> list:
             continue
         label = row_names.renamed((label,))[-1]          # as the camera draws it (camkit.row_names)
         seen = visited.get((page.get("page"), r.get("slot")))
-        rows.append(row_of(label, seen, (label,), maps, greyed=bool(r.get("greyed")),
+        rows.append(row_of(label, seen, (label,), maps, greyed=bool(r.get("greyed")), readings=readings,
                            never=r.get("never_open") or safety.never_open(label)))
     return rows
 
@@ -301,19 +335,21 @@ def tree(scan: Path, crawls: list, key: str, mode: str = None) -> dict:
     """The menu tree of camera `key` from the scan's model.json and the crawls' rows and maps; with `mode`, that
     shooting mode's menu, the entry of the file's "modes"."""
     model = json.loads((scan / "model.json").read_text(encoding="utf-8"))
-    visited, maps = {}, {}
+    visited, maps, readings = {}, {}, {}
     for c in crawls:                               # a later crawl adds what an earlier one did not reach
         for k, v in crawl_rows(c).items():
             visited.setdefault(k, v)
         for k, v in crawl_map(c).items():
             maps.setdefault(k, v)
+        for k, v in crawl_readings(c).items():
+            readings.setdefault(k, v)
     tabs = collections.OrderedDict()
     for page in sorted(model, key=lambda p: counter(p.get("page"))):
         crumb = [x.strip() for x in (page.get("breadcrumb") or "").split(">") if x.strip()]
         if not crumb:
             continue
         tabs.setdefault(crumb[0], []).append({"page": page.get("page") or "", "group": " > ".join(crumb[1:]),
-                                             "rows": page_rows(page, visited, maps)})
+                                             "rows": page_rows(page, visited, maps, readings)})
     model_name, firmware = paths.split(key)
     names = ", ".join(c.name for c in crawls) or "none"
     source = (f"Written by kit/tools/menu_tree.py from the page scan {scan.name} (kit/page_model.py's page model) and "
@@ -435,7 +471,7 @@ def fold(menu: dict, crawl: Path) -> list:
     entry, changed in place): each top row the crawl walked found by its label among the menu's top rows, wherever
     its page, never by the crawl's page counter, and folded there (folded). What it did, one line each: a row changed
     or added, and a top row the menu holds none or several of, left out."""
-    maps, said = crawl_map(crawl), []
+    maps, readings, said = crawl_map(crawl), crawl_readings(crawl), []
     for t in menu.get("tabs") or []:                # the tree's older names as the camera draws them (camkit.row_names)
         for pg in t.get("pages") or []:
             camed_rows(pg.get("rows") or [])
@@ -448,7 +484,7 @@ def fold(menu: dict, crawl: Path) -> list:
                         "that label in the menu; not folded")
             continue
         pg, i = hits[0]
-        pg["rows"][i] = folded(pg["rows"][i], row_of(label, summary, (label,), maps), summary.get("submenu") or [],
+        pg["rows"][i] = folded(pg["rows"][i], row_of(label, summary, (label,), maps, readings=readings), summary.get("submenu") or [],
                                (pg["rows"][i]["label"],), said)
     return said
 

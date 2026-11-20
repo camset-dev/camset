@@ -120,7 +120,13 @@ have begun at a held row.
 A setting proved only in Stills is not in the Movie menu until Movie's walk reads its row or a proof is made there, even
 where the camera shows it. So two owners of a model get the same `row_menus` only once the mapping is complete.
 `kit/schema_update.py` prints, at every pass, the settings listed in fewer menus than their top row stands in, and the
-menus each lacks.
+menus each lacks. A row whose walk in a menu found that Right opens nothing there (it draws no ›) holds no rows in that
+menu, so the settings below it elsewhere are not counted as open work for it.
+
+**Two rows of one label.** Where the camera tells two rows of one label under one row (or two top rows of one tab)
+apart by an icon alone, the camera's `ROW_ICONS` hand table gives each icon's words by the row's path ("label#n" for
+the n-th), and the definition writes such a row's label as "label (words)": Setup's "Custom Key/Dial Set. (Still)" and
+"Custom Key/Dial Set. (Movie)". The menu tree and every place are matched by the camera's own label first.
 
 A write with the menu tree on the computer writes these from `MENUS`, and none of them without it. With no menu tree
 there (a fresh clone, CI) it leaves the definition's as they are, as it does the places. A write from a definition read

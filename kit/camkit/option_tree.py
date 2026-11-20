@@ -202,10 +202,15 @@ def shared(doc: dict, found: dict, by_row: dict) -> dict:
     return out
 
 
-def trees(doc: dict, proofs: list, shared_from: dict | None = None) -> tuple:
+BY_HAND = ("its row is given by hand (HAND_PLACES): that row's function writes the record, the row lists none of these "
+           "options, so no tree")
+
+
+def trees(doc: dict, proofs: list, shared_from: dict | None = None, hand=frozenset()) -> tuple:
     """({key: option tree} for the settings of a definition that get one from these proofs, a row's own or one shared
     with a setting of the same values (shared(); `shared_from`, when given, gets {key: the key it shares with}),
-    {key: why not} for those that sit on a row with an axis or whose labels look nested and get none)."""
+    {key: why not} for those that sit on a row with an axis or whose labels look nested and get none). `hand`: the keys
+    whose row is given by hand (HAND_PLACES), whose row does not list their options (BY_HAND)."""
     found, why_not = {}, {}
     by_row = rows(proofs)
     for s in doc["settings"]:
@@ -213,7 +218,7 @@ def trees(doc: dict, proofs: list, shared_from: dict | None = None) -> tuple:
         mains = by_row.get(tuple(s.get("row") or ()))
         if mains is None:
             if nested_looking(s):
-                why_not[s["key"]] = ("not placed on a menu row" if not s.get("row") else
+                why_not[s["key"]] = ("not placed on a menu row" if not s.get("row") else BY_HAND if s["key"] in hand else
                                      "its row has no carousel axis in the proofs: the camera lists these options flat")
             continue
         if s.get("under_option"):

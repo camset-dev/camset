@@ -235,6 +235,8 @@ class Tree:
                "opts": r.get("options") or [], "walk": walk,
                "kids": [self._node(c, path, at + [i], group, walks, n, written) for i, c in enumerate(r.get("children") or [])],
                "recs": [], "subs": []}
+        if r.get("drawn_options"):          # an option's label as the camera draws it, an icon's letters left out
+            out["drawn"] = dict(r["drawn_options"])
         self.where[out["id"]] = (group, path, at)
         return out
 
@@ -956,19 +958,33 @@ def menus_refusal(tree, menus: list) -> str | None:
     return None
 
 
+# the crawl's outcome where Right on a row changed nothing (camkit.crawl.visit_row), which kit/tools/menu_tree.py keeps as
+# the row's reason, state "unhandled": the row draws no ›, so it opens nothing in that menu (the S&Q menu's Recognition
+# Target targets, kit2_crawl_sq_1120 frames 00914, 00929, 00948)
+OPENS_NOTHING = "no response to Right"
+
+
+def opens_nothing(node: dict) -> bool:
+    """Whether a row of the tree (a Tree node) opens nothing in its menu: its walk's Right changed nothing
+    (OPENS_NOTHING), so no row stands below it there."""
+    return node.get("st") == "unhandled" and node.get("why") == OPENS_NOTHING and not node.get("kids")
+
+
 def fewer_menus(doc, tree, menus: list, placed: dict) -> list:
     """[(key, tab, the top row's label, [the menus it lacks])] of every placed setting (`placed`: settings() with
     by_menu's row_menus, as writer.fromdata.places gives them; no copy) listed in fewer camera menus than the menus
     whose own tree holds its top row (the same top row by the merged numbering and its label), where that menu never
     read the rows down to the setting's (a menu that read them and has no such row lacks it truly: Breathing Comp. in
-    the Still menu), and where no other record of the same row and option is listed in it (records of one row kept to
-    their own modes' menus, the Help Guide's SteadyShot twins: the row is there, by its own record): the work a mapping
-    has left, a row crawled or proved in those menus' modes (a mapping is not done while there is any)."""
+    the Still menu; so does one whose row on the way opens nothing there, opens_nothing: the S&Q menu's Recognition
+    Target targets, which hold no rows of their own), and where no other record of the same row and option is listed in
+    it (records of one row kept to their own modes' menus, the Help Guide's SteadyShot twins: the row is there, by its
+    own record): the work a mapping has left, a row crawled or proved in those menus' modes (a mapping is not done while
+    there is any)."""
 
     def unread(node, labels):
         for label in labels[1:]:
             if not node["kids"]:
-                return True                  # the rows under it never read
+                return not opens_nothing(node)          # the rows under it never read, unless it opens none
             node = next((k for k in node["kids"] if norm(k["l"]) == norm(label)), None)
             if node is None:
                 return False                 # read, and no such row
@@ -1004,6 +1020,87 @@ def fewer_menus(doc, tree, menus: list, placed: dict) -> list:
         if lack:
             out.append((s["key"], tab, p["row"][0], lack))
     return out
+
+
+def icon_words(m: "Tree", icons: dict) -> dict:
+    """{a row's node id: (the ROW_ICONS entry, the words its icon means)} for the rows of menu `m` the camera tells
+    apart by an icon alone: of
+    the rows that bear one label among a tab's top rows (every group's) or under one row, each the ROW_ICONS table
+    (`icons`) names by its path, its tab then its labels from the top row down, " > " between, the n-th of a label
+    written "label#n" (the first bare, or "#0"), as nth reads a path. A row no other row of its label stands beside
+    is never named so (two rows of one row reading alike is the table's one use)."""
+    want = {}
+    for k, w in (icons or {}).items():
+        tab, *labels = [x.strip() for x in k.split(" > ")]
+        want[(tab, tuple((norm(nth(x)[0]), nth(x)[1] or 0) for x in labels))] = (k, w)
+    out = {}
+
+    def walk(tab, rows, above):
+        counts, seen = collections.Counter(norm(x["l"]) for x in rows), collections.Counter()
+        for x in rows:
+            n = seen[norm(x["l"])]
+            seen[norm(x["l"])] += 1
+            here = above + ((norm(x["l"]), n),)
+            if counts[norm(x["l"])] > 1 and (tab, here) in want:
+                out[x["id"]] = want[(tab, here)]
+            walk(tab, x["kids"], here)
+    for tb in m.tabs:
+        walk(tb["tab"], [x for g in tb["groups"] for x in g["rows"]], ())
+    return out
+
+
+def iconed(label: str, words: str) -> str:
+    """A row's label as the definition writes it where its icon alone tells it from a row of the same label beside it:
+    "Custom Key/Dial Set. (Movie)"."""
+    return f"{nth(label)[0]} ({words})"
+
+
+def with_icons(doc, tree, places: dict, icons: dict, menus: list = ()) -> list:
+    """Each place in `places` ({key: {"row", "row_at"[, "row_tab"][, "row_mode"][, "row_places"]}}, settings()' and
+    by_menu's, changed in place) with the label of every row on its way that the camera tells apart from a row of the
+    same label beside it by its icon alone given its words (icon_words, iconed: "Custom Key/Dial Set. (Movie)"), in its
+    own place and in each of its row_places (`menus`: the camera menus, camera.menus' entries). A row is found in the
+    menu the place was found in, by the merged numbering of its top row and then each row's own index there. Called
+    once every place is found and every menu looked up, the tree's matching by label and place untouched. Returns what
+    to say of the table's entries that named no such row in any menu."""
+    if not icons:
+        return []
+    t = Tree(doc, tree)
+    modes = mode_trees(doc, tree)
+    number = merge_tops(t, modes)
+    trees = {None: t, **dict(modes)}
+    words = {key: icon_words(m, icons) for key, m in trees.items()}
+    nodes = {key: _nodes_at(m, key, number) for key, m in trees.items()}
+    used = set()
+    by_key = {s["key"]: s for s in doc["settings"]}
+
+    def relabel(place, key, tab):
+        node = nodes.get(key, {}).get((tab, (place.get("row_at") or [None])[0]))
+        row = list(place.get("row") or [])
+        for i, label in enumerate(row):
+            if i:
+                kids, at = node["kids"], place["row_at"][i] if i < len(place["row_at"]) else None
+                node = kids[at] if isinstance(at, int) and 0 <= at < len(kids) else None
+            if node is None or norm(node["l"]) != norm(label):
+                break
+            if node["id"] in words.get(key, {}):
+                entry, said = words[key][node["id"]]
+                row[i] = iconed(label, said)
+                used.add(entry)
+        place["row"] = row
+    for k, place in places.items():
+        s = by_key.get(k) or {}
+        tab = place.get("row_tab") or s.get("tab") or "Other"
+        if place.get("row"):
+            relabel(place, place.get("row_mode"), tab)
+        for menu, there in (place.get("row_places") or {}).items():
+            key = next((menu_of(m, tree) for m in menus or () if m.get("name") == menu), None)
+            if there.get("row") and key is not False:
+                relabel(there, key, there.get("row_tab") or tab)
+    named = {entry for key in words for entry, _ in words[key].values()}
+    return [f"ROW_ICONS: {k!r} names no row that another row of its label stands beside in the menu tree: left out"
+            for k in icons if k not in named] + \
+           [f"ROW_ICONS: {k!r} names a row no setting is placed on" for k in icons if k in named and k not in used]
 
 
 def menu_of(menu: dict, tree) -> object:
@@ -1046,20 +1143,19 @@ def turned(a: list, b: list) -> bool:
 
 def option_names(node: dict, label: str) -> bool:
     """Whether a row the walk read as a list or checklist (its "opts", no rows read below it) has one option naming
-    `label`: one option named so exactly, else exactly one named so after a leading token of icon letters (at most
-    row_names.ICON_LEAD characters and the space after it, ROW_NAMES' rule: "W Rating" names Rating). Two options that
-    both name it only after that rule name it no better than none: no guess."""
+    `label`: one option named so exactly, else exactly one named so as the camera draws it, where the tree has the
+    evidence that its leading token is an icon's letters ("drawn": another reading of that same option gave the label
+    without it, kit/tools/menu_tree.py's drawn_options: "W Rating", which the vision reader read "Rating", names
+    Rating). A token is never taken for an icon by its length alone ("Shot Mark" names no "Mark", "Rear Dial" no
+    "Dial"), and two options that both name it so name it no better than none: no guess."""
     opts = [str(o) for o in node.get("opts") or []]
     if node.get("kids") or not opts:
         return False
     exact = sum(norm(o) == norm(label) for o in opts)
     if exact:
         return exact == 1
-
-    def iconed(o):
-        token, _, rest = o.partition(" ")
-        return bool(rest) and 0 < len(token) <= row_names.ICON_LEAD and norm(rest) == norm(label)
-    return sum(iconed(o) for o in opts) == 1
+    drawn = node.get("drawn") or {}
+    return sum(norm(drawn.get(o, "")) == norm(label) for o in opts) == 1
 
 
 def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", options: dict,

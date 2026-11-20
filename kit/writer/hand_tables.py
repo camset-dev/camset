@@ -11,7 +11,8 @@ offer (NOT_OFFERED), the copies the camera keeps (COPIES) and the switches that 
 record cannot be proved (UNPROVED), the rows the records name otherwise than the camera draws them (ROW_NAMES,
 which camkit.row_names reads for every comparison of a row's name), the camera's menus by shooting mode (MENUS) and
 the rows given by hand (HAND_PLACES: a record a row's own function writes, a row the walk can never read, seen on the
-camera), which writer/fromdata.py reads, and the label fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
+camera) and what a row's icon means where two rows of one label stand side by side (ROW_ICONS), which writer/fromdata.py
+reads, and the label fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
 and firmware, and is written and edited by hand. How, when and in which run each hand fact was proved is the mapping's
 evidence, kept in the private overlay (private/evidence/<model>_fw<fw>.hand.json) and put back into the tables by
 load() (writer/hand_evidence.py). A camera with no file has every table empty.
@@ -58,16 +59,17 @@ TABLES = {
     "NOT_OFFERED": "not_offered", "VIDEO_SYSTEM_VALUES": "entries", "COPIES": "lists", "COPY_MODES": "tuple", "COPY_MODES_UNKNOWN": "frozenset",
     "KEEPS_APART": "keeps_apart", "LIMIT_PAIRS": "limit_pairs",
     "UNPROVED": "unproved", "CONTEXT_WORDS": "context_words", "ORIENTED": "pattern", "ROW_NAMES": "row_names",
-    "MENUS": "menus", "HAND_PLACES": "hand_places",
+    "MENUS": "menus", "HAND_PLACES": "hand_places", "ROW_ICONS": "row_icons",
 }
 OWN_KEYS = ("$schema", "_comment", "camera")
 EMPTY = {"entries": dict, "new_records": dict, "new_like": dict, "words": dict, "lists": dict, "context_words": dict,
          "my_menu_empty": dict, "set": set, "frozenset": frozenset, "record_ids": dict, "values": list, "steps": dict,
          "rows": dict, "text": lambda: None, "not_offered": list, "tuple": tuple, "unproved": dict,
          "pattern": lambda: None, "picker_lists": dict, "keeps_apart": dict, "limit_pairs": dict,
-         "frame_travel": dict, "row_names": dict, "menus": list, "hand_places": dict}
+         "frame_travel": dict, "row_names": dict, "menus": list, "hand_places": dict, "row_icons": dict}
 REF = "#/FILTER_FLAGS/"         # the one $ref a file may hold: a NEW_RECORDS entry that is FILTER_FLAGS' own
 PLACED_KEY = re.compile(r"(global|set):0x[0-9a-f]{4}(\[\d+\]|@\d+)?")          # a setting's key (HAND_PLACES)
+ICON_WORDS = r"[A-Za-z][A-Za-z&-]*( [A-Za-z][A-Za-z&-]*)?"          # what a row's icon means, in words (ROW_ICONS)
 # the fields of an entry the writer reads, by table, each with the JSON type it must have ("values": [code, name] pairs)
 NEW_RECORD = {"like": str, "name": str, "values": "values", "note": str}
 FIELDS = {"RECORD_FIXES": {"name": str}, "FILTER_FLAGS": NEW_RECORD, "NEW_RECORDS": NEW_RECORD,
@@ -610,6 +612,18 @@ def _shaped(name: str, kind: str, raw):
             extra = sorted(set(e) - {"row"})
             if extra:
                 raise _Shape(f"{k!r} holds {', '.join(map(repr, extra))}, which a hand place does not have")
+        return raw
+    if kind == "row_icons":
+        # what the icon before a row's label means, by the row's path (its tab, then the labels from the top row down,
+        # " > " between, the n-th of the rows one label names under one row written "label#n", the first one bare):
+        # {path: one or two words}, the definition's label for that row then "label (words)" where two rows of one row
+        # would otherwise read alike (camkit.placement.icon_words)
+        for k, w in _need(raw, dict, "the table").items():
+            labels = [x.strip() for x in k.split(" > ")]
+            if len(labels) < 2 or not all(labels):
+                raise _Shape(f"{k!r} is not a row's tab then its labels, \" > \" between")
+            if not re.fullmatch(ICON_WORDS, _need(w, str, f"{k!r}'s words")):
+                raise _Shape(f"{k!r}'s words, {w!r}, are not one or two words of letters (\"Still\", \"Movie\")")
         return raw
     if kind == "unproved":
         out = {}
