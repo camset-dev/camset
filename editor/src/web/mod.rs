@@ -5811,10 +5811,15 @@ pub(crate) mod tests {
         let mine = slots(&app, &movie, &tab);
         // file A with the first dial memory holding other values than the live settings, in one record of the rows
         // shown in the Movie menu and one only the other menu's rows hold
-        let changeable = |slot: &Slot| app.schema.settings.iter().find(|x| x.slot() == *slot && x.scalar && x.text.is_none() && x.range.is_none() && x.values.len() >= 2
-            && x.area == "global" && x.in_sets && !x.expert && !app.locked(x, 0) && app.shape_ok_in(x, 0)).cloned();
-        let theirs = slots(&app, &live, &tab).into_iter().filter(|s| !mine.contains(s)).find_map(|s| changeable(&s)).expect("a record of the other menu's rows alone");
-        let ours = mine.iter().find_map(changeable).expect("a record of the Movie menu's rows");
+        // a plain record (no copies, kept by no copy rule, alone in its place), the first in the records' order, so the
+        // recall copies it as it is and the test picks the same one in every run
+        let changeable = |slot: &Slot| app.schema.settings.iter().filter(|x| x.slot() == *slot).count() == 1 && app.schema.settings.iter()
+            .find(|x| x.slot() == *slot && x.scalar && x.text.is_none() && x.range.is_none() && x.values.len() >= 2 && x.copies.is_empty() && x.copy_of.is_none()
+                && x.area == "global" && x.in_sets && !x.expert && !app.locked(x, 0) && app.shape_ok_in(x, 0)).is_some();
+        let sorted = |set: std::collections::HashSet<Slot>| { let mut v: Vec<Slot> = set.into_iter().collect(); v.sort(); v };
+        let of = |slot: Slot| app.schema.settings.iter().find(|x| x.slot() == slot).cloned().unwrap();
+        let theirs = of(sorted(slots(&app, &live, &tab)).into_iter().filter(|s| !mine.contains(s)).find(changeable).expect("a record of the other menu's rows alone"));
+        let ours = of(sorted(mine.clone()).into_iter().find(changeable).expect("a record of the Movie menu's rows"));
         let mut c = test_parse(crate::test_support::SAMPLE_BYTES).unwrap();
         for x in [&theirs, &ours] {
             let v = c.sections[dial].get(x.id).and_then(|r| r.get(x.index)).unwrap();
