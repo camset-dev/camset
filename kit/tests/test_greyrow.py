@@ -183,6 +183,25 @@ def test_the_right_never_goes_on_a_row_the_kit_may_not_open(monkeypatch, path, s
     assert line["why"]
 
 
+@pytest.mark.parametrize("path, lit", [
+    (["File/Folder Settings", "Create New Fold"], "Create New Folder"),     # typed short: the bar acts as it opens
+    (["Framing Stabilizer"], "Format"),                                     # the bar a format
+    (["Framing Stabilizer"], "Zoom"),                                       # the bar a row whose opening acts
+    (["Framing Stabilizer"], "")])                                          # the bar reads nothing
+def test_the_lit_bar_is_judged_before_help_and_a_refused_one_gets_no_key(monkeypatch, path, lit):
+    """The path as typed may pass where the bar the cursor stands on does not (help_run.on_label takes a 12-letter
+    prefix): the bar read on the fresh frame is judged as an open of it would be, and one refused, or one that reads
+    nothing, gets no key at all, not even Help (the review's probe: C4 went on Create New Folder)."""
+    import help_run
+    cam = GreyCam(label=path[-1])
+    world(monkeypatch, cam)
+    cam.lit = lit
+    monkeypatch.setattr("help_run.on_label", help_run.on_label)             # the real, loose match
+    line, said, tried = ask(cam, path=path)
+    assert (line["outcome"], line["right"], cam.keys, tried) == (greyrow.PASSED, False, [], set()), line
+    assert "lit row" in line["why"]
+
+
 def test_never_twice_on_a_row_in_the_run(monkeypatch):
     """The row's one Right is spent before it goes out: asked again in the run (or a row the run's file says was
     spent), its Help is read and no Right goes."""

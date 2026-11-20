@@ -8,7 +8,9 @@ runs to learn that Touch Operation shuts it).
 
 For one row, the cursor on it on a menu or submenu page, in this order, each step pressing nothing where it stops:
   0. A row the kit may not open or reach whatever its colour (closed: never-open, what acts as it opens, a format,
-     delete or reset, a row above it not seen opened) gets no key, Help's neither, as kit/help_run.py passes it over.
+     delete or reset, a row above it not seen opened) gets no key, Help's neither, as kit/help_run.py passes it over;
+     nor does a lit bar that, read on the fresh frame, reads nothing or as such a row itself (bar_refused), whatever
+     the path as typed said.
   1. Drawn grey now: the lit bar's label measured on a frame grabbed afresh, never the page scan's (row_grey: the
      options' rule, proving.screens' GREY_*, on the menu's label crop; kit2_help's 398 lit rows read 117-131 on the 55
      the camera greys and 221-247 on the 343 it does not). White, or unsure: nothing pressed.
@@ -109,12 +111,28 @@ def read_text(cam) -> str:
     return text_of(cam)
 
 
-def on_row(cam, label: str) -> bool:
-    """The lit bar reads the row `label`, an OCR slip allowed (help_run.on_label, after the page scan's position check
-    or the submenu's find_row has said which row it is)."""
+def on_row(lit: str, label: str) -> bool:
+    """The lit bar's text `lit` reads the row `label`, an OCR slip allowed (help_run.on_label, after the page scan's
+    position check or the submenu's find_row has said which row it is). Loose on purpose: what the bar is, is judged
+    first, on its own text (bar_refused)."""
     from help_run import on_label
-    lit = lit_of(cam)
-    return bool(lit.strip()) and on_label(lit, label)
+    return bool(str(lit or "").strip()) and on_label(lit, label)
+
+
+def bar_refused(lit: str, path, seen) -> str:
+    """Why the lit bar, as read now, may not be opened, or "": a bar that reads nothing (the never-open check cannot judge
+    it), a never-open text (safety.never_open), or one the look lap's own list refuses (safety.look_lap_refused: what
+    never opens, the Screen Reader, a row whose opening acts, a format, delete or reset not seen opened). The path as
+    typed is no proof of the bar: "Create New Fold" passes closed(), the bar it lands on reads Create New Folder."""
+    if not str(lit or "").strip():
+        return "the lit row reads nothing, so the never-open check cannot judge it"
+    why = safety.never_open(lit)
+    if why:
+        return f"the lit row reads as never-open ({why})"
+    why = safety.look_lap_refused(lit, bool(seen.seen(path)))
+    if why:
+        return f"the lit row: {why}"
+    return ""
 
 
 def _plain(text) -> str:
@@ -168,17 +186,9 @@ def open_refused(path, lit: str, seen, stored=None) -> str:
     lit bar as read now judged the same way (never-open, the look lap's list), a bar that reads nothing, and the row
     itself not seen opened on this body (its first open is the crawl's procedure, camkit.first_open, which this run does
     not make). Every reason only refuses."""
-    why = closed(path, seen, stored)
+    why = closed(path, seen, stored) or bar_refused(lit, path, seen)
     if why:
         return why
-    if not str(lit or "").strip():
-        return "the lit row reads nothing, so the never-open check cannot judge it"
-    why = safety.never_open(lit)
-    if why:
-        return f"the lit row reads as never-open ({why})"
-    why = safety.look_lap_refused(lit, bool(seen.seen(path)))
-    if why:
-        return f"the lit row: {why}"
     if not seen.seen(path):
         return ("not seen opened on this body: its first open is the crawl's procedure (camkit.first_open: RESTORE_BY_HAND "
                 "before, the settings checked after), which this run does not make")
@@ -214,7 +224,14 @@ def ask_why(cam, path, *, seen, tried: set, keys=None, stored=None, labels=(), s
         failed(f"the screen is {cam.read().kind!r} ({cam.frame.path.name}), not the row's menu page")
     cam.refresh("grey-row")                     # drawn grey now, on a frame grabbed afresh
     line["row_frame"] = cam.frame.path.name
-    if cam.read().kind not in ROW_KINDS or not on_row(cam, label):
+    if cam.read().kind not in ROW_KINDS:
+        failed(f"after a fresh look the screen is {cam.read().kind!r} ({cam.frame.path.name}), not the row's menu page")
+    lit = lit_of(cam)
+    why = bar_refused(lit, path, seen)
+    if why:                                     # the bar itself, before any key: no Help on it either
+        say(f"{name}: passed over, nothing pressed: {why}")
+        return {**line, "outcome": PASSED, "why": why}
+    if not on_row(lit, label):
         failed(f"the lit row is not {label!r} ({cam.frame.path.name})")
     grey, measure = row_grey(cam)
     line["grey"] = None if measure is None else round(measure, 1)
@@ -250,7 +267,7 @@ def ask_why(cam, path, *, seen, tried: set, keys=None, stored=None, labels=(), s
         say(f"{name}: its Help gives no reason; a Right went on this row before in the run: no second")
         return {**line, "outcome": TRIED}
     grey, measure = row_grey(cam)
-    if not on_row(cam, label) or grey is not True:
+    if not on_row(lit_of(cam), label) or grey is not True:
         say(f"{name}: after its Help the lit row is not the grey row any more ({cam.frame.path.name}): no Right")
         return {**line, "outcome": MOVED}
     tried.update(keys)                          # spent before the press: never a second, whatever follows
