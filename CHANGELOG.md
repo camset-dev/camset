@@ -203,6 +203,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   that leaves a mode without a menu, records of one row with overlapping menus, and a Main tile showing an Expert-only
   setting. No place rests on where an option list's reading began, a silent proof's mode comes from the camera's own
   files for placement alone, and a hand place's reason is the private hand evidence's.
+- **A definition's menus are rebuilt alike without the runs:** the modes the camera's files give silent proofs are kept
+  in their evidence, where placement reads them. At every pass the writer prints the settings listed in fewer menus than
+  their row stands in, the mapping's open work.
 - **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
   counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
