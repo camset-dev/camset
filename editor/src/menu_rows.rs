@@ -11,8 +11,10 @@ use std::collections::{HashMap, HashSet};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Line {
     /// A row of the camera's menu that holds no setting of its own here (a submenu, or a row whose settings bear
-    /// other names): its label, how deep it is, and its labels from the group's top row, which name it for folding.
-    Heading { label: String, depth: usize, path: Vec<String> },
+    /// other names): its label as drawn, how deep it is, its labels from the group's top row (a mode's name first under
+    /// `Line::Mode`), and their places (`row_at`), which with the labels name it for folding (`fold_id`): two rows of
+    /// one label, told apart on the camera by an icon alone, fold apart.
+    Heading { label: String, depth: usize, path: Vec<String>, at: Vec<i64> },
     /// The settings row `rows[index]`, indented by `depth`. A setting alone on a row of the camera with nothing under
     /// it is that row, under its own name ("Interval Rec Mode" on "Interval Shooting": `place_words` names the row).
     Row { index: usize, depth: usize },
@@ -84,6 +86,16 @@ pub fn with_words(label: &str, words: Option<&str>) -> String {
 /// `s`'s row as drawn, from its top label down, each with its words: "Custom Key/Dial Set. (Still) > Custom Key 1".
 pub fn drawn_row(s: &Setting) -> String {
     s.row.iter().enumerate().map(|(i, l)| with_words(l, s.row_words(i))).collect::<Vec<_>>().join(" > ")
+}
+
+/// What names a heading for folding (`Line::Heading`): each of its labels with its place (`row_at`), a mode's name before
+/// them as it is, so two rows of one label in one group (Custom Key/Dial Set. for stills and for movies) fold apart.
+pub fn fold_id(path: &[String], at: &[i64]) -> Vec<String> {
+    let lead = path.len().saturating_sub(at.len());
+    path.iter().enumerate().map(|(i, l)| match i.checked_sub(lead).and_then(|j| at.get(j)) {
+        Some(n) => format!("{l}@{n}"),
+        None => l.clone(),
+    }).collect()
 }
 
 /// Lower-case letters and digits only, as the kit compares menu labels (camkit.placement.norm).
@@ -298,10 +310,11 @@ fn nest(rows: &[Vec<Setting>], placed: Vec<usize>, mode: Option<&str>, strip: &d
         for level in common..path.len() {
             let label = with_words(&path[level].1, words.get(&node(s, level + 1)).and_then(|w| w.as_deref()));
             let labels: Vec<String> = mode.map(str::to_string).into_iter().chain(path[..=level].iter().map(|p| p.1.clone())).collect();
+            let at: Vec<i64> = path[..=level].iter().map(|p| p.0).collect();
             open.push(path[level].clone());
             let mine = node(s, level + 1);
             if level + 1 < path.len() {
-                lines.push(Line::Heading { label, depth: level, path: labels });
+                lines.push(Line::Heading { label, depth: level, path: labels, at });
             } else if is_own(s) || ((s.under_option.is_none() || s.on_page()) && here.get(&mine).is_some_and(|h| h.len() == 1) && !deeper.contains(&mine)) {
                 // its own setting, or one alone on it with no rows under it: the row itself
                 lines.push(Line::Row { index: i, depth: level });
@@ -309,7 +322,7 @@ fn nest(rows: &[Vec<Setting>], placed: Vec<usize>, mode: Option<&str>, strip: &d
                     row_here = Some(path.clone());
                 }
             } else {
-                lines.push(Line::Heading { label, depth: level, path: labels });
+                lines.push(Line::Heading { label, depth: level, path: labels, at });
                 lines.push(Line::Row { index: i, depth: level + 1 });
             }
         }
@@ -321,8 +334,8 @@ pub fn order(lines: &[Line]) -> Vec<usize> {
     lines.iter().filter_map(|l| match l { Line::Row { index, .. } => Some(*index), _ => None }).collect()
 }
 
-/// Which lines a folded heading hides: `folded(path)` says whether the heading of those labels is folded. Each line's
-/// flag, true when one of the headings above it is folded.
+/// Which lines a folded heading hides: `folded(id)` says whether the heading of that fold id (`fold_id`: its labels and
+/// their places) is folded. Each line's flag, true when one of the headings above it is folded.
 pub fn hidden(lines: &[Line], folded: impl Fn(&[String]) -> bool) -> Vec<bool> {
     let mut out = Vec::with_capacity(lines.len());
     let mut under: Option<usize> = None;          // the depth of the folded heading lines are hidden below
@@ -333,8 +346,8 @@ pub fn hidden(lines: &[Line], folded: impl Fn(&[String]) -> bool) -> Vec<bool> {
         }
         out.push(under.is_some());
         if under.is_none() {
-            if let Line::Heading { path, depth, .. } = l {
-                if folded(path) {
+            if let Line::Heading { path, depth, at, .. } = l {
+                if folded(&fold_id(path, at)) {
                     under = Some(*depth);
                 }
             }
@@ -343,15 +356,15 @@ pub fn hidden(lines: &[Line], folded: impl Fn(&[String]) -> bool) -> Vec<bool> {
     out
 }
 
-/// The headings above line `at` (their labels from the top row), the nearest last: the ones to unfold to show it.
+/// The headings above line `at` (each by its fold id, `fold_id`), the nearest last: the ones to unfold to show it.
 pub fn headings_above(lines: &[Line], at: usize) -> Vec<Vec<String>> {
     let mut depth = match lines.get(at) { Some(Line::Heading { depth, .. } | Line::Row { depth, .. }) => *depth, _ => return Vec::new() };
     let mut out = Vec::new();
     for l in lines[..at].iter().rev() {
         match l {
             Line::Mode(_) | Line::More => break,
-            Line::Heading { depth: d, path, .. } if *d < depth => {
-                out.push(path.clone());
+            Line::Heading { depth: d, path, at: places, .. } if *d < depth => {
+                out.push(fold_id(path, places));
                 depth = *d;
             }
             Line::Row { depth: d, .. } if *d < depth => depth = *d,
@@ -402,6 +415,31 @@ mod tests {
         list.into_iter().map(|s| vec![s]).collect()
     }
 
+    /// The lines with their headings' places left out, for the cases about the layout (`at` is `fold_id`'s).
+    fn unplaced(lines: Vec<Line>) -> Vec<Line> {
+        lines.into_iter().map(|l| match l { Line::Heading { label, depth, path, .. } => Line::Heading { label, depth, path, at: Vec::new() }, l => l }).collect()
+    }
+
+    /// Two rows of one label in one group, apart by their places alone (the camera tells them apart by an icon): two
+    /// headings, each with its places, and two fold ids, so folding one leaves the other shown.
+    #[test]
+    fn two_rows_of_one_label_fold_apart() {
+        let r = rows(vec![
+            s("a", "Key A", &["Custom Key/Dial Set.", "Custom Key 1"], &[5, 0], None, &[]),
+            s("b", "Key B", &["Custom Key/Dial Set.", "Custom Key 1"], &[6, 0], None, &[]),
+        ]);
+        let lines = lay_out(&r);
+        let heads: Vec<(&Vec<String>, &Vec<i64>)> = lines.iter().filter_map(|l| match l { Line::Heading { path, at, .. } => Some((path, at)), _ => None }).collect();
+        assert_eq!(heads.len(), 2);
+        assert_eq!((heads[0].0, heads[0].1), (&vec!["Custom Key/Dial Set.".to_string()], &vec![5]));
+        assert_eq!(heads[1].1, &vec![6]);
+        let first = fold_id(heads[0].0, heads[0].1);
+        assert_ne!(first, fold_id(heads[1].0, heads[1].1), "two fold ids");
+        assert_eq!(hidden(&lines, |id| id == first.as_slice()), vec![false, true, false, false], "the first folded, the second shown");
+        assert_eq!(headings_above(&lines, 3), vec![fold_id(heads[1].0, heads[1].1)], "a jump to the second unfolds the second alone");
+        assert_eq!(fold_id(&["Movie".into(), "SteadyShot".into()], &[7]), vec!["Movie".to_string(), "SteadyShot@7".into()], "a mode's name as it is");
+    }
+
     /// The rows the camera tells apart by an icon alone (`row_icons`): the case of editor/tests/data/menu_row_icons.json,
     /// which the kit's copy lays out alike (kit/tests/test_menu_rows.py). A level is its label without its `#n`, then
     /// its words in brackets where every setting on or under the row agrees on them (two settings under one heading,
@@ -419,7 +457,7 @@ mod tests {
         };
         let settings: Vec<Setting> = case["settings"].as_array().unwrap().iter().map(made).collect();
         let lines: Vec<serde_json::Value> = lay_out(&rows(settings.clone())).into_iter().map(|l| match l {
-            Line::Heading { label, depth, path } => serde_json::json!(["heading", label, depth, path]),
+            Line::Heading { label, depth, path, .. } => serde_json::json!(["heading", label, depth, path]),
             Line::Row { index, depth } => serde_json::json!(["row", index, depth]),
             Line::Mode(m) => serde_json::json!(["mode", m]),
             Line::More => serde_json::json!(["more"]),
@@ -456,8 +494,8 @@ mod tests {
         ]);
         let lines = lay_out(&r);
         let row = |index, depth| Line::Row { index, depth };
-        let head = |label: &str, depth, path: &[&str]| Line::Heading { label: label.into(), depth, path: path.iter().map(|x| x.to_string()).collect() };
-        assert_eq!(lines, vec![
+        let head = |label: &str, depth, path: &[&str]| Line::Heading { label: label.into(), depth, path: path.iter().map(|x| x.to_string()).collect(), at: vec![] };
+        assert_eq!(unplaced(lines.clone()), vec![
             row(3, 0),          // its sub-choices (2, 5) beside its options in the detail panel, no rows
             head("Drive Mode Limit", 0, &["Drive Mode Limit"]), row(7, 1), row(8, 1),
             head("Cont. Shooting Speed", 0, &["Cont. Shooting Speed"]), row(4, 1), row(1, 1),
@@ -489,8 +527,8 @@ mod tests {
         ]);
         let lines = lay_out(&r);
         let row = |index, depth| Line::Row { index, depth };
-        let head = |label: &str, depth, path: &[&str]| Line::Heading { label: label.into(), depth, path: path.iter().map(|x| x.to_string()).collect() };
-        assert_eq!(lines, vec![
+        let head = |label: &str, depth, path: &[&str]| Line::Heading { label: label.into(), depth, path: path.iter().map(|x| x.to_string()).collect(), at: vec![] };
+        assert_eq!(unplaced(lines.clone()), vec![
             row(1, 0), head("Lens Compensation", 0, &["Lens Compensation"]), row(5, 1),
             Line::Mode("Movie".into()),
             head("S&Q Settings", 0, &["Movie", "S&Q Settings"]), head("Frame Rate Settings", 1, &["Movie", "S&Q Settings", "Frame Rate Settings"]),
@@ -501,7 +539,8 @@ mod tests {
         assert_eq!(mode_words("Movie"), "In Movie mode");
         assert_eq!(place_words(&r[0][0]).as_deref(), Some("On the camera: S&Q Settings > Frame Rate Settings > Rec Frame Rate (In Movie mode)"));
         // a folded Stills heading hides nothing past the mode's heading; the headings above a mode's row are its own
-        let fold = |p: &[String]| p == ["Lens Compensation".to_string()];
+        let lens = lines.iter().find_map(|l| match l { Line::Heading { label, path, at, .. } if label == "Lens Compensation" => Some(fold_id(path, at)), _ => None }).unwrap();
+        let fold = |p: &[String]| p == lens.as_slice();
         assert_eq!(hidden(&lines, fold), vec![false, false, true, false, false, false, false, false, false, false, false, false]);
         assert_eq!(headings_above(&lines, 6).len(), 2);
         assert!(headings_above(&lines, 4).is_empty());
@@ -607,8 +646,8 @@ mod tests {
         ]);
         assert!(page.iter().all(|r| r[0].on_page()) && page[0][0].page_prefix() == Some(2));
         let row = |index, depth| Line::Row { index, depth };
-        let head = |label: &str, depth, path: &[&str]| Line::Heading { label: label.into(), depth, path: path.iter().map(|x| x.to_string()).collect() };
-        assert_eq!(lay_out(&page), vec![
+        let head = |label: &str, depth, path: &[&str]| Line::Heading { label: label.into(), depth, path: path.iter().map(|x| x.to_string()).collect(), at: vec![] };
+        assert_eq!(unplaced(lay_out(&page)), vec![
             row(0, 0), row(1, 0),          // the stills copy beside it, not under it
             head("Black Gamma", 0, &["Black Gamma"]), row(3, 1), row(2, 1),
             head("Knee", 0, &["Knee"]), row(4, 1), head("Auto Set", 1, &["Knee", "Auto Set"]), row(5, 2), row(6, 2),
@@ -630,7 +669,7 @@ mod tests {
         let mut p2 = two[0][0].clone();
         (p2.key, p2.under_option, p2.row[1], p2.row_at[1]) = ("p2".into(), Some("P2".into()), "P2".into(), 2);
         two.push(vec![p2]);
-        let lines = lay_out(&two);
+        let lines = unplaced(lay_out(&two));
         assert_eq!((&lines[0], lines.last()), (&head("P1", 0, &["P1"]), Some(&row(7, 1))), "{lines:?}");
     }
 
@@ -638,8 +677,8 @@ mod tests {
     #[test]
     fn a_row_without_its_own_setting_is_a_heading() {
         let r = rows(vec![s("c", "Speed", &["Drive Mode"], &[26], Some("Continuous Shooting"), &[])]);
-        assert_eq!(lay_out(&r), vec![
-            Line::Heading { label: "Drive Mode".into(), depth: 0, path: vec!["Drive Mode".into()] },
+        assert_eq!(unplaced(lay_out(&r)), vec![
+            Line::Heading { label: "Drive Mode".into(), depth: 0, path: vec!["Drive Mode".into()], at: vec![] },
             Line::Row { index: 0, depth: 1 },
         ]);
     }
@@ -662,11 +701,12 @@ mod tests {
         ]);
         let lines = lay_out(&r);
         assert_eq!(lines.len(), 6, "{lines:?}");          // Bracket Settings, b, Focus Bracket Settings, a, Interval Shoot Func., c
-        let fold = |p: &[String]| p == ["Bracket Settings".to_string(), "Focus Bracket Settings".to_string()];
+        // each heading by its fold id (`fold_id`: its labels with their places)
+        let fold = |p: &[String]| p == ["Bracket Settings@32".to_string(), "Focus Bracket Settings@3".to_string()];
         assert_eq!(hidden(&lines, fold), vec![false, false, false, true, false, false]);
-        let all = |p: &[String]| p.len() == 1 && p[0] == "Bracket Settings";
+        let all = |p: &[String]| p.len() == 1 && p[0] == "Bracket Settings@32";
         assert_eq!(hidden(&lines, all), vec![false, true, true, true, false, false]);
-        assert_eq!(headings_above(&lines, 3), vec![vec!["Bracket Settings".to_string()], vec!["Bracket Settings".to_string(), "Focus Bracket Settings".to_string()]]);
+        assert_eq!(headings_above(&lines, 3), vec![vec!["Bracket Settings@32".to_string()], vec!["Bracket Settings@32".to_string(), "Focus Bracket Settings@3".to_string()]]);
         assert!(headings_above(&lines, 0).is_empty());
     }
 }

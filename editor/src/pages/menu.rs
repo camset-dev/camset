@@ -1800,7 +1800,7 @@ pub(crate) mod facts_tests {
         assert_eq!(app.shown_group_of(&hold), "Shooting Mode");
         let rows = group(&app, "Shooting Mode");
         let lines = app.group_lines(&rows);
-        assert!(lines.iter().any(|l| matches!(l, Line::Heading { label, depth: 1, path } if label == "Recall Custom hold 1" && path[0] == "Reg. Custom Shoot Set")), "{lines:?}");
+        assert!(lines.iter().any(|l| matches!(l, Line::Heading { label, depth: 1, path, .. } if label == "Recall Custom hold 1" && path[0] == "Reg. Custom Shoot Set")), "{lines:?}");
         let tc = group(&app, "TC/UB");
         assert_eq!(app.group_lines(&tc)[0], Line::Mode("Movie".into()), "TC/UB is the Movie menu's only");
         let iq = group(&app, "Image Quality/Rec");
@@ -1911,7 +1911,9 @@ pub(crate) mod facts_tests {
             app.schema_gen += 1;
         }
         let unplaced = loose(&app).unwrap();
-        let speeds = App::fold_key("Shooting", "Drive Mode", &["Cont. Shooting Speed".to_string()]);
+        // the heading over it, by its fold id (`fold_id`: its label and its place)
+        assert_eq!(hi.row.first().map(String::as_str), Some("Cont. Shooting Speed"));
+        let speeds = App::fold_key("Shooting", "Drive Mode", &menu_rows::fold_id(&hi.row[..1], &hi.row_at[..1]));
         for flat in [false, true] {
             app.set_flat_list(flat);
             for (s, from_compare) in [(&hi, false), (&fixed, true), (&unplaced, false), (&fixed, false)] {
@@ -2554,7 +2556,7 @@ pub(crate) mod facts_tests {
         let groups = app.tab_groups(tab);
         let (_, _, rows) = groups.iter().find(|(g, _, _)| g == group).cloned().unwrap();
         let lines = app.group_lines(&rows);
-        let heads: Vec<String> = lines.iter().filter_map(|l| match l { Line::Heading { path, .. } => Some(App::fold_key(tab, group, path)), _ => None }).collect();
+        let heads: Vec<String> = lines.iter().filter_map(|l| match l { Line::Heading { path, at, .. } => Some(App::fold_key(tab, group, &menu_rows::fold_id(path, at))), _ => None }).collect();
         assert!(!heads.is_empty(), "the group has rows that hold others");
         // a row under one of them (a heading above it)
         let under = lines.iter().enumerate().find_map(|(at, l)| match l { Line::Row { index, .. } if !menu_rows::headings_above(&lines, at).is_empty() => Some(rows[*index][0].clone()), _ => None }).unwrap();
@@ -2631,6 +2633,63 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// Two headings of one label in one group fold apart, on main's definition as it is (no words yet): the a1 II's two
+    /// Custom Key/Dial Set. rows and its two Fn Menu Settings, each named for folding by its labels and places
+    /// (`fold_id`). A click folds one alone; Collapse all folds each by its own key; a jump to a row under the second
+    /// unfolds the second alone; Enter on a chosen heading folds that one alone.
+    #[test]
+    fn two_headings_of_one_label_fold_apart() {
+        use egui::accesskit::{Action as A11y, ActionRequest, Role};
+        let (mut app, dir, user) = sample_app("fold_twins", None);
+        let (tab, group) = ("Setup", "Operation Customize");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let lines = app.group_lines(&rows);
+        let twins = |label: &str| -> Vec<(usize, Vec<String>)> {
+            lines.iter().enumerate().filter_map(|(i, l)| match l { Line::Heading { path, at, depth: 0, .. } if path.last().map(String::as_str) == Some(label) => Some((i, menu_rows::fold_id(path, at))), _ => None }).collect()
+        };
+        let (keys, fns) = (twins("Custom Key/Dial Set."), twins("Fn Menu Settings"));
+        assert!(keys.len() == 2 && fns.len() == 2, "the two pairs on main's definition: {keys:?} {fns:?}");
+        assert!(keys[0].1 != keys[1].1 && fns[0].1 != fns[1].1, "four fold ids");
+        let folded_of = |app: &App| menu_rows::hidden(&lines, |p| app.folded.contains(&App::fold_key(tab, group, p)));
+        // the rows under each heading
+        let under = |at: usize| -> Vec<usize> { let d = match &lines[at] { Line::Heading { depth, .. } => *depth, _ => 0 }; (at + 1..lines.len()).take_while(|&j| match &lines[j] { Line::Heading { depth, .. } | Line::Row { depth, .. } => *depth > d, _ => false }).collect() };
+        // a click on the first Custom Key heading, in the window
+        let mut w = Win::new();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), None);
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let first = said.iter().find(|(_, r, l)| *r == Role::Label && l == "⏷ Custom Key/Dial Set.").map(|(id, ..)| *id).expect("the heading");
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: A11y::Click, target: first, data: None })]);
+        let _ = w.run(&mut app, vec![]);
+        // one of the two folded (the tree lists the two nodes in its own order), the other left open
+        let hidden = folded_of(&app);
+        let shut: Vec<bool> = keys.iter().map(|(_, id)| app.folded.contains(&App::fold_key(tab, group, id))).collect();
+        assert_eq!(shut.iter().filter(|x| **x).count(), 1, "the click folded one heading alone: {:?}", app.folded);
+        let (closed, open) = if shut[0] { (keys[0].0, keys[1].0) } else { (keys[1].0, keys[0].0) };
+        assert!(under(closed).iter().all(|&j| hidden[j]), "its rows hidden");
+        assert!(under(open).iter().all(|&j| !hidden[j]), "the other's rows shown");
+        // Collapse all: each by its own key
+        app.folded.clear();
+        app.fold_all(true);
+        for (_, id) in keys.iter().chain(&fns) {
+            assert!(app.folded.contains(&App::fold_key(tab, group, id)), "{id:?} folded by its own key");
+        }
+        // a jump to a row under the second Fn Menu Settings unfolds that one alone
+        let target = match &lines[under(fns[1].0)[0]] { Line::Row { index, .. } => rows[*index][0].clone(), _ => unreachable!() };
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&target.name, &target.key)));
+        let _ = w.run(&mut app, vec![]);
+        assert!(!app.folded.contains(&App::fold_key(tab, group, &fns[1].1)) && app.folded.contains(&App::fold_key(tab, group, &fns[0].1)), "the jump unfolded its own heading alone");
+        // Enter on the chosen second Custom Key heading folds it alone
+        app.folded.clear();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), None);
+        app.item_head = Some(keys[1].1.clone());
+        app.focus = Focus::Items;
+        let _ = w.run(&mut app, vec![]);
+        w.key(&mut app, egui::Key::Enter);
+        assert!(app.folded.contains(&App::fold_key(tab, group, &keys[1].1)) && !app.folded.contains(&App::fold_key(tab, group, &keys[0].1)), "Enter folded the chosen one alone");
+        done(&dir, &user);
+    }
+
     /// Rows the camera tells apart by an icon alone (`row_icons`, stubbed as the next data pass gives them) draw its words
     /// wherever a row level is drawn or said: Edit's headings and a screen reader's name for them, a row's title in a
     /// menu, its place on hover, the page's layout and places, Compare's titles in the window and on the page; a search
@@ -2641,7 +2700,7 @@ pub(crate) mod facts_tests {
         let (mut app, dir, user) = sample_app("row_icons", Some(crate::test_support::row_icons_stub));
         let (_, _, rows) = app.tab_groups("Setup").into_iter().find(|(g, _, _)| g == "Operation Customize").unwrap();
         let lines = app.group_lines(&rows);
-        let heads: Vec<(String, Vec<String>)> = lines.iter().filter_map(|l| match l { Line::Heading { label, depth: 0, path } => Some((label.clone(), path.clone())), _ => None }).collect();
+        let heads: Vec<(String, Vec<String>)> = lines.iter().filter_map(|l| match l { Line::Heading { label, depth: 0, path, .. } => Some((label.clone(), path.clone())), _ => None }).collect();
         for (h, label) in [("Custom Key/Dial Set. (Still)", "Custom Key/Dial Set."), ("Custom Key/Dial Set. (Movie)", "Custom Key/Dial Set."), ("Fn Menu Settings (Still)", "Fn Menu Settings"), ("Fn Menu Settings (Playback)", "Fn Menu Settings")] {
             assert!(heads.iter().any(|(x, path)| x == h && path.last().map(String::as_str) == Some(label)), "{h}, its path the label alone, in {heads:?}");
         }
@@ -2857,7 +2916,7 @@ pub(crate) mod facts_tests {
         let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
         let (tab, group) = ("Shooting", "Drive Mode");
         let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
-        let heads: Vec<String> = app.group_lines(&rows).iter().filter_map(|l| match l { Line::Heading { path, .. } => Some(App::fold_key(tab, group, path)), _ => None }).collect();
+        let heads: Vec<String> = app.group_lines(&rows).iter().filter_map(|l| match l { Line::Heading { path, at, .. } => Some(App::fold_key(tab, group, &menu_rows::fold_id(path, at))), _ => None }).collect();
         app.select(Some(View::Tab(tab.into())), Some(group.into()), None);
         let _ = w.run(&mut app, vec![]);
         for pane in [Focus::Tabs, Focus::Groups, Focus::Items] {
@@ -2918,7 +2977,7 @@ pub(crate) mod facts_tests {
         let (tab, group) = ("Shooting", "Drive Mode");
         let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
         let lines = app.group_lines(&rows);
-        let heads: Vec<String> = lines.iter().filter_map(|l| match l { Line::Heading { path, .. } => Some(App::fold_key(tab, group, path)), _ => None }).collect();
+        let heads: Vec<String> = lines.iter().filter_map(|l| match l { Line::Heading { path, at, .. } => Some(App::fold_key(tab, group, &menu_rows::fold_id(path, at))), _ => None }).collect();
         let first = lines.iter().find_map(|l| match l { Line::Row { index, .. } => Some(rows[*index][0].clone()), _ => None }).unwrap();
         app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&first.name, &first.key)));
         let _ = w.run(&mut app, vec![]);
@@ -2959,7 +3018,8 @@ pub(crate) mod facts_tests {
         let lines = app.group_lines(&rows);
         // the first heading and the row just above it (or, at the top, the row just below)
         let h = lines.iter().position(|l| matches!(l, Line::Heading { .. })).unwrap();
-        let Line::Heading { path, label, .. } = &lines[h] else { unreachable!() };
+        let Line::Heading { path: labels, label, at, .. } = &lines[h] else { unreachable!() };
+        let path = &menu_rows::fold_id(labels, at);
         let key = App::fold_key(tab, group, path);
         let next = lines[h + 1..].iter().find_map(|l| match l { Line::Row { index, .. } => Some(rows[*index][0].clone()), _ => None }).unwrap();
         app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&next.name, &next.key)));

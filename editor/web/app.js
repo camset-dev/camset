@@ -1578,10 +1578,17 @@ function groupRows(g, where) {
   return out;
 }
 
+/** What names a heading of the camera's layout for folding in group `group` of view `where`: its labels and their
+ *  places (`at`, the window's `fold_id`), so two rows of one label (told apart on the camera by an icon alone) fold
+ *  apart. */
+function rowFoldKey(where, group, l) {
+  return JSON.stringify(l.at && l.at.length ? [where, group, l.path, l.at] : [where, group, l.path]);
+}
+
 /** A row of the camera's menu that holds no setting of its own here: a heading that folds the rows under it, kept
  *  folded while the page is open, as the window keeps its own. */
 function rowHead(l, g, where) {
-  const key = JSON.stringify([where, g.name, l.path]);
+  const key = rowFoldKey(where, g.name, l);
   const name = el("div", { class: "name", title: "A row of the camera's menu: click to fold or show the settings under it" }, l.head);
   const head = el("div", { class: "row rowhead", "data-depth": l.depth, "data-fold": key, style: { "--depth": String(l.depth) } }, name);
   const show = () => {
@@ -4399,7 +4406,7 @@ function foldAll(collapse) {
     // every heading of its layout, its rows made or not yet (a group's rows are made when it is first opened)
     for (const l of (d._group && d._group.layout) || []) {
       if (!("head" in l)) continue;
-      const k = JSON.stringify([d._where, d._group.name, l.path]);
+      const k = rowFoldKey(d._where, d._group.name, l);
       if (collapse) xp.rowFolds.add(k); else xp.rowFolds.delete(k);
     }
   }

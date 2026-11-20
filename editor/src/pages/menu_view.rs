@@ -321,13 +321,13 @@ impl App {
                 None => {
                     let hidden = menu_rows::hidden(&lines, |p| self.folded.contains(&fold_key(p)));
                     // a row of the camera's menu chosen by the keys stays the choice while it is shown
-                    let head_shown = self.item_head.as_ref().is_some_and(|p| lines.iter().zip(&hidden).any(|(l, h)| !h && matches!(l, Line::Heading { path, .. } if path == p)));
+                    let head_shown = self.item_head.as_ref().is_some_and(|p| lines.iter().zip(&hidden).any(|(l, h)| !h && matches!(l, Line::Heading { path, at, .. } if menu_rows::fold_id(path, at) == *p)));
                     if !head_shown {
                         // the first row a fold leaves shown, or where every row is under a folded one, the first heading
                         let first = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Row { index, .. } if !h => Some(&rows[*index][0]), _ => None });
                         self.select(None, self.group.clone(), first.map(|s| (s.name.as_str(), s.key.as_str())));
                         if first.is_none() {
-                            self.item_head = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Heading { path, .. } if !h => Some(path.clone()), _ => None });
+                            self.item_head = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Heading { path, at, .. } if !h => Some(menu_rows::fold_id(path, at)), _ => None });
                         }
                     }
                 }
@@ -349,7 +349,7 @@ impl App {
             let stops: Vec<usize> = (0..lines.len()).filter(|&a| !hidden[a] && matches!(lines[a], Line::Row { .. } | Line::Heading { .. })).collect();
             let cur = Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref());
             let at = lines.iter().position(|l| match l {
-                Line::Heading { path, .. } => self.item_head.as_ref() == Some(path),
+                Line::Heading { path, at, .. } => self.item_head.as_ref() == Some(&menu_rows::fold_id(path, at)),
                 Line::Row { index, .. } => self.item_head.is_none() && Some(*index) == cur,
                 _ => false,
             });
@@ -361,9 +361,9 @@ impl App {
                     self.select(None, self.group.clone(), Some((&rows[*index][0].name, &rows[*index][0].key)));
                     moved = true;
                 }
-                Some(Line::Heading { path, .. }) => {
+                Some(Line::Heading { path, at, .. }) => {
                     self.select(None, self.group.clone(), None);
-                    self.item_head = Some(path.clone());
+                    self.item_head = Some(menu_rows::fold_id(path, at));
                     moved = true;
                 }
                 _ => {}
@@ -432,7 +432,7 @@ impl App {
                 egui::ScrollArea::vertical().id_salt("detail_scroll").auto_shrink([false, false]).show(ui, |ui| {
                     if let Some(row) = current.map(|i| &rows[i]) {
                         self.detail_panel(ui, tab, gname, row, editable, &mut actions);
-                    } else if let Some(label) = self.item_head.as_ref().and_then(|p| lines.iter().find_map(|l| match l { Line::Heading { label, path, .. } if path == p => Some(label.clone()), _ => None })) {
+                    } else if let Some(label) = self.item_head.as_ref().and_then(|p| lines.iter().find_map(|l| match l { Line::Heading { label, path, at, .. } if menu_rows::fold_id(path, at) == *p => Some(label.clone()), _ => None })) {
                         ui.heading(label);
                         ui.label("A row of the camera's menu that holds the settings under it. Enter or Space folds or shows them, Left folds them and Right shows them; Up and Down go on through the rows.");
                     }
@@ -488,8 +488,11 @@ impl App {
                                     ui.end_row();
                                     continue;
                                 }
-                                Line::Heading { label, depth, path } => {
-                                    let closed = self.folded.contains(&fold_key(path));
+                                Line::Heading { label, depth, path, at } => {
+                                    // named for folding by its labels and their places (`fold_id`): two rows of one
+                                    // label fold apart
+                                    let id = menu_rows::fold_id(path, at);
+                                    let closed = self.folded.contains(&fold_key(&id));
                                     // the edited settings under it, shown while it is folded
                                     let under = lines[li + 1..].iter().take_while(|l| matches!(l, Line::Row { depth: d, .. } | Line::Heading { depth: d, .. } if d > depth));
                                     let edited = under.filter(|l| matches!(l, Line::Row { index, .. } if rows[*index].iter().any(|s| self.changed(s)))).count();
@@ -497,12 +500,12 @@ impl App {
                                         ui.add_space(ROW_INDENT * *depth as f32);
                                         let head = RichText::new(format!("{} {label}", if closed { "⏵" } else { "⏷" })).strong();
                                         // chosen by the keys (`item_head`): marked as a chosen row is
-                                        let chosen = self.item_head.as_ref() == Some(path);
+                                        let chosen = self.item_head.as_ref() == Some(&id);
                                         let head = if chosen { head.background_color(ui.visuals().selection.bg_fill) } else { head };
                                         let r = ui.add(egui::Label::new(head).sense(egui::Sense::click()))
                                             .on_hover_text(if closed { "A row of the camera's menu: click to show the settings under it" } else { "A row of the camera's menu: click to fold the settings under it" });
                                         if r.clicked() {
-                                            fold = Some(path.clone());
+                                            fold = Some(id.clone());
                                         }
                                         if chosen && moved {
                                             r.scroll_to_me(None);
@@ -645,8 +648,8 @@ impl App {
                 }
                 let lines = self.group_lines(rows);
                 for l in &lines {
-                    if let Line::Heading { path, .. } = l {
-                        let k = Self::fold_key(&tab, gname, path);
+                    if let Line::Heading { path, at, .. } = l {
+                        let k = Self::fold_key(&tab, gname, &menu_rows::fold_id(path, at));
                         if collapse { self.folded.insert(k); } else { self.folded.remove(&k); }
                     }
                 }
@@ -659,7 +662,7 @@ impl App {
                     self.select(None, Some(gname.clone()), row.as_ref().map(|s| (s.name.as_str(), s.key.as_str())));
                     // none left shown: the row of the camera's menu, still shown, that holds it, so the keys have somewhere to be
                     if row.is_none() {
-                        self.item_head = (0..at).rev().find_map(|a| match &lines[a] { Line::Heading { path, .. } if !hidden[a] => Some(path.clone()), _ => None });
+                        self.item_head = (0..at).rev().find_map(|a| match &lines[a] { Line::Heading { path, at: places, .. } if !hidden[a] => Some(menu_rows::fold_id(path, places)), _ => None });
                     }
                 }
             }

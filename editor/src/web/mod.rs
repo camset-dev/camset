@@ -1070,7 +1070,7 @@ impl App {
                 let lines = self.group_lines(&rows);
                 if lines.iter().any(|l| !matches!(l, Line::Row { depth: 0, .. })) {
                     layout = Some(lines.iter().map(|l| match l {
-                        Line::Heading { label, depth, path } => json!({ "head": label, "depth": depth, "path": path }),
+                        Line::Heading { label, depth, path, at } => json!({ "head": label, "depth": depth, "path": path, "at": at }),
                         Line::Row { index, depth } => json!({ "key": rows[*index][0].key, "depth": depth }),
                         Line::Mode(mode) => json!({ "mode": menu_rows::mode_words(mode), "name": mode }),
                         Line::More => json!({ "more": menu_rows::MORE }),
@@ -1188,7 +1188,7 @@ impl App {
                 let lines = menu_rows::lay_out(&rows);
                 if lines.iter().any(|l| !matches!(l, Line::Row { depth: 0, .. })) {
                     layout = Some(lines.iter().map(|l| match l {
-                        Line::Heading { label, depth, path } => json!({ "head": label, "depth": depth, "path": path }),
+                        Line::Heading { label, depth, path, at } => json!({ "head": label, "depth": depth, "path": path, "at": at }),
                         Line::Row { index, depth } => json!({ "key": rows[*index][0].key, "depth": depth }),
                         Line::Mode(mode) => json!({ "mode": menu_rows::mode_words(mode), "name": mode }),
                         Line::More => json!({ "more": menu_rows::MORE }),

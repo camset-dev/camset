@@ -484,6 +484,34 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_two_rows_of_one_label_fold_apart(tmp_path):
+    """Two headings of one label in one group, apart by their places (`at`, as the editor sends them: on the camera an
+    icon alone tells them apart): folding one leaves the other's rows shown, by a click and by Collapse all's keys
+    alike, each kept by its own key."""
+    got = run(tmp_path, """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+const g = { name: "Operation Customize", color: "#000", rows: [row("k:a", "Key A"), row("k:b", "Key B")],
+  layout: [{ head: "Custom Key/Dial Set. (Still)", depth: 0, path: ["Custom Key/Dial Set."], at: [5] }, { key: "k:a", depth: 1 },
+           { head: "Custom Key/Dial Set. (Movie)", depth: 0, path: ["Custom Key/Dial Set."], at: [6] }, { key: "k:b", depth: 1 }] };
+view.mode = "edit"; view.page = "tab"; view.tab = "Setup"; view.q = "";
+const drawn = drawTab([g], { places: true, flat: false });
+$("content").replaceChildren(...drawn);
+const hidden = () => $("content").querySelectorAll(".grid > .row").map((n) => n.hidden);
+const heads = $("content").querySelectorAll(".rowhead > .name");
+heads[0].click();
+const out = { one: hidden(), keys: [...xp.rowFolds] };
+heads[0].click();
+shortcut(key("ArrowUp"));
+out.all = [...xp.rowFolds].sort();
+console.log(JSON.stringify(out));
+""")
+    assert got["one"] == [False, True, False, False], "the Still heading folded, the Movie one's row shown"
+    assert got["keys"] == ['["Setup","Operation Customize",["Custom Key/Dial Set."],[5]]']
+    assert got["all"] == ['["Setup","Operation Customize",["Custom Key/Dial Set."],[5]]', '["Setup","Operation Customize",["Custom Key/Dial Set."],[6]]']
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an
