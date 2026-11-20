@@ -278,7 +278,8 @@ def test_every_menu_names_modes_the_camera_has_and_tiles_it_holds():
     assert fromdata.camera_menus(d, []) is None
     for bad, words in (([{"name": "A", "modes": ["Night"]}], "names the mode 'Night'"),
                        ([{"name": "A", "modes": ["Movie"]}, {"name": "B", "modes": ["Movie"]}], "in two menus"),
-                       ([{"name": "A", "modes": ["Movie"], "main_tiles": "S&Q"}], "tile set 'S&Q'")):
+                       ([{"name": "A", "modes": ["Movie"], "main_tiles": "S&Q"}], "tile set 'S&Q'"),
+                       ([MENUS[0], MENUS[1], {"name": "S&Q", "modes": ["S&Q"]}], "leaves the camera's mode 'Time-lapse' without a menu")):
         with pytest.raises(hand_tables.Refused) as e:
             fromdata.camera_menus(d, bad)
         assert words in str(e.value.code), words

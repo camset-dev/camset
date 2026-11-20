@@ -217,7 +217,8 @@ def camera_menus(doc: dict, table: list) -> list | None:
     """The camera's menus (camera.menus) from its MENUS hand table (`table`, as writer/hand_tables.py reads it), each
     {name, modes[, main_tiles][, hover]} in the table's order; None for no table. Refused in plain words (hand_tables.
     Refused) where a menu's mode is none the camera section names (its memory sets' modes, its live mode's values), a
-    mode is in two menus, a name is there twice, or main_tiles names no tile set of camera.main_tiles."""
+    mode is in two menus, a mode of the camera's live mode is in none (every position of its switch has its menu), a
+    name is there twice, or main_tiles names no tile set of camera.main_tiles."""
     if not table:
         return None
     cam = doc.get("camera") or {}
@@ -239,6 +240,10 @@ def camera_menus(doc: dict, table: list) -> list | None:
         if "main_tiles" in menu and menu["main_tiles"] not in tiles:
             raise hand_tables._refused(where, f"MENUS' {menu['name']!r} names the tile set {menu['main_tiles']!r}, which "
                                               "camera.main_tiles does not hold")
+    live = [m for m in dict.fromkeys(((cam.get("live_mode") or {}).get("modes") or {}).values()) if m not in seen]
+    if live:
+        raise hand_tables._refused(where, f"MENUS leaves the camera's mode {live[0]!r} without a menu (camera.live_mode "
+                                          "names it): give it to the menu the camera shows in it")
     return [{f: menu[f] for f in MENU_FIELDS if f in menu} for menu in table]
 
 
