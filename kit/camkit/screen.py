@@ -133,6 +133,13 @@ SUB_BOX = (125, 176, 185, 250)         # › box: Right opens a sub-panel
 # the box is filled orange 211 x 56 at y 351 (Cont. Bracket's, kit2_fin_brtype_cont 00006), 248 or 58 wide (Focus
 # Bracket's Step Width and its digits, kit2_fin_brtype_f_look2 00008-00009), the other boxes outlined in grey beside it
 DIALOG_FIELDS = (115, 110)
+# A lit box holding a long value can be under the 60 % orange a number form's field fills (_active_field): Cont. and
+# Single Bracket's "2 Images (+)" and "2 Images (-)", 58.0-60.0 % over HDMI (kit2_pass2 174861-178286 and 233828-233975 in
+# Drive Mode, 265237 in Bracket Type). Its outline stays whole (_lit_box): the most orange of each side's three outermost
+# lines misses at most 20 px across the top and bottom (the corners, and the ▲/▼ drawn over those edges) and 3 px down
+# the sides. Measured 2026-11-20 on the 38,525 saved frames read as dialogs (7,255 OSD, 31,270 HDMI): 10,353 lit boxes
+# over 60 %, 623 under it (those, 58.0 % the least), no other orange shape of a box's size over 20 % orange
+LIT_BOX_FILL, LIT_BOX_GAPS = 0.4, (30, 8)
 BATTERY = (556, 0, 640, 40)            # shooting screen: battery icon (template = its left end, no digits)
 # held vertically the camera turns the shooting screen on HDMI too (2026-10-30): grip down puts the
 # battery at the top left, read bottom to top; grip up at the bottom right (each template cut from
@@ -1247,14 +1254,15 @@ def _dialog(a, s: Screen):
 
 def _dialog_field(a, s: Screen):
     """A carousel option's lit field (DIALOG_FIELDS): field, the lit box's index among the boxes on its line (boxes,
-    each's x0, x1; bar, the lit box's rows), as a number form's (_fields), the line looked at right of the divider only.
-    Left as they are (None, []) while no box is lit: the option itself is lit, or it draws no fields. The signature is
-    not touched: the body's picture under the title already holds the lit box."""
+    each's x0, x1; bar, the lit box's rows), as a number form's (_fields), the line looked at right of the divider only;
+    the lit box _active_field's or, where it finds none, _lit_box's (a long value). Left as they are (None, []) while no
+    box is lit: the option itself is lit, or it draws no fields. The signature is not touched: the body's picture under
+    the title already holds the lit box."""
     x0, y0 = DIALOG_FIELDS
     o = _orange(a).copy()
     o[:y0] = False
     o[:, :x0] = False
-    box = _active_field(o)
+    box = _active_field(o) or _lit_box(o)
     if box is None:
         return
     x, y, w, h = box
@@ -1262,6 +1270,28 @@ def _dialog_field(a, s: Screen):
     s.boxes = _split_sides(g, _line_boxes(g, box, x0), box)
     s.field = s.boxes.index((x, x + w - 1))
     s.bar = (y, y + h - 1)
+
+
+def _lit_box(o):
+    """A carousel option's lit box holding a long value, where _active_field finds none (_dialog_field), or None: the
+    largest orange component 40-70 px tall and 50-260 wide, over LIT_BOX_FILL of it orange, whose outline is whole: each
+    side's line (the most orange of its three outermost rows or columns) misses at most LIT_BOX_GAPS px. The value's
+    white text takes from the box's middle and never reaches its sides (DIALOG_FIELDS)."""
+    import cv2
+    m = o.astype(np.uint8)
+    m[:58] = 0
+    m[420:] = 0
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    best = None
+    across, down = LIT_BOX_GAPS
+    for i, (x, y, w, h, area) in enumerate(st[1:], 1):
+        if not (40 <= h <= 70 and 50 <= w <= 260 and area > LIT_BOX_FILL * w * h) or (best and area <= best[4]):
+            continue
+        sub = lab[y:y + h, x:x + w] == i
+        rows, cols = sub.sum(axis=1), sub.sum(axis=0)
+        if w - min(rows[:3].max(), rows[-3:].max()) <= across and h - min(cols[:3].max(), cols[-3:].max()) <= down:
+            best = (int(x), int(y), int(w), int(h), int(area))
+    return best and best[:4]
 
 
 def _split_sides(g, boxes, box) -> list:

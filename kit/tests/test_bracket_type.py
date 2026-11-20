@@ -92,6 +92,52 @@ def test_the_cameras_bracket_type_frames(name, field, count):
     assert s.field == field and len(s.boxes) == count
 
 
+def long_value(lit=1, boxes=CONT, y=351, h=56) -> Frame:
+    """carousel(lit) holding a long white value in its lit box, the ▲ and ▼ drawn white over the box's top and bottom
+    edges: half the box left orange (Bracket Type's "2 Images (-)" left 59 %, kit2_pass2 265237), its sides whole."""
+    f = carousel(lit, boxes, y, h)
+    x0, x1 = boxes[lit]
+    for x in range(x0 + 14, x1 - 14, 8):
+        f.image[y + 8:y + h - 8, x:x + 6] = 230
+    cx = (x0 + x1) // 2
+    f.image[y - 3:y + 4, cx - 8:cx + 9] = 230
+    f.image[y + h - 4:y + h + 3, cx - 8:cx + 9] = 230
+    return f
+
+
+def test_a_lit_box_holding_a_long_value_is_still_the_field():
+    """A lit box under 60 % orange (_active_field's fill) is still the field where its own four sides are orange
+    (screen._lit_box): the value's text takes from the box's middle, never from its sides."""
+    f = long_value()
+    x0, x1 = CONT[1]
+    assert float(screen._orange(f.image)[351:407, x0:x1 + 1].mean()) < 0.6
+    s = screen.read(f)
+    assert s.kind == "dialog" and s.field == 1 and s.boxes == list(CONT) and s.bar == (351, 406)
+
+
+def test_an_orange_outline_is_no_lit_box():
+    """An orange frame round a box, its inside black, is no field: its sides are orange, but it is under 40 % orange."""
+    f = carousel()
+    x0, x1 = CONT[1]
+    f.image[351:407, x0:x1 + 1] = ORANGE
+    f.image[355:403, x0 + 4:x1 - 3] = 0
+    s = screen.read(f)
+    assert s.kind == "dialog" and s.field is None and s.boxes == []
+
+
+@pytest.mark.parametrize("before, lit_before, after, boxes", [
+    ("265236_fresh.png", 1, "265237_down.png", [(137, 345), (354, 563)]),  # Bracket Type: "2 Images (-)", 59 % orange
+    ("233912_down.png", 1, "233914_down.png", [(137, 345), (354, 563)]),   # Drive Mode's Cont. Bracket: "2 Images (+)"
+    ("177248_down-late.png", 0, "177249_right.png", [(137, 345), (354, 563), (573, 624)])])   # Single Bracket's, the › box
+def test_the_cameras_lit_box_holding_2_images(before, lit_before, after, boxes):
+    """The camera's own frames over HDMI, a lit Number of Shots box holding a long value under 60 % orange: box 1 lit, as
+    the frame before it and the press between say (265237 is the failure of 2026-11-20: Down on "3 Images" drew "2 Images
+    (-)"; 177249 is a Right from box 0)."""
+    was, s = (screen.read(load(need(A1 / "kit2_pass2" / "shots" / n))) for n in (before, after))
+    assert s.kind == "dialog" and s.field == 1 and s.boxes == boxes and s.bar == (351, 405)
+    assert was.field == lit_before and len(was.boxes) == len(boxes) and was.bar == s.bar
+
+
 # ------------------------------------------------------------------------------------- A: the second axis of this row
 
 BRK_MAP = "kit2_fin_crawl_brk/map.json"
