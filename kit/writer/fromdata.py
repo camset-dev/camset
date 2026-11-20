@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, paths, placement, row_names, runs
+from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, paths, placement, row_names
 from runner import read_json
 
 from . import hand_tables
@@ -180,7 +180,7 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
         datafiles.say_no_menu_tree(tree, NO_TREE)
         return None
     tree, boxes, hand = datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)), hand or {}
-    modes = silent_modes(definitions.key(doc))
+    modes = placement.menu_modes_of(doc)          # from the proofs' evidence, never the runs
     found = placement.settings(doc, tree, boxes, placement.with_modes(placement.with_hand(hand), modes))
     for k in sorted(set(hand) - set(found)):
         print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
@@ -260,17 +260,6 @@ def with_menus(camera: dict, menus: list | None) -> dict:
 # the probe lines of the provers of an option's own row of boxes (kit/provers/optboxes_run.py's PROBES), in any run
 # folder of the camera's: the order the camera draws those boxes in (camkit.placement.box_orders)
 BOX_PROBES = "option_boxes.jsonl"
-
-
-def silent_modes(camera: str) -> dict:
-    """The shooting modes the camera's own files give its proofs whose context names none (kit/pass2_report.py's
-    silent_modes over the camera's main run on this computer, the live-mode record of each one's base download, cached
-    in the camera's runs/_cache): placement alone takes them (camkit.placement.with_modes); none without the runs."""
-    run = paths.runs_top() / camera / runs.MAIN_RUN
-    if not (run / "proofs.jsonl").exists():
-        return {}
-    import pass2_report
-    return pass2_report.silent_modes(run)
 
 
 def box_orders(camera: str) -> dict:

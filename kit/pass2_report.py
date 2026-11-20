@@ -707,17 +707,17 @@ def live_mode_reader(run: Path) -> live_modes.Reader:
     return live_modes.Reader(lm, live_modes.cache_file(run.parent))
 
 
-def silent_modes(run: Path) -> dict:
-    """{(a record's key, its row's labels norm()ed: camkit.placement.split): the shooting modes its counted proofs whose
-    context names no mode (camkit.placement.mode_of, the camera file's modes) were made in}, by the camera's own files:
-    the live-mode record in each one's base download (live_mode_reader), the top-level menu's mode
-    (camkit.placement.TOP_MODE) where it says none or the file is gone; each record by its element's key and its whole
-    record's. The report's rows and what they credit stay as the contexts give them: a proof made in S&Q of a record
-    every mode shares (the key tables, Playback's filter) is that record's proof all the same. Placement alone takes
-    these modes (writer.fromdata.places, camkit.placement.with_modes), so a menu that never read a row holds a setting
-    its own mode's proofs went through. The camera's files said S&Q for 162 silent lines of 2026-11-07 (Custom Key/Dial
-    Set., Fn Menu Settings, Playback Filter Condition) and Movie for 24 (kit2_drive_tcub's Time Code and User Bit
-    Presets). {} for a run with no proofs."""
+def silent_modes(run: Path, save: bool = True) -> dict:
+    """{(a record's key, its row's labels: camkit.placement.split): the shooting modes its counted proofs whose context
+    names no mode (camkit.placement.mode_of, the camera file's modes) were made in}, by the camera's own files: the
+    live-mode record in each one's base download (live_mode_reader); a base download that is gone, or a code the
+    camera file's live_mode names no mode for, gives none. Each record by its element's key and its whole record's.
+    The report's rows and what they credit stay as the contexts give them: a proof made in S&Q of a record every mode
+    shares (the key tables, Playback's filter) is that record's proof all the same. The writer keeps these modes in
+    the proofs' evidence (writer/proofs.with_menu_modes), and placement takes them from there alone. The camera's
+    files said S&Q for 162 silent lines of 2026-11-07 (Custom Key/Dial Set., Fn Menu Settings, Playback Filter
+    Condition) and Movie for 24 (kit2_drive_tcub's Time Code and User Bit Presets). save: keep what was read in the
+    camera's cache (camkit.live_modes; a dry run keeps none). {} for a run with no proofs."""
     if not (run / "proofs.jsonl").exists():
         return {}
     proofs, skip = report_proofs(run)[:2]
@@ -727,14 +727,17 @@ def silent_modes(run: Path) -> dict:
     for i, r in enumerate(proofs):
         if i in skip or (r.get("applied") is False and r.get("kind") != "fields"):
             continue
-        if placement.mode_of(f"x [{r.get('context') or ''}]", modes) is not None:
+        if placement.mode_of(f"x [{r.get('context') or ''}]", modes) is not None or not r.get("base"):
             continue
-        mode = (reader.mode(base_file(r["base"])) if r.get("base") else None) or placement.TOP_MODE
-        labels = tuple(placement.norm(x) for x in placement.split(row_name(r)))
+        mode = reader.mode(base_file(r["base"]))
+        if mode is None:
+            continue                       # its base download gone, or a code no mode: no mode, never the top one
+        labels = tuple(placement.split(row_name(r)))
         for c in element_changes(r):
             for k in {c["key"], c["key"].split("[")[0]}:
                 out[(k, labels)].add(mode)
-    reader.save()
+    if save:
+        reader.save()
     return dict(out)
 
 

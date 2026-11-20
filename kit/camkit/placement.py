@@ -678,22 +678,34 @@ def with_hand(hand: dict):
     return lambda s: list(hand[s["key"]]) if s.get("key") in hand else proof_paths(s)
 
 
+def menu_modes_of(doc: dict) -> dict:
+    """{(a setting's key, a row's labels): {mode}}: the shooting modes the camera's own files gave the setting's proofs
+    of that row whose context names none, as the writer keeps them in each proof's evidence ("menu_modes": {the row,
+    its labels " > " between: [modes]}, writer/proofs.with_menu_modes; never public: camkit.definitions.lean_proof).
+    with_modes takes them, so a definition is placed alike with or without the runs on the computer. {} where no
+    proof has any (a definition read without its evidence)."""
+    out = {}
+    for s in doc.get("settings") or []:
+        for row, ms in ((s.get("proved") or {}).get("menu_modes") or {}).items():
+            out[(s.get("key"), tuple(split(row)))] = set(ms)
+    return out
+
+
 def with_modes(paths_of, modes: dict | None):
     """The paths `paths_of` gives a setting, each whose context names no mode given the shooting modes its proofs were
-    made in by the camera's own files (`modes`: {(key, the row's labels norm()ed): {mode}}, kit/pass2_report.py's
-    silent_modes, the setting's key or its whole record's): the path as it is where one was the top-level menu's
-    (TOP_MODE), and the path with "[<mode> mode]" for each other mode; a path the lookup does not know stays as it is.
-    `paths_of` itself where there is no lookup."""
+    made in by the camera's own files (`modes`: {(key, the row's labels): {mode}}, menu_modes_of, the setting's own
+    key): the path as it is where one was the top-level menu's (TOP_MODE), and the path with "[<mode> mode]" for each
+    other mode; a path the lookup does not know stays as it is. `paths_of` itself where there is no lookup."""
     if not modes:
         return paths_of
     every = {TOP_MODE} | {m for ms in modes.values() for m in ms}
+    normed = {(k, tuple(norm(x) for x in labels)): ms for (k, labels), ms in modes.items()}
 
     def paths(s):
         out = []
         for p in paths_of(s):
             labels = tuple(norm(x) for x in split(p))
-            got = set() if mode_of(p, sorted(every)) else \
-                modes.get((s.get("key"), labels)) or modes.get((str(s.get("key")).split("[")[0], labels)) or set()
+            got = set() if mode_of(p, sorted(every)) else normed.get((s.get("key"), labels)) or set()
             if not got - {TOP_MODE}:
                 out.append(p)
                 continue

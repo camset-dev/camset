@@ -167,7 +167,7 @@ from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis
                            reader_source, with_drawn, sampled_scale, scaled_numbers, shown, menu_row, with_allowances, written_values,
                            with_in_sets_proved, without_set_twins, still_values, walked_whole, written_by_row,
                            with_menu_rows, with_names, with_option_trees, with_scales, with_shown_as, without_held,
-                           without_observed, without_written_with)
+                           with_menu_modes, without_observed, without_written_with)
 from writer.offered import check_video_systems, cut_to_walks, not_offered_marks, with_video_systems  # noqa: E402
 from writer.copies import copy_names, with_copies, with_keeps_apart  # noqa: E402
 from writer.limits import with_limit_pairs  # noqa: E402
@@ -1906,6 +1906,10 @@ def main():
     print(f"help: {n_help} settings with the camera's In-Camera Guide text ({n_opt} with help for their options), "
           f"kept in {paths.shown(private)}; {n_own} with the project's own in the definition")
     with_option_trees(doc, RUN)
+    # the modes the camera's own files give the proofs whose context names none, into their evidence, where placement
+    # reads them (not the runs): a --from-data or a write without the runs places the settings alike
+    print(f"menu modes: {with_menu_modes(doc, RUN, save=a.write and not a.dry_run)} settings with proofs whose context "
+          "names no mode and that the camera's own files place in another mode (kept in their evidence)")
     doc = from_data(doc)                 # the parts from data/, as --from-data gives them, last
     print(f"expert: {sum(1 for s in doc['settings'] if s.get('expert'))} settings shown in Expert mode only")
     names = collections.Counter(src for s in doc["settings"] for src in ((s.get("proved") or {}).get("names") or {}).values())

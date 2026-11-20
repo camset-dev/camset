@@ -1,10 +1,11 @@
 """The shooting mode a settings file was saved in, by the camera's own live-mode record: the camera file's `live_mode`
 (its record's key and the code of each mode; no camera's fact here). Read from a file once and kept in the camera's
 cache, runs/<model>_fw<fw>/_cache/live_mode.json, by the file's SHA-256 and the record's key, the raw code only (so a
-mode renamed in the camera file needs no new reading): the pass-2 report reads the mode of every proof whose context
-names none from its base download (kit/pass2_report.py, report_proofs), about 1,250 files on the a1 II, 50 s to parse
-afresh and well under a second from the cache. A file that cannot be read, or a cache that cannot be read or written,
-gives no mode or changes nothing: the file is read afresh next time."""
+mode the camera file names later, or renames, needs no new reading): the writer reads the mode of every counted proof
+whose context names none from its base download (kit/pass2_report.py silent_modes, writer/proofs.with_menu_modes),
+about 1,250 files on the a1 II, 50 s to parse afresh and well under a second from the cache. A file that cannot be
+read or parsed gives no mode and is not kept, so it is read afresh next time; a cache that cannot be read or written
+changes nothing. Only a write keeps what it read (save()); a dry run keeps nothing."""
 import hashlib
 import json
 import re
@@ -59,9 +60,11 @@ class Reader:
                 try:
                     rec = camset.parse(data, name=str(path)).get(*self.where)
                 except (ValueError, IndexError):
-                    rec = None
+                    return None                 # no settings file this reader frames: not kept, read afresh next time
                 v = rec.value() if rec is not None else None
-                self.codes[sha] = v if isinstance(v, int) else None
+                if not isinstance(v, int):
+                    return None                 # no such record: not kept either
+                self.codes[sha] = v
                 self.fresh = True
             self.by_path[path] = self.codes[sha]
         code = self.by_path[path]

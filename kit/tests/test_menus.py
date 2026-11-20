@@ -524,12 +524,14 @@ def test_a_menus_place_always_carries_its_row_and_row_at():
 
 def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode_for_placement_alone(tmp_path, monkeypatch):
     """Where a proof's context names no mode, placement takes the camera's own: the live-mode record (the camera file's
-    live_mode) in its base download, read once and kept in the camera's cache. A silent proof whose base download says
-    Movie is its record's proof in the Movie menu too, where that menu never read the rows under the row; one whose
-    base says Stills, or whose context names a mode, stays as it is. The report's rows, and so what they credit, stay
-    as the contexts give them, and proofs.jsonl is not rewritten."""
+    live_mode) in its base download, read once and kept in the camera's cache, written by the writer into the proof's
+    evidence (proved.menu_modes, writer/proofs.with_menu_modes) and read from there alone. A silent proof whose base
+    download says Movie is its record's proof in the Movie menu too, where that menu never read the rows under the row;
+    one whose base says Stills, whose context names a mode, or whose base download is gone, gives none. The report's
+    rows, and so what they credit, stay as the contexts give them, and proofs.jsonl is not rewritten."""
     import pass2_report
     from camkit import camset, live_modes, paths
+    from writer import proofs as writer_proofs
     key = paths.A1II
     lm = json.loads(definitions.camera_file(key).read_text(encoding="utf-8"))["live_mode"]
     section, rid = (0, int(lm["key"].split("0x")[1], 16))
@@ -546,29 +548,79 @@ def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode_for_placemen
              {**line, "path": ["Exposure Std. Adjust", "Multi"], "base": "00002_stills.DAT",
               "changes": [{"key": "global:0x0032", "before": 0, "after": 1}]},
              {**line, "path": ["Exposure Std. Adjust", "Spot"], "base": "00001_movie.DAT", "context": "S&Q mode",
-              "changes": [{"key": "global:0x0033", "before": 0, "after": 1}]}]
+              "changes": [{"key": "global:0x0033", "before": 0, "after": 1}]},
+             {**line, "path": ["Exposure Std. Adjust", "Center"], "base": "00003_gone.DAT",
+              "changes": [{"key": "global:0x0034", "before": 0, "after": 1}]}]
     text = "".join(json.dumps(x) + "\n" for x in lines)
     (run / "proofs.jsonl").write_text(text, encoding="utf-8")
     monkeypatch.setattr(live_modes, "CACHE", tmp_path / "live_mode.json")
     rows = [pass2_report.row_name(r) for r in pass2_report.report_proofs(run)[0]]
-    assert rows == ["Exposure Std. Adjust > Spot", "Exposure Std. Adjust > Multi", "Exposure Std. Adjust > Spot [S&Q mode]"]
-    modes = pass2_report.silent_modes(run)
-    spot, multi = ("exposurestdadjust", "spot"), ("exposurestdadjust", "multi")
-    assert modes == {("global:0x0031", spot): {"Movie"}, ("global:0x0032", multi): {"Stills"}}
-    assert (run / "proofs.jsonl").read_text(encoding="utf-8") == text
-    assert len(json.loads((tmp_path / "live_mode.json").read_text(encoding="utf-8"))["codes"]) == 2
+    assert rows == ["Exposure Std. Adjust > Spot", "Exposure Std. Adjust > Multi", "Exposure Std. Adjust > Spot [S&Q mode]",
+                    "Exposure Std. Adjust > Center"]
+    assert pass2_report.silent_modes(run, save=False) == {("global:0x0031", ("Exposure Std. Adjust", "Spot")): {"Movie"},
+                                                           ("global:0x0032", ("Exposure Std. Adjust", "Multi")): {"Stills"}}
+    assert not (tmp_path / "live_mode.json").exists()                                    # a dry run keeps nothing
+    assert pass2_report.silent_modes(run) and len(json.loads((tmp_path / "live_mode.json").read_text(encoding="utf-8"))["codes"]) == 2
     monkeypatch.setattr(camset, "parse", lambda *a, **k: (_ for _ in ()).throw(AssertionError("read again")))
-    assert pass2_report.silent_modes(run) == modes                                         # from the cache
+    assert pass2_report.silent_modes(run)                                                 # from the cache
+    assert (run / "proofs.jsonl").read_text(encoding="utf-8") == text
     d = doc(setting("global:0x0031", "Spot", "Exposure", "Exposure Std. Adjust > Spot"),
-            setting("global:0x0032", "Multi", "Exposure", "Exposure Std. Adjust > Multi"))
-    assert placement.with_modes(placement.proof_paths, modes)(d["settings"][0]) == ["Exposure Std. Adjust > Spot [Movie mode]"]
-    assert by_key(d)["global:0x0031"] == {"row_menus": ["Still"]}                  # Movie never read Spot's row
+            setting("global:0x0032", "Multi", "Exposure", "Exposure Std. Adjust > Multi"),
+            setting("global:0x0034", "Center", "Exposure", "Exposure Std. Adjust > Center"))
+    assert writer_proofs.with_menu_modes(d, run) == 1
+    by = {s["key"]: s for s in d["settings"]}
+    assert by["global:0x0031"]["proved"]["menu_modes"] == {"Exposure Std. Adjust > Spot": ["Movie"]}
+    assert "menu_modes" not in by["global:0x0032"]["proved"] and "menu_modes" not in by["global:0x0034"]["proved"]
+    from camkit import definitions as D
+    assert D.lean_proof(by["global:0x0031"]["proved"]).keys() <= {"values", "shared", "sampled"}          # never public
+    assert by_key(copy.deepcopy(d))["global:0x0031"] == {"row_menus": ["Still"]}         # the menus as by the paths alone
+    modes = placement.menu_modes_of(d)
+    assert placement.with_modes(placement.proof_paths, modes)(by["global:0x0031"]) == ["Exposure Std. Adjust > Spot [Movie mode]"]
     got = placement.by_menu(d, TREE, MENUS, modes=modes)
     assert got["global:0x0031"] == {"row_menus": ["Still", "Movie"]} and got["global:0x0032"] == {"row_menus": ["Still"]}
     from writer import copies
-    assert [copies.row_mode(r) for r in rows] == ["Stills", "Stills", "S&Q"]          # the writer reads rows alike
+    assert [copies.row_mode(r) for r in rows[:3]] == ["Stills", "Stills", "S&Q"]          # the writer reads rows alike
     assert copies.row_mode("ISO [Movie mode (dial set with the menu)]") == "Movie"
 
+
+def test_a_definition_written_with_proofs_modes_is_rebuilt_alike_without_the_runs(tmp_path, monkeypatch):
+    """The modes of the proofs whose context names none are evidence, in each proof: a definition written with them is
+    rebuilt from data/ and private/ alone, with an empty runs folder and never a look at the runs, the same text twice,
+    through the split into public file and evidence and back; and the top-level place takes them too (a row only
+    Movie's and S&Q's menus have, proved silently in S&Q, is S&Q's, not the first mode's that has it)."""
+    import pass2_report
+    import schema_update as S
+    monkeypatch.setattr(pass2_report, "silent_modes", lambda *a, **k: (_ for _ in ()).throw(AssertionError("read the runs")))
+    key = "TEST_fw1.00"
+    data = tmp_path / "data"
+    (data / key).mkdir(parents=True)
+    camera = {"model": "TEST", **CAMERA, "main_tiles": [{"name": "Stills", "tiles": []}, {"name": "Movie", "tiles": []}]}
+    (data / key / f"camera_{key}.json").write_text(json.dumps(camera), encoding="utf-8")
+    (data / key / f"hand_tables_{key}.json").write_text(json.dumps({"camera": key, "MENUS": MENUS}), encoding="utf-8")
+    tree = tmp_path / "tree.json"
+    tree.write_text(json.dumps(TREE), encoding="utf-8")
+    monkeypatch.setattr(definitions, "DATA", data)
+    monkeypatch.setattr(S.help_files, "OWN", data)
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda k: tree)
+    monkeypatch.setattr(fromdata, "box_orders", lambda k: {})
+    spot = setting("global:0x0031", "Spot", "Exposure", "Exposure Std. Adjust > Spot")
+    spot["proved"]["menu_modes"] = {"Exposure Std. Adjust > Spot": ["Movie"]}
+    tc = setting("global:0x0035", "Time Code Format", "TC/UB", "Time Code Format")
+    tc["proved"]["menu_modes"] = {"Time Code Format": ["S&Q"]}
+    d = doc(*copy.deepcopy(SETTINGS), spot, tc)
+    first = S.from_data(copy.deepcopy(d))
+    by = {s["key"]: s for s in first["settings"]}
+    assert by["global:0x0031"]["row_menus"] == ["Still", "Movie"]
+    assert by["global:0x0035"]["row_mode"] == "S&Q" and by["global:0x0035"]["row_menus"] == ["Movie", "S&Q"]
+    public, evidence = definitions.split(first)
+    assert not any("menu_modes" in (s.get("proved") or {}) for s in public["settings"])
+    again = S.from_data(definitions.merge(json.loads(json.dumps(public)), json.loads(json.dumps(evidence))))
+    assert definitions.text(again) == definitions.text(first)
+    plain = copy.deepcopy(d)
+    for s in plain["settings"]:
+        (s.get("proved") or {}).pop("menu_modes", None)
+    by = {s["key"]: s for s in S.from_data(plain)["settings"]}
+    assert by["global:0x0031"]["row_menus"] == ["Still"] and by["global:0x0035"]["row_mode"] == "Movie"
 
 def test_a_main_tile_never_shows_an_expert_only_setting_but_a_fractions_parts():
     """The editor's Compare lists Main's settings among those shown outside Expert mode: a tile's own key (keys,
@@ -857,3 +909,4 @@ def test_rows_read_turned_round_keep_the_own_place_one_unread_level_deeper():
          "settings": [{**setting("global:0x0001", "Recognition Priority Set.", "Subject Recog.", path, f"{path} [S&Q mode]"), "tab": "Focus"}]}
     got = placement.by_menu(copy.deepcopy(d), tree, [MENUS[0], MENUS[2]])["global:0x0001"]
     assert got == {"row_menus": ["Still", "S&Q"]}, got
+

@@ -24,7 +24,7 @@ from .offered import check_video_systems, with_video_systems
 from .proofs import (axis_value_rows, box_numbers, disputed_out, kept_proof, menu_row, mixed, note_readers, print_kept,
                      reworded, sampled_scale, with_allowances, with_drawn, with_in_sets_proved, with_menu_rows,
                      still_values, walked_whole, written_by_row, written_values, with_option_trees, with_scales,
-                     without_observed, without_set_twins)
+                     with_menu_modes, without_observed, without_set_twins)
 
 
 def newest_download(run: Path) -> Path:
@@ -465,6 +465,10 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
     if tables.FRAME_TRAVEL or any("frame" in s for s in doc["settings"]):
         with_frames(doc, tables.FRAME_TRAVEL, (evidence or {}).get("FRAME_TRAVEL"))
     without_observed(doc)
+    # the modes the camera's own files give the proofs whose context names none, into their evidence (placement reads
+    # them there, never in the runs)
+    print(f"menu modes: {with_menu_modes(doc, run, save=write)} settings with proofs the camera's own files place in "
+          "another mode (kept in their evidence)")
     doc = from_data(doc)
     print(f"{sum(1 for s in doc['settings'] if s.get('proved'))} of {len(doc['settings'])} settings proved; "
           f"{len(changed)} labels changed or added")
