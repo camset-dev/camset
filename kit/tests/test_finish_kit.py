@@ -2226,6 +2226,22 @@ def test_closing_a_rows_flags_leaves_the_grey_worker_only_the_question_it_is_ask
     assert first.result(timeout=5).answer == {"entries": []}
 
 
+def test_an_untold_option_says_whether_the_reader_was_not_asked_or_gave_no_flag(monkeypatch):
+    """The pixels cannot tell and no flag came: the run says which, the reader's answer not taken (and why) or no flag
+    from it (and why), never "no answer" where nothing was asked."""
+    from proving import greyed
+    monkeypatch.setattr(greyed, "REASONS", {})
+    said = []
+    for asked, words in (({"not_asked": "the value the row was saved on, entered as its put-back whatever is said"},
+                          "the reader's answer not taken: the value the row was saved on"),
+                         ({"question": "entries.v2", "why": "the option is not listed"},
+                          "the reader gave no flag (the option is not listed)")):
+        what = greyed.judge(SimpleNamespace(), "Row", "A", 0, 3, None, say=said.append,
+                            drawn=greyed.Drawing(None, 170.0, None, asked))
+        assert what == greyed.ENTER and words in said[-1], said[-1]
+    assert not any("gave no answer" in s for s in said)
+
+
 @pytest.mark.parametrize("answered_by, taken", [("RedHatAI/Qwen3.8-27B-INT4", True), ("Qwen3.8-27B-4bit", True),
                                                  ("glm-4.6v-flash", False), ("google/gemma-4-26b", False),
                                                  (None, True)])

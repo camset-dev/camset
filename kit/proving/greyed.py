@@ -465,8 +465,10 @@ def judge(cam, name: str, label: str, k: int, saved, back, say=_say, drawn: Draw
             say(f"   {label!r}: drawn grey, told by the {told(d.grey_by())} alone, which misjudged an option of this row "
                 "that the camera applied: entered as before")
         elif d.pixels is None and d.reader is None and d.level is not None:
+            why = d.asked.get("not_asked")
             say(f"   {label!r}: whether it is drawn grey cannot be told (its text reads {d.level:.0f}): entered as before; "
-                "the reader gave no answer")
+                + (f"the reader's answer not taken: {why}" if why else
+                   f"the reader gave no flag ({d.asked.get('why') or 'no answer'})"))
         elif d.pixels is None and d.reader is False and d.level is not None:
             say(f"   {label!r}: the pixels cannot tell whether it is drawn grey (its text reads {d.level:.0f}); the reader "
                 "reads it white: entered")
