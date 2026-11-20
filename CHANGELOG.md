@@ -76,6 +76,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the docs and the ledger's public form, the mapping found no menu row that changes such a record, so it does not know
   what the record holds, and a change to it is unproved and at your own risk. Which unmapped records never changed
   stays in the mapper's private ledger, never listed or counted in a public file (decision 27).
+- **The a1 II's definition lists the camera's three menus, Still, Movie and S&Q,** and the menus each of its 1380 placed
+  settings stands in, read from each mode's own menus; 165 settings take the row they lacked, among them Camera Set.
+  Memory's records, the focus positions under Focus Area and Preset Focus/Zoom's. It also names 340 values as the camera
+  draws them, says why eight rows are greyed (Focus Mode, ISO AUTO Min. SS, Select LUT, Aspect Marker Level), and adds
+  Save HEIF Size, the Recall Custom holds' Exposure step, Playback DISP Mode and whether Lock Operation Parts holds.
 - **The a1 II's definition proves Bracket Type's Cont. Bracket and Single Bracket whole,** each of their 60 choices
   and no longer a sample. Six rows take the names the camera draws (Proxy Recording, Proxy File Format, Proxy Rec.
   Settings, with Shutter Button, S&Q's Record Setting and the movie Recording Media row), and two value names are
@@ -201,12 +206,26 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that
+  list names no blocker for Focus Mode Dial instead of the shorter one, and the test expects whichever its data gives.
 - **A stopped Recall Custom run (`customshoot_values.py`, `customshoot_run.py`) presses nothing more but MENU:** its
   start file goes back and is checked, it exits 8 (4 for a STOP file left before it, which it names, or a working copy
   only a hand can put back), it gives `customshoot_values.py --put-back --against <its start file>` only where opening
   hold 3 restores the copy, and a hold that failed part way now exits 8 where it exited 0. A notice after Register
   counts only as the camera's "Registered." alone, and the coverage ledger no longer reads a registration mirror line
   not applied as a refusal.
+- **A restore's check keeps trying a camera slow to restart for up to 300 s,** the one limit every run and tool goes
+  by, where it gave up at 130 s; twice the camera had only been late.
+- **A restore's check says what it waits for,** the camera's restart and up to 5 minutes, before its first try, and a
+  first Ctrl-C meanwhile says the check goes on and that a second one would leave it undone.
+- **`greyrow_run.py` takes a misread "This function is currently disabled." for no reason,** as OCR's "This tunction is
+  currently disabled." was taken for one on five rows, which then got no Right. A real reason is still a reason.
+- **`carousel_fields_run.py` walks the boxes of an option with a short name,** such as movie Self-timer's On: with a
+  box lit, OCR's reading of the title stands where it is exactly that option's name, since the second reader then
+  answers the lit box. A title naming another option still stops the walk, and so does a proof that moves the option's
+  own record, which each line now keeps beside the title read.
+- **`carousel_fields_run.py` judges a box lit on the frame its title was read from,** as it judges the option: a box
+  seen lit just after a Right and gone once the title settled no longer passes, so no walk ends on an empty look.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.
@@ -225,6 +244,28 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **`reader_census.py --questions` and `label_audit.py` say why each reader failed, by count:** an HTTP status and
   its reason phrase (never the server's body), a timeout, a refused connection or "an answer that is no usable JSON",
   beside the asked line and in the line that stops a reader after a run of failures, never what an answer held.
+- **A definition can say which of the camera's menus hold each setting:** a camera's `MENUS` hand table (a menu per
+  position of its shooting-mode switch) becomes `camera.menus`, and each placed setting gets `row_menus` and
+  `row_places` (a menu's tree holds its row, or that menu's own proofs reach it). `HAND_PLACES` places a record no
+  proof path can, and `kit/tools/menu_tree.py --add` takes one group's pages from a page scan into a tree.
+- **The camera's menus tell more records apart:** one setting kept in two records that Stills and Movie each move
+  alone keeps each in its own mode's menu, and a row given by hand reaches the second of two rows of one label (`#1`)
+  or a row named as its group. The camera file may word the menu buttons' label and hover (`camera.text.menus_label`,
+  `menus_hover`).
+- **The camera's menus rest on nothing of the owner's:** placement never reads My Menu's item pages, the kit reads a
+  proof's context one way everywhere, and a write with no menu tree here leaves a definition's menus as they are. A
+  menu's place always names its row and row_at, and a row given by hand never changes whether a record is shown.
+- **The writer refuses camera menus the editor could not show truly:** a MENUS table the menu tree does not match or
+  that leaves a mode without a menu, records of one row with overlapping menus, and a Main tile showing an Expert-only
+  setting. No place rests on where an option list's reading began, a silent proof's mode comes from the camera's own
+  files for placement alone, and a hand place's reason is the private hand evidence's.
+- **A menu holds the rows its walk read as a list's options:** where a mode's walk read a row as a list or checklist,
+  its options name the settings below it there (Movie's and S&Q's Playback Filter Condition).
+- **A definition's menus are rebuilt alike without the runs:** the modes the camera's files give silent proofs are kept
+  in their evidence, where placement reads them. At every pass the writer prints the settings listed in fewer menus than
+  their row stands in, the mapping's open work.
+- **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
+  counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.

@@ -5,6 +5,7 @@ scan's page model and the crawls' walks (its shape: schemas/menu-tree.schema.jso
     .venv/bin/python kit/tools/menu_tree.py [--scan kit2_page_scan] [--crawl kit2_crawl ...] [--replace]
     .venv/bin/python kit/tools/menu_tree.py --mode Movie --scan kit2_page_scan_movie [--crawl kit2_crawl_movie] [--replace]
     .venv/bin/python kit/tools/menu_tree.py --fold kit2_fin_crawl_brk [--fold ...] [--mode Movie] [--dry-run]
+    .venv/bin/python kit/tools/menu_tree.py --add "My Menu > My Menu Setting" --scan kit2_page_scan_1118p [--dry-run]
 
 The tree is the mapper's own, private whole (camkit.datafiles, docs/decisions/0016): which rows the walk found greyed
 or could not read, which option lists it read and where each began are the state the camera stood in, so it is never
@@ -28,6 +29,13 @@ the camera's Still/Movie/S&Q switch says it, and as the proofs' contexts say it,
 scan and crawls into the file's "modes", beside the Stills menu, which it leaves as it is; a mode already there is
 replaced only with --replace, and replacing the Stills menu keeps the modes. A scan alone gives each page's top rows
 ("seen", their rows unknown); kit/camkit/placement.py then takes the rows under them from the proofs' own paths.
+
+--add "TAB > GROUP" --scan SCAN takes one group's pages from a page scan into the existing tree's menu (the Stills
+menu, or --mode's) where that menu has none of them, changing nothing else: its rows as tree() writes a page the crawls
+never reached (seen, greyed, or never), the group placed in the scan's order among the menu's pages, a tab the menu
+lacks among its tabs where the scan has it (My Menu's own setting page, "My Menu > My Menu Setting", into a Stills menu
+written by hand before My Menu was read). A group named as its tab and a number ("My Menu > My Menu1") is a page of
+the owner's own items, and is refused (docs/decisions/0016).
 
 --fold CRAWL takes a later crawl's walk into the existing tree (the Stills menu, or --mode's), changing nothing else
 (fold): each top row the crawl walked is found in the tree by its label, never by its page counter, which moves with
@@ -217,14 +225,16 @@ def state_of(summary: dict, greyed: bool) -> tuple:
 
 
 def row_of(label: str, summary: dict | None, path: tuple, maps: dict, greyed: bool = False, never: str = None) -> dict:
-    """One row of the tree, with its children when the crawl walked a submenu."""
+    """One row of the tree, with its children when the crawl walked a submenu. A row the walk found a notice on, never
+    opening it, takes no options or fields from the map, which keeps one row per label path: those are its twin's of
+    one label (the S&Q menu's second Shoot Mode row beside the walked first)."""
     if summary is None:
         state, why = (("never", never) if never else ("greyed", "") if greyed else ("seen", "not walked"))
         return {"label": label, "state": state, "why": why or "", "kind": ""}
     state, why = state_of(summary, greyed)
     kind = summary.get("kind") or ""
     out = {"label": label, "state": state, "why": why, "kind": "notice" if is_notice(summary.get("outcome") or "") else kind}
-    m = maps.get(path)
+    m = None if is_notice(summary.get("outcome") or "") else maps.get(path)
     if m and kind == "fields":
         out["fields"] = fields_of(m)
     elif m:
@@ -236,6 +246,55 @@ def row_of(label: str, summary: dict | None, path: tuple, maps: dict, greyed: bo
         out["kind"] = "submenu"
         out["children"] = [row_of(s.get("label") or "", s, path + (s.get("label") or "",), maps) for s in subs]
     return out
+
+
+def page_rows(page: dict, visited: dict, maps: dict) -> list:
+    """A scanned page's rows as the tree holds them: each label as the camera draws it (camkit.row_names), and what the
+    crawls (`visited`, by page counter and slot; `maps`, by path) found there, else seen, greyed or never."""
+    rows = []
+    for r in page.get("rows") or []:
+        label = (r.get("label") or "").strip()
+        if not label:
+            continue
+        label = row_names.renamed((label,))[-1]          # as the camera draws it (camkit.row_names)
+        seen = visited.get((page.get("page"), r.get("slot")))
+        rows.append(row_of(label, seen, (label,), maps, greyed=bool(r.get("greyed")),
+                           never=r.get("never_open") or safety.never_open(label)))
+    return rows
+
+
+def added(menu: dict, scan: Path, tab: str, group: str) -> list:
+    """The pages of `tab` > `group` in the page scan's model taken into a menu of the tree (`menu`, changed in place):
+    each page's rows as page_rows writes a page no crawl reached, the pages after the menu's last page of that tab that
+    comes before them in the scan, or, for a tab the menu lacks, the tab before the first of the menu's tabs that comes
+    after it in the scan (last when none does). Refused (SystemExit) where the menu holds that group already, the scan
+    holds none of its pages, or the group is named as its tab and a number (a page of the owner's own items). What it
+    did, one line each."""
+    if placement.item_page(group, tab):
+        sys.exit(f"{tab} > {group} is a page of the owner's own items (its tab's name and a number): never taken into a "
+                 "tree (docs/decisions/0016)")
+    if any(pg.get("group") == group for t in menu.get("tabs") or [] if t["tab"] == tab for pg in t.get("pages") or []):
+        sys.exit(f"the menu holds {tab} > {group} already: --add takes in only a group it lacks")
+    model = sorted(json.loads((scan / "model.json").read_text(encoding="utf-8")), key=lambda p: counter(p.get("page")))
+    crumb = lambda p: [x.strip() for x in (p.get("breadcrumb") or "").split(">") if x.strip()]          # noqa: E731
+    pages = [p for p in model if crumb(p)[:1] == [tab] and " > ".join(crumb(p)[1:]) == group]
+    if not pages:
+        sys.exit(f"{scan / 'model.json'} holds no page of {tab} > {group}")
+    new = [{"page": p.get("page") or "", "group": group, "rows": page_rows(p, {}, {})} for p in pages]
+    order = list(dict.fromkeys(crumb(p)[0] for p in model if crumb(p)))
+    have = next((t for t in menu.get("tabs") or [] if t["tab"] == tab), None)
+    if have is None:
+        later = [i for i, t in enumerate(menu.get("tabs") or []) if t["tab"] in order and order.index(t["tab"]) > order.index(tab)]
+        at = later[0] if later else len(menu.get("tabs") or [])
+        menu.setdefault("tabs", []).insert(at, {"tab": tab, "pages": new})
+        where = f"a tab of its own, before {menu['tabs'][at + 1]['tab']}" if at + 1 < len(menu["tabs"]) else "a tab of its own, last"
+    else:
+        groups = [crumb(p)[1:] and " > ".join(crumb(p)[1:]) for p in model if crumb(p)[:1] == [tab]]
+        before = {g for g in groups[:groups.index(group)]}
+        at = max([i + 1 for i, pg in enumerate(have["pages"]) if pg.get("group") in before], default=0)
+        have["pages"][at:at] = new
+        where = f"{tab}'s page {at + 1}"
+    return [f"{tab} > {group}: {len(new)} pages, {sum(len(p['rows']) for p in new)} rows, as {where}"]
 
 
 def tree(scan: Path, crawls: list, key: str, mode: str = None) -> dict:
@@ -253,17 +312,8 @@ def tree(scan: Path, crawls: list, key: str, mode: str = None) -> dict:
         crumb = [x.strip() for x in (page.get("breadcrumb") or "").split(">") if x.strip()]
         if not crumb:
             continue
-        rows = []
-        for r in page.get("rows") or []:
-            label = (r.get("label") or "").strip()
-            if not label:
-                continue
-            label = row_names.renamed((label,))[-1]          # as the camera draws it (camkit.row_names)
-            seen = visited.get((page.get("page"), r.get("slot")))
-            rows.append(row_of(label, seen, (label,), maps, greyed=bool(r.get("greyed")),
-                               never=r.get("never_open") or safety.never_open(label)))
         tabs.setdefault(crumb[0], []).append({"page": page.get("page") or "", "group": " > ".join(crumb[1:]),
-                                             "rows": rows})
+                                             "rows": page_rows(page, visited, maps)})
     model_name, firmware = paths.split(key)
     names = ", ".join(c.name for c in crawls) or "none"
     source = (f"Written by kit/tools/menu_tree.py from the page scan {scan.name} (kit/page_model.py's page model) and "
@@ -462,6 +512,38 @@ def fold_main(out: Path, crawls: list, mode: str | None, dry_run: bool) -> dict:
     return doc
 
 
+def add_main(out: Path, scan, spec: str, mode: str | None, dry_run: bool) -> dict:
+    """--add: one group's pages from a page scan into the tree at `out` (its Stills menu, or `mode`'s), said, the
+    menu's source naming the scan; written unless `dry_run`, and only when the JSON Schema finds nothing wrong."""
+    if not out.exists():
+        sys.exit(f"{out} is not there: --add takes a group into an existing tree")
+    if not scan:
+        sys.exit("--add needs the page scan that holds the group: --scan kit2_page_scan_<...>")
+    tab, _, group = (x.strip() for x in spec.partition(" > "))
+    if not tab or not group:
+        sys.exit(f"--add {spec!r}: name the tab, then the group, \" > \" between (\"My Menu > My Menu Setting\")")
+    scan = Path(scan)
+    if not (scan / "model.json").exists():
+        sys.exit(f"{scan / 'model.json'} is not there: run kit/page_model.py on the page scan first")
+    doc = datafiles.load_menu_tree(out)
+    menu = doc if not mode else next((m for m in doc.get("modes") or [] if m.get("mode") == mode.strip()), None)
+    if menu is None:
+        sys.exit(f"the tree holds no {mode} mode's menu: write it with --mode {mode} --scan ... first")
+    for line in added(menu, scan, tab, group):
+        print(f"  {line}")
+    note = f"{tab} > {group} taken in from the page scan {scan.name} (menu_tree.py --add)."
+    if note not in menu.get("source", ""):
+        menu["source"] = f"{menu.get('source', '').rstrip()} {note}".strip()
+    wrong = check(doc)
+    if wrong:
+        sys.exit("the tree would not meet its schema:\n  " + "\n  ".join(wrong[:20]))
+    if dry_run:
+        print(f"would write {paths.shown(out) if out.resolve().is_relative_to(ROOT) else out} (--dry-run: nothing written)")
+    else:
+        write(out, doc)
+    return doc
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--scan", default=None, type=paths.run_arg,
@@ -472,13 +554,17 @@ def main(argv=None):
                          "(default: kit2_crawl when it is there, and none with --mode)")
     ap.add_argument("--mode", default=None,
                     help="write this shooting mode's menu (Movie, S&Q) into the tree's \"modes\", from its own scan "
-                         "and crawls, leaving the Stills menu as it is")
+                         "and crawls, leaving the Stills menu as it is; the name as the camera file's live_mode names "
+                         "the mode, which the camera's MENUS table names too")
     ap.add_argument("--out", default=None,
                     help="the file to write (default: private/evidence/<model>_fw<fw>/menu_tree_<model>_fw<fw>.json)")
     ap.add_argument("--dry-run", action="store_true", help="say what would be written; write nothing")
     ap.add_argument("--replace", action="store_true", help="replace an existing menu tree")
     ap.add_argument("--carousel-names", action="store_true",
                     help="name the existing tree's carousel options by their own names (carousel_names), nothing else")
+    ap.add_argument("--add", default=None, metavar="TAB > GROUP",
+                    help="take that group's pages from --scan into the existing tree's menu (the Stills menu, or "
+                         "--mode's), where it has none of them (added)")
     ap.add_argument("--fold", action="append", type=paths.run_arg,
                     help="take a later crawl's walk into the existing tree, its rows found by label (fold); more than "
                          "one, in order; with --mode, into that mode's menu")
@@ -490,6 +576,8 @@ def main(argv=None):
     default = definitions.menu_tree_file(key)
     if a.fold:
         return fold_main(Path(a.out) if a.out else default, [Path(c) for c in a.fold], a.mode, a.dry_run)
+    if a.add:
+        return add_main(Path(a.out) if a.out else default, a.scan, a.add, a.mode, a.dry_run)
     if a.carousel_names:
         out = Path(a.out) if a.out else default
         doc = datafiles.load_menu_tree(out)

@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import camset, screen
+from . import link as links
 from .frames import link_connection, load
 from .link import Link, LinkError, StopRequested
 
@@ -393,6 +394,14 @@ def finish(link, start: Path, tag: str = "after", say=_say, **kw) -> Ending:
 # fixed 40 s wait. RESTART_FIRST: the latest the first try waits; RESTART_RETRY: between tries that did not connect.
 RESTART_FIRST = 20.0
 RESTART_RETRY = 3.0
+# The latest a restore check starts a try, from its call: the one ceiling every check goes by (verify_restore, which
+# prover_session's, prove_run's, crawl_run's, drive.py's, mode_switch.py's, filter_run's per item and upload_check.py's,
+# a chain's end file, all go through), so no caller gives up earlier than another. The a1 II's 368 restores of 2026-11-18
+# to 20 opened a link 26 to 50 s after the upload (median 35 s); two of 2026-11-20 were far later, the camera taking a
+# link about 154 s after one upload and between 134 and 193 s after the other, and the old deadline (a 40 s wait plus
+# six tries 15 s apart: 130 s) gave both up while the camera was only late. Tries fail cleanly while it restarts (above),
+# so the ceiling keeps room over the slowest seen: 300 s. A camera that truly does not come back is said so then.
+RESTORE_CEILING = 300.0
 # A notice can already be on show when the check begins, which is not the restart's: the end download's saving
 # notice (the check began 1.49 to 1.87 s after that download's reply in the a1 II's 65 watched restore waits of
 # 2026-11-18 and 19, and the saving notice was seen gone 1.79 to 2.06 s after a download's reply: LOCK_HDMI_S's
@@ -444,7 +453,7 @@ def _connect_failed(e: BaseException) -> bool:
     return isinstance(e, LinkError) and not getattr(e, "opened", True)
 
 
-def verify_restore(run, start: Path, settle: float = 40.0, tries: int = 6, pause: float = 15.0, link_class=Link,
+def verify_restore(run, start: Path, settle: float = 40.0, pause: float = 15.0, link_class=Link,
                    ready: float = 3.0, say=_say, show: int = 20, expected=frozenset(), keys: bool = False, eyes=None,
                    clock=time) -> int | None:
     """After an upload the camera restarts: wait for it (restarted: with HDMI `eyes` the shooting screen back after
@@ -452,13 +461,29 @@ def verify_restore(run, start: Path, settle: float = 40.0, tries: int = 6, pause
     the records that differ from `start`, saying the first `show` of them (0: the count only, for a run whose start file
     holds a value it never prints; with keys, their keys too: said_keys); None when no connection came. A try that did
     not connect (_connect_failed) is tried again RESTART_RETRY s later, any other failure `pause` s later, as before;
-    no try starts past the deadline the fixed wait gave (`settle` plus `tries` times `pause` from the call), so it is
-    never slower than that wait. The records `expected` names (ended) are said by key and not counted. Each wait is in
-    the run's events.jsonl ("restore_wait": what it waited for and the seconds; "restore_reconnected" or
-    "restore_unreached" with the tries and the seconds from the call)."""
+    no try starts past RESTORE_CEILING s from the call, the one ceiling every caller's check goes by. The records
+    `expected` names (ended) are said by key and not counted. Each wait is in the run's events.jsonl ("restore_wait":
+    what it waited for and the seconds; "restore_reconnected" or "restore_unreached" with the tries and the seconds from
+    the call). A person at the terminal is told once, before the first try, what the wait is for and how long it can
+    last, and a first Ctrl-C meanwhile says the check goes on (camkit.link.WAITING_ON): each failed try's line alone
+    could read as a hang, and a second Ctrl-C there leaves the restore unchecked."""
+    minutes = f"{RESTORE_CEILING / 60:g} minutes"
+    say(f"the camera restarts after the upload: checking that the file took, trying for up to {minutes}")
+    before, links.WAITING_ON = links.WAITING_ON, (
+        f"the check that the uploaded file took goes on while the camera restarts (up to {minutes}), and the run stops "
+        "after it. Press Ctrl-C again only to stop at once, which leaves that check undone: whether the camera holds "
+        "the file is then not known.")
+    try:
+        return _check_restore_tries(run, start, settle, pause, link_class, ready, say, show, expected, keys, eyes, clock)
+    finally:
+        links.WAITING_ON = before
+
+
+def _check_restore_tries(run, start, settle, pause, link_class, ready, say, show, expected, keys, eyes, clock):
+    """verify_restore's wait and tries, its docstring's."""
     log = getattr(run, "log", None) or (lambda kind, **f: None)
     t0 = clock.monotonic()
-    deadline = t0 + settle + tries * pause
+    deadline = t0 + RESTORE_CEILING
     waited = restarted(eyes, clock, min(RESTART_FIRST, settle))
     log("restore_wait", waited_for=waited, seconds=round(clock.monotonic() - t0, 3))
     attempt = 0

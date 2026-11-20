@@ -117,7 +117,49 @@
      "save_load_excluded"
     ]
    },
-   "description": "The camera section: data/<model>_fw<fw>/camera_<model>_fw<fw>.json as kit/schema_update.py copies it (camera.schema.json), less what only the kit reads: save_load_excluded is the camera file's alone (kit/writer/fromdata.py CAMERA_FILE_ONLY), never a definition's."
+   "description": "The camera section: data/<model>_fw<fw>/camera_<model>_fw<fw>.json as kit/schema_update.py copies it (camera.schema.json), less what only the kit reads: save_load_excluded is the camera file's alone (kit/writer/fromdata.py CAMERA_FILE_ONLY), never a definition's.",
+   "properties": {
+    "menus": {
+     "type": "array",
+     "minItems": 1,
+     "description": "The camera's menus, one for each position of its shooting-mode switch, in order (the camera's MENUS hand table, as kit/writer/fromdata.py copies it): an editor offers one button each, by name, where there are two or more, and lays a menu out from the settings whose row_menus name it. Absent: the camera's menus are not told apart, and no setting carries row_menus or row_places.",
+     "items": {
+      "type": "object",
+      "required": [
+       "name",
+       "modes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The menu's name, as the camera's switch says it: the button's label, and the name row_menus and row_places use."
+       },
+       "modes": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {
+         "type": "string",
+         "minLength": 1
+        },
+        "description": "The shooting modes whose menu this is, as camera.memory_sets.modes and camera.live_mode's values name them; each mode in one menu only."
+       },
+       "main_tiles": {
+        "type": "string",
+        "minLength": 1,
+        "description": "The camera.main_tiles tile set this menu's Main page shows, by its name."
+       },
+       "hover": {
+        "type": "string",
+        "minLength": 1,
+        "description": "What the menu's button says on hover, in plain words."
+       }
+      }
+     }
+    }
+   }
   }
  },
  "$defs": {
@@ -203,15 +245,74 @@
     },
     "row_tab": {
      "type": "string",
-     "description": "The tab whose menu holds \"row\", as the menu tree names it, when it is not the setting's own \"tab\": no row of its own tab is reached by its proof paths, and one of another tab is, from that tab's top row (the Custom Key cells a definition keeps in Shooting sit on Setup's Custom Key/Dial Set.). An editor laying the rows out as the camera does shows the setting in this tab, in \"row_group\" there; \"tab\" stays what the flat list, comparisons and exports use. Absent when the row is in the setting's own tab, or the setting has no \"row\"."
+     "description": "The tab whose menu holds \"row\", as the menu tree names it, when it is not the setting's own \"tab\": no row of its own tab is reached by its proof paths, and one of another tab is, from that tab's top row (the Custom Key cells a definition keeps in Shooting sit on Setup's Custom Key/Dial Set.). An editor laying the rows out as the camera does shows the setting in this tab, in \"row_group\" there; \"tab\" stays what the flat list and the exports use. Absent when the row is in the setting's own tab, or the setting has no \"row\"."
     },
     "row_group": {
      "type": "string",
-     "description": "The camera group whose page holds \"row\", by the definition's name for it, when it is not the setting's own \"group\" (a screen the definition keeps as a group of its own, as Fn Menu or Recall Custom hold 1, sits on its row in Operation Customize or Shooting Mode). An editor laying the rows out as the camera does shows the setting in this group; \"group\" stays what the flat list, comparisons and exports use. Absent when the row is in the setting's own group, or the setting has no \"row\"."
+     "description": "The camera group whose page holds \"row\", by the definition's name for it, when it is not the setting's own \"group\" (a screen the definition keeps as a group of its own, as Fn Menu or Recall Custom hold 1, sits on its row in Operation Customize or Shooting Mode). An editor laying the rows out as the camera does shows the setting in this group; \"group\" stays what the flat list and the exports use. Absent when the row is in the setting's own group, or the setting has no \"row\"."
     },
     "row_mode": {
      "type": "string",
      "description": "The shooting mode whose menu holds \"row\" (\"Movie\"), as the menu tree names it, when the Stills menu has no such row: an editor laying the rows out as the camera does lists these after the group's Stills rows, under the mode's name. Absent for a row of the Stills menu, or a setting with no \"row\"."
+    },
+    "row_menus": {
+     "type": "array",
+     "minItems": 1,
+     "uniqueItems": true,
+     "items": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": "The camera's menus (camera.menus, by name, in its order) whose own rows hold \"row\": the menu tree of each mode the menu covers holds the row, or the setting's own proofs in that mode (the mode a proof's context names, else the one the camera's own files give) reach it, the rows that menu never read then taken from those proofs' paths, or its row given by hand places it where that menu's tree has the top row (kit/camkit/placement.py by_menu). It follows how deep each mode's walk read and which modes proofs were made in: two owners of the model get the same only once the mapping is complete. On every setting \"row\" places when the definition has camera.menus, never on a copy (copy_of: it follows its setting); absent otherwise."
+    },
+    "row_places": {
+     "type": "object",
+     "propertyNames": {
+      "minLength": 1
+     },
+     "additionalProperties": {
+      "type": "object",
+      "required": [
+       "row",
+       "row_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "row": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+         "type": "string"
+        },
+        "description": "As the setting's \"row\", in this menu."
+       },
+       "row_at": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "description": "As the setting's \"row_at\", in this menu: the same merged numbering of a tab's top rows, so a row the menus share has one number; then each row's place among the rows this menu shows under its row."
+       },
+       "row_tab": {
+        "type": "string",
+        "description": "As the setting's \"row_tab\", in this menu."
+       },
+       "row_group": {
+        "type": "string",
+        "description": "As the setting's \"row_group\", in this menu."
+       },
+       "under_option": {
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "As the setting's \"under_option\", in this menu; null where the setting is under no option in this menu though its own place is under one (a field left out keeps the setting's own)."
+       }
+      }
+     },
+     "description": "The setting's place in a menu of row_menus, by its name, only where it differs from the setting's own (\"row\", \"row_at\", \"row_tab\", \"row_group\", \"under_option\"): the rows this menu shows under a shared row in another order, or a row only this menu labels so. An editor reads it before the setting's own place for that menu. Names and places only: no row's state, option list, page counter or My Menu item is ever here (kit/tools/check_public.py)."
     },
     "values": {
      "type": "array",

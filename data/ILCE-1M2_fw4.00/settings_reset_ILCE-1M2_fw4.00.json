@@ -458,7 +458,7 @@
    "initialize": "resets"
   },
   "global:0x0248": {
-   "name": "Frame Rate (S&Q)",
+   "name": "S&Q Frame Rate",
    "tab": "Shooting",
    "result": "resets",
    "initialize": "resets"
@@ -1736,7 +1736,7 @@
    "initialize": "resets"
   },
   "global:0x049c": {
-   "name": "Monitoring Output Display HDMI",
+   "name": "HDMI Info. Display",
    "tab": "Setup",
    "result": "keeps",
    "initialize": "resets"

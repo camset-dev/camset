@@ -92,7 +92,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ROOT, camset, datafiles, definitions, jsonl, match, models, paths, row_names, runs  # noqa: E402
+from camkit import ROOT, camset, datafiles, definitions, jsonl, live_modes, match, models, paths, placement, row_names, runs  # noqa: E402
 from runner import read_json, write_json  # noqa: E402
 
 
@@ -739,6 +739,54 @@ def same_proof(r: dict) -> tuple | None:
     return (r.get("run"), r["dat"], r.get("base"), row_name(r), json.dumps(r.get("index")), str(r.get("label")))
 
 
+def live_mode_reader(run: Path) -> live_modes.Reader:
+    """The reader of the shooting mode a proof's download was saved in (camkit.live_modes), by the camera file's
+    live_mode (data/<model>_fw<fw>/camera_<model>_fw<fw>.json, the camera being the run's folder's: runs/<model>_fw<fw>/),
+    cached in the camera's runs/_cache; one that reads nothing where the camera file names no live_mode."""
+    cam = definitions.camera_file(run.parent.name) if paths.KEY.match(run.parent.name) else None
+    try:
+        lm = read_json(cam).get("live_mode") if cam is not None and cam.exists() else None
+    except (OSError, ValueError):
+        lm = None
+    return live_modes.Reader(lm, live_modes.cache_file(run.parent))
+
+
+def silent_modes(run: Path, save: bool = True) -> dict:
+    """{(a record's key, its row's labels: camkit.placement.split): the shooting modes its counted proofs whose context
+    names no mode (camkit.placement.mode_of, the camera file's modes) were made in}, by the camera's own files: the
+    live-mode record in each one's base download (live_mode_reader); a base download that is gone, or a code the
+    camera file's live_mode names no mode for, gives none (a row all of whose such proofs give none: an empty set).
+    Each record by its element's key and its whole record's.
+    The report's rows and what they credit stay as the contexts give them: a proof made in S&Q of a record every mode
+    shares (the key tables, Playback's filter) is that record's proof all the same. The writer keeps these modes in
+    the proofs' evidence (writer/proofs.with_menu_modes), and placement takes them from there alone. The camera's
+    files said S&Q for 162 silent lines of 2026-11-07 (Custom Key/Dial Set., Fn Menu Settings, Playback Filter
+    Condition) and Movie for 24 (kit2_drive_tcub's Time Code and User Bit Presets). save: keep what was read in the
+    camera's cache (camkit.live_modes; a dry run keeps none). {} for a run with no proofs."""
+    if not (run / "proofs.jsonl").exists():
+        return {}
+    proofs, skip = report_proofs(run)[:2]
+    reader = live_mode_reader(run)
+    modes = list(reader.modes.values())
+    out = collections.defaultdict(set)
+    for i, r in enumerate(proofs):
+        if i in skip or (r.get("applied") is False and r.get("kind") != "fields"):
+            continue
+        if placement.mode_of(f"x [{r.get('context') or ''}]", modes) is not None or not r.get("base"):
+            continue
+        mode = reader.mode(base_file(r["base"]))
+        labels = tuple(placement.split(row_name(r)))
+        for c in element_changes(r):
+            for k in {c["key"], c["key"].split("[")[0]}:
+                if mode is None:
+                    out[(k, labels)]              # its base download gone, or a code no mode: no mode, never the top one
+                else:
+                    out[(k, labels)].add(mode)
+    if save:
+        reader.save()
+    return dict(out)
+
+
 def report_proofs(run: Path, alone: bool = False) -> tuple:
     """(proofs, skip, blocked, failed, reread) over the runs the report reads (proof_runs): each run's proofs in order,
     qualified, a proof read before in another folder left out (same_proof), a registration mirror line left out
@@ -790,9 +838,10 @@ STATE_ITEM = re.compile(r"(.+?) = .+")    # "Row = option": a context's or a set
 
 
 def state_items(r: dict) -> list:
-    """A proof's context items (split at "," and ";") and setup rows (kit/provers/afreg_run.py's "setup": the rows the
+    """A proof's context items, as the kit reads a context everywhere (camkit.placement.context_items: split at "," and
+    ";", an item's trailing parenthetical left out), and setup rows (kit/provers/afreg_run.py's "setup": the rows the
     run set before it)."""
-    return [w.strip() for w in re.split(r"[,;] ", r.get("context") or "") + list(r.get("setup") or []) if w.strip()]
+    return placement.context_items(r.get("context") or "") + [w.strip() for w in r.get("setup") or [] if w.strip()]
 
 
 def walked_rows(proofs: list) -> dict:

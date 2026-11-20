@@ -104,7 +104,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         rec_frame_rate_0242 = 578
         rec_frame_rate_0244 = 580
         rec_frame_rate_0246 = 582
-        frame_rate = 584
+        s_q_frame_rate = 584
         record_setting_024e = 590
         record_setting_0250 = 592
         record_setting_0252 = 594
@@ -176,7 +176,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         fixed_speed_stby = 779
         fixed_speed_rec = 781
         speed_type = 783
-        fixed_speed_sby = 786
+        fixed_speed_stby_0312 = 786
         fixed_speed_rec_0314 = 788
         live_view_display = 790
         exposure_effect = 792
@@ -274,6 +274,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         save_image_size = 985
         raw_j_save_image = 986
         save_jpeg_size = 988
+        save_heif_size = 989
         remote_shooting = 1008
         bluetooth_rmt_ctrl = 1017
         bluetooth_function_0401 = 1025
@@ -379,7 +380,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         movie_hdmi_output_time_code = 1176
         rec_control = 1177
         movie_hdmi_output_audio_ch = 1179
-        monitoring_output_display_hdmi = 1180
+        hdmi_info_display = 1180
         control_for_hdmi = 1181
         video_light_mode = 1182
         shutter_when_pwr_off_04a2 = 1186
@@ -400,6 +401,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         unknown_camera_state_04e2 = 1250
         disp_mode = 1253
         finder_disp_mode = 1254
+        playback_disp_mode = 1255
         black_level_array = 1257
         black_level_array_04ff = 1279
         black_level_array_0515 = 1301
@@ -513,6 +515,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         af_track_sens_array = 3117
         af_on_registered_array = 3121
         af_on_array = 3125
+        recall_custom_hold_exposure_step = 3129
         interval_rec_shooting_interval = 3133
         interval_rec_number_of_shots = 3135
         interval_rec_shooting_start_time = 3137
@@ -521,6 +524,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         time_code_preset_minutes = 3145
         time_code_preset_seconds = 3146
         time_code_preset_frames = 3147
+        lock_operation_parts_locked_now = 3148
         wb_fine_tune_a_b = 3149
         wb_fine_tune_a_b_0c4f = 3151
         wb_fine_tune_a_b_0c51 = 3153

@@ -559,6 +559,27 @@ def test_the_reasonless_sentence_is_the_guides_last():
         assert not greyrow.reasonless(text), text
 
 
+# the guide's last sentence as OCR read it on five grey rows of 2026-11-20 (kit2_greyrow: Display LUT in S&Q and Movie,
+# Embed LUT File, Proxy Rec. Settings in S&Q and Movie), the f of "function" taken for a t: the sentence alone
+MISREAD = ["This tunction is currently disabled."] * 5
+
+
+def test_a_reader_s_slip_in_the_reasonless_sentence_still_gives_no_reason():
+    """OCR's slips in the one sentence (a letter misread, spacing, the popup's OK read along) leave it the camera's
+    reasonless sentence, by the kit's likeness rule (camkit.match.same) and its own length: the five readings that took
+    a Right away from five rows on 2026-11-20 among them. A real reason is still a reason, the sentence with words
+    added before it or after it too."""
+    for text in [f"Sets X. {s}" for s in MISREAD] + [
+            "Sets X. This function is currently disab1ed.", "Sets X. This  function is currentlydisabled.",
+            "Sets X. This function is currently disabled. OK", "Sets X. This function is currently disabled.•ОК"]:
+        assert greyrow.reasonless(text), text
+    for text in ("Sets X. This function is not available while the HDMI cable is connected.",
+                 "Sets X. This function is currently disabled during S&Q shooting.",
+                 "Sets X. This option is currently enabled.", "Sets X This tunction is currently disabled.",
+                 "Sets X. This tunction is currently disabled. Turn on Y."):
+        assert not greyrow.reasonless(text), text
+
+
 def guides():
     """The help walk's guides (runs/<a1 II>/kit2_help/help.jsonl), skipped without them: (text, the row's guide said
     the camera's state)."""

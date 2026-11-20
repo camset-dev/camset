@@ -55,6 +55,8 @@ Contents (text files, and the ASCII strings in binary ones):
   file it is checked by), and a definition whose "model" is not its layout's is refused.
 - Each definition is lean (camkit.definitions.evidence_in_public): none of the mapping's evidence (how, when, in which
   run or from which state a thing was proved), which stays in the mapper's private/evidence/ (docs/decisions/0016).
+  Its camera menus (camera.menus, each setting's row_menus and row_places) hold names and places only (menu_problems):
+  no row's state, no option list read off a carousel, no My Menu item page, no page counter.
 - So is every camera's data folder, data/<model>_fw<fw>/ (camkit.datafiles.evidence_in_public): no menu tree, no
   accepted file and no record shapes there (private whole), no coverage ledger's looks file, nor its public form,
   printed and never kept (docs/decisions/0023), no run's folder (runs/, or Windows' runs\\), kit2_ run name, ISO date
@@ -100,7 +102,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, camset, datafiles, definitions, help_files, paths  # noqa: E402
+from camkit import ROOT, camset, datafiles, definitions, help_files, paths, placement  # noqa: E402
 from make_sample import (PERSONAL, empty_note, missing_words, personal, personal_problems, personal_rules,  # noqa: E402
                          rid_text, shown_why)
 
@@ -819,6 +821,87 @@ def data_problems() -> list:
     return out
 
 
+MENU_FIELDS = ("name", "modes", "main_tiles", "hover")                      # a camera menu (camera.menus)
+MENU_PLACE = ("row", "row_at", "row_tab", "row_group", "under_option")       # a place in a menu (row_places)
+PAGE_COUNTER = re.compile(r"^\s*(page\s*)?(\d+)\s*/\s*(\d+)\s*$", re.I)       # "38/63": moves with the camera's state
+
+
+def page_counter(label: str) -> bool:
+    """Whether a row, tab or group label is a page counter: "Page N/M", or "N/M" with a menu's two-digit total (M of 10
+    or more, N not past it). A row's label is a name, never a value: a fraction written as one (a step "1/3", "2/3")
+    has a one-digit total, while the camera's menus run to dozens of pages. An option's name ("1/60", a shutter
+    speed) is no label of these and is never held to it."""
+    m = PAGE_COUNTER.match(label or "")
+    return bool(m) and (bool(m[1]) or (int(m[3]) >= 10 and int(m[2]) <= int(m[3])))
+
+
+def menu_problems(doc: dict) -> list:
+    """Each place a definition's camera menus say more than names and places (decision 16): a camera menu or a place in
+    a menu holding a field it does not have (a row's state, an option list read off a carousel, a page), a row_menus or
+    row_places name no camera menu has, a row, tab or group label that is a page counter ("38/63", "Page 38/63", which
+    move with My Menu's pages: page_counter), one that is one of My Menu's item pages however written (camera.text.
+    my_menu_name and a number, "MyMenu1", "★My Menu1", "My Menu Page 1": what the owner put there,
+    camkit.placement.item_page), a row on My Menu's tab outside its setting page (an owner's item), and row_menus or
+    row_places on a copy (which follows its setting)."""
+    cam = doc.get("camera") or {}
+    menus = cam.get("menus")
+    mine = ((cam.get("text") or {}).get("my_menu_name")) or "My Menu"
+    out, names = [], set()
+    for i, m in enumerate(menus or []):
+        if not isinstance(m, dict):
+            out.append(f"camera.menus[{i}] is no menu")
+            continue
+        out += [f"camera.menus[{i}] holds {f!r}" for f in m if f not in MENU_FIELDS]
+        names.add(m.get("name"))
+
+    def labels(where, *texts, option=None):
+        return [f"{where}: {x!r} is a page counter" for x in texts if isinstance(x, str) and page_counter(x)] + \
+            [f"{where}: {x!r} is one of {mine}'s item pages" for x in (*texts, option)
+             if isinstance(x, str) and placement.item_page(x, mine)]
+
+    def not_labels(where, place):
+        return [f"{where}: {f} is no label" for f in ("row_tab", "row_group", "under_option")
+                if place.get(f) is not None and not isinstance(place[f], str)]
+
+    def on_my_menu(where, tab, group):
+        if not isinstance(tab, str) or not isinstance(group, str):
+            return []                    # no label: not_labels says so
+        if placement.norm(tab) == placement.norm(mine) and \
+                not placement.norm(group).startswith(placement.norm(mine) + "setting"):
+            return [f"{where}: a row on {mine}'s tab outside its setting page ({group!r}): one of the owner's own items"]
+        return []
+    for s in doc.get("settings") or []:
+        k = s.get("key")
+        if ("row_menus" in s or "row_places" in s) and menus is None:
+            out.append(f"{k}: row_menus or row_places without camera.menus")
+        if s.get("copy_of") and ("row_menus" in s or "row_places" in s):
+            out.append(f"{k}: row_menus on a copy, which follows its setting ({s['copy_of']})")
+        out += not_labels(k, s)
+        if s.get("row"):
+            out += on_my_menu(k, s.get("row_tab") or s.get("tab"), s.get("row_group") or s.get("group"))
+        out += [f"{k}: row_menus names {n!r}, no camera menu" for n in s.get("row_menus") or [] if n not in names]
+        out += labels(f"{k}: row", *(s.get("row") or []), s.get("row_tab"), s.get("row_group"), option=s.get("under_option"))
+        for n, place in (s.get("row_places") or {}).items():
+            where = f"{k}: row_places[{n!r}]"
+            if n not in names or n not in (s.get("row_menus") or []):
+                out.append(f"{where}: no camera menu of the setting's row_menus")
+            if not isinstance(place, dict):
+                out.append(f"{where} is no place")
+                continue
+            out += [f"{where} holds {f!r}" for f in place if f not in MENU_PLACE]
+            out += [f"{where}: row holds {x!r}, not a label" for x in place.get("row") or [] if not isinstance(x, str)]
+            out += not_labels(where, place)
+            out += labels(where, *(place.get("row") or []), place.get("row_tab"), place.get("row_group"),
+                          option=place.get("under_option"))
+            out += on_my_menu(where, place.get("row_tab") or s.get("row_tab") or s.get("tab"),
+                              place.get("row_group") or s.get("row_group") or s.get("group"))
+    return out
+
+
+MENU_WORDS = ("its camera menus say more than names and places ({why}): mend the camera's MENUS or HAND_PLACES table "
+              "or its menu tree, then write the definition again (kit/schema_update.py --write)")
+
+
 def lean_problems() -> list:
     """Each definition that carries the mapping's evidence (definitions.evidence_in_public), place by place (the first
     five of each, and how many in all)."""
@@ -830,6 +913,10 @@ def lean_problems() -> list:
                 for why in found[:5]]
         if len(found) > 5:
             out.append(f"{rel}: {len(found)} places of evidence in all")
+        menus = menu_problems(doc)
+        out += [f"{rel}: " + MENU_WORDS.format(why=why) for why in menus[:5]]
+        if len(menus) > 5:
+            out.append(f"{rel}: {len(menus)} places its camera menus say more in all")
     return out
 
 
@@ -883,7 +970,9 @@ def blob_problems(path: str, text: str) -> list:
             doc = json.loads(text)
         except ValueError:
             return []
-        return definitions.evidence_in_public(doc, text)[:5] if isinstance(doc, dict) else []
+        if not isinstance(doc, dict):
+            return []
+        return (definitions.evidence_in_public(doc, text) + [MENU_WORDS.format(why=why) for why in menu_problems(doc)])[:5]
     return []
 
 

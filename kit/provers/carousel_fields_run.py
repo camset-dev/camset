@@ -59,7 +59,11 @@ Readings, as kit/provers/optboxes_run.py reads its boxes: the lit box by OCR, th
 itself on every doubt (camkit.reading.doubts) and always where the value decides a proof (the owner's rule: the reader is
 asked before a row fails), OCR plain and the reader apart settled by the third role's readers where a reading stands by
 the kit's one counting rule (box_vote), else stopping the row; the field's name by OCR, the reader where it
-is not plain Latin; the title by OCR against the map's options, the reader on a doubt. Whether a press moved the box is
+is not plain Latin; the title by OCR against the map's options, the reader on a doubt, but with a box lit a short title
+OCR reads as exactly one option's name stands on OCR alone (the reader's option question answers the lit box there:
+title_reads' box_lit, box_refused's alone), and a proof whose download moves the option's own record, which the base
+moved, is written "applied": false and stops the row (not_this_option); each line keeps the title read and by whom
+("title", "title_read", "title_by"). Whether a press moved the box is
 told by its picture (white on orange, over 150 grey), which no reading decides. A value read the same as the one before while
 the picture changed (two values the readers cannot tell apart), a value seen before that is not the one held, a reader
 that does not answer where it must, a title not the option's, a box not lit where it should be: each stops the row
@@ -178,18 +182,50 @@ def votes_of(r: BoxRead) -> dict:
     return {"box_votes": list(r.votes)} if r.votes else {}
 
 
-def title_reads(cam, labels: list) -> str | None:
+def title_reads(cam, labels: list, box_lit: bool = False) -> str | None:
     """The carousel option the title names, one of the map's `labels`: OCR's orange line (proving.screens.carousel_text)
     where it names one plainly (camkit.reading: no doubt, one option named), else the second reader's (vlm_option);
     None where neither names one. Read once the title has settled (proving.screens.title_settled): it redraws after the
-    strip, and a frame just after a Down can show the strip on the next option under the old title."""
+    strip, and a frame just after a Down can show the strip on the next option under the old title.
+    box_lit (box_refused's alone): where the frame the title was read from has a field lit, OCR's reading also stands
+    where it is exactly one option's name and its only doubt is that it is short (short_title_stands): the second
+    reader's option question answers the lit box there, not the title, so it can never confirm a short one (movie
+    Self-timer's "On", the reader saying "3 s" on box 0, kit2_pass2 270328, 2026-11-20). A title that names another
+    option still names it, and any other doubt still asks. What was read, and by whom, is kept for the proof line
+    (TITLE_READ)."""
     title_settled(cam)
     t = carousel_text(cam)
     i = reading.choice_of(t, "label", labels)
-    if i is None or reading.doubts(t, "label", choices=labels):
-        v = vlm_option(cam)
-        i = reading.choice_of(v, "label", labels) if v else None
+    why = reading.doubts(t, "label", choices=labels)
+    frame = getattr(getattr(getattr(cam, "frame", None), "path", None), "name", None)
+    if i is not None and (not why or box_lit and short_title_stands(cam, t, labels[i], why)):
+        TITLE_READ.update(title=labels[i], read=t, by="ocr", frame=frame)
+        return labels[i]
+    v = vlm_option(cam)
+    i = reading.choice_of(v, "label", labels) if v else None
+    TITLE_READ.update(title=labels[i] if i is not None else None, read=v, by="reader", ocr=t, frame=frame)
     return labels[i] if i is not None else None
+
+
+TITLE_READ: dict = {}           # the last title read (title_reads): the option it names, the text, who read it, the frame
+
+
+def title_said() -> dict:
+    """The proof line's word on the title its box was chosen under (TITLE_READ): "title" the option it named, "title_read"
+    the text, "title_by" who read it ("ocr", or "reader" with OCR's reading beside it as "title_ocr"); {} where none was
+    read since the run began."""
+    if not TITLE_READ:
+        return {}
+    out = {"title": TITLE_READ.get("title"), "title_read": TITLE_READ.get("read"), "title_by": TITLE_READ.get("by")}
+    return {**out, "title_ocr": TITLE_READ.get("ocr")} if TITLE_READ.get("by") == "reader" else out
+
+
+def short_title_stands(cam, text: str, label: str, why: list) -> bool:
+    """Whether OCR's reading `text` of the title stands alone with a box lit: the frame it was read from has a field
+    lit, the reading is the option `label`'s name exactly (option_key, nothing loose), and every doubt about it is its
+    shortness (camkit.reading.doubts' "short word")."""
+    return (getattr(cam.read(), "field", None) is not None and option_key(text) == option_key(label)
+            and all(str(w).startswith("short word") for w in why))
 
 
 def is_option(name: str | None, option: str) -> bool:
@@ -198,29 +234,43 @@ def is_option(name: str | None, option: str) -> bool:
 
 def option_refused(cam, option: str, labels: list) -> str:
     """Why the frame on show is not the carousel with `option` itself lit, or "": the pixel reader's dialog with no
-    field lit, its title naming the option."""
+    field lit, its title naming the option. No field lit is judged again on the frame the title was read from
+    (title_reads' settled look may take a later frame than the one judged first): a box lit there is no option lit,
+    whatever the title says, so into_box never sends Right from a box."""
     s = cam.read()
     if s.kind != "dialog":
         return f"the screen reads as {s.kind}, not the carousel"
     if getattr(s, "field", None) is not None:
         return f"box {s.field} is lit, not the option"
     named = title_reads(cam, labels)
+    s = cam.read()
+    if s.kind != "dialog":
+        return f"the screen reads as {s.kind}, not the carousel"
+    if getattr(s, "field", None) is not None:
+        return f"box {s.field} is lit, not the option"
     return "" if is_option(named, option) else f"its title names {named!r}, not {option!r}"
 
 
 def box_refused(cam, option: str, labels: list, b: int, count: int | None) -> str:
     """Why the frame on show is not `option`'s box b lit (of `count` boxes, where known), or "": the pixel reader's
-    dialog with box b the lit one, as many boxes as before; the title read only where asked (`labels`)."""
-    s = cam.read()
-    if s.kind != "dialog":
-        return f"the screen reads as {s.kind}, not the carousel"
-    if getattr(s, "field", None) != b:
-        return f"box {getattr(s, 'field', None)} is lit, not box {b}"
-    if count is not None and len(s.boxes) != count:
-        return f"{len(s.boxes)} boxes are drawn, not {count}"
-    if labels and not is_option(title_reads(cam, labels), option):
-        return f"its title no longer names {option!r}"
-    return ""
+    dialog with box b the lit one, as many boxes as before; the title read only where asked (`labels`). The lit box and
+    the count are judged again on the frame the title was read from, as option_refused judges the option (title_reads'
+    settled look may take a later frame than the one judged first): no box b lit there is no box b, whatever the title
+    says, so into_box never ends on a frame with no box lit."""
+    def lit_here() -> str:
+        s = cam.read()
+        if s.kind != "dialog":
+            return f"the screen reads as {s.kind}, not the carousel"
+        if getattr(s, "field", None) != b:
+            return f"box {getattr(s, 'field', None)} is lit, not box {b}"
+        if count is not None and len(s.boxes) != count:
+            return f"{len(s.boxes)} boxes are drawn, not {count}"
+        return ""
+    why = lit_here()
+    if why or not labels:
+        return why
+    named = title_reads(cam, labels, box_lit=True)
+    return lit_here() or ("" if is_option(named, option) else f"its title no longer names {option!r}")
 
 
 def lit_box(cam) -> tuple:
@@ -767,16 +817,20 @@ def keep(cam, link, eyes, path, option, labels, look_: Look, b, w: Walk, place_,
     final = what in ("round", "back")
     rec = {"path": [*path, option], "kind": "list", "via": VIA, "index": [b, place_], "field": look_.labels[b],
            "value": field["value"], "label": lab, "fields": fields, "box": r.text, "read_by": r.by, "shown": r.ocr,
-           "box_vlm": r.vlm, "box_reader": r.reader, **votes_of(r), "chosen_frame": chosen, "row_frame": row_frame,
-           "dat": dat.name, "base": base.name, **({"notice": got.notice} if got.notice else {}), "applied": got.applied,
-           "final": final, **({"whole": not w.cut} if final else {}), "attempt": attempt, "changes": changes_of(ch)}
-    if final or not got.applied:
+           "box_vlm": r.vlm, "box_reader": r.reader, **votes_of(r), **title_said(), "chosen_frame": chosen,
+           "row_frame": row_frame, "dat": dat.name, "base": base.name, **({"notice": got.notice} if got.notice else {}),
+           "applied": got.applied, "final": final, **({"whole": not w.cut} if final else {}), "attempt": attempt,
+           "changes": changes_of(ch)}
+    moved = not_this_option(rec, ch, name)
+    if final or not rec["applied"]:
         out.write(json.dumps(rec, ensure_ascii=False) + "\n")
         out.flush()
     else:
         w.pending = rec
     print(f"   {look_.labels[b]} = {r.text!r} ({lab}): " + ("refused by the camera" if not got.applied else
           ", ".join(f"{c.key} {c.before!r}->{c.after!r}" for c in ch[:4]) or "no change"), flush=True)
+    if moved:
+        raise Failed(moved)
     if got.applied:
         w.pos, w.changes[place_] = place_, rec["changes"]
     if final and ch:
@@ -785,6 +839,25 @@ def keep(cam, link, eyes, path, option, labels, look_: Look, b, w: Walk, place_,
 
 
 KEEP_OPENED: dict = {}          # box -> the pictures of every box as its walk first opened it (other_values)
+BASE_MOVED: set = set()         # every record the base moved from the session's start, the option's own among them (body)
+
+
+def not_this_option(rec: dict, ch, name: str) -> str:
+    """Why a box's proof line cannot be kept as applied, or "": its download moved a record the base had moved from the
+    session's start (BASE_MOVED), the option's own record (Self-timer's 0x1012, Bracket Type's 0x02bf), which no value of
+    the option's own boxes moves: Enter chose its boxes under another option, whatever its title read (a short title OCR
+    read as this option's exactly). The line is marked "applied": false with "option_moved" the records, and the walk
+    stops on the reason returned; none of the camera's 262 carousel-fields lines of 2026-11-19/20 touches such a
+    record. What it does not cover: a session that started on the option already (125 of those 262 lines) has a base
+    that moved nothing, so nothing is guarded there; and BASE_MOVED holds every record the base moved, not the option's
+    alone, so a box value that rightly writes one of the others would be stopped too (none of the 262 has)."""
+    moved = sorted(c.key for c in ch if c.key in BASE_MOVED)
+    if not moved:
+        return ""
+    rec.update(applied=False, option_moved=moved)
+    return (f"{name}: the proof moved {', '.join(moved)}, the option's own record the base set: its boxes were chosen "
+            f"under another option (the title read {rec.get('title_read')!r}, by {rec.get('title_by')}); nothing "
+            "credited")
 
 
 def walk_box(cam, link, eyes, cycle, model, path, option, labels, look_: Look, b, base, out, run, most: int) -> None:
@@ -983,17 +1056,20 @@ def choose_pair(cam, link, eyes, path, option, labels, look_: Look, g: Grid, p: 
     ch = camset.diff(camset.read(base), camset.read(dat))
     rec = {"path": [*path, option], "kind": "list", "via": VIA, "walk": "grid", "index": ["grid", p, i],
            "field": look_.labels[1], "value": r.text, "label": lab, "fields": fields, "box": r.text, "read_by": r.by,
-           "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, **votes_of(r), "chosen_frame": chosen,
-           "row_frame": row_frame, "dat": dat.name, "base": base.name, **({"notice": got.notice} if got.notice else {}),
-           "applied": got.applied, "final": final, **({"whole": not g.cut} if final else {}), "attempt": attempt,
-           "changes": changes_of(ch)}
-    if final or not got.applied:
+           "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, **votes_of(r), **title_said(),
+           "chosen_frame": chosen, "row_frame": row_frame, "dat": dat.name, "base": base.name,
+           **({"notice": got.notice} if got.notice else {}), "applied": got.applied, "final": final,
+           **({"whole": not g.cut} if final else {}), "attempt": attempt, "changes": changes_of(ch)}
+    moved = not_this_option(rec, ch, name)
+    if final or not rec["applied"]:
         out.write(json.dumps(rec, ensure_ascii=False) + "\n")
         out.flush()
     else:
         g.pending = rec
     print(f"   {lab}: " + ("refused by the camera" if not got.applied else
                            ", ".join(f"{c.key} {c.before!r}->{c.after!r}" for c in ch[:4]) or "no change"), flush=True)
+    if moved:
+        raise Failed(moved)
     if not got.applied:
         # a pair its boxes offered: box 1 would stand off its low end for box 0's next move, so the grid stops here
         raise Failed(f"{name}: the camera refused {lab!r}, a pair its boxes offered (its notice closed with MENU)")
@@ -1254,16 +1330,19 @@ def named_walk(cam, link, eyes, cycle, model, path, option, labels, look_: Look,
             rec = {"path": [*path, option], "kind": "list", "via": VIA, "walk": "number", "index": ["number", number],
                    "field": look_.labels[b0], "value": field["value"], "label": lab, "fields": fields, "box": r.text,
                    "read_by": r.by, "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, **votes_of(r),
-                   "chosen_frame": chosen, "row_frame": row_frame, "dat": dat.name, "base": base.name,
+                   **title_said(), "chosen_frame": chosen, "row_frame": row_frame, "dat": dat.name, "base": base.name,
                    **({"notice": got.notice} if got.notice else {}), "applied": got.applied, "final": final,
                    "attempt": attempt, "changes": changes_of(ch)}
-            if final or not got.applied:
+            moved = not_this_option(rec, ch, name)
+            if final or not rec["applied"]:
                 out.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 out.flush()
             else:
                 n.pending = rec
             print(f"   {look_.labels[b0]} = {number} ({lab}): " + ("refused by the camera" if not got.applied else
                   ", ".join(f"{c.key} {c.before!r}->{c.after!r}" for c in ch[:4]) or "no change"), flush=True)
+            if moved:
+                raise Failed(moved)
             if final and ch:
                 raise Failed(f"{name}: {held} put back, {len(ch)} records still differ from the base")
     finally:
@@ -1312,6 +1391,8 @@ def main(argv=None):
     run = Run(PROOF_RUN)
     eyes = eyes_from_config(run)
     KEEP_OPENED.clear()
+    TITLE_READ.clear()
+    BASE_MOVED.clear()
     stopped = []
     with proofs_file(run, a.context) as out, prover_session(run, eyes) as s:
         try:
@@ -1362,6 +1443,8 @@ def body(s, eyes, cycle, model, path, a, labels, out, run) -> None:
     base = link.download(f"{path[-1]}-{a.option}-base".replace(" ", "-"))
     wait_lock(time.monotonic(), eyes, clock=time)
     moved = camset.diff(camset.read(s.start), camset.read(base))
+    BASE_MOVED.clear()
+    BASE_MOVED.update(c.key for c in moved)          # the option's own: no proof of its boxes may move them (keep)
     print(f"base: {a.option} chosen as its boxes stand ({len(moved)} records moved from the start file); every proof "
           "is compared with it", flush=True)
     if a.grid:

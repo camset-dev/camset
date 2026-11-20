@@ -722,3 +722,33 @@ def with_allowances(doc: dict, allowed: dict) -> int:
         for w in sorted(words) if s else ():
             n += add_evidence(s, w)
     return n
+
+
+def with_menu_modes(doc: dict, run: Path, save: bool = True) -> int:
+    """Each proved setting's "menu_modes" in its proof, which is evidence (camkit.definitions.lean_proof publishes
+    none of it): {a row its proofs went through, its labels " > " between: the modes the camera's own files say its
+    proofs of that row were made in}, for the rows where its counted proofs name no mode in their context and the
+    live-mode record of their base downloads gives one other than the top-level menu's (kit/pass2_report.py
+    silent_modes), and [] for a row whose every such proof lost its base download (no mode known: placement then counts
+    it in no menu by its mode, not even the Still menu's, and still places its record by it). Placement takes them from
+    the evidence alone
+    (camkit.placement.menu_modes_of), so the definition is rebuilt from data/ and private/ without the runs, and a
+    write over a pruned run keeps what the evidence says only where the proofs still give it. save: keep what was read
+    in the camera's cache (a dry run keeps none). How many settings have any."""
+    import pass2_report
+    from camkit import placement
+    lookup = pass2_report.silent_modes(Path(run), save=save)
+    n = 0
+    for s in doc["settings"]:
+        p = s.get("proved")
+        if not isinstance(p, dict):
+            continue
+        mine = {" > ".join(labels): sorted(ms) for (k, labels), ms in lookup.items()
+                if k == s["key"] and (not ms or ms - {placement.TOP_MODE})}          # [] : its proofs' modes unknown
+        if mine:
+            p["menu_modes"] = dict(sorted(mine.items()))
+            n += 1
+        else:
+            p.pop("menu_modes", None)
+    return n
+

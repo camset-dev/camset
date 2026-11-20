@@ -44,7 +44,7 @@ import re
 
 import numpy as np
 
-from camkit import coverage, first_open, row_names, safety, screen
+from camkit import coverage, first_open, match, row_names, safety, screen
 from camkit.live import leave_notice, lit_text, text_of
 from camkit.screen import same_state
 
@@ -54,9 +54,15 @@ from .screens import BAR_X, GREY_INK, GREY_LINE, GREY_MIN, GREY_TELL, place, sam
 ROW_KINDS = ("menu", "submenu")
 # The camera's sentences that say a function is shut and not why: a grey row's guide ends with one, after the row's own
 # description, as a paragraph of its own (kit2_help: 63 of the 1,993 guides read, every one "This function is currently
-# disabled.", which OCR read whole on all 63). Compared as the guide's last sentence, folded, case and spacing aside; a
-# text whose last sentence is not one of these counts as a reason, and no Right goes
+# disabled.", which OCR read whole on all 63). Compared as the guide's last sentence, folded, case and spacing aside, a
+# reader's slip in it forgiven (reads_as: "This tunction is currently disabled." on five rows, 2026-11-20); a text whose
+# last sentence is not one of these counts as a reason, and no Right goes
 REASONLESS = ("This function is currently disabled.",)
+# the popup's OK button read along at a guide's end ("... disabled. OK", "•ОК" with Cyrillic letters)
+FOOTER_OK = re.compile(r"[\s•·]*(?<![A-Za-z0-9])[Oo0][Kk](?![A-Za-z0-9])\W*$")
+# how far a slip may move the sentence's length, spaces and dots aside (match.key): a letter read for another moves it
+# none, one dropped or doubled one; words added before or after it move it further, and they may be a reason
+SLIP_CHARS = 2
 FOLLOWS = re.compile(r"not available as follows\b", re.I)
 # words a refusal is written with, which no sentence of the a1 II's 1,993 guides holds before its last (one guide's
 # "the subject cannot be recognized" says what a level does, and is no refusal): in a grey row's description they may
@@ -168,14 +174,22 @@ def _plain(text) -> str:
 
 
 def reasonless(text) -> bool:
-    """Whether a grey row's guide gives no reason: read (some text), its last sentence one of REASONLESS, and no sentence
-    before it written with a refusal's words (REASON_WORDS: "not available as follows" among them, the refusal the
-    camera names a blocker with)."""
-    t = " ".join(safety.fold(str(text or "")).split())
+    """Whether a grey row's guide gives no reason: read (some text), its last sentence one of REASONLESS as a reader
+    may slip in it (reads_as; the popup's OK read along left out, FOOTER_OK), and no sentence before it written with a
+    refusal's words (REASON_WORDS: "not available as follows" among them, the refusal the camera names a blocker with)."""
+    t = FOOTER_OK.sub("", " ".join(safety.fold(str(text or "")).split())).strip()
     parts = [p for p in SENTENCE_END.split(t) if p.strip()]
     if not parts or any(REASON_WORDS.search(p) for p in parts[:-1]) or FOLLOWS.search(parts[-1]):
         return False
-    return _plain(parts[-1]) in {_plain(x) for x in REASONLESS}
+    return any(reads_as(parts[-1], x) for x in REASONLESS)
+
+
+def reads_as(reading, sentence) -> bool:
+    """Whether a reading is `sentence` as a reader may have slipped in it: the same once folded (_plain), or one the
+    kit's likeness rule takes for it (camkit.match.same: its key, else a near spelling with the same last word) whose
+    length, spaces and dots aside (match.key), is within SLIP_CHARS of the sentence's, so no word is added to it."""
+    a, b = _plain(reading), _plain(sentence)
+    return a == b or (abs(len(match.key(a)) - len(match.key(b))) <= SLIP_CHARS and match.same(a, b))
 
 
 def help_blocker(text, labels=()) -> dict | None:
