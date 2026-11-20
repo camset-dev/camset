@@ -1197,11 +1197,13 @@ NEW_QUESTION_NAMES = re.compile(r'\.v[23]["\']|\bicon_left_out\(|\bwithout_icon\
                                 r'|\bQUESTIONS\b|\bask_named_reader\(|\bwith_options\(|\breading\.read\('
                                 r'|\bCliReader\b|claude-cli')
 MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader_census.py"}
-# proving/greyed.py names QUESTIONS, and nothing else of the list: it asks a kind's ".grey" version for its "greyed"
-# alone, beside its pixel test, and only to be more careful (2026-11-19); it reads no option by it, and its own test
-# holds it to that one question (test_greyed_asks_a_grey_question_for_its_grey_alone)
+# proving/greyed.py names QUESTIONS and the whole-list question's key ("entries.v2"), and nothing else of the list: it
+# asks a carousel's ".grey" version and a list's whole-list question for their "greyed" alone, beside its pixel test,
+# and only to be more careful (2026-11-19, measured by the reader census); it reads no option by them, and its own test
+# holds it to those two questions (test_greyed_asks_a_grey_question_for_its_grey_alone)
 MAY_NAME_QUESTIONS = {"kit/proving/greyed.py"}
 BUT_QUESTIONS = re.compile(NEW_QUESTION_NAMES.pattern.replace(r"|\bQUESTIONS\b", ""))
+GREYED_MAY_ASK = '"entries.v2"'
 
 
 def test_no_caller_asks_the_new_questions_or_reads_by_the_rule_yet():
@@ -1215,7 +1217,8 @@ def test_no_caller_asks_the_new_questions_or_reads_by_the_rule_yet():
         if "tests" in p.parts or "__pycache__" in p.parts or name in MAY_NAME_THEM:
             continue
         names = BUT_QUESTIONS if name in MAY_NAME_QUESTIONS else NEW_QUESTION_NAMES
-        if names.search(p.read_text(encoding="utf-8")):
+        text = p.read_text(encoding="utf-8")
+        if names.search(text.replace(GREYED_MAY_ASK, "") if name in MAY_NAME_QUESTIONS else text):
             found.append(name)
     assert sorted(found) == [], f"these name the new questions or read through camkit.reading.read: {found}"
     assert BUT_QUESTIONS.search("reading.read(") and BUT_QUESTIONS.search('"lit.v2"') and \
@@ -1314,15 +1317,18 @@ def test_greyed_of_takes_a_true_or_false_and_only_where_something_was_read():
 
 
 def test_greyed_asks_a_grey_question_for_its_grey_alone():
-    """proving/greyed.py, the one caller outside the reading modules that names QUESTIONS: it asks the ".grey" question
-    of a list's, a side list's or a carousel's kind, and reads its grey (greyed_of), never an option by it (no
-    reading.read, reading.region, with_options or choice_of)."""
+    """proving/greyed.py, the one caller outside the reading modules that names QUESTIONS: it asks a carousel's ".grey"
+    question and a list's whole-list question, and reads their grey (greyed_of, Flags.flag), never an option by them
+    (no reading.read, reading.region, with_options or choice_of), of the second reader alone (role "second", never
+    "third")."""
     text = (ROOT / "kit" / "proving" / "greyed.py").read_text(encoding="utf-8")
     assert not re.search(r"reading\.(read|region|choice_of|agree|tally|outcome)\(|with_options|ask_named_reader", text)
+    assert not re.search(r"role\s*=\s*[\"']third|ask_role\(", text)
     from proving import greyed
-    # a carousel's alone: on a list and a side list the readers saw no grey (reader census, 2026-11-19)
+    # a carousel's lit option: its ".grey" question; a list's and a side list's: the whole list (entries.v2)
     assert {k: reading.QUESTIONS[v].grey_prompt for k, v in greyed.ASKED.items()} == {"dialog": "carousel.v2.grey"}
-    assert {"list", "sidelist"} == greyed.PIXELS_ALONE and not greyed.PIXELS_ALONE & set(greyed.ASKED)
+    assert {"list", "sidelist"} == greyed.LISTS and not greyed.LISTS & set(greyed.ASKED)
+    assert greyed.ENTRIES == "entries.v2" and greyed.ENTRIES in vlm.PROMPTS
     assert "grey_prompt" in text and not re.search(r"\.prompt\b", text)      # never the kind's own question
 
 

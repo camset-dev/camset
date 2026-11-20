@@ -1903,8 +1903,8 @@ def test_a_refused_line_carries_no_diff_that_is_another_options(monkeypatch):
 
 # ------------------------------------------- 13b. the reader says which option is grey too, and only adds care (2026-11-19)
 
-# The reader's answer given outright on a side list, where no run asks one (proving.greyed.PIXELS_ALONE, measured
-# 2026-11-19), to hold judge's rule for two eyes, which a list's whole-list flags would feed once measured
+# The reader's flag given outright on a side list (proving.greyed.reader_grey faked), to hold judge's rule for two
+# eyes; the whole-list answers that give it in a run (proving.greyed.Flags) have tests of their own below
 OUTRIGHT = ("sidelist",)
 
 
@@ -1915,7 +1915,7 @@ def said_by_reader(monkeypatch, cam, said, kinds=("dialog",)):
     from proving import greyed
     asked = []
 
-    def reader_grey(c):
+    def reader_grey(c, **kw):
         if c.read().kind not in kinds:
             return None, {}
         asked.append(c.option)
@@ -1974,7 +1974,7 @@ def test_the_reader_is_asked_only_where_its_answer_can_change_what_is_pressed(mo
     monkeypatch.setattr(greyed, "drawn_grey", lambda cam: (pixels, 120.0 if pixels else 225.0 if pixels is False
                                                            else 170.0))
     calls = []
-    monkeypatch.setattr(greyed, "reader_grey", lambda cam: calls.append(1) or (True, {"question": "lit.v2.grey"}))
+    monkeypatch.setattr(greyed, "reader_grey", lambda cam, **kw: calls.append(1) or (True, {"question": "lit.v2.grey"}))
     monkeypatch.setattr(greyed, "by_help", lambda cam, name, label, back: greyed.Reason({"row": "Gamma"}, "help",
                                                                                         "00003_guide.png", label))
     what = greyed.judge(SimpleNamespace(), "Row", "A", k, 3, None, say=lambda m: None)
@@ -1986,26 +1986,198 @@ def test_the_reader_is_asked_only_where_its_answer_can_change_what_is_pressed(mo
     assert greyed.unasked(k, 3, greyed._deaf(reasons.get("Row")), pixels) == kept.get("not_asked", "")
 
 
-def test_on_a_list_and_a_side_list_no_reader_is_asked_and_the_pixels_alone_tell_grey(monkeypatch, tmp_path):
-    """PP4's Color Mode with Gamma on HLG, and Flash Sync Spd. Prty. with On grey: no reader question goes out about any
-    option (asked about the lit option alone the readers saw no grey, 2026-11-19), the keys are those of the pixels
-    alone, and each line says why the reader was not asked."""
+class GreyPool:
+    """proving.greyed's grey worker faked: each whole-list question answered at once, or never (late: the answer still
+    out when every option is judged); the frames asked about recorded."""
+
+    def __init__(self, late=False):
+        self.late, self.asked = late, []
+
+    def submit(self, fn, *a):
+        from concurrent.futures import Future
+        f = Future()
+        self.asked.append(a[0].path.name)
+        if not self.late:
+            f.set_result(fn(*a))
+        return f
+
+
+def listen_world(monkeypatch, answer, window=None, late=False):
+    """proving.greyed's whole-list seams faked round a list: band_options gives window(cam) (the options OCR names on
+    the bands on show; default every option of COLOR), ask_entries the second reader's answer, answer(the window asked
+    about) (a dict, or None for no answer). Returns the worker (its frames asked about)."""
+    from camkit import reading
     from proving import greyed
-    asked = []
-    monkeypatch.setattr(greyed.reading, "ask", lambda *a, **k: asked.append(a) or pytest.fail("a reader was asked"))
-    cam = SideCam()
+    shown = {}
+
+    def bands(cam, labels):
+        w = list(window(cam)) if window else list(range(len(labels)))
+        shown[cam.frame.path.name] = w
+        return w
+
+    def ask(frame):
+        got = answer(shown[frame.path.name])
+        return reading.Asked(got, "fake second", "fake-model", "" if got is not None else "no answer")
+    pool = GreyPool(late)
+    monkeypatch.setattr(greyed, "band_options", bands)
+    monkeypatch.setattr(greyed, "ask_entries", ask)
+    monkeypatch.setattr(greyed, "_pool", lambda: pool)
+    return pool
+
+
+def entries_of(labels, grey=(), skip=(), twice=()):
+    """A whole-list answer listing labels[j] for each j of a window: "greyed" true for those in grey; skip left out,
+    twice listed twice."""
+    def answer(window):
+        out = []
+        for j in window:
+            if j in skip:
+                continue
+            out += [{"label": labels[j], "greyed": j in grey, "highlighted": False}] * (2 if j in twice else 1)
+        return {"entries": out}
+    return answer
+
+
+def test_a_side_list_asks_its_whole_list_once_and_a_grey_flag_beside_white_pixels_keeps_it_unchosen(monkeypatch):
+    """PP4's Color Mode, Still and S-Cinetone grey by their pixels and Movie by the second reader's whole-list flag
+    alone: one question for the row's visit (its five options on one screenful), Movie gets the camera's Help and the
+    row's one Enter for the reason, never one to choose it, and Still and S-Cinetone then no key; each line keeps the
+    reader's flag, the question and the frame it was asked on."""
+    alone = SideCam(grey=(1, 2), refuse=(0, 1, 2))
+    listen_world(monkeypatch, lambda w: None)
+    side_world(monkeypatch, alone)
+    cam = SideCam(grey=(1, 2), refuse=(0, 1, 2))
+    pool = listen_world(monkeypatch, entries_of(COLOR, grey={0, 1, 2}))
     lines, said, guides = side_world(monkeypatch, cam)
     got = by_label(lines)
-    assert asked == [] and [x["label"] for x in lines if x.get("greyed")] == ["Movie", "Still", "S-Cinetone"]
-    assert all(x["greyed_by"] == "pixels" for x in lines if x.get("greyed"))
-    assert got["709"]["grey_readings"] == {"pixels": False, "level": 225.0, "reader": None,
-                                           "not_asked": greyed.NOT_ON_A_LIST}
-    assert all(x["grey_readings"]["reader"] is None and x["grey_readings"]["not_asked"] for x in lines)
-    monkeypatch.chdir(tmp_path)
-    lcam = ListCam(grey=(1,), refuse=(1,), saved=0)
-    llines, _, _ = list_world(monkeypatch, lcam)
-    assert asked == [] and by_label(llines)["Off"]["grey_readings"]["not_asked"] == greyed.NOT_ON_A_LIST
-    assert by_label(llines)["On"]["greyed_by"] == "pixels"
+    assert len(pool.asked) == 1 and guides == [("Picture Profile > PP4 > Color Mode: Movie", 0)]
+    assert enters_on(cam, {1, 2}) == 0 < enters_on(alone, {1, 2}) and enters_on(cam, {0}) == 1
+    assert (got["Movie"]["greyed_by"], got["Movie"]["entered"], got["Movie"]["applied"]) == ("reader", "for its reason",
+                                                                                           False)
+    assert got["Movie"]["grey_readings"] == {"pixels": False, "level": 225.0, "reader": True, "question": "entries.v2",
+                                             "asked_on": pool.asked[0], "read": "Movie", "reader_name": "fake second"}
+    assert got["709"]["grey_readings"]["reader"] is False and got["709"]["applied"]
+    assert got["Still"]["grey_readings"]["not_asked"] == "the pixels tell it grey, which no answer changes"
+
+
+@pytest.mark.parametrize("variant", ["late", "none", "empty", "garbled", "short", "long", "unknown labels",
+                                     "twice", "not listed", "flags not true or false"])
+def test_a_late_empty_garbled_or_wrong_length_answer_changes_nothing(monkeypatch, variant):
+    """The whole-list answer that cannot be trusted for an option gives it no flag: the camera gets exactly the keys of
+    the pixels alone (no answer at all), whatever the answer would have said."""
+    alone = SideCam(grey=(1,), refuse=(0, 1, 3))
+    listen_world(monkeypatch, lambda w: None)
+    side_world(monkeypatch, alone)
+    all_grey = set(range(len(COLOR)))
+    answer = {"late": entries_of(COLOR, grey=all_grey), "none": lambda w: None, "empty": lambda w: {"entries": []},
+              "garbled": lambda w: {"selected": "Movie", "greyed": True},
+              "short": entries_of(COLOR, grey=all_grey, skip={4}),
+              "long": lambda w: {"entries": entries_of(COLOR, grey=all_grey)(w)["entries"] + [{"label": "Movie",
+                                                                                             "greyed": True}]},
+              "unknown labels": lambda w: {"entries": [{"label": f"Zqx {j}", "greyed": True} for j in w]},
+              "twice": lambda w: {"entries": [{"label": "Movie", "greyed": True}] * len(w)},
+              "not listed": lambda w: {"entries": [{"label": "BT.2020", "greyed": True}] + [
+                  {"label": f"Zqx {j}", "greyed": True} for j in w[1:]]},
+              "flags not true or false": lambda w: {"entries": [{"label": COLOR[j], "greyed": "maybe"} for j in w]}}
+    cam = SideCam(grey=(1,), refuse=(0, 1, 3))
+    listen_world(monkeypatch, answer[variant], late=variant == "late")
+    lines, said, guides = side_world(monkeypatch, cam)
+    assert cam.keys == alone.keys, variant
+    for x in lines:
+        if x["label"] not in ("Still", "BT.2020"):      # Still: the pixels' grey; BT.2020: the put-back
+            assert x["grey_readings"]["reader"] is None and x["grey_readings"]["why"], (variant, x)
+        assert x.get("greyed_by") in (None, "pixels"), (variant, x)
+
+
+@pytest.mark.parametrize("pixels", [(), (0,), (1, 2), (0, 2, 3)])
+@pytest.mark.parametrize("reader", [(), (0,), (3,), (0, 1, 2, 3), (2, 3)])
+@pytest.mark.parametrize("refuse", ["pixels", "both", "none"])
+def test_the_whole_list_answer_never_causes_an_enter_or_a_right_the_pixels_alone_would_not(monkeypatch, pixels, reader,
+                                                                                         refuse):
+    """Whatever the whole-list flags say and whatever the camera refuses, no option gets more Enters than with the
+    pixels alone, the row no more Rights, and an option only the reader calls grey at most the row's one Enter for its
+    reason, but where the reader misjudged the row."""
+    pixel_grey, reader_grey = set(pixels), set(reader)
+    refused = {"pixels": pixel_grey, "both": pixel_grey | reader_grey, "none": set()}[refuse]
+    alone = SideCam(grey=pixel_grey, refuse=refused)
+    listen_world(monkeypatch, lambda w: None)
+    side_world(monkeypatch, alone)
+    cam = SideCam(grey=pixel_grey, refuse=refused)
+    listen_world(monkeypatch, entries_of(COLOR, grey=reader_grey))
+    lines, said, guides = side_world(monkeypatch, cam)
+    for o in range(len(COLOR)):
+        assert enters_on(cam, {o}) <= enters_on(alone, {o}), (o, cam.keys, alone.keys)
+    assert cam.keys.count("right") <= alone.keys.count("right") and cam.keys.count("enter") <= alone.keys.count("enter")
+
+
+@pytest.mark.parametrize("answer, grey", [(entries_of(COLOR, grey={1}), True), (entries_of(COLOR), False),
+                                          (lambda w: None, False), (entries_of(COLOR, grey={1}, skip={1}), False)])
+def test_where_the_pixels_cannot_tell_the_whole_list_flag_is_waited_for_and_taken(monkeypatch, answer, grey):
+    """Still's text measures 170: the row's whole-list answer is waited for and its flag taken; no answer, or Still not
+    listed, enters it as before."""
+    cam = SideCam(grey=(), refuse=(1,), unsure=(1,))
+    listen_world(monkeypatch, answer)
+    lines, said, guides = side_world(monkeypatch, cam)
+    still = by_label(lines)["Still"]
+    assert (still.get("greyed_by") == "reader") is grey and (still["grey_readings"]["reader"] is True) is grey
+
+
+def test_an_answer_still_out_where_the_pixels_cannot_tell_is_waited_for_a_presss_time_then_entered(monkeypatch):
+    from camkit import reading
+    monkeypatch.setitem(reading.TIMEOUTS, "press", 0.05)
+    cam = SideCam(grey=(), refuse=(), unsure=(1,))
+    listen_world(monkeypatch, entries_of(COLOR, grey={1}), late=True)
+    lines, said, guides = side_world(monkeypatch, cam)
+    still = by_label(lines)["Still"]
+    assert still["applied"] and still["grey_readings"]["why"] == "the answer was not in yet"
+
+
+class Visit(SimpleNamespace):
+    """A cursor resting on option k of a long side list, its frame a name of its own."""
+
+
+@pytest.mark.parametrize("window, asks", [
+    (lambda k: range(k // 6 * 6, k // 6 * 6 + 6), 3),             # a list that pages: once a screenful
+    (lambda k: range(max(0, min(k - 3, 12)), max(0, min(k - 3, 12)) + 6), 5),  # cursor kept on band 3: once in 3
+    (lambda k: range(max(0, k - 5), max(0, k - 5) + 6), 13)])     # cursor on the bottom band: once an option past it
+def test_a_list_that_scrolls_asks_once_where_the_cursor_reaches_an_option_no_screenful_asked_showed(monkeypatch, window,
+                                                                                                  asks):
+    """proving.greyed.Flags on an 18-option list visited option by option: a question about the screenful on show only
+    where the cursor's option is on no screenful asked yet, never twice about one frame."""
+    from camkit import reading
+    from proving import greyed
+    labels = [f"Zqx {j}" for j in range(18)]
+    pool = GreyPool()
+    monkeypatch.setattr(greyed, "_pool", lambda: pool)
+    shown = {}
+    monkeypatch.setattr(greyed, "band_options", lambda cam, labs: shown.setdefault(cam.frame.path.name,
+                                                                                    list(window(cam.k))))
+    monkeypatch.setattr(greyed, "ask_entries", lambda frame: reading.Asked(
+        entries_of(labels)(shown[frame.path.name]), "fake second", "m", ""))
+    flags = greyed.Flags(labels)
+    for k in range(18):
+        cam = Visit(k=k, frame=SimpleNamespace(path=Path(f"{k:05d}_down.png"), image=None))
+        flags.look(cam, k)
+        flags.look(cam, k)                                       # the same frame: never asked twice
+    assert len(pool.asked) == asks
+    assert all(flags.flag(k)[0] is False for k in range(18))     # every option flagged white, by its label
+
+
+def test_a_reader_standing_in_for_the_second_is_never_asked_about_grey(monkeypatch):
+    from camkit import vlm
+    from proving import greyed
+    monkeypatch.setattr(vlm, "role", lambda name: {"name": "qwen"})
+    monkeypatch.setattr(vlm, "standing_in", lambda name: {"name": "glm"})
+    monkeypatch.setattr(greyed.reading, "ask", lambda *a, **k: pytest.fail("a stand-in was asked"))
+    got = greyed.ask_entries(SimpleNamespace(path=Path("00001_down.png"), image=None))
+    assert got.answer is None and got.why == greyed.NO_STAND_IN
+    cam = SimpleNamespace(frame=SimpleNamespace(path=Path("00002_right.png"), image=None),
+                          read=lambda: SimpleNamespace(kind="dialog"))
+    assert greyed.reader_grey(cam) == (None, {"not_asked": greyed.NO_STAND_IN})
+    monkeypatch.setattr(vlm, "standing_in", lambda name: None)
+    monkeypatch.setattr(greyed.reading, "ask", lambda frame, prompt, timeout, role="second":
+                        greyed.reading.Asked({"entries": []}, "glm", "glm-model", ""))    # answered by another
+    assert greyed.ask_entries(SimpleNamespace(path=Path("00003_down.png"), image=None)).why == greyed.NO_STAND_IN
 
 
 def test_a_reader_calling_grey_options_white_presses_nothing_the_pixels_alone_would_not(monkeypatch):
@@ -2152,6 +2324,20 @@ def test_on_a_carousel_the_reader_alone_tells_an_option_grey(monkeypatch, tmp_pa
     assert guides2 == [] and cam2.keys.count("enter") == 3 and "greyed" not in by_label(lines2)["On"]
 
 
+def test_the_list_prover_asks_its_whole_list_once_a_visit(monkeypatch, tmp_path):
+    """prove_row on Flash Sync Spd. Prty.: one whole-list question for the row's visit; Off, white by its pixels and
+    grey by the reader's flag, gets Help and the row's one Enter for its reason."""
+    monkeypatch.chdir(tmp_path)
+    cam = ListCam(grey=(), refuse=(2,), saved=0)
+    pool = listen_world(monkeypatch, entries_of(SHUTTER, grey={2}))
+    lines, said, guides = list_world(monkeypatch, cam)
+    off = by_label(lines)["Off"]
+    assert len(pool.asked) == 1 and guides == ["Flash Sync Spd. Prty.: Off"]
+    assert (off["greyed_by"], off["entered"], off["grey_readings"]["question"]) == ("reader", "for its reason",
+                                                                                   "entries.v2")
+    assert by_label(lines)["On"]["applied"] and by_label(lines)["On"]["grey_readings"]["reader"] is False
+
+
 def carousel_enters(cam, saved=0):
     """{option: the Enters it got} replayed from a ListCam's keys (its own moves), from the option it was saved on."""
     n = len(SHUTTER)
@@ -2195,7 +2381,8 @@ def test_on_a_carousel_the_reader_never_causes_an_enter_the_old_code_did_not_sen
 def test_the_reader_is_asked_the_kinds_grey_question_about_the_frame_on_show(eyes):
     """proving.greyed.reader_grey: a carousel's option asked carousel.v2.grey through camkit.reading.ask, its "greyed"
     read by camkit.reading.greyed_of; a failure or an answer with no grey is no answer, said why; a list's and a side
-    list's asked nothing, said so; any other screen asked nothing."""
+    list's lit option asked nothing (its flag is the row's whole-list answer's: Flags), said so; any other screen asked
+    nothing."""
     from proving import greyed
     lit = eyes.frame("00010_down.png", bar=(305, 236, 595, 282))
     eyes.answer("lit.v2.grey", {"selected": "Movie", "greyed": True})
@@ -2203,8 +2390,8 @@ def test_the_reader_is_asked_the_kinds_grey_question_about_the_frame_on_show(eye
 
     def on(kind, frame):
         return SimpleNamespace(frame=frame, read=lambda: SimpleNamespace(kind=kind))
-    for kind in ("sidelist", "list"):                       # the pixels alone: nothing asked
-        assert greyed.reader_grey(on(kind, lit)) == (None, {"not_asked": greyed.NOT_ON_A_LIST})
+    for kind in ("sidelist", "list"):        # no question about the lit option: the row's whole-list answers, none here
+        assert greyed.reader_grey(on(kind, lit)) == (None, {"not_asked": "no whole-list answers kept for this row"})
     assert greyed.reader_grey(on("dialog", lit)) == (False, {"question": "carousel.v2.grey",
                                                              "reader_name": "fake second", "read": "ISO 100"})
     assert eyes.asked == ["carousel.v2.grey"]

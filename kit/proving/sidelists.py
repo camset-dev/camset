@@ -227,6 +227,7 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     base = camset.read(base_path)
     last, order, c, prev = base_path, None, None, None
     applied_k, greyed_k, tried_k = [], [], []       # what the run says of the row at its end (proving.greyed)
+    flags = greyed.Flags(vals)                       # the row's whole-list answers for this visit (proving.greyed)
     while True:
         if order is not None:
             to_row(cam, path, top, row_place)
@@ -242,6 +243,7 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             raise Failed(f"{name}: could not tell which value the side list opened on ({side_text(cam)!r})")
         if order is None:
             c = prev = cur                  # the value the side list opened on: what a grey option's MENU leaves it on
+            flags.look(cam, c)              # the screenful on show asked about, in the background (proving.greyed)
             plan = job["plan"]
             if SPREAD and len(plan) > 3:                    # a long text list: its first, middle and last
                 plan = sorted({0, len(vals) // 2, len(vals) - 1})
@@ -253,11 +255,11 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         move_to(cam, cur, k, n, "sidelist")
         if side_index(cam, job) != k:
             raise Failed(f"{name}: the cursor is not on {vals[k]!r} ({side_text(cam)!r})")
-        # an option the side list draws grey is never entered to choose it (proving.greyed: grey by its
-        # pixels): the row's first one, the camera's Help on it, then, where Help names no reason, its one Enter to read
+        # an option the side list draws grey is never entered to choose it (proving.greyed: grey by its pixels or the
+        # second reader's whole-list flag): the row's first one, the camera's Help on it, then, where Help names no reason, its one Enter to read
         # the notice; the others no key at all
         what = greyed.judge(cam, name, vals[k], k, c,
-                            lambda k=k: cam.read().kind == "sidelist" and side_index(cam, job) == k)
+                            lambda k=k: cam.read().kind == "sidelist" and side_index(cam, job) == k, flags=flags)
         if what == greyed.SKIP:
             reason = greyed.REASONS.get(name)
             rec = greyed.line({"path": path, "kind": "sidelist", "index": k, "label": vals[k], "shown": side_text(cam),

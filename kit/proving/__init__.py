@@ -12,7 +12,7 @@
     fields      number fields          sidelists   Picture Profile's side lists     checklists  checkboxes
     looks       Creative Look panels   wbgrid      White Balance fine-tune grids    tables      tables, tiles, keys
     helptext    --help-text: the In-Camera Guide of each row and option
-    greyed      an option drawn grey (a list's and side list's by their pixels, a carousel's by the second reader):
+    greyed      an option drawn grey (by its pixels, or by the second reader's flag, only ever to be more careful):
                 never entered to choose it, its reason read once a row
 
 The list prover itself (prove_row, with its display proof), the carousels' second axes (prove_axis_row), the session

@@ -17,7 +17,7 @@ A list that offers a single option (Rec Frame Rate under PAL with XAVC HS 8K) ca
 display proves it instead (prove_by_display), the option read by OCR and the vision model, nothing chosen, and the
 value its row's records hold in the download the proof starts from (a proof line with "proof": "display").
 
-An option the list, side list or carousel draws grey (a list's by its pixels, a carousel's by the reader: proving.greyed) is
+An option the list, side list or carousel draws grey (by its pixels, or the second reader's flag: proving.greyed) is
 never entered to choose it (2026-11-19): the row's first one gets the
 camera's own Help through the kit's guarded Help (C4 where the footer draws the help button, its In-Camera Guide, OK),
 and where that names no reason, one Enter to read the camera's notice, said as such (--never-enter-grey: none); the
@@ -211,6 +211,11 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     c = which_option(cam, job)
     if c is None:
         raise Failed(f"{name}: could not tell which option the {kind} opened on ({text(cam)!r})")
+    # a list's whole-list answers for this visit of the row (proving.greyed.Flags): the second reader asked about the
+    # screenful on show now, in the background, and again where the cursor reaches an option no screenful asked showed
+    flags = greyed.Flags(labels) if kind == "list" and not job.get("network_row") else None
+    if flags is not None:
+        flags.look(cam, c)
     order = [(c + i) % n for i in range(1, n)] + [c]
     choose = job.get("choose")          # a network row: only the options its decision names (network_jobs_or_exit)
     network_row = job.get("network_row")
@@ -263,12 +268,13 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             if network_row:         # inside a network row only the map's own option names are kept (KEPT)
                 now = kept_option(now, labels)
             return frame, seen, now
-        # an option the list draws grey is never entered to choose it (proving.greyed: a list's by its pixels, a carousel's by the reader): the
+        # an option the list draws grey is never entered to choose it (proving.greyed: by its pixels or the reader's flag): the
         # row's first one, the camera's Help on it, then, where Help names no reason, its one Enter to read the notice;
         # the others no key at all. Not inside a network row, whose screens take no key but its own (camkit.live)
         evidence = chosen_now()                 # the cursor on option k, checked before anything is pressed on it
         what = greyed.ENTER if network_row else greyed.judge(
-            cam, name, labels[k], k, c, lambda k=k: cam.read().kind == kind and which_option(cam, job) == k, say=tell)
+            cam, name, labels[k], k, c, lambda k=k: cam.read().kind == kind and which_option(cam, job) == k, say=tell,
+            flags=flags)
         if what == greyed.TRY:
             evidence = chosen_now()             # after the camera's Help on it: the option on the frame the Enter is on
         if what == greyed.SKIP:
@@ -1013,8 +1019,8 @@ def main():
                          "with the whole run through the OSD (an OSD page scan and map, no --start), for when the "
                          "capture may not come back between rows, and for another mode's rows")
     ap.add_argument("--never-enter-grey", action="store_true",
-                    help="no Enter on an option drawn grey, ever (a list's or side list's by its pixels, a carousel's by "
-                         "the second reader): each is recorded greyed as drawn with what the camera's Help on the row's "
+                    help="no Enter on an option drawn grey, ever (by its pixels, or by the second reader's flag): each "
+                         "is recorded greyed as drawn with what the camera's Help on the row's "
                          "first one said, or no reason (by default that first one takes one Enter to read the camera's "
                          "notice where Help names no reason, which the camera may apply: proving.greyed)")
     a = ap.parse_args()

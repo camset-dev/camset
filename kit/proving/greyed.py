@@ -12,17 +12,19 @@ it, and why it is greyed is read once a row (the row's one Enter for that, which
     SKIP    drawn grey and its reason read, or NEVER_ENTER: no key at all on it; the line says greyed as drawn
 
 Whether an option is drawn grey, two eyes can tell, each on the frame the cursor stands on (drawing): the pixels
-(proving.screens.drawn_grey, on a list and a side list) and the second reader, asked the kind of screen's question that
-also asks it (camkit.reading.QUESTIONS' grey_prompt, its "greyed": reader_grey; the owner, 2026-11-19: "the VLM text
-needs to include which text is grey"). On a list and a side list the pixels alone tell it, as before: asked about the
-lit item alone, the readers called none of 60 side-list options the camera drew grey grey (kit/tools/reader_census.py,
-2026-11-19), so no reader is asked there (ASKED). On a carousel, whose pixels are not judged, the reader decides. Either
-eye saying grey makes it grey; a reader that does not answer changes nothing, so a reader calling an option white
-never makes the kit press on one the pixels call grey: the reader only ever adds care. The reader is asked, in line,
-only where its answer can change what is pressed (unasked): never on the value the row was saved on, on an option the
-pixels already call grey, nor on a row where it misjudged an option. judge's answer (Verdict) says which eyes told it
-grey ("pixels", "reader" or "both": told) and carries both readings (Drawing.kept), which every line it judged keeps
-("grey_readings"), a grey one with "greyed_by" beside "greyed": "drawn" (line, marks).
+(proving.screens.drawn_grey: a list's and a side list's lit band) and the second reader, never
+a third nor one standing in for the second (the owner, 2026-11-19: "the VLM text needs to include which text is
+grey"). On a list and a side list the reader's flag for the option comes from its answer about the whole list on show
+(Flags: camkit.vlm's entries.v2, asked in the background when the list opens and again where the cursor reaches an
+option no screenful asked showed, never once an option), matched to the option by its label; on a carousel, whose
+pixels are not judged, from its question about the lit option (carousel.v2.grey), asked in line. Either eye
+saying grey makes it grey; where the pixels cannot tell, the reader's flag decides (waited for); where they read white,
+an answer already in is taken and none is waited for; a reader that gives no flag changes nothing, so a reader calling
+an option white never makes the kit press on one the pixels call grey: the reader only ever adds care. Its answer is
+not taken where it cannot change what is pressed (unasked): on the value the row was saved on, on an option the pixels
+call grey, on a row where it misjudged an option. judge's answer (Verdict) says
+which eyes told it grey ("pixels", "reader" or "both": told) and carries both readings (Drawing.kept), which every line
+it judged keeps ("grey_readings"), a grey one with "greyed_by" beside "greyed": "drawn" (line, marks).
 
 The reason (REASONS, a row's for the run): first the camera's own Help on that first grey option, through the kit's
 guarded Help alone (drive.help_refused: a menu or option screen whose footer draws the help button; help_run.guide:
@@ -35,10 +37,11 @@ told it grey (Misjudged): those are not heard again on that row, whose other opt
 as before, while an option the other eye calls grey is still judged grey. So a reader's misjudgement never makes the
 kit enter an option the pixels call grey, and the pixels' never one the reader does without its own Help and one try.
 """
+import contextlib
 import re
 from typing import NamedTuple
 
-from camkit import coverage, reading
+from camkit import coverage, reading, vlm
 
 from .base import Failed
 from .screens import drawn_grey
@@ -49,16 +52,20 @@ REASONS: dict = {}          # {row name: Reason, or Misjudged} read this run: on
 LABELS: set | None = None   # the row labels a blocker is named by (labels(): the definition's and the page model's)
 FOLLOWS = re.compile(r"not available as follows\b", re.I)
 EYES = ("pixels", "reader")
-# the kind of screen whose lit option the reader is asked about, and the kind whose question (camkit.reading.QUESTIONS'
-# grey_prompt) asks, beside its text, whether it is drawn grey: a carousel alone. On a list and a side list (PIXELS_ALONE)
-# the readers asked about the lit item alone called none of 60 grey side-list entries grey (2026-11-19, Qwen3.8-27B and
-# GLM-4.6V-Flash, by lit.v2.grey or option.grey; the pixels told every one), while the menu question's per-row flag
-# matched the pixels on 99% of rows: a question about the whole list (camkit.vlm's entries.v2) is measured before any
-# prover asks it
+# What the second reader is asked whether an option is grey, by the kind of screen (reader census, 2026-11-19):
+# - a list and a side list (LISTS): the whole list, every entry with its flag (entries.v2: Flags), once a screenful,
+#   in the background. Asked about the lit item alone, Qwen3.8-27B and GLM-4.6V-Flash called none of 60 grey side-list
+#   entries grey, while the menu question's per-row flag matched the pixels on 99% of rows; asked the whole list, Qwen
+#   (the second reader) called grey 90.8% of the 142 grey side-list entries the cursor was not on and 59.5% of the 37 it
+#   was on, and no white entry grey (272 and 72), 7.5 s an answer at four at once. The third readers are never asked
+#   about grey: Gemma (26B) called 9.2% and GLM-4.6V-Flash 16.2% of those 142 grey, and neither one lit grey entry of 37
+# - a carousel (ASKED): its lit option, carousel.v2.grey, its pixels not judged; Qwen called 8 of 13 grey options grey
+#   and 6 of 60 white, carousel.v2.grey2 (pinned, the census's alone) fewer grey (6 of 13) and as many white
 ASKED = {"dialog": "carousel"}
-PIXELS_ALONE = {"list", "sidelist"}
-NOT_ON_A_LIST = ("on a list the pixels alone tell it: asked about the lit option alone the readers saw no grey "
-                 "(reader census, 2026-11-19)")
+LISTS = {"list", "sidelist"}
+ENTRIES = "entries.v2"      # camkit.vlm's whole-list question
+NO_STAND_IN = "the second reader is away: a reader standing in for it is never asked whether an option is grey"
+_POOL: list = []            # one worker for the whole-list questions, apart from the evidence question's (_pool)
 
 
 def _say(message: str) -> None:
@@ -134,26 +141,198 @@ def told(eyes) -> str | None:
     return "both" if eyes >= set(EYES) else next(iter(eyes)) if eyes else None
 
 
-def reader_grey(cam) -> tuple:
-    """(whether the second reader says the option under the cursor is drawn grey: True, False, or None where it gives no
-    answer; what the line keeps of its side): asked the question of the screen's kind that also asks it (ASKED,
-    camkit.reading.QUESTIONS, read by camkit.reading.greyed_of), through camkit.reading.ask (camkit.vlm.ask_role: a
-    stand-in for the second reader where it will not connect, never about a black frame, nothing while its reader is
-    down), with a press's time (camkit.reading.TIMEOUTS). Any failure is no answer. On a list and a side list nothing
-    is asked (None, {"not_asked": NOT_ON_A_LIST}: PIXELS_ALONE); (None, {}) on any other screen no question asks it
-    of."""
+def _screen_kind(cam):
     read = getattr(cam, "read", None)
-    screen_kind = getattr(read(), "kind", None) if callable(read) else None
-    if screen_kind in PIXELS_ALONE:
-        return None, {"not_asked": NOT_ON_A_LIST}
-    kind = ASKED.get(screen_kind)
-    if kind is None:
+    return getattr(read(), "kind", None) if callable(read) else None
+
+
+def _own_second():
+    """(the second reader's configured name or None where it cannot be told, whether a reader standing in plays the
+    role now): a stand-in is never asked about grey (NO_STAND_IN)."""
+    try:
+        own = vlm.role("second").get("name")
+    except Exception:           # noqa: BLE001 - no config to tell by: camkit.reading.ask says what is wrong
+        return None, False
+    stand = vlm.standing_in("second")
+    return own, stand is not None and stand.get("name") != own
+
+
+def ask_entries(frame) -> reading.Asked:
+    """The second reader's answer to the whole-list question (camkit.vlm's entries.v2) about frame, through
+    camkit.reading.ask with a proof's time; no answer where a reader stands in for it, or answered for it (NO_STAND_IN).
+    Run on the grey worker (_pool), never in line."""
+    own, standing = _own_second()
+    if standing:
+        return reading.Asked(None, None, None, NO_STAND_IN)
+    got = reading.ask(frame, ENTRIES, reading.TIMEOUTS["proof"])
+    if own and got.name and got.name != own:
+        return reading.Asked(None, got.name, got.model, NO_STAND_IN)
+    return got
+
+
+def _pool():
+    if not _POOL:
+        from concurrent.futures import ThreadPoolExecutor
+        _POOL.append(ThreadPoolExecutor(max_workers=1, thread_name_prefix="grey"))
+    return _POOL[0]
+
+
+def _flag(v) -> bool | None:
+    """A JSON true or false, or the strings "true" and "false" in any case; None for anything else."""
+    if isinstance(v, bool):
+        return v
+    return {"true": True, "false": False}.get(v.strip().lower()) if isinstance(v, str) else None
+
+
+def band_options(cam, labels) -> list:
+    """[the option of `labels` OCR names on each band the list or side list on show draws, an index or None (none, or
+    two named)], top to bottom (proving.screens.grey_rows, the bands with ink; OCR's lines of the frame, which the
+    prover read already, proving.screens.frame_lines); [] on any other screen."""
+    from camkit.ocr import text_in
+
+    from .screens import OPTION_X, _matches, frame_lines, grey_rows
+    bands = [b for b in grey_rows(cam) if b[4] is not None]
+    if not bands:
+        return []
+    try:
+        lines = frame_lines(cam)
+    except Exception:           # noqa: BLE001 - no OCR: no band named, so none covered
+        lines = []
+    x0, x1 = OPTION_X[_screen_kind(cam)]
+    out = []
+    for t, b, *_ in bands:
+        hits = _matches(text_in(lines, (x0 - 20, t - 2, x1 + 20, b + 2)), labels)
+        out.append(hits[0] if len(hits) == 1 else None)
+    return out
+
+
+class Ask(NamedTuple):
+    """One whole-list question: the frame it was asked about, how many option bands that frame draws, the options OCR
+    named on them, and the answer to come (a Future of camkit.reading.Asked)."""
+    frame: str | None
+    bands: int
+    seen: frozenset
+    future: object
+
+
+class Flags:
+    """A list's or side list's whole-list answers for one visit of its row (the provers make one a row, labels its
+    options): the second reader asked entries.v2 about a screenful in the background (look), once where the option the
+    cursor stands on is on no screenful asked yet, and each answer read for an option's flag (flag) by its label, never
+    by its place. An answer whose list is not as long as the screen it was asked about draws, garbled, empty, or not in
+    yet, gives no flag; nor does an option it lists twice or not at all."""
+
+    def __init__(self, labels):
+        self.labels = [str(x) for x in labels]
+        self.asks: list = []
+
+    def _named(self, entries) -> dict:
+        """{option index: [the entries naming it]} by the provers' comparison of option labels (screens._matches)."""
+        from .screens import _matches
+        out: dict = {}
+        for e in entries:
+            hits = _matches(str(e.get("label") or ""), self.labels)
+            if len(hits) == 1:
+                out.setdefault(hits[0], []).append(e)
+        return out
+
+    def _entries(self, ask: Ask) -> tuple:
+        """(the entries of a done question's answer, or None; why None)."""
+        try:
+            got = ask.future.result(timeout=0)
+        except Exception as e:  # noqa: BLE001 - a question that raised is no answer
+            return None, f"the question failed ({type(e).__name__})"
+        entries = got.answer.get("entries") if isinstance(got.answer, dict) else None
+        if got.answer is None:
+            return None, got.why or "no answer"
+        if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
+            return None, "the answer holds no list of entries"
+        if len(entries) != ask.bands:
+            return None, f"its list has {len(entries)} entries where the screen drew {ask.bands}"
+        return entries, ""
+
+    def covered(self) -> set:
+        """The options on a screenful asked about: those OCR named on its bands, and those a done answer names."""
+        out = set()
+        for a in self.asks:
+            out |= a.seen
+            if a.future.done():
+                entries, _ = self._entries(a)
+                out |= set(self._named(entries or []))
+        return out
+
+    def look(self, cam, k: int) -> None:
+        """Ask about the frame on show, in the background, where option k (the cursor's) is on no screenful asked yet
+        and the frame draws a list: never twice about one frame."""
+        if k in self.covered():
+            return
+        name = getattr(getattr(cam.frame, "path", None), "name", None)
+        if name is not None and any(a.frame == name for a in self.asks):
+            return
+        bands = band_options(cam, self.labels)
+        if bands:
+            self.asks.append(Ask(name, len(bands), frozenset(j for j in bands if j is not None),
+                                 _pool().submit(ask_entries, cam.frame)))
+
+    def flag(self, k: int, wait: float = 0.0) -> tuple:
+        """(option k's flag: True, False or None; what the line keeps): from the newest answer that lists it once, among
+        the questions about a screenful that showed it (else any); a question not answered yet waited for up to `wait`
+        seconds in all (0: only answers already in)."""
+        import time
+        if not self.asks:
+            return None, {"question": ENTRIES, "why": "no screenful of the list was asked about"}
+        mine = [a for a in self.asks if k in a.seen] or list(self.asks)
+        deadline, why = time.monotonic() + wait, "the answer was not in yet"
+        for a in reversed(mine):
+            if not a.future.done():
+                left = deadline - time.monotonic()
+                if left > 0:
+                    with contextlib.suppress(Exception):     # late or failed: no flag from it
+                        a.future.result(timeout=left)
+                if not a.future.done():
+                    continue
+            entries, why_not = self._entries(a)
+            if entries is None:
+                why = why_not
+                continue
+            named = self._named(entries).get(k, [])
+            if len(named) != 1:
+                why = "the option is not listed" if not named else "the option is listed twice"
+                continue
+            said = _flag(named[0].get("greyed"))
+            if said is None:
+                why = "its flag is no true or false"
+                continue
+            got = a.future.result(timeout=0)
+            return said, {"question": ENTRIES, "asked_on": a.frame, "read": str(named[0].get("label")),
+                          **({"reader_name": got.name} if got.name else {})}
+        return None, {"question": ENTRIES, "why": why}
+
+
+def reader_grey(cam, k: int | None = None, flags: Flags | None = None, wait: float = 0.0) -> tuple:
+    """(whether the second reader says the option under the cursor is drawn grey: True, False, or None where it gives no
+    answer; what the line keeps of its side). On a list and a side list (LISTS), option k's flag in the row's whole-list
+    answers (Flags.flag, waiting up to `wait` seconds for one asked about a screenful that showed it). On a carousel
+    (ASKED), its question about the lit option (camkit.reading.QUESTIONS' grey_prompt, read by
+    camkit.reading.greyed_of), asked in line through camkit.reading.ask with a press's time, never of a reader standing
+    in for the second (NO_STAND_IN). Any failure is no answer; (None, {}) on any other screen."""
+    kind = _screen_kind(cam)
+    if kind in LISTS:
+        if flags is None or k is None:
+            return None, {"not_asked": "no whole-list answers kept for this row"}
+        return flags.flag(k, wait)
+    if kind not in ASKED:
         return None, {}
-    q = reading.QUESTIONS[kind]
+    q = reading.QUESTIONS[ASKED[kind]]
+    own, standing = _own_second()
+    if standing:
+        return None, {"not_asked": NO_STAND_IN}
     try:
         got = reading.ask(cam.frame, q.grey_prompt, reading.TIMEOUTS["press"])
     except Exception as e:      # noqa: BLE001 - no answer: the pixels decide, as before
         return None, {"question": q.grey_prompt, "why": f"the question could not be asked ({type(e).__name__})"}
+    if own and got.name and got.name != own:
+        return None, {"question": q.grey_prompt, "why": NO_STAND_IN}
     said = reading.greyed_of(got.answer, q)
     read = got.answer.get(q.field) if isinstance(got.answer, dict) else None
     return said, {"question": q.grey_prompt, **({"reader_name": got.name} if got.name else {}),
@@ -161,8 +340,8 @@ def reader_grey(cam) -> tuple:
                   **({"why": got.why or "the answer says nothing of grey"} if said is None else {})}
 
 
-def unasked(k: int, saved, deaf, pixels) -> str:
-    """Why the reader is not asked about option k, where its answer cannot change what is pressed on it ("" where it
+def unasked(k: int, saved, deaf, pixels, kind=None) -> str:
+    """Why the reader's answer is not taken for option k, where it cannot change what is pressed on it ("" where it
     can): the value the row was saved on (entered as its put-back, whatever either eye says); a row where the reader
     misjudged an option (its answer is not heard there); an option the pixels call grey on a row where they are heard
     (grey, whatever the reader says)."""
@@ -175,13 +354,16 @@ def unasked(k: int, saved, deaf, pixels) -> str:
     return ""
 
 
-def drawing(cam, why_not=None) -> Drawing:
+def drawing(cam, why_not=None, k: int | None = None, flags: Flags | None = None) -> Drawing:
     """The option under the cursor as both eyes tell it on the frame on show (Drawing): the pixels always, then the
-    reader unless why_not, a function of the pixels' verdict, says why it is not asked (unasked), which the line then
-    keeps as "not_asked"."""
+    reader unless why_not, a function of the pixels' verdict, says why its answer is not taken (unasked), which the
+    line then keeps as "not_asked". A list's flag is waited for only where the pixels cannot tell; where they read
+    white, only an answer already in is taken."""
     grey, level = drawn_grey(cam)
     why = why_not(grey) if why_not is not None else ""
-    said, asked = (None, {"not_asked": why}) if why else reader_grey(cam)
+    if why:
+        return Drawing(grey, level, None, {"not_asked": why})
+    said, asked = reader_grey(cam, k=k, flags=flags, wait=reading.TIMEOUTS["press"] if grey is None else 0.0)
     return Drawing(grey, level, said, asked)
 
 
@@ -242,15 +424,21 @@ def seen(what) -> str:
                                                 else f"; the pixels read it white{level}") + ")"}[who]
 
 
-def judge(cam, name: str, label: str, k: int, saved, back, say=_say, drawn: Drawing | None = None) -> Verdict:
+def judge(cam, name: str, label: str, k: int, saved, back, say=_say, drawn: Drawing | None = None,
+          flags: Flags | None = None) -> Verdict:
     """What the prover does with the option `label` (index k) under the cursor of the row `name` (ENTER, TRY or SKIP:
     the module's, as a Verdict), `saved` the index of the value the row was saved on, back() whether the list is still
     on that option, drawn the option's Drawing where the caller has it (else drawing(cam), on the frame on show, the
-    reader asked only where its answer can change what is pressed: unasked). Says, option by option, each one drawn grey
-    and by which eyes, and each one whose drawing no eye could tell."""
+    reader's answer taken only where it can change what is pressed: unasked), flags the row's whole-list answers on a
+    list or side list (Flags: the screenful on show asked about first, in the background, where no screenful asked
+    yet showed option k). Says, option by option, each one drawn grey and by which eyes, and each one whose drawing no
+    eye could tell."""
     known = REASONS.get(name)
     deaf = _deaf(known)
-    d = drawn if drawn is not None else drawing(cam, lambda grey: unasked(k, saved, deaf, grey))
+    kind = _screen_kind(cam)
+    if drawn is None and flags is not None and kind in LISTS and "reader" not in deaf:
+        flags.look(cam, k)
+    d = drawn if drawn is not None else drawing(cam, lambda grey: unasked(k, saved, deaf, grey, kind), k, flags)
     by = d.grey_by(deaf)
     if not by:
         if d.grey_by():
