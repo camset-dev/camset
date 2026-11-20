@@ -1640,6 +1640,140 @@ def test_the_census_measures_each_kinds_questions_against_the_option_proved(tmp_
         reader_census.main([str(root), "--reader", "fake"])                # --reader goes with --questions
 
 
+def grey_run(tmp_path) -> Path:
+    """A made-up camera's run root for the census's grey variant: a list row whose options' lines say, needing no
+    person, applied (white), refused "not available" (grey), greyed as drawn (grey), applied though its pixels say grey
+    (the sources disagree) and nothing but its pixels (white); a carousel row with one option refused and one applied;
+    a checklist proof (no truth)."""
+    import numpy as np
+    from PIL import Image
+    root = tmp_path / "TEST-CAM_fw9.99"
+    run = root / "kit2_pass2"
+    (run / "shots").mkdir(parents=True)
+    took = [{"key": "global:0x0101", "before": 0, "after": 1}]
+    refused = {"text": "This operation or setting not available as follows Zqx Gamma OK", "frame": "x.png"}
+    lines = [
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Alpha", "shown": "Zqx Alpha", "chosen_frame": "00001.png",
+         "applied": True, "changes": took, "notice": None},
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Beta", "shown": "Zqx Beta", "chosen_frame": "00002.png",
+         "applied": False, "changes": [], "notice": refused},
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Gamma", "shown": "Zqx Gamma", "chosen_frame": "00003.png",
+         "applied": False, "changes": [], "notice": None, "dat": None, "greyed": "drawn", "greyed_by": "pixels"},
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Delta", "shown": "Zqx Delta", "chosen_frame": "00004.png",
+         "applied": True, "changes": took, "notice": None},
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Omega", "shown": "Zqx Omega", "chosen_frame": "00005.png"},
+        {"path": ["Zqx Drive"], "kind": "dialog", "label": "Zqx Slow", "shown": "Zqx Slow", "chosen_frame": "00006.png",
+         "applied": False, "changes": [], "notice": refused},
+        {"path": ["Zqx Drive"], "kind": "dialog", "label": "Zqx Fast", "shown": "Zqx Fast", "chosen_frame": "00007.png",
+         "applied": True, "changes": took, "notice": None},
+        {"path": ["Zqx Set"], "kind": "checklist", "label": "Zqx One", "chosen_frame": "00008.png",
+         "boxes": [{"box": 0, "label": "Zqx One", "ticked": True}, {"box": 1, "label": "Zqx Two", "ticked": False}]},
+    ]
+    (run / "proofs.jsonl").write_text("".join(json.dumps(x) + "\n" for x in lines), encoding="utf-8")
+    for n in range(1, 9):
+        Image.fromarray(np.full((480, 640, 3), 60 + n, np.uint8)).save(run / "shots" / f"{n:05d}.png")
+    return root
+
+
+# the pixels' measure the made-up frames are given (proving.screens.drawn_grey's, on a list's frames): Delta's says grey
+# though the camera applied it, Omega's white, Alpha's in between (no truth of its own, the line's stands)
+GREY_LEVELS = {"00001.png": 170.0, "00002.png": 120.0, "00003.png": None, "00004.png": 118.0, "00005.png": 230.0}
+# each frame's answers by question: grey (drawn grey), white, or the reader's slip
+GREY_SAID = {"00001.png": ("Zqx Alpha", False), "00002.png": ("Zqx Beta", True), "00003.png": ("Zqx Gamma", False),
+             "00004.png": ("Zqx Delta", True), "00005.png": ("Zqx Omega", True), "00006.png": ("Zqx Slow", True),
+             "00007.png": ("Zqx Fast", False), "00008.png": ("Zqx One", False)}
+
+
+class GreyReader:
+    """A reader faked for the grey variant: each question's answer by its key (camkit.vlm.PROMPTS); the ".grey" ones
+    answer the frame's grey (GREY_SAID), but option.grey, which reads Beta as another option (its wording costing the
+    reading); the questions they were made from answer the text alone."""
+
+    def __init__(self, shots: Path, asked: list):
+        self.by_bytes = {p.read_bytes(): p.name for p in shots.glob("*.png")}
+        self.asked = asked
+
+    def answer(self, image: bytes, prompt: str, waits=None):
+        from camkit import vlm
+        name = self.by_bytes[image]
+        key = next(k for k, v in vlm.PROMPTS.items() if v == prompt)
+        self.asked.append((name, key))
+        label, grey = GREY_SAID[name]
+        if key.startswith("checklist"):
+            return {"boxes": [{"label": "Zqx One", "ticked": True, **({"greyed": grey} if ".grey" in key else {})}]}
+        if key == "option.grey" and name == "00002.png":
+            return {"selected": "Zqx Alpha", "greyed": True}
+        return {"selected": label, **({"greyed": grey} if key.endswith(".grey") else {})}
+
+
+def test_the_census_judges_the_grey_questions_against_a_truth_that_needs_no_person(tmp_path, monkeypatch, capsys):
+    """--variants grey: the list's frames drawn grey (Beta refused, Gamma greyed as drawn) and drawn white (Alpha
+    applied, Omega's pixels), Delta left out (applied, its pixels grey), the carousel's by its lines alone, the
+    checklist with no truth; each ".grey" question's grey judged right, wrong or no answer, grey and white apart, and
+    the text of each question beside the one it was made from on the same frames."""
+    import reader_census as rc
+    root = grey_run(tmp_path)
+    asked = []
+    census_config(monkeypatch, GreyReader(root / "kit2_pass2" / "shots", asked))
+    monkeypatch.setattr(rc, "pixel_level", lambda frame: GREY_LEVELS.get(frame.name))
+    before = files_of(root)
+    assert rc.main([str(root), "--questions", "--json", "--variants", "grey", "--cache", str(tmp_path / "answers")]) == 0
+    got = json.loads(capsys.readouterr().out)
+    g = got["grey"]
+    assert g["truth"]["list"] == {"frames": 5, "grey": 2, "white": 2, "sources disagree": 1, "grey by refused": 1,
+                                  "grey by pixels": 1, "grey by drawn": 1, "white by applied": 1, "white by pixels": 1}
+    assert g["truth"]["carousel"] == {"frames": 2, "grey": 1, "white": 1, "grey by refused": 1, "white by applied": 1}
+    assert g["truth"]["checklist"] == {"frames": 1, "no truth": 1} and "checklist" not in g["scores"]
+    assert g["sampled"] == {"list": {"grey": 2, "white": 2}, "carousel": {"grey": 1, "white": 1}}
+    lit = g["scores"]["list"]
+    assert set(lit) == {"lit.v2", "lit.v2.grey", "option", "option.grey"}
+    assert lit["lit.v2"]["fake"]["text"] == {"right": 4} and "grey" not in lit["lit.v2"]["fake"]
+    # Gamma answered white where it is drawn grey; Omega grey where it is white
+    assert lit["lit.v2.grey"]["fake"]["grey"] == {"grey: right": 1, "grey: wrong": 1, "white: right": 1,
+                                                  "white: wrong": 1}
+    assert lit["lit.v2.grey"]["fake"]["text"] == {"right": 4}
+    assert lit["option.grey"]["fake"]["text"] == {"right": 3, "another option": 1}     # the wording cost a reading
+    assert lit["option.grey"]["fake"]["text, grey"] == {"right": 1, "another option": 1}
+    car = g["scores"]["carousel"]
+    assert set(car) == {"carousel.v2", "carousel.v2.grey", "option", "option.grey", "dialog", "dialog.grey"}
+    assert car["carousel.v2.grey"]["fake"]["grey"] == {"grey: right": 1, "white: right": 1}
+    assert car["dialog.grey"]["fake"]["grey"] == {"grey: right": 1, "white: right": 1}
+    assert {k for _, k in asked} == {"lit.v2", "lit.v2.grey", "option", "option.grey", "carousel.v2",
+                                     "carousel.v2.grey", "dialog", "dialog.grey"}
+    assert "00004.png" not in {n for n, _ in asked} and "00008.png" not in {n for n, _ in asked}
+    assert files_of(root) == before
+    # the text form prints counts and rates alone: no label, reading or file name
+    assert rc.main([str(root), "--questions", "--variants", "grey", "--minutes", "0",
+                    "--cache", str(tmp_path / "answers")]) == 0
+    text = capsys.readouterr().out
+    assert "== grey:" in text and "lit.v2.grey" in text and "50.0% of 2" in text
+    for said in ("Zqx", "00001", ".png"):
+        assert said not in text, said
+
+
+def test_a_lines_grey_and_the_pixels_make_the_truth_and_disagree_out():
+    import reader_census as rc
+    took = [{"key": "k", "before": 0, "after": 1}]
+    assert rc.line_grey({"greyed": "drawn", "applied": False}) == {"drawn": True}
+    assert rc.line_grey({"notice": {"text": "... not available as follows Gamma"}, "applied": True}) == {"refused": True}
+    assert rc.line_grey({"applied": True, "changes": took, "notice": None}) == {"applied": True}
+    for r in ({"applied": True, "changes": [], "notice": None}, {"applied": True, "changes": took,
+                                                                 "notice": {"text": "Saved."}}, {}):
+        assert rc.line_grey(r) == {}, r
+
+    def item(said):
+        return rc.Item("list", Path("f.png"), "A", ["A"], extra={"line_grey": said} if said else {})
+    assert rc.grey_truth(item({}), 120.0) == ("grey", ("pixels",), False)
+    assert rc.grey_truth(item({}), 140.0) == ("grey", ("pixels",), False)
+    assert rc.grey_truth(item({}), 141.0) == (None, (), False)              # within the margin: no truth
+    assert rc.grey_truth(item({}), 199.0) == (None, (), False)
+    assert rc.grey_truth(item({}), 200.0) == ("white", ("pixels",), False)
+    assert rc.grey_truth(item({"refused": True}), 230.0) == (None, ("refused", "pixels"), True)
+    assert rc.grey_truth(item({"applied": True}), None) == ("white", ("applied",), False)
+    assert rc.grey_truth(item({"drawn": True, "refused": True}), 125.0) == ("grey", ("drawn", "refused", "pixels"),
+                                                                            False)
+
+
 def test_the_census_judges_each_answer_by_its_kind_of_screen():
     import reader_census as rc
     assert [rc.number_of(t) for t in ("ISO 2500", f"{PLUS_MINUS}0", "-0", "+9", "02", "1,5 sec", "Minimum")] == \

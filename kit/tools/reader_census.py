@@ -79,13 +79,27 @@ they part is counted (pairs). --dry-run asks nothing and says what a run would a
 it; --parallel asks a local server several questions at once (at most its config's "parallel" and 8); --fail-run sets
 the failures in a row after which a reader is asked nothing more.
 
+"grey" (since 2026-11-19) measures the ".grey" questions (camkit.vlm), which also ask whether the item read is drawn
+grey: of each kind whose question asks it (camkit.reading.QUESTIONS' grey: a list, a side list, a table's picker, a
+checklist, a carousel, its axis and its cells), up to --per-kind frames whose truth is grey and as many whose truth is
+white, each asked the kind's ".grey" question and the one it was made from (its name without ".grey"), the option
+question and its ".grey" version, and on a carousel and its axis the dialog question and its own. The truth needs no
+person (GREY_SURE's comment): a line greyed as drawn, or refused with "not available"; the pixel test with a margin on
+a list's and a side list's frames; a line the camera applied; a frame whose sources disagree is left out, counted.
+Each grey answer is judged right, wrong or no answer, the frames drawn grey and those drawn white apart, and each
+question's text against the option proved on the same frames, so that a wording that costs the reading shows beside
+the question it was made from. It measures the pixels of every list and side list proof frame once (about a minute on
+the first camera's runs) and takes the same sample with --held-out.
+
 What --questions decides: a kind's caller moves onto its new question only once, with each reader the owner uses, the
 new question names the proved option on nearly every sampled frame, never less often than the old one, and its wrong
 options are rare; options are handed to the reader only where the decoy list shows no wrong picks from the list. A
 kind that falls short keeps its old question. A third question (.v3, beside the pinned second) is kept only where it
 names the proved option more often on the sample and no less often on --held-out, with no more wrong options (so far
 only the title's). When the list's caller moves, a list proof on a carousel whose second axis lights a strip cell asks
-the carousel's question instead.
+the carousel's question instead. A ".grey" question stays its kind's only where, with each reader, it reads the text
+no worse than the question it was made from and its grey is right on the frames drawn grey and rarely wrong on those
+drawn white (proving.greyed asks it for its grey alone, beside the pixels).
 
 Decision 8 (docs/decisions/0008): a run a --network run marked (camkit.vlm.LOCAL_MARKER) is asked about by local
 readers only (camkit.vlm.local_only_runs: --questions leaves out a reader named that is not local, and stops when none
@@ -108,6 +122,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -395,7 +410,7 @@ def third_vote(tally: "Tally", shown: str, who: str, said: str, ocr2, label: str
 # no JSON object), "not asked" (past the reader's --minutes, or after it failed FAIL_RUN times in a row)
 VERDICTS = ("right", "another option", "no option", "no answer", "reader failed", "not asked")
 JUDGED = VERDICTS[:4]
-VARIANTS = ("old", "new", "options", "decoy", "v3", "best")
+VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey")
 # a Claude model asked through the Claude Code command line (--claude-cli MODEL), on the person's own signed-in plan:
 # census-only (CliReader), never a reader a camera run could pick up; one call at a time
 CLI = "claude"                       # the command, found on PATH (CAMSET_CLAUDE_CLI names another)
@@ -822,6 +837,124 @@ CROPS = {"lit crop": None, "scale crop": (540, 70, 640, 272)}   # the scale's en
 # question of QUESTIONS measured better on both samples (the list's routing), that one in its place
 BEST = {"list": ("v3: route",)}
 
+# "grey": the ".grey" questions (camkit.vlm) judged on whether the item they read is drawn grey, against a truth that
+# needs no person, and beside the questions they were made from on the item's text, on the same frames (the owner,
+# 2026-11-19: "the VLM text needs to include which text is grey, does it respond with that?"). The truth, by source:
+#   drawn    grey: a line proving.greyed wrote greyed as drawn
+#   refused  grey: the camera's notice after the option's Enter said "not available" (it refused the option)
+#   pixels   grey or white: proving.screens.drawn_grey's measure GREY_SURE or more from its GREY_LINE (a list and a side
+#            list): every list and side list proof frame of the first camera measured 110-139 grey or 220-259 white
+#   applied  white: the camera took the option (applied, a record changed, no notice)
+# Sources that disagree leave the frame out (counted). The kinds whose question asks it (QUESTIONS' grey); a carousel's
+# truth is its lines' alone, an axis cell's and a checklist box's none yet (said so).
+GREY_SURE = 30
+GREY_KINDS = tuple(k for k, q in reading.QUESTIONS.items() if q.grey)
+PIXEL_KINDS = {"list", "side list"}                  # where drawn_grey measures the lit option
+NOT_AVAILABLE = re.compile(r"not available", re.I)
+GREY_JUDGED = ("right", "wrong", "no answer")
+GREY_VERDICTS = (*GREY_JUDGED, "reader failed", "not asked")
+
+
+def line_grey(r: dict) -> dict:
+    """What a proof line says, needing no person, of whether the option it chose was drawn grey: {"drawn": True}
+    (proving.greyed wrote it greyed as drawn), {"refused": True} (the camera's notice said "not available"),
+    {"applied": True} (the camera took it: applied, a record changed, no notice); {} where it says none of these."""
+    out = {}
+    if r.get("greyed") == "drawn":
+        out["drawn"] = True
+    notice = r.get("notice") if isinstance(r.get("notice"), dict) else None
+    if notice and NOT_AVAILABLE.search(str(notice.get("text") or "")):
+        out["refused"] = True
+    elif r.get("applied") is True and not r.get("notice") and r.get("changes"):
+        out["applied"] = True
+    return out
+
+
+def grey_truth(item: Item, level=None) -> tuple:
+    """(the truth of whether item's option is drawn grey: "grey", "white" or None, the sources saying it, whether two
+    disagree): its line's (line_grey) and the pixels' measure `level` (drawn_grey's, GREY_SURE from GREY_LINE or more;
+    None: not measured)."""
+    from proving.screens import GREY_LINE
+    said = item.extra.get("line_grey") or {}
+    grey = [s for s in ("drawn", "refused") if said.get(s)]
+    white = ["applied"] if said.get("applied") else []
+    if level is not None and level <= GREY_LINE - GREY_SURE:
+        grey.append("pixels")
+    elif level is not None and level >= GREY_LINE + GREY_SURE:
+        white.append("pixels")
+    if grey and white:
+        return None, tuple(grey + white), True
+    return ("grey" if grey else "white" if white else None), tuple(grey or white), False
+
+
+def pixel_level(frame: Path):
+    """proving.screens.drawn_grey's measure of the lit option on a frame file (None where it measures none)."""
+    from proving.screens import drawn_grey
+
+    from camkit import screen
+    from camkit.frames import load
+    f = load(frame)
+    s = screen.read(f)
+    return drawn_grey(SimpleNamespace(frame=f, read=lambda: s))[1]
+
+
+def grey_sample(items: list, per_kind: int, usable=None, level=None) -> tuple:
+    """({kind: [(item, truth, sources)]}, {kind: counts}): of each kind whose question asks the grey (GREY_KINDS), up
+    to per_kind frames whose truth is grey and as many whose truth is white, chosen the same way every time (by a hash
+    of the frame's run and name, as sample()), black frames (usable) left out; the counts say, over every frame of the
+    kind, how many have each truth, by source, and how many sources disagreed. The pixels are measured on a list's and
+    a side list's frames alone (PIXEL_KINDS), once a frame, by `level` (default pixel_level)."""
+    import hashlib
+    level = level or pixel_level
+    measured = {}
+    out, counts = {}, {}
+    for kind in GREY_KINDS:
+        mine = sorted((it for it in items if it.kind == kind),
+                      key=lambda it: hashlib.sha1(f"{it.frame.parent.parent.name}/{it.frame.name}/{kind}".encode())
+                      .hexdigest())
+        c = collections.Counter()
+        chosen = {"grey": [], "white": []}
+        for it in mine:
+            if usable is not None and not usable(it.frame):
+                continue
+            if kind in PIXEL_KINDS and it.frame not in measured:
+                measured[it.frame] = level(it.frame)
+            truth, sources, apart = grey_truth(it, measured.get(it.frame))
+            c["frames"] += 1
+            c["sources disagree" if apart else truth or "no truth"] += 1
+            for s in sources if truth else ():
+                c[f"{truth} by {s}"] += 1
+            if truth and len(chosen[truth]) < per_kind:
+                chosen[truth].append((it, truth, sources))
+        if c:
+            counts[kind] = dict(c)
+        out[kind] = [x for pair in itertools.zip_longest(chosen["grey"], chosen["white"]) for x in pair if x]
+    return out, counts
+
+
+def grey_questions(item: Item) -> list:
+    """[(question key, the question's text, pick of the text, the Question whose grey is judged or None)] a frame of the
+    grey sample is asked: the kind's ".grey" question (QUESTIONS) and the one it was made from (its key without
+    ".grey"), the option question every proof keeps a reading by and its ".grey" version, and on a carousel and its
+    axis the dialog question and its own."""
+    q = reading.QUESTIONS[item.kind]
+    pick = NEW_PICK.get(item.kind, _selected)
+    out = [(q.prompt.removesuffix(".grey"), pick, None), (q.prompt, pick, q)]
+    pairs = [("option", "selected")] + ([("dialog", "selected")] if item.kind in ("carousel", "axis") else [])
+    for key, name in pairs:
+        out += [(key, _field(name), None),
+                (f"{key}.grey", _field(name), reading.Question(f"{key}.grey", name, "label", grey=reading.GREYED))]
+    return [(key, vlm.PROMPTS[key], p, gq) for key, p, gq in out]
+
+
+def grey_verdict(answer, item: Item, truth: str, question) -> str:
+    """Whether an answer says the item's grey as the truth has it: "right", "wrong", "no answer" (no true or false
+    there, camkit.reading.greyed_of), "reader failed", "not asked"."""
+    if answer is NOT_ASKED or answer is FAILED:
+        return "not asked" if answer is NOT_ASKED else "reader failed"
+    said = reading.greyed_of(answer, question, item.extra.get("label"))
+    return "no answer" if said is None else "right" if said == (truth == "grey") else "wrong"
+
 
 def image_of(frame: Path, transform=None) -> bytes:
     """The picture the reader is sent: the frame's file, or a part of it enlarged twice (CROPS: the lit item's box,
@@ -936,8 +1069,10 @@ def question_items(run: Path, lines: list, reread: dict) -> list:
                     continue
                 # a list proof on a carousel whose second axis lights a strip cell (HYPOTHESES' route)
                 strip = seen == "dialog" and axis_lit_x(load(frame).image) is not None
+                said_grey = line_grey(r)          # what the line says of the option's grey (the "grey" variant)
                 out.append(Item(site, frame, lab, labels, old=old,
-                                extra={"expect": expect_of(r), **ocr_said, **({"strip": True} if strip else {})}))
+                                extra={"expect": expect_of(r), **ocr_said, **({"strip": True} if strip else {}),
+                                       **({"line_grey": said_grey} if said_grey else {})}))
                 if kind == "dialog":
                     out.append(Item("title", frame, str((r.get("path") or [""])[-1]), old=None))
                 codes = [c for c in dict.fromkeys(cell_code(x) for x in labels) if c]
@@ -1368,18 +1503,37 @@ def measure(places: list, args) -> dict:
     for kind in kinds:
         plans[kind] = [(it, corrected(it, fixes.get(kind) or {}, fixes_left_out), questions_of(it, u, variants))
                        for u in chosen.get(kind, []) for it in u]
+    # the grey sample (variant "grey"): kind -> [(item, against the corrected truth, its grey truth, [grey_questions])]
+    grey_plan, grey_counts = {}, {}
+    if "grey" in variants and set(kinds) & set(GREY_KINDS):
+        print("grey: measuring the pixels of the list and side list proof frames for the truth", file=sys.stderr,
+              flush=True)
+        sampled, grey_counts = grey_sample([it for it in items if it.kind in kinds], args.per_kind, usable)
+        if hosted:
+            kept, more = hosted_sample({k: [[it] for it, _, _ in v] for k, v in sampled.items()})
+            left_out.update(more)
+            keep = {u[0].frame for units in kept.values() for u in units}
+            sampled = {k: [x for x in v if x[0].frame in keep] for k, v in sampled.items()}
+        grey_plan = {k: [(it, corrected(it, fixes.get(k) or {}, fixes_left_out), truth, grey_questions(it))
+                         for it, truth, _ in v] for k, v in sampled.items() if k in kinds and v}
     asks = []
     for row in itertools.zip_longest(*[plans[k] for k in kinds]):
         for entry in row:
             if entry is not None:
                 it, _, qs = entry
                 asks += [(it.frame, text, transform) for _, text, _, transform in qs]
+    for row in itertools.zip_longest(*grey_plan.values()):
+        for entry in row:
+            if entry is not None:
+                asks += [(entry[0].frame, text, None) for _, text, _, _ in entry[3]]
     asks = list(dict.fromkeys(asks))
 
     def table():
         return {k: collections.defaultdict(lambda: collections.defaultdict(collections.Counter)) for k in kinds}
     scores, fixed, both, flags = table(), table(), table(), table()
     asked, timing, verdicts, cli_calls = {}, {k: collections.defaultdict(dict) for k in kinds}, {}, {}
+    grey_scores = {k: collections.defaultdict(lambda: collections.defaultdict(
+        lambda: collections.defaultdict(collections.Counter))) for k in grey_plan}
     for cfg in cfgs:
         name = str(cfg["name"])
         if vlm.paid(cfg) and not args.dry_run:
@@ -1406,8 +1560,7 @@ def measure(places: list, args) -> dict:
                         value = pick(got, it)
                         if value is SKIP:
                             continue
-                        empty = value is None or (isinstance(value, str) and not value.strip()) or \
-                            (isinstance(value, tuple) and not any(str(v or "").strip() for v in value))
+                        empty = _empty(value)
                         verdict = "no answer" if empty else judge(it, value)
                         fixed_verdict = "no answer" if empty else judge(it_fixed, value)
                         how = None if empty else together(it_fixed, value)
@@ -1422,6 +1575,26 @@ def measure(places: list, args) -> dict:
             for qid, secs in spent.items():
                 timing[kind][qid][name] = {"asked now": len(secs), "mean s": round(sum(secs) / len(secs), 2),
                                            "max s": round(max(secs), 2)}
+        for kind, plan in grey_plan.items():
+            spent = collections.defaultdict(list)
+            for it, it_fixed, truth, qs in plan:
+                for key, text, pick, gq in qs:
+                    got = answers.get((it.frame, text, None), NOT_ASKED)
+                    if (it.frame, text, None) in took:
+                        spent[key].append(took[(it.frame, text, None)])
+                    if got is NOT_ASKED or got is FAILED:
+                        said = "not asked" if got is NOT_ASKED else "reader failed"
+                    else:
+                        value = pick(got, it)
+                        said = "no answer" if _empty(value) else judge(it_fixed, value)
+                    by = grey_scores[kind][key][name]
+                    by["text"][said] += 1                      # on every frame of the sample, grey and white alike
+                    by[f"text, {truth}"][said] += 1            # on the frames of each truth apart
+                    if gq is not None:
+                        by["grey"][f"{truth}: {grey_verdict(got, it, truth, gq)}"] += 1
+            for key, secs in spent.items():
+                grey_scores[kind][key][name]["seconds"].update(
+                    {"asked now": len(secs), "mean s": round(sum(secs) / len(secs), 2), "max s": round(max(secs), 2)})
 
     def plain(t):
         return {k: {q: {r: dict(c) for r, c in v.items()} for q, v in t[k].items()} for k in kinds}
@@ -1430,6 +1603,12 @@ def measure(places: list, args) -> dict:
            "sampled": {k: {"frames": len(chosen.get(k, [])), "items": len(plans[k]), **split[k]} for k in kinds},
            "scores": plain(scores), "asked": asked, "both": plain(both), "flags": plain(flags),
            "timing": {k: dict(v) for k, v in timing.items()}, "pairs": pairs(verdicts)}
+    if "grey" in variants:
+        out["grey"] = {
+            "truth": grey_counts,
+            "sampled": {k: dict(collections.Counter(truth for _, _, truth, _ in v)) for k, v in grey_plan.items()},
+            "scores": {k: {q: {r: {part: dict(c) for part, c in by.items()} for r, by in v.items()}
+                           for q, v in grey_scores[k].items()} for k in grey_plan}}
     if hosted:
         out["left out for hosted readers"] = dict(left_out)
     if cli_calls:
@@ -1440,6 +1619,12 @@ def measure(places: list, args) -> dict:
         out["scores corrected"] = plain(fixed)
         out["truth fixes left out"] = dict(fixes_left_out)
     return out
+
+
+def _empty(value) -> bool:
+    """An answer's reading that holds nothing: none, an empty text, a pair of empty texts."""
+    return value is None or (isinstance(value, str) and not value.strip()) or \
+        (isinstance(value, tuple) and not any(str(v or "").strip() for v in value))
 
 
 def _has_readers() -> bool:
@@ -1650,6 +1835,8 @@ def show_questions(out: dict) -> None:
         for q, by_pair in out.get("pairs", {}).get(kind, {}).items():
             for p, c in by_pair.items():
                 print(f"  {q}, {p}: " + ", ".join(f"{k} {v}" for k, v in sorted(c.items())))
+    if "grey" in out:
+        show_grey(out["grey"])
     print(f"\nblack frames left out of the sample: {out['black frames left out']}")
     if out.get("truth fixes left out"):
         print("truth fixes not made, as they would make two options one (--truth): " + ", ".join(
@@ -1662,6 +1849,50 @@ def show_questions(out: dict) -> None:
     if out.get("dry run"):
         print("dry run: nothing was asked ('would ask' is what a run would ask each reader; 'from a cache' is free)")
     print("asked: " + "; ".join(f"{r}: " + ", ".join(f"{k} {v}" for k, v in a.items()) for r, a in out["asked"].items()))
+
+
+def grey_rates(c: dict, truth: str) -> tuple:
+    """(right, of): a grey question's answers on the frames whose truth is `truth`, the reader's failures left out."""
+    return c.get(f"{truth}: right", 0), sum(c.get(f"{truth}: {v}", 0) for v in GREY_JUDGED)
+
+
+def show_grey(g: dict) -> None:
+    """The grey variant's counts, as text: per kind, the frames by truth and source, then per question and reader the
+    text's right rate on the sample (the question a ".grey" one was made from beside it), and for a ".grey" question
+    its grey's right rate on the frames drawn grey and on those drawn white, apart, with its answers saying nothing."""
+    print("\n== grey: whether the item read is drawn grey (the \".grey\" questions), against a truth that needs no "
+          "person: a line greyed as drawn or refused (\"not available\"), the pixels with a margin, a line the camera "
+          "applied; text right %: the item's text, on the same frames, against the option proved")
+    for kind, c in g["truth"].items():
+        sampled = g["sampled"].get(kind, {})
+        print(f"\n  {kind}: {c.get('frames', 0)} frames; truth grey {c.get('grey', 0)}, white {c.get('white', 0)}, "
+              f"none {c.get('no truth', 0)}, sources disagree {c.get('sources disagree', 0)} ("
+              + ", ".join(f"{k} {v}" for k, v in sorted(c.items()) if " by " in k)
+              + f"); sampled grey {sampled.get('grey', 0)}, white {sampled.get('white', 0)}")
+        by_question = g["scores"].get(kind, {})
+        if not by_question:
+            continue
+        print(f"    {'question':18s} {'reader':10s} {'text right %':>13s} {'grey right %':>13s} {'white right %':>14s} "
+              f"{'no grey said':>13s} {'failed':>7s}")
+        for q, by_reader in by_question.items():
+            for r, parts in by_reader.items():
+                t, grey = parts.get("text", {}), parts.get("grey")
+                text = percent(t.get("right", 0), sum(t.get(v, 0) for v in JUDGED))
+                failed = t.get("reader failed", 0) + t.get("not asked", 0)
+                if grey is None:
+                    print(f"    {q:18s} {r:10s} {text:>13s} {'':>13s} {'':>14s} {'':>13s} {failed:7d}")
+                    continue
+                cells = []
+                for truth in ("grey", "white"):
+                    right, of = grey_rates(grey, truth)
+                    cells.append(f"{percent(right, of).strip()} of {of}")
+                none = grey.get("grey: no answer", 0) + grey.get("white: no answer", 0)
+                print(f"    {q:18s} {r:10s} {text:>13s} {cells[0]:>13s} {cells[1]:>14s} {none:13d} {failed:7d}")
+        for q, by_reader in by_question.items():
+            for r, parts in by_reader.items():
+                if parts.get("seconds"):
+                    s = parts["seconds"]
+                    print(f"    seconds {q} ({r}): {s['asked now']} asked now, mean {s['mean s']}, max {s['max s']}")
 
 
 def percent(n: int, of: int) -> str:
