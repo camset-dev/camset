@@ -505,6 +505,34 @@ def test_the_afreg_list_shows_the_drive_steps_when_tracking_is_planned_and_leave
     assert "Drive Mode = Single Shooting" in listed("--areas", "Wide", "--drive-mode", "menu")
 
 
+def test_the_afreg_prover_keeps_the_order_given_with_in_order():
+    """--in-order: the areas in the order --areas gives them, so a copy the holds write from the area moves both ways
+    ("Custom 2,Custom 1": the Custom area copies to Custom 2 and back, Custom 1 seen written). An area the registration
+    holds already stays where it is given, another (non-Tracking) area registered before it; without --in-order the
+    plan keeps the area record's order and its own rule (the held area last), as before."""
+    A = afreg_module()
+    doc = afreg_doc()
+    assert [t["label"] for t in A.plan(doc, "Spot: L, Zone", in_order=True)] == ["Spot: L", "Zone"]
+    assert [t["label"] for t in A.plan(doc, "Spot: L, Zone")] == ["Zone", "Spot: L"]
+    assert [t["label"] for t in A.plan(doc, "all", in_order=True)] == [t["label"] for t in A.plan(doc, "all")]
+    every = A.plan(doc, "all")
+    todo = A.plan(doc, "Spot: L, Zone", in_order=True)
+    assert [t["label"] for t in A.ordered(todo, 12, every, keep=True)] == ["Wide", "Spot: L", "Zone"]
+    assert [t["label"] for t in A.ordered(todo, 11, every, keep=True)] == ["Spot: L", "Zone"]
+    assert [t["label"] for t in A.ordered(todo, 12, every)] == ["Zone", "Spot: L"], "without keep: held last"
+
+
+def test_the_afreg_list_says_the_order_kept(capsys, monkeypatch):
+    """--list --in-order prints the plan in the order given."""
+    A = afreg_module()
+    monkeypatch.setattr(A, "read_json", lambda path: {})
+    monkeypatch.setattr(A.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(A.definitions, "with_evidence", lambda doc, *a, **k: afreg_doc())
+    A.main(["--list", "--areas", "Spot: L,Zone", "--in-order"])
+    out = capsys.readouterr().out
+    assert out.index("Spot: L") < out.index("Zone"), out
+
+
 def test_the_afreg_prover_orders_judges_and_credits_only_what_the_area_writes():
     """An area the registration holds already is registered last (alone: after another, non-Tracking, area), since its
     hold could show no change. A line is applied only when the plan's own area record moved to the area's code and every

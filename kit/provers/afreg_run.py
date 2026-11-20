@@ -6,6 +6,7 @@ which registers it ("Registered the focus area.") into the Registered AF area re
     .venv/bin/python -u kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas "Spot: S,Tracking: Custom 2"
     .venv/bin/python -u kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas missing --grip down
     .venv/bin/python -u kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas missing --grip level
+    .venv/bin/python -u kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas "Custom 2,Custom 1" --in-order
     .venv/bin/python -u kit/provers/afreg_run.py --proved                           (the codes the run's lines proved)
 
 --allow "Fn hold on the shooting screen" (FN_HOLD) is the owner's word for the hold: held on the shooting screen with
@@ -175,9 +176,11 @@ def code_of(setting: dict, label: str) -> int | None:
     return hits[0] if len(hits) == 1 else None
 
 
-def plan(doc: dict, areas: str, grip: str | None = None) -> list:
+def plan(doc: dict, areas: str, grip: str | None = None, in_order: bool = False) -> list:
     """[{"label", "code", "expected": {key: code}, "copied", "own_key", "other_area_keys"}] for the areas asked for, in the area
-    record's order: "missing", its values not in its proved.values; "all"; else the labels given. Level (no grip), with
+    record's order, or with `in_order` labels in the order given (--in-order: "Custom 2,Custom 1" moves the Custom area
+    copies a hold writes from the area both ways, so Custom 1 is seen written): "missing", its values not in its
+    proved.values; "all"; else the labels given. Level (no grip), with
     Switch V/H AF Area Off, a hold writes all three orientations, so each one's records are expected; with a grip, that
     orientation's alone (--grip level: the horizontal ones). copied: a non-Tracking area's Tracking start area records
     of those orientations, which its hold copies from the live start area (the camera's own setting): side effects,
@@ -197,6 +200,8 @@ def plan(doc: dict, areas: str, grip: str | None = None) -> list:
         if unknown or not asked:
             sys.exit(f"afreg_run: --areas {areas!r}: {unknown or 'nothing'} not among {[lab for _, lab in values]}")
         chosen = [x for x in values if any(bare(x[1]) == bare(a) for a in asked)]
+        if in_order:
+            chosen = [x for a in dict.fromkeys(bare(a) for a in asked) for x in values if bare(x[1]) == a]
     every = {o: records(doc, o) for o in ([orientation] if grip else GROUPS)}
     names = {s["name"]: s["key"] for s in doc.get("settings") or []}
     others = [k for o in GROUPS if o not in every
@@ -219,13 +224,14 @@ def plan(doc: dict, areas: str, grip: str | None = None) -> list:
     return out
 
 
-def ordered(todo: list, held, every: list) -> list:
+def ordered(todo: list, held, every: list, keep: bool = False) -> list:
     """The plan with its first area put last when the registration already holds it (`held`, the area record's value
-    after the setup), since its hold could show no change; a plan of that one area alone gets another area first
-    (the first non-Tracking one of `every`, which needs no Focus Mode). Nothing is said: the order is the trace."""
+    after the setup), since its hold could show no change; a plan of that one area alone, or one whose order is to be
+    kept (`keep`, --in-order), gets another area first (the first non-Tracking one of `every`, which needs no Focus
+    Mode). Nothing is said: the order is the trace."""
     if not todo or todo[0]["code"] != held:
         return list(todo)
-    if len(todo) > 1:
+    if len(todo) > 1 and not keep:
         return todo[1:] + todo[:1]
     other = next(t for t in every if t["code"] != held and not t["label"].startswith("Tracking"))
     return [other] + list(todo)
@@ -972,7 +978,8 @@ def prove(a, doc: dict, todo: list, focus: bool, drive: bool, context: str, allo
         if vertical:                                        # On or Off, as the start download holds it
             out.context = context_of(a.grip, a.context, vertical)
         ref, setup = prepare(cam, link, hdmi, run, cycle, model, a.grip, focus, drive, s.start)
-        queue = ordered(todo, held_value(camset.read(ref), todo[0]["own_key"]), every)
+        queue = ordered(todo, held_value(camset.read(ref), todo[0]["own_key"]), every,
+                        getattr(a, "in_order", False))
         retried, in_a_row = set(), 0
         while queue:
             t = queue.pop(0)
@@ -1023,6 +1030,9 @@ def main(argv=None) -> int:
     ap.add_argument("--run", default="kit2_afreg2")
     ap.add_argument("--context", default=None, help="more of the state these proofs are made in")
     ap.add_argument("--limit", type=int, default=0, help="the first N areas of the plan only")
+    ap.add_argument("--in-order", action="store_true",
+                    help="register the --areas labels in the order given, not the area record's ('Custom 2,Custom 1': "
+                         "the copies a hold writes from the area move both ways)")
     ap.add_argument("--list", action="store_true", help="print the plan only; no camera")
     ap.add_argument("--proved", action="store_true", help="print the codes the run's applied lines proved; no camera")
     add_allow_argument(ap)
@@ -1037,7 +1047,8 @@ def main(argv=None) -> int:
             print("no applied proof in the run")
         return 0
     doc = definitions.with_evidence(read_json(definitions.active()), definitions.active())
-    todo = plan(doc, a.areas, a.grip)
+    # --in-order, passed only where given (a plan stand-in that knows no such argument still serves the rest)
+    todo = plan(doc, a.areas, a.grip, in_order=True) if a.in_order else plan(doc, a.areas, a.grip)
     if a.limit:
         todo = todo[:a.limit]
     tracking = any(t["label"].startswith("Tracking") for t in todo)
