@@ -7,7 +7,11 @@ docs/DATA_CONTRACTS.md), so the editor lays a group's rows out as the camera doe
 A proof's menu path ("Bracket Settings > Focus Bracket Settings > Shooting Interval [Movie mode]") steps into a
 row's submenu with " > ", names an option of the row with " / " (the setting is the choice the camera shows beside
 that option: "Drive Mode / Continuous Shooting" is the continuous shooting speed), and ends with the proof's context
-in brackets, which says nothing about the place except the shooting mode the proof was made in ("[Movie mode]").
+in brackets, which says nothing about the place except the shooting mode the proof was made in ("[Movie mode]"). Where
+two rows under one row bear one label (the a1 II's Rec. Media Settings draws two Recording Media rows, the stills one
+and the movie one), a label with "#n" names the n-th of them, from 0, in the menu's order ("Rec. Media Settings >
+Recording Media#1", nth), as kit/proving/tables.py names the second of two screens of one name; a label alone names
+the first, or the one written as read.
 
 The tree's top-level "tabs" are the Stills menu; its "modes" hold the menus of the camera's other shooting modes
 (Movie, S&Q), each written by kit/tools/menu_tree.py --mode. A setting the Stills menu has no row for, proved in a
@@ -29,6 +33,16 @@ def norm(s) -> str:
 def strict(s) -> str:
     """A label with its signs kept ("hi+(e-shutter)"), to tell apart labels norm() makes alike."""
     return re.sub(r"\s+", "", (s or "").lower())
+
+
+NTH = re.compile(r"(.*\S)#(\d+)")          # a label naming the n-th of the rows that bear it ("Recording Media#1")
+
+
+def nth(label: str) -> tuple:
+    """(the label, which of the rows bearing it under one row it names, from 0, or None): "Recording Media#1" is
+    ("Recording Media", 1), the second; a label with no "#n" is itself and None."""
+    m = NTH.fullmatch((label or "").strip())
+    return (m[1], int(m[2])) if m else (label, None)
 
 
 def split(path: str) -> list:
@@ -109,7 +123,7 @@ class Place:
         tab, menu = s.get("tab") or "Other", (s.get("proved") or {}).get("menu") or []
         for path in [menu] if isinstance(menu, str) else menu:
             for seg in self.segments(path, tab)[:2]:
-                m = self.rows[tab].get(seg.lower())
+                m = self.rows[tab].get(nth(seg)[0].lower())
                 if m:
                     return {"cg": m["group"], "cgi": self.groups[tab].index(m["group"]), "row": m["label"], "ro": m["order"]}
         g = self.group_named(tab, s.get("group") or "")
@@ -180,37 +194,40 @@ class Tree:
         """(the deepest row whose labels follow segs from a top row, how many of segs lead to it); else, with
         `anywhere`, a row of that label (in near's group first), the camera's menus repeating some labels (Fixed Speed
         STBY, Tracking Shift Range); else (None, 0). Labels are compared by norm(); of sibling rows that norm() alike
-        ("Hi+ (E-Shutter)" and "Hi (E-Shutter)"), the one written as the label read is taken."""
+        ("Hi+ (E-Shutter)" and "Hi (E-Shutter)"), the one written as the label read is taken, and a label with "#n"
+        (nth) takes the n-th of the rows bearing it, among a row's rows or the tab's top rows, or none."""
         t = self.by_tab.get(tab)
         if not t:
             return None, 0
-        keys = [norm(x) for x in segs]
+        keys = [norm(nth(x)[0]) for x in segs]
+        which = [nth(x)[1] for x in segs]
 
-        def kid(rows, i):
-            same = [k for k in rows if norm(k["l"]) == keys[i]]
+        def pick(same, i):
+            if which[i] is not None:
+                return same[which[i]] if which[i] < len(same) else None
             return next((k for k in same if strict(k["l"]) == strict(segs[i])), same[0] if same else None)
 
+        def kid(rows, i):
+            return pick([k for k in rows if norm(k["l"]) == keys[i]], i)
+
         best = None
-        for g in t["groups"]:
-            for top in g["rows"]:
-                cur, i = top, 0
-                if not segs or norm(top["l"]) != keys[0]:
-                    continue
-                i = 1
-                while i < len(segs):
-                    nxt = kid(cur["kids"], i)
-                    if not nxt:
-                        break
-                    cur, i = nxt, i + 1
-                if not best or i > best[1]:
-                    best = (cur, i)
+        tops = [top for g in t["groups"] for top in g["rows"] if segs and norm(top["l"]) == keys[0]]
+        for top in tops if not segs or which[0] is None else [x for x in [pick(tops, 0)] if x]:
+            cur, i = top, 1
+            while i < len(segs):
+                nxt = kid(cur["kids"], i)
+                if not nxt:
+                    break
+                cur, i = nxt, i + 1
+            if not best or i > best[1]:
+                best = (cur, i)
         if best or not anywhere:
             return best or (None, 0)
         for seg in keys[:1]:
             for g in sorted(t["groups"], key=lambda g: g["name"] != near):
                 hits = [x for x, _ in self.nodes(g["rows"]) if norm(x["l"]) == seg]
-                if hits:
-                    return hits[0], 1
+                if hits and (which[0] is None or which[0] < len(hits)):
+                    return hits[which[0] or 0], 1
         return None, 0
 
     def find(self, tab, segs, near=None, anywhere=True):
@@ -317,15 +334,19 @@ class Tree:
     def grow(self, node, labels) -> dict:
         """The row `labels` names under `node`, made from a proof's path where the tree does not know the rows under
         a row (a submenu the walk never opened, a mode's row read off its page scan alone): each made row comes
-        after its siblings, so they keep the order the definition lists the settings proved through them."""
+        after its siblings, so they keep the order the definition lists the settings proved through them. A label with
+        "#n" (nth) is the n-th row of its label there, the rows before it made too, under the label alone."""
         group, path, at = self.where[node["id"]]
-        for label in labels:
-            kid = next((k for k in node["kids"] if norm(k["l"]) == norm(label)), None)
-            if not kid:
+        for said in labels:
+            label, n = nth(said)
+            same = [k for k in node["kids"] if norm(k["l"]) == norm(label)]
+            while len(same) <= (n or 0):
                 kid = {"id": f"{node['id']}.{len(node['kids'])}", "l": label, "st": "proof", "why": "", "opts": [],
                        "walk": [], "kids": [], "recs": [], "subs": [], "made": True}
                 self.where[kid["id"]] = (group, path + [label], at + [len(node["kids"])])
                 node["kids"].append(kid)
+                same.append(kid)
+            kid = same[n or 0]
             node, (group, path, at) = kid, self.where[kid["id"]]
         return node
 

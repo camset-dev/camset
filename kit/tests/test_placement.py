@@ -201,6 +201,98 @@ def test_the_rows_under_a_row_never_opened_come_from_the_paths():
     assert got["global:0x0007"] == {"row": ["Fn Menu Settings"], "row_at": [2], "row_group": "Shooting Mode"}
 
 
+def test_two_rows_of_one_label_are_told_apart_by_their_place():
+    """The a1 II's Rec. Media Settings draws two Recording Media rows, the stills one and the movie one, which the walk
+    reads alike: a label with "#n" names the n-th of the rows bearing it, from 0, in the menu's order (placement.nth),
+    the public row its label alone; a label alone is the first. A name of the kit's own ("Recording Media (Movie)") is
+    no row's: the setting stays on the row above, before its rows (b3afe42's 0x029a), and so does a place past the
+    last. Under a row whose rows the tree does not know, "#n" grows the n-th row of that label, the ones before it with
+    it."""
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": [{"page": "1/1", "group": "Media", "rows": [
+        row("Format"), row("Rec. Media Settings", row("Recording Media"), row("Recording Media"), row("Auto Switch Media Card")),
+        {"label": "Unwalked", "state": "seen"}]}]}]}
+    d = {"model": "TEST", "tabs": ["Shooting"], "menu": [], "settings": [
+        setting("global:0x029a", "Recording Media (Movie)", group="Media", menus=["Rec. Media Settings > Recording Media#1 [ctx]"]),
+        setting("global:0x0298", "Recording Media", group="Media", menus=["Rec. Media Settings > Recording Media"]),
+        setting("global:0x029c", "Auto Switch Media Card", group="Media", menus=["Rec. Media Settings > Auto Switch Media Card"]),
+        setting("global:0x0001", "Named so", group="Media", menus=["Rec. Media Settings > Recording Media (Movie)"]),
+        setting("global:0x0002", "Past the last", group="Media", menus=["Rec. Media Settings > Recording Media#2"]),
+        setting("global:0x0003", "Second grown", group="Media", menus=["Unwalked > Part#1"])]}
+    got = placement.settings(d, tree)
+    assert got["global:0x0298"] == {"row": ["Rec. Media Settings", "Recording Media"], "row_at": [1, 0]}
+    assert got["global:0x029a"] == {"row": ["Rec. Media Settings", "Recording Media"], "row_at": [1, 1]}
+    assert got["global:0x029c"] == {"row": ["Rec. Media Settings", "Auto Switch Media Card"], "row_at": [1, 2]}
+    assert got["global:0x0001"] == got["global:0x0002"] == {"row": ["Rec. Media Settings"], "row_at": [1]}
+    assert got["global:0x0003"] == {"row": ["Unwalked", "Part"], "row_at": [2, 1]}
+    assert placement.nth("Recording Media#1") == ("Recording Media", 1) and placement.nth("ISO #") == ("ISO #", None)
+    # the n-th of a tab's top rows of one label, and the viewer's tree hangs by the same rule
+    t = placement.Tree(d, {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": [
+        {"page": "1/2", "group": "Zoom", "rows": [row("Fixed Speed REC")]},
+        {"page": "2/2", "group": "Zoom", "rows": [row("Other"), row("Fixed Speed REC", row("Speed"))]}]}]})
+    assert t.where[t.find("Shooting", ["Fixed Speed REC#1", "Speed"])["id"]][2] == [2, 0]
+    assert t.find("Shooting", ["Fixed Speed REC#2"], anywhere=False) is None
+
+
+def test_a_crawl_folded_into_the_tree_puts_its_rows_in_the_cameras_order(own_runs):
+    """After a crawl is folded into the tree (kit/tools/menu_tree.py --fold), rows grown from proof paths in the
+    definition's order give way to the camera's: Bracket Type, walked with the drive mode dial on BRK, lists its five
+    options, so the settings under Cont. Bracket, Single Bracket and Focus Bracket sit under those options in its order
+    (beside them in the editor, as the White Balance and DRO Bracket steps already were); and Playback's Aspect Marker
+    Disp., walked, has Aspect Marker Disp. before Aspect Marker Level, whatever order the definition lists them in.
+    Made-up tree and crawls, laid out as the a1 II's."""
+    import menu_tree
+    from camkit import menu_rows
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [
+        {"tab": "Shooting", "pages": [{"page": "10/65", "group": "Drive Mode", "rows": [
+            row("Bracket Settings", {"label": "Bracket Type", "state": "greyed", "kind": "notice", "why": ""},
+                {"label": "Selftimer during Bracket", "state": "walked", "kind": "list", "options": ["Off", "2 Sec"]})]}]},
+        {"tab": "Playback", "pages": [{"page": "40/65", "group": "Playback Option", "rows": [
+            {"label": "Protect", "state": "walked"}, {"label": "Aspect Marker Disp.", "state": "seen", "why": "not walked"}]}]}]}
+    for name, rows_, opts in (
+            ("kit2_fin_crawl_brk", [{"page": "8/63", "slot": 6, "label": "Bracket Settings", "outcome": "submenu crawled",
+                                     "kind": "submenu", "submenu": [{"page": "B", "slot": 0, "label": "Bracket Type",
+                                                                     "outcome": "walked", "kind": "dialog"}]}],
+             {"path": ["Bracket Settings", "Bracket Type"], "options": [
+                 {"index": i, "label": lab} for i, lab in enumerate(["Cont. Bracket", "Single Bracket", "Focus Bracket",
+                                                                     "White Balance Bracket: Lo", "DRO Bracket: Lo"])]}),
+            ("kit2_fin_crawl_amdisp", [{"page": "38/63", "slot": 4, "label": "Aspect Marker Disp.", "outcome": "submenu crawled",
+                                        "kind": "submenu", "submenu": [
+                                            {"page": "A", "slot": 0, "label": "Aspect Marker Disp.", "outcome": "walked", "kind": "list"},
+                                            {"page": "A", "slot": 1, "label": "Aspect Marker Level", "outcome": "notice", "kind": "notice"}]}],
+             {"path": ["Aspect Marker Disp.", "Aspect Marker Disp."], "options": [{"index": 0, "label": "On"}, {"index": 1, "label": "Off"}]})):
+        crawl = own_runs / name
+        crawl.mkdir()
+        (crawl / "rows.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows_), encoding="utf-8")
+        (crawl / "map.json").write_text(json.dumps({"rows": [opts]}), encoding="utf-8")
+    ctx = " [Drive Mode dial on BRK]"
+    brk = [[0, "Cont. Bracket"], [1, "Single Bracket"], [2, "Focus Bracket"], [3, "White Balance Bracket"], [4, "DRO Bracket"]]
+    d = {"model": "TEST", "tabs": ["Shooting", "Playback"], "menu": [], "settings": [
+        setting("global:0x10ac", "Focus Bracket Focus Range", menus=["Bracket Settings > Bracket Type > Focus Bracket" + ctx]),
+        {**setting("global:0x1479", "Aspect Marker Level (Playback)", group="Playback Option",
+                   menus=["Aspect Marker Disp. > Aspect Marker Level [HDMI Info. Display = Off]"]), "tab": "Playback"},
+        {**setting("global:0x1478", "Aspect Marker Disp.", group="Playback Option",
+                   menus=["Aspect Marker Disp. > Aspect Marker Disp."]), "tab": "Playback"},
+        setting("global:0x02bf", "Bracket Type", menus=["Bracket Settings > Bracket Type" + ctx], values=brk),
+        setting("global:0x13f3", "Bracket Type: White Balance Bracket step", menus=["Bracket Settings > Bracket Type / White Balance Bracket" + ctx]),
+        setting("global:0x13f9", "Bracket Type: Cont. Bracket setting", menus=["Bracket Settings > Bracket Type > Cont. Bracket" + ctx]),
+        setting("global:0x13f7", "Bracket Type: Single Bracket setting", menus=["Bracket Settings > Bracket Type > Single Bracket" + ctx])]}
+    got = placement.settings(d, tree)                         # as b3afe42 wrote them: grown in the definition's order
+    assert [got[k]["row_at"] for k in ("global:0x10ac", "global:0x13f9", "global:0x13f7")] == [[0, 0, 0], [0, 0, 1], [0, 0, 2]]
+    assert (got["global:0x1479"]["row_at"], got["global:0x1478"]["row_at"]) == ([1, 0], [1, 1])
+    for name in ("kit2_fin_crawl_brk", "kit2_fin_crawl_amdisp"):
+        menu_tree.fold(tree, own_runs / name)
+    got = placement.settings(d, tree)
+    for k, opt in (("global:0x13f9", "Cont. Bracket"), ("global:0x13f7", "Single Bracket"), ("global:0x10ac", "Focus Bracket"),
+                   ("global:0x13f3", "White Balance Bracket")):
+        assert got[k] == {"row": ["Bracket Settings", "Bracket Type"], "row_at": [0, 0], "under_option": opt}, k
+    assert got["global:0x1478"] == {"row": ["Aspect Marker Disp.", "Aspect Marker Disp."], "row_at": [1, 0]}
+    assert got["global:0x1479"] == {"row": ["Aspect Marker Disp.", "Aspect Marker Level"], "row_at": [1, 1]}
+    placed = [{**s, **got[s["key"]]} for s in d["settings"]]
+    own = next(s for s in placed if s["key"] == "global:0x02bf")
+    assert [opt for _, opt in menu_rows.sub_choices(own, placed)] == \
+        ["Cont. Bracket", "Single Bracket", "Focus Bracket", "White Balance Bracket"]          # Bracket Type's order
+
+
 MODES = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": [
     {"page": "1/3", "group": "Image Quality/Rec", "rows": [row("File Format"), row("Movie Settings")]},
     {"page": "2/3", "group": "Shutter/Silent", "rows": [row("Silent Mode"), row("Shutter Type")]},

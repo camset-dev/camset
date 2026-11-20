@@ -4,6 +4,7 @@ scan's page model and the crawls' walks (its shape: schemas/menu-tree.schema.jso
     .venv/bin/python kit/tools/menu_tree.py --dry-run                    # say what it would write, write nothing
     .venv/bin/python kit/tools/menu_tree.py [--scan kit2_page_scan] [--crawl kit2_crawl ...] [--replace]
     .venv/bin/python kit/tools/menu_tree.py --mode Movie --scan kit2_page_scan_movie [--crawl kit2_crawl_movie] [--replace]
+    .venv/bin/python kit/tools/menu_tree.py --fold kit2_fin_crawl_brk [--fold ...] [--mode Movie] [--dry-run]
 
 The tree is the mapper's own, private whole (camkit.datafiles, docs/decisions/0016): which rows the walk found greyed
 or could not read, which option lists it read and where each began are the state the camera stood in, so it is never
@@ -27,6 +28,15 @@ the camera's Still/Movie/S&Q switch says it, and as the proofs' contexts say it,
 scan and crawls into the file's "modes", beside the Stills menu, which it leaves as it is; a mode already there is
 replaced only with --replace, and replacing the Stills menu keeps the modes. A scan alone gives each page's top rows
 ("seen", their rows unknown); kit/camkit/placement.py then takes the rows under them from the proofs' own paths.
+
+--fold CRAWL takes a later crawl's walk into the existing tree (the Stills menu, or --mode's), changing nothing else
+(fold): each top row the crawl walked is found in the tree by its label, never by its page counter, which moves with
+the camera's state ("38/63" in one state is "40/65" in another), and only where one top row bears it. What the walk read
+fills what the tree did not know, and rows under a row come in the crawl's order, the camera's: a row the tree held
+greyed, seen or unread takes the crawl's walk (Bracket Type's options, walked with the drive mode dial on BRK), a
+submenu's rows the tree lacked are added where the crawl met them (Playback's Aspect Marker Disp., Aspect Marker Disp.
+then Aspect Marker Level), and a row the tree had walked keeps what it read. Rows that share a label under one row are
+matched in their order (the stills and the movie Recording Media rows). Each row it changes is said.
 """
 import argparse
 import collections
@@ -36,7 +46,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, datafiles, definitions, jsonl, paths, safety  # noqa: E402
+from camkit import ROOT, datafiles, definitions, jsonl, paths, placement, safety  # noqa: E402
 
 SCHEMA = ROOT / "schemas" / "menu-tree.schema.json"
 
@@ -244,6 +254,77 @@ def with_mode(doc: dict, menu: dict) -> dict:
     return {**doc, "modes": modes[:at] + [menu] + modes[at:]}
 
 
+def known(r: dict | None) -> int:
+    """How much a row of the tree says of the camera: 3 a screen the walk read (walked), 2 a submenu with its rows,
+    1 any other state the walk found (greyed, an information notice, never opened, unhandled, a submenu with no rows),
+    0 a row only seen on its page, or none."""
+    if not r:
+        return 0
+    if r.get("state") == "walked":
+        return 3
+    if r.get("children"):
+        return 2
+    return 0 if r.get("state") in ("seen", "", None) else 1
+
+
+def folded(old: dict, new: dict, path: tuple, said: list) -> dict:
+    """A tree's row `old` with what a crawl's row `new` (row_of) adds, each change said in `said` by its path: two
+    submenus' rows merged (folded_rows), else the crawl's row where it says more of the camera (known) and the tree's
+    row has no rows under it to lose, else the tree's row as it is."""
+    if old.get("children") and new.get("children"):
+        return {**old, "children": folded_rows(old["children"], new["children"], path, said)}
+    if known(new) > known(old) and not old.get("children"):
+        said.append(f"{' > '.join(path)}: {old.get('state') or 'seen'} -> {new.get('state')}"
+                    + (f" ({len(new['children'])} rows)" if new.get("children") else "")
+                    + (f" ({len(new['options'])} options)" if new.get("options") else ""))
+        return new
+    return old
+
+
+def folded_rows(old: list, new: list, path: tuple, said: list) -> list:
+    """The rows under one row, the tree's (`old`) with a crawl's (`new`): each crawl row matched to the tree's of its
+    label (placement.norm), rows sharing a label in their order, and folded into it; one the tree lacks put after the
+    tree's row the crawl met before it (first, when none), so the rows stay in the camera's order. A crawl row with no
+    label read is left out."""
+    at, seen = {}, collections.Counter()
+    for i, r in enumerate(old):
+        k = placement.norm(r.get("label"))
+        at[(k, seen[k])] = i
+        seen[k] += 1
+    out, after, last, seen = list(old), collections.defaultdict(list), -1, collections.Counter()
+    for r in new:
+        k = placement.norm(r.get("label"))
+        if not k:
+            continue
+        i = at.get((k, seen[k]))
+        seen[k] += 1
+        if i is None:
+            said.append(f"{' > '.join(path + (r['label'],))}: added ({r.get('state')})")
+            after[last].append(r)
+            continue
+        out[i], last = folded(old[i], r, path + (old[i]["label"],), said), i
+    return after[-1] + [x for i, r in enumerate(out) for x in [r] + after[i]]
+
+
+def fold(menu: dict, crawl: Path) -> list:
+    """A crawl's walk (its rows.jsonl and map.json) folded into a menu of the tree (`menu`: the Stills menu or a mode's
+    entry, changed in place): each top row the crawl walked found by its label among the menu's top rows, wherever
+    its page, never by the crawl's page counter, and folded there (folded). What it did, one line each: a row changed
+    or added, and a top row the menu holds none or several of, left out."""
+    maps, said = crawl_map(crawl), []
+    tops = [(pg, i) for t in menu.get("tabs") or [] for pg in t.get("pages") or [] for i in range(len(pg.get("rows") or []))]
+    for summary in crawl_rows(crawl).values():
+        label = (summary.get("label") or "").strip()
+        hits = [(pg, i) for pg, i in tops if label and placement.norm(pg["rows"][i]["label"]) == placement.norm(label)]
+        if len(hits) != 1:
+            said.append(f"{label or '(no label read)'}: {'no top row' if not hits else f'{len(hits)} top rows'} of "
+                        "that label in the menu; not folded")
+            continue
+        pg, i = hits[0]
+        pg["rows"][i] = folded(pg["rows"][i], row_of(label, summary, (label,), maps), (pg["rows"][i]["label"],), said)
+    return said
+
+
 def counts(doc: dict) -> collections.Counter:
     """How many rows the walk found in each state, in the menu `doc` (a tree's Stills menu, or a mode's entry)."""
     c = collections.Counter()
@@ -274,6 +355,35 @@ def write(out: Path, doc: dict) -> None:
     print(f"wrote {paths.shown(out) if out.resolve().is_relative_to(ROOT) else out}")
 
 
+def fold_main(out: Path, crawls: list, mode: str | None, dry_run: bool) -> dict:
+    """--fold: each crawl folded, in order, into the tree at `out` (its Stills menu, or `mode`'s), said row by row, the
+    menu's source naming the crawls; written unless `dry_run`, and only when the JSON Schema finds nothing wrong."""
+    if not out.exists():
+        sys.exit(f"{out} is not there: --fold takes a crawl into an existing tree (write one first, without --fold)")
+    doc = datafiles.load_menu_tree(out)
+    menu = doc if not mode else next((m for m in doc.get("modes") or [] if m.get("mode") == mode.strip()), None)
+    if menu is None:
+        sys.exit(f"the tree holds no {mode} mode's menu: write it with --mode {mode} --scan ... first")
+    for crawl in crawls:
+        if not (crawl / "rows.jsonl").exists():
+            sys.exit(f"{crawl / 'rows.jsonl'} is not there: --fold takes a crawl's walk (kit/crawl_run.py)")
+        said = fold(menu, crawl)
+        print(f"{crawl.name}{f' ({mode} mode)' if mode else ''}:" + ("" if said else " nothing to fold"))
+        for line in said:
+            print(f"  {line}")
+        note = f"Rows folded in from the crawl {crawl.name} (menu_tree.py --fold)."
+        if note not in menu.get("source", ""):
+            menu["source"] = f"{menu.get('source', '').rstrip()} {note}".strip()
+    wrong = check(doc)
+    if wrong:
+        sys.exit("the tree would not meet its schema:\n  " + "\n  ".join(wrong[:20]))
+    if dry_run:
+        print(f"would write {paths.shown(out) if out.resolve().is_relative_to(ROOT) else out} (--dry-run: nothing written)")
+    else:
+        write(out, doc)
+    return doc
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--scan", default=None, type=paths.run_arg,
@@ -291,12 +401,17 @@ def main(argv=None):
     ap.add_argument("--replace", action="store_true", help="replace an existing menu tree")
     ap.add_argument("--carousel-names", action="store_true",
                     help="name the existing tree's carousel options by their own names (carousel_names), nothing else")
+    ap.add_argument("--fold", action="append", type=paths.run_arg,
+                    help="take a later crawl's walk into the existing tree, its rows found by label (fold); more than "
+                         "one, in order; with --mode, into that mode's menu")
     a = ap.parse_args(argv)
     root = paths.run_root()
     key = root.name
     if not a.dry_run:
         datafiles.stop_if_left(key, "menu_tree.py")          # a tree still in data/ is moved first, never written past
     default = definitions.menu_tree_file(key)
+    if a.fold:
+        return fold_main(Path(a.out) if a.out else default, [Path(c) for c in a.fold], a.mode, a.dry_run)
     if a.carousel_names:
         out = Path(a.out) if a.out else default
         doc = datafiles.load_menu_tree(out)

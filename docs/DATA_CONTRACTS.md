@@ -83,7 +83,9 @@ are split and merged, and what a write does with evidence that no longer fits (`
 `private/evidence/<model>_fw<fw>/`) that its proof paths lead to, with `kit/camkit/placement.py`, the placement the
 proof viewer uses too, and writes the six fields from it; without the tree or the evidence the places stay as written.
 The editor lays a tab out from them alone ("As on the camera"). A proof path steps into a row's submenu with ` > `,
-names an option of the row with ` / `, and ends with the proof's context in brackets. A path that names an option and
+names an option of the row with ` / `, and ends with the proof's context in brackets; where two rows under one row
+bear one label, `#n` names the n-th of them, from 0 ("Rec. Media Settings > Recording Media#1", the movie one). A
+path that names an option and
 steps below it is on the page that option opens: "Picture Profile > PP2 > Black Gamma > Level" gives `row`
 `["Picture Profile", "PP2", "Black Gamma", "Level"]` and `under_option` "PP2". `order` sorts a setting in the editor's
 "Flat list", by the top row of its group that its proof went through; one that went through none sorts after those
@@ -305,8 +307,8 @@ A `FRAME_PROOFS` entry's evidence:
 ## The menu tree: the camera's menus
 
 `private/evidence/<model>_fw<fw>/menu_tree_<model>_fw<fw>.json`, from the page scan's page model and the crawls
-(`kit/tools/menu_tree.py --help`). The proof viewer's rows come from it, and each setting's place in the
-definition. Schema: `schemas/menu-tree.schema.json`.
+(`kit/tools/menu_tree.py --help`); `--fold` takes a later crawl's walk into it, row by row, in the camera's order. The
+proof viewer's rows come from it, and each setting's place in the definition. Schema: `schemas/menu-tree.schema.json`.
 
 {{ schema_fields("menu-tree") }}
 
