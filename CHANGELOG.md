@@ -197,6 +197,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   alone keeps each in its own mode's menu, and a row given by hand reaches the second of two rows of one label (`#1`)
   or a row named as its group. The camera file may word the menu buttons' label and hover (`camera.text.menus_label`,
   `menus_hover`).
+- **The camera's menus rest on nothing of the owner's:** placement never reads My Menu's item pages, the kit reads a
+  proof's context one way everywhere, and a write with no menu tree here leaves a definition's menus as they are. A
+  menu's place always names its row and row_at, and a row given by hand never changes whether a record is shown.
 - **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
   counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
