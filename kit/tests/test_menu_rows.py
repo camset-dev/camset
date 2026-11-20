@@ -108,12 +108,13 @@ def test_sub_choices_beside_their_option_not_rows():
 
 
 def test_a_page_under_an_option():
-    def on(key, name, row_, at):
-        return s(key, name, ["Profile", "P1", *row_], [29, 1, *at], "P1", group="Profile P1", row_group="Profile P1")
-    page = rows(on("bl", "Black Level", ["Black Level"], [0]), on("bls", "Black Level (stills)", ["Black Level"], [0]),
+    def on(key, name, row_, at, **more):
+        return s(key, name, ["Profile", "P1", *row_], [29, 1, *at], "P1", group="Profile P1", row_group="Profile P1", **more)
+    # a copy the camera keeps of a parameter (copy_of) is one row with it, whatever its name
+    page = rows(on("bl", "Black Level", ["Black Level"], [0]), on("bls", "Black Level (stills)", ["Black Level"], [0], copy_of="bl"),
                 on("bgl", "Black Gamma Level", ["Black Gamma", "Level"], [2, 1]), on("bgr", "Black Gamma Range", ["Black Gamma", "Range"], [2, 0]),
                 on("km", "Knee Mode", ["Knee", "Mode"], [3, 0]), on("kmp", "Knee Auto Set Max Point", ["Knee", "Auto Set", "Max Point"], [3, 1, 0]),
-                on("kmps", "Knee Auto Set Max Point (stills)", ["Knee", "Auto Set", "Max Point"], [3, 1, 0]))
+                on("kmps", "Copy of the max point", ["Knee", "Auto Set", "Max Point"], [3, 1, 0], copy_of="kmp"))
     assert all(mr.on_page(x[0]) for x in page) and mr.page_prefix(page[0][0]) == 2
     assert mr.lay_out(page) == [row(0, 0), row(1, 0),
                                 head("Black Gamma", 0, ["Black Gamma"]), row(3, 1), row(2, 1),

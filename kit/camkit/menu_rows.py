@@ -41,8 +41,10 @@ def on_page(s) -> bool:
 
 
 def same_row(a, b) -> bool:
+    """On the same row of the camera's menu, in the same mode's menu and the same menus (Setting::same_row)."""
     return (a.get("row") or []) == (b.get("row") or []) and (a.get("row_at") or []) == (b.get("row_at") or []) \
-        and a.get("row_mode") == b.get("row_mode")
+        and a.get("row_mode") == b.get("row_mode") and (a.get("row_menus") or []) == (b.get("row_menus") or []) \
+        and (a.get("row_places") or {}) == (b.get("row_places") or {})
 
 
 def links_with(a, b) -> bool:
@@ -110,13 +112,10 @@ def sub_choices(own, among) -> list:
     return kept
 
 
-def base_name(name: str) -> str:
-    n = (name or "").strip()
-    for tail in ("(stills)", "(movie)"):
-        if n.endswith(tail):
-            n = n[:-len(tail)]
-            break
-    return norm(n)
+def row_of(s) -> str:
+    """The setting a page's row stands for (menu_rows::row_of): a copy the camera keeps of a setting's value (copy_of)
+    stands for that setting, so the copies of a page's parameter are one row of it, never by their names."""
+    return s.get("copy_of") or s["key"]
 
 
 # ---------------------------------------------------------------- a group's rows (menu_rows::lay_out)
@@ -143,7 +142,7 @@ def _nest(rows: list, firsts: list, placed_rows: list, mode, strip, lines: list)
     here, deeper = collections.defaultdict(set), set()
     for i in placed_rows:
         s = rows[i][0]
-        here[node(s, length(s))].add(base_name(s.get("name")) if on_page(s) else s["key"])
+        here[node(s, length(s))].add(row_of(s) if on_page(s) else s["key"])
         for n in range(1, length(s)):
             deeper.add(node(s, n))
     opened, row_here = [], None
