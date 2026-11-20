@@ -3244,6 +3244,8 @@ pub(crate) mod tests {
     #[test]
     fn columns_and_rows_for_the_page() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         assert_eq!(app.col_from_json(&json!(["a", 0])), Some(Col::a(0)));
         for bad in [json!(["b", 0]), json!(["base", 0]), json!(["a", 99]), json!(["a", -1]), json!(["c", 0]), json!(["a"]), json!("a"), Value::Null] {
@@ -3355,6 +3357,8 @@ pub(crate) mod tests {
     #[test]
     fn compare_rows_as_the_window_has_them() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let (b, s, other) = changed_sample(&app);
         ask_upload(&mut app, "open_b", &b, "wsa_rows_B.DAT");
@@ -3518,6 +3522,8 @@ pub(crate) mod tests {
     #[test]
     fn copy_and_merge() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         let sample: &[u8] = include_bytes!("../../definitions/ILCE-1M2_fw4.00.DAT");
         ask_upload(&mut app, "open", sample, "wsa_copy_A.DAT");
         let (b, s, other) = changed_sample(&app);
@@ -3632,6 +3638,8 @@ pub(crate) mod tests {
     #[test]
     fn state_for_the_frame() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         let s = ask(&mut app, "state", json!({}));
         assert!(s["file"].is_null());
         assert_eq!(s["edits"], 0);
@@ -3692,6 +3700,8 @@ pub(crate) mod tests {
     #[test]
     fn main_page_as_the_window_has_it() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let Some(pages) = app.schema.camera.main_tiles.clone() else { return };
         for (i, page) in pages.0.iter().enumerate() {
@@ -4169,6 +4179,8 @@ pub(crate) mod tests {
     #[test]
     fn rows_say_whose_help_they_show() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let tab = app.schema.tabs[0].clone();
         let keys: Vec<String> = tab_rows(&mut app, &tab).iter().take(2).map(|r| r["key"].as_str().unwrap().to_string()).collect();
@@ -4268,6 +4280,8 @@ pub(crate) mod tests {
     #[test]
     fn options_nested_as_on_the_camera() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         app.allow_unobserved = true;
         let fa = app.schema.settings.iter().find(|s| s.key == "global:0x0f46").unwrap().clone();
@@ -4404,6 +4418,8 @@ pub(crate) mod tests {
     #[test]
     fn the_page_follows_the_layout_in_its_groups_and_links() {
         let mut app = App::new(vec![], Prefs { expert: true, ..Prefs::default() });
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let hold = app.schema.settings.iter().find(|s| s.group == "Recall Custom hold 1" && s.name == "Shoot Mode" && s.area == "global").unwrap().clone();
         let fn1 = app.schema.settings.iter().find(|s| s.group == "Fn Menu" && s.area == "global" && s.row_group.is_some()).unwrap().clone();
@@ -4599,6 +4615,8 @@ pub(crate) mod tests {
     #[test]
     fn csv_and_layout_downloads() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let a = answer(&mut app, "csv", json!({ "target": 0 }));
         assert_eq!((a.status, a.content_type), (200, "text/csv"));
@@ -6088,6 +6106,8 @@ mod safety_tests {
     #[test]
     fn the_page_recalls_the_whole_memory() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let m = app.dial_sets()[0];
         let differ = |app: &App| app.memory_rows().iter().flat_map(|r| r.2.clone())
@@ -6105,6 +6125,8 @@ mod safety_tests {
     #[test]
     fn the_page_leaves_other_shapes_alone() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         let mut older = other_firmware();
         for b in older.sections[1].get_mut(0x0cde).unwrap().value.iter_mut() { *b = b.wrapping_add(1); }
         assert_eq!(request(&mut app, "open", json!({}), Some((&older.to_bytes(), false))).status, 200);

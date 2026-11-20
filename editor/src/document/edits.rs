@@ -1209,6 +1209,8 @@ pub(crate) mod copies_tests {
     /// the file was opened; no copy says whose mode it is (`copy_for`), so the copies in step go with the setting.
     pub(crate) fn with_copies(v: i64, stills: i64, movie: i64) -> (App, [Setting; 3]) {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (the copies rule is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample_now();
         for s in app.schema.settings.iter_mut() {
             if s.key == MAIN { s.copies = vec![STILLS.into(), MOVIE.into()]; }
@@ -2088,6 +2090,8 @@ pub(crate) mod copies_tests {
     #[test]
     fn the_views_hold_a_view_only_setting() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample_now();
         // a setting of the Main page's first tiles, kept in the memories, with named values, which the sample lets change
         let pages = app.schema.camera.main_tiles.clone().expect("the a1 II's Main page");

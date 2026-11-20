@@ -863,7 +863,7 @@ mod family_tests {
     /// jump to one of them lands on the page. The flat list keeps the table. Skipped while no setting is on a page.
     #[test]
     fn an_option_opens_its_page() {
-        let (mut app, dir, user) = sample_app("page", None);
+        let (mut app, dir, user) = sample_app("page", Some(crate::test_support::strip_menus));
         let Some(own) = app.settings_in(0, None).find(|s| !app.option_pages(s).is_empty()).cloned() else {
             assert!(!app.schema.settings.iter().any(Setting::on_page), "settings on a page and no option opening it");
             let _ = (std::fs::remove_dir_all(dir), std::fs::remove_dir_all(user));

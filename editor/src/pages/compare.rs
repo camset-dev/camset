@@ -1000,6 +1000,8 @@ pub(crate) mod copy_tests {
     #[test]
     fn compare_rows_are_one_per_setting() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample_now();
         let rows = app.matrix_rows_for("", None);
         assert!(rows.iter().all(|r| r.2.iter().all(|s| app.same_row(&r.2[0], s))), "a row holds linked records only");
@@ -1078,6 +1080,8 @@ pub(crate) mod copy_tests {
     #[test]
     fn records_written_together_are_copied_together() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample_now();
         let rows = app.matrix_rows_for("", None);
         let row = rows.iter().find(|r| r.2.len() >= 3 && r.2.iter().all(|s| s.scalar && s.values.len() >= 3 && app.shape_ok_in(s, 0) && app.locked_why(s, 0).is_none()))

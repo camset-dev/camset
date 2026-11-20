@@ -1502,7 +1502,8 @@ pub(crate) mod facts_tests {
                 assert!(!tabs.contains(&name), "My Menu is not a tab of the Menu");
                 let on_my_menu: Vec<String> = app.mymenu_groups().into_iter().flat_map(|(_, rows)| rows.into_iter().flatten().map(|s| s.key)).collect();
                 assert_eq!(!on_my_menu.is_empty(), with_my_menu, "My Menu's own tab is on its page only with My Menu");
-                let groups: std::collections::HashMap<String, Vec<String>> = tabs.iter().map(|t| (t.clone(), app.tab_groups(t).into_iter().map(|(g, _, _)| g).collect())).collect();
+                // the groups of an entry in the camera's menu a jump opens (`jump_place`; none without menus)
+                let mut groups: std::collections::HashMap<(Option<String>, String), Vec<String>> = Default::default();
                 for s in app.schema.settings.iter().filter(|s| !s.expert) {
                     let target = if s.area == "global" { 0 } else { 1 };
                     match app.view_of(s) {
@@ -1512,7 +1513,9 @@ pub(crate) mod facts_tests {
                             assert!(app.settings_in(target, Some(&t)).any(|o| o.key == s.key), "{} is not under {t}", s.name);
                             assert_eq!(app.settings_in(target, None).filter(|o| o.key == s.key).count(), 1);
                             let shown = app.shown_group_of(s);
-                            assert!(groups[&t].contains(&shown) || app.target != target, "{}: {t} has no group {shown}", s.name);
+                            let menu = app.jump_place(s, target, app.menu_shown().as_deref()).0;
+                            let held = groups.entry((menu.clone(), t.clone())).or_insert_with(|| app.tab_groups_in(target, menu.as_deref(), &t, "", false).into_iter().map(|(g, _, _)| g).collect());
+                            assert!(held.contains(&shown) || app.target != target, "{}: {t} has no group {shown} in {menu:?}", s.name);
                         }
                         v => panic!("{}: a jump opens {v:?}", s.name),
                     }
@@ -1535,6 +1538,8 @@ pub(crate) mod facts_tests {
     #[test]
     fn what_the_menus_do_not_hold_has_an_entry_of_its_own() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let off = app.schema.camera.text.off_menu_name().to_string();
         assert_eq!(off, "Not in the menus");
@@ -1764,7 +1769,7 @@ pub(crate) mod facts_tests {
     /// the flat list is the definition's groups, as before.
     #[test]
     fn sub_screens_and_movie_rows_as_on_the_camera() {
-        let (mut app, dir, user) = sample_app("subscreens", None);
+        let (mut app, dir, user) = sample_app("subscreens", Some(crate::test_support::strip_menus));
         let names = |app: &App| app.tab_groups("Shooting").into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
         let group = |app: &App, g: &str| app.tab_groups("Shooting").into_iter().find(|(n, _, _)| n == g).unwrap().2;
         let hold = app.schema.settings.iter().find(|s| s.group == "Recall Custom hold 1" && s.name == "Shoot Mode" && s.area == "global").unwrap().clone();
@@ -1831,7 +1836,7 @@ pub(crate) mod facts_tests {
     /// edit counts go there, and the camera's order across the tabs puts it there; the flat list keeps its own tab.
     #[test]
     fn a_row_in_another_tab_as_on_the_camera() {
-        let (mut app, dir, user) = sample_app("rowtab", None);
+        let (mut app, dir, user) = sample_app("rowtab", Some(crate::test_support::strip_menus));
         let key = app.schema.settings.iter().find(|s| s.area == "global" && !s.expert && s.row_tab.is_some() && s.row_mode.is_none() && s.tab != "Setup" && s.row_tab.as_deref() == Some("Setup")).unwrap().clone();
         let (own, there) = (key.tab.clone(), "Setup".to_string());
         let group = key.row_group.clone().unwrap();
@@ -1876,13 +1881,20 @@ pub(crate) mod facts_tests {
     /// the camera hid (which it unfolds) and on one under "More settings in this group"; Compare's way back stays.
     #[test]
     fn jumps_land_on_their_row_in_either_layout() {
-        let (mut app, dir, user) = sample_app("jumps", None);
+        let (mut app, dir, user) = sample_app("jumps", Some(crate::test_support::strip_menus));
         let ctx = egui::Context::default();
         let mut frame = eframe::Frame::_new_kittest();
         let nth = |app: &App, group: &str, name: &str, n: usize| app.schema.settings.iter().filter(|s| s.group == group && s.name == name && s.area == "global").nth(n).unwrap().clone();
         let hi = nth(&app, "Drive Mode", "Hi(E-Shutter)", 0);
         let fixed = nth(&app, "Zoom", "Fixed Speed REC", 1);
-        let unplaced = app.schema.settings.iter().find(|s| s.group == "Shooting Mode" && s.area == "global" && !s.placed() && !s.expert).unwrap().clone();
+        // a setting of Shooting Mode placed nowhere: one made so where the definition places them all
+        let loose = |app: &App| app.schema.settings.iter().find(|s| s.group == "Shooting Mode" && s.area == "global" && !s.placed() && !s.expert).cloned();
+        if loose(&app).is_none() {
+            let i = app.schema.settings.iter().position(|s| s.group == "Shooting Mode" && s.area == "global" && s.placed() && !s.expert && s.under_option.is_none() && s.copy_of.is_none()).unwrap();
+            (app.schema.settings[i].row, app.schema.settings[i].row_at) = (Vec::new(), Vec::new());
+            app.schema_gen += 1;
+        }
+        let unplaced = loose(&app).unwrap();
         let speeds = App::fold_key("Shooting", "Drive Mode", &["Cont. Shooting Speed".to_string()]);
         for flat in [false, true] {
             app.set_flat_list(flat);
@@ -2091,9 +2103,16 @@ pub(crate) mod facts_tests {
         assert!(!keys(&app, Some("Still")).is_empty());
         assert!(["Movie", "S&Q"].iter().all(|m| keys(&app, Some(m)) == keys(&app, Some("Still"))));
         assert_eq!(keys(&app, Some("Still")), keys(&app, None).into_iter().filter(|k| keys(&app, Some("Still")).contains(k)).collect::<Vec<_>>());
-        // a group's settings placed nowhere, under "More settings in this group" in a menu that shows the group
-        let more = app.tab_groups_in(0, Some("Still"), "Shooting", "", false).into_iter().any(|(_, f, rows)| !f && app.group_lines(&rows).contains(&Line::More));
-        assert!(more, "Shooting Mode's settings placed nowhere");
+        // a group's settings placed nowhere, under "More settings in this group" in a menu that shows the group: one made
+        // so here (a setting of a group of several placed ones), whatever the definition places
+        let rows = app.settings_in_menu(0, "Still", Some("Shooting"));
+        let loose = rows.iter().find(|s| s.placed() && s.under_option.is_none() && !s.on_page() && rows.iter().filter(|o| o.group == s.group && o.placed()).count() > 2).cloned().unwrap();
+        for x in app.schema.settings.iter_mut().filter(|x| x.key == loose.key) {
+            (x.row, x.row_at, x.row_menus) = (Vec::new(), Vec::new(), Vec::new());
+        }
+        app.schema_gen += 1;
+        let more = app.tab_groups_in(0, Some("Still"), "Shooting", "", false).into_iter().find(|(_, f, rows)| !f && rows.iter().flatten().any(|s| s.key == loose.key));
+        assert!(more.is_some_and(|(_, _, rows)| app.group_lines(&rows).contains(&Line::More)), "{} under More settings in this group", loose.name);
         // Expert mode: every record a row of its own, under its own name
         app.prefs.expert = true;
         let names: Vec<String> = app.settings_in_menu(0, "Movie", None).into_iter().filter(|s| s.row == ["ISO"] && s.under_option.is_none()).map(|s| s.name).collect();

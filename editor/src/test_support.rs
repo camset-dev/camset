@@ -65,6 +65,24 @@ pub(crate) fn strip_menus(v: &mut serde_json::Value) {
     }
 }
 
+/// The definitions the app has loaded, and the one in use, without the camera's menus (as `strip_menus` takes them out
+/// of a definition's text): the editor as before menus, for a test that opens the shipped sample through `App::new`
+/// and is not about the menus, so it holds whether or not the shipped definition lists them. Call it before opening.
+pub(crate) fn as_before_menus(app: &mut App) {
+    let strip = |s: &mut camset_editor::schema::Schema| {
+        s.camera.menus.clear();
+        for x in s.settings.iter_mut() {
+            x.row_menus.clear();
+            x.row_places.clear();
+        }
+    };
+    for s in app.defs.list.iter_mut() {
+        strip(s);
+    }
+    strip(&mut app.schema);
+    app.schema_gen += 1;
+}
+
 /// `stub_menus`, and one setting placed in one menu otherwise than its own place says (`row_places`): Audio Recording
 /// (global:0x02e9, a row of Movie mode's menu only, on its own row in Audio Recording) under a row "Audio Settings" in
 /// S&Q's menu, in S&Q's alone of the two it has.
