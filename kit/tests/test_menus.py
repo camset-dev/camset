@@ -490,3 +490,41 @@ def test_a_menus_place_always_carries_its_row_and_row_at():
     v = Draft202012Validator(schema["$defs"]["setting"]["properties"]["row_places"])
     for m, p in got["row_places"].items():
         assert not list(v.iter_errors({m: p})), (m, p)
+
+
+def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode(tmp_path, monkeypatch):
+    """Where a proof's context names no mode, its mode is the camera's own: the live-mode record (the camera file's
+    live_mode) in its base download, read once and kept in the camera's cache. A silent line whose base download says
+    Movie is a Movie proof for the report and for placement ("[Movie mode]" in its row); one whose base says Stills, or
+    whose context names a mode, stays as it is; proofs.jsonl is not rewritten."""
+    import pass2_report
+    from camkit import camset, live_modes, paths
+    key = paths.A1II
+    lm = json.loads(definitions.camera_file(key).read_text(encoding="utf-8"))["live_mode"]
+    section, rid = (0, int(lm["key"].split("0x")[1], 16))
+    code = {v: int(k) for k, v in lm["modes"].items()}
+    cs = camset.read(definitions.sample(definitions.load(key)))
+    run = tmp_path / key / "kit2_pass2"
+    (run / "dat").mkdir(parents=True)
+    for name, mode in (("00001_movie.DAT", "Movie"), ("00002_stills.DAT", "Stills")):
+        raw = code[mode].to_bytes(cs.get(section, rid).size, "little", signed=True)
+        (run / "dat" / name).write_bytes(camset.with_values(cs, {(section, rid): raw}))
+    line = {"kind": "list", "index": [0], "label": "x", "changes": [], "dat": "00009_after.DAT"}
+    lines = [{**line, "path": ["Time Code Preset"], "base": "00001_movie.DAT"},
+             {**line, "path": ["User Bit Preset"], "base": "00002_stills.DAT"},
+             {**line, "path": ["Time Code Format"], "base": "00001_movie.DAT", "context": "S&Q mode"}]
+    text = "".join(json.dumps(x) + "\n" for x in lines)
+    (run / "proofs.jsonl").write_text(text, encoding="utf-8")
+    monkeypatch.setattr(live_modes, "CACHE", tmp_path / "live_mode.json")
+    proofs = pass2_report.report_proofs(run)[0]
+    rows = [pass2_report.row_name(r) for r in proofs]
+    assert rows == ["Time Code Preset [Movie mode]", "User Bit Preset", "Time Code Format [S&Q mode]"]
+    every = ["Stills", "Movie", "S&Q", "Time-lapse"]
+    assert [placement.mode_of(r, every) or placement.TOP_MODE for r in rows] == ["Movie", "Stills", "S&Q"]
+    from writer import copies
+    assert [copies.row_mode(r) for r in rows] == ["Movie", "Stills", "S&Q"]          # the writer reads them alike
+    assert copies.row_mode("ISO [Movie mode (dial set with the menu)]") == "Movie"
+    assert (run / "proofs.jsonl").read_text(encoding="utf-8") == text
+    assert len(json.loads((tmp_path / "live_mode.json").read_text(encoding="utf-8"))["codes"]) == 2
+    monkeypatch.setattr(camset, "parse", lambda *a, **k: (_ for _ in ()).throw(AssertionError("read again")))
+    assert [pass2_report.row_name(r) for r in pass2_report.report_proofs(run)[0]] == rows          # from the cache

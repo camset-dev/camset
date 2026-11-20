@@ -91,7 +91,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ROOT, camset, datafiles, definitions, jsonl, match, models, paths, placement, row_names, runs  # noqa: E402
+from camkit import ROOT, camset, datafiles, definitions, jsonl, live_modes, match, models, paths, placement, row_names, runs  # noqa: E402
 from runner import read_json, write_json  # noqa: E402
 
 
@@ -695,6 +695,35 @@ def same_proof(r: dict) -> tuple | None:
     return (r.get("run"), r["dat"], r.get("base"), row_name(r), json.dumps(r.get("index")), str(r.get("label")))
 
 
+def live_mode_reader(run: Path) -> live_modes.Reader:
+    """The reader of the shooting mode a proof's download was saved in (camkit.live_modes), by the camera file's
+    live_mode (data/<model>_fw<fw>/camera_<model>_fw<fw>.json, the camera being the run's folder's: runs/<model>_fw<fw>/),
+    cached in the camera's runs/_cache; one that reads nothing where the camera file names no live_mode."""
+    cam = definitions.camera_file(run.parent.name) if paths.KEY.match(run.parent.name) else None
+    try:
+        lm = read_json(cam).get("live_mode") if cam is not None and cam.exists() else None
+    except (OSError, ValueError):
+        lm = None
+    return live_modes.Reader(lm, live_modes.cache_file(run.parent))
+
+
+def with_mode(r: dict, reader: live_modes.Reader) -> dict:
+    """A proof as the report reads it, its shooting mode said (the kit's one reading of a proof's mode, which placement
+    takes from the report's rows): where its context names no mode (camkit.placement.mode_of, the camera file's
+    modes), the camera's own, the live-mode record in its base download (live_mode_reader), put first in its context
+    ("S&Q mode", "Movie mode, ...") unless it is the top-level menu's (camkit.placement.TOP_MODE: a context that names
+    none says that one). A line whose base download is gone or says no mode stays as it is; nothing is rewritten in
+    proofs.jsonl. The camera's own files said S&Q for 162 silent lines of 2026-11-07 (Custom Key/Dial Set., Fn Menu
+    Settings, Playback Filter Condition) and Movie for 24 (kit2_drive_tcub's Time Code and User Bit Presets)."""
+    ctx = r.get("context") or ""
+    if not r.get("base") or placement.mode_of(f"x [{ctx}]", list(reader.modes.values())) is not None:
+        return r
+    mode = reader.mode(base_file(r["base"]))
+    if mode is None or mode == placement.TOP_MODE:
+        return r
+    return {**r, "context": f"{mode} mode" + (f", {ctx}" if ctx else "")}
+
+
 def report_proofs(run: Path, alone: bool = False) -> tuple:
     """(proofs, skip, blocked, failed, reread) over the runs the report reads (proof_runs): each run's proofs in order,
     qualified, a proof read before in another folder left out (same_proof), a registration mirror line left out
@@ -706,16 +735,18 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
     row label carries the values of the cells before it, the camera's own settings); a cell no walked cell matches
     keeps its own reading with its place, and UNWALKED_CELLS says which and why. The proofs' downloads are read from
     the run's folders (base_value). A proof whose choice also moved another field or box is read without that other's
-    records (own_changes)."""
+    records (own_changes). A proof whose context names no mode is read in the mode its base download was saved in
+    (with_mode)."""
     _BASE_DIRS[:] = [run / "dat", run]
     _RUNS_ROOT[:] = [run.parent]
+    reader = live_mode_reader(run)
     proofs, skip, blocked, failed, reread, seen = [], set(), {}, {}, 0, set()
     for part in proof_runs(run, alone):
         own = []
         for r in jsonl.read(part / "proofs.jsonl"):
             if r.get("kind") == MIRROR_KIND:
                 continue                       # a registration's copy, no row's proof (mirror_lines reads it)
-            r = own_changes(qualified(r, part.name, run.name))
+            r = with_mode(own_changes(qualified(r, part.name, run.name)), reader)
             key = same_proof(r)
             if key is not None and key in seen:
                 continue                       # the same proof read in another folder
@@ -729,6 +760,7 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
         blocked.update(b)
         failed.update(f)
         proofs += own
+    reader.save()
     tables = run.parent / "kit2_tables" / "tables.json"
     proofs, unwalked = match.cell_options(proofs, read_json(tables) if tables.exists() else None)
     UNWALKED_CELLS.clear()
