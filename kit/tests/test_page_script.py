@@ -354,6 +354,38 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_the_record_maps_bytes_fold_by_the_keys_and_the_buttons(tmp_path):
+    """The reviewer's inventory, B: the record map's bytes fold and show by the keys as by its own Collapse all and
+    Expand all (the keys in words and as aria-keyshortcuts): Expand all asks the editor for the bytes of every
+    multi-byte record listed, Collapse all for none; a map with no multi-byte record has neither."""
+    got = run(tmp_path, """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+let redraws = 0;
+redraw = () => { redraws += 1; };
+const rec = (id, big) => ({ id, big, offset: "000000", hex: "0x" + id, shape: big ? "u8[16]" : "u16", value: "v", raw: "r", raw_full: "r", edited: false, setting: null });
+view.mode = "edit"; view.page = "records"; view.q = "";
+const j = { title: "Live: records in file order", unmapped_words: "u", rows: [rec(1, true), rec(2, false), rec(3, true)] };
+const drawn = drawRecords(j);
+$("content").replaceChildren(...drawn);
+const out = { taken: shortcut(key("ArrowDown")) };
+out.expanded = [...xp.rm.open].sort();
+shortcut(key("ArrowUp")); out.collapsed = [...xp.rm.open];
+const bs = drawn[0].querySelectorAll(".fold-all button");
+out.buttons = bs.map((b) => [b.textContent, b.getAttribute("aria-keyshortcuts")]);
+bs[1].click(); out.button_expanded = [...xp.rm.open].sort();
+bs[0].click(); out.button_collapsed = [...xp.rm.open];
+out.redraws = redraws;
+out.none = drawRecords({ ...j, rows: [rec(2, false)] })[0].querySelectorAll(".fold-all button").length;
+console.log(JSON.stringify(out));
+""")
+    assert got["taken"] is True and got["expanded"] == [1, 3] and got["collapsed"] == []
+    assert got["buttons"] == [["Collapse all", "Control+Shift+ArrowUp"], ["Expand all", "Control+Shift+ArrowDown"]]
+    assert got["button_expanded"] == [1, 3] and got["button_collapsed"] == [] and got["redraws"] == 4
+    assert got["none"] == 0
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an

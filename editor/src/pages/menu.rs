@@ -2577,6 +2577,34 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The reviewer's inventory, B: the record map (Expert mode) folds and shows its records' bytes by the keys as by its
+    /// own Collapse all and Expand all: Expand all the multi-byte records listed, Collapse all every one.
+    #[test]
+    fn the_record_maps_bytes_fold_by_the_keys_and_the_buttons() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_records", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        (app.prefs.expert, app.view) = (true, View::Records);
+        let open = |w: &mut Win, app: &mut App| {
+            let _ = w.run(app, vec![]);
+            let _ = w.run(app, vec![]);
+            w.ctx.data(|d| d.get_temp::<std::collections::HashSet<u16>>(egui::Id::new("rm_expanded"))).unwrap_or_default()
+        };
+        let big: std::collections::HashSet<u16> = app.record_rows().iter().filter(|r| r.big).map(|r| r.id).collect();
+        assert!(!big.is_empty() && open(&mut w, &mut app).is_empty(), "every record folded to start with");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        let shown = open(&mut w, &mut app);
+        assert_eq!(shown, big, "Expand all: every multi-byte record listed");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(open(&mut w, &mut app).is_empty(), "Collapse all");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert_eq!(open(&mut w, &mut app), shown, "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert!(open(&mut w, &mut app).is_empty());
+        done(&dir, &user);
+    }
+
     /// The reviewer's inventory, A: a family group's table (Picture Profiles, Creative Looks) folds and opens by the keys
     /// as by its own Collapse all and Expand all, as on the page.
     #[test]

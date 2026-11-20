@@ -2456,6 +2456,9 @@ function drawRecords(j) {
     filter("unmapped", "Only unmapped"), filter("edited", "Only edited", "Records whose value differs from the file as it was opened"),
     el("span", { class: "small weak" }, "Search matches record ids (0x1234), setting names and values. Click a setting to open it; click the shape of a multi-byte record for its bytes."));
   if (!j.rows.length) return [head, el("hr"), el("p", {}, "No records match.")];
+  // the records listed, whose bytes Expand all shows (`foldAll`), and its buttons where any has bytes to show
+  xp.rm.rows = j.rows;
+  if (j.rows.some((r) => r.big)) head.append(foldButtons("Fold every record's bytes", "Show the bytes of every multi-byte record listed"));
   const row = (r) => {
     const open = r.big && xp.rm.open.has(r.id);
     const toggle = () => { if (open) xp.rm.open.delete(r.id); else xp.rm.open.add(r.id); redraw(); };
@@ -4317,6 +4320,14 @@ function foldAll(collapse) {
       const head = $("content").querySelectorAll(".cmp-fold").find((h) => h.dataset.fold === foldKeys(held)[0]);
       if (head) head.focus({ preventScroll: true });
     }
+    return true;
+  }
+  // the record map: every record's bytes folded, or those of the records listed shown (the editor sends them)
+  if (pageName() === "records") {
+    const big = (xp.rm.rows || []).filter((r) => r.big);
+    if (!big.length) return false;
+    if (collapse) xp.rm.open.clear(); else for (const r of big) xp.rm.open.add(r.id);
+    redraw();
     return true;
   }
   const groups = [...$("content").querySelectorAll("details.grp")].filter((d) => d._where !== undefined);

@@ -618,7 +618,7 @@ impl App {
     /// `KEY_EXPAND_ALL`), the page's alike: in Compare its tabs and groups, as its Collapse all and Expand all have always
     /// done; in a tab of Edit the camera's rows that hold others in the group shown (the group column picks one group at a
     /// time; the Menu's entries are pages, not folds), or a family group's table; on the exposure page its "What decides"
-    /// sections (`head_fold`). A row
+    /// sections, on the record map its records' bytes (`head_fold`). A row
     /// chosen that a fold hides gives way to the nearest row still shown, as a click on its heading does, or to none where
     /// every row is under a folded one. The rule: every foldable group of the view in front, as on the page.
     pub(crate) fn fold_all(&mut self, collapse: bool) {
@@ -661,7 +661,7 @@ impl App {
                     }
                 }
             }
-            (Mode::Edit, View::Exposure) => self.head_fold = Some(collapse),
+            (Mode::Edit, View::Exposure | View::Records) => self.head_fold = Some(collapse),
             _ => {}
         }
     }
