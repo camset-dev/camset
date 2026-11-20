@@ -346,10 +346,13 @@ impl App {
         if self.diff_cursor.is_some_and(|c| c >= shown.len()) { self.diff_cursor = None; }
         ui.horizontal(|ui| {
             ui.label(format!("{} of {} settings shown", shown.len(), rows.len()));
-            if ui.button("Collapse all").on_hover_text("Fold every tab; click a tab or group heading to open it").clicked() {
-                for (t, _, _) in rows.iter() { self.matrix_closed.insert((t.clone(), String::new())); }
+            // the same as Cmd/Ctrl+Shift+↑ / ↓ (`fold_all`)
+            let ctx = ui.ctx().clone();
+            let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+            if ui.button("Collapse all").on_hover_text(format!("Fold every tab; click a tab or group heading to open it ({})", keys(&KEY_COLLAPSE_ALL))).clicked() {
+                self.fold_all(true);
             }
-            if ui.button("Expand all").clicked() { self.matrix_closed.clear(); }
+            if ui.button("Expand all").on_hover_text(format!("Open every tab and group ({})", keys(&KEY_EXPAND_ALL))).clicked() { self.fold_all(false); }
             ui.separator();
             let at = self.diff_cursor.and_then(|c| diff_rows.iter().position(|i| *i == c));
             if ui.add_enabled(!diff_rows.is_empty(), egui::Button::new("⏶ Previous")).on_hover_text("Previous difference (Shift+F3 or Alt+Up)").clicked() { self.diff_step = -1; }

@@ -316,7 +316,9 @@ impl App {
             }
             match Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref()) {
                 None => {
-                    let first = menu_rows::order(&lines).first().map(|&i| &rows[i][0]);
+                    // the first row a fold leaves shown (none where every row is under a folded one: Collapse all)
+                    let hidden = menu_rows::hidden(&lines, |p| self.folded.contains(&fold_key(p)));
+                    let first = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Row { index, .. } if !h => Some(&rows[*index][0]), _ => None });
                     self.select(None, self.group.clone(), first.map(|s| (s.name.as_str(), s.key.as_str())));
                 }
                 // a jump to a row a folded row of the camera hides unfolds it
@@ -401,9 +403,17 @@ impl App {
             let mut pick_item = None;
             let mut fold = None;
             let mut set_flat = None;
+            let mut fold_every = None;
             egui::CentralPanel::default().show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(gname).strong());
+                    // the camera's rows that hold others, all folded or all shown (`fold_all`), with their keys
+                    if lines.iter().any(|l| matches!(l, Line::Heading { .. })) {
+                        let ctx = ui.ctx().clone();
+                        let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+                        if ui.small_button("Collapse all").on_hover_text(format!("Fold every row of the camera's menu here that holds others ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
+                        if ui.small_button("Expand all").on_hover_text(format!("Show every row of the camera's menu here ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
+                    }
                     // the layout switch, when the definition says where its settings sit on the camera
                     if self.places() {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -545,12 +555,58 @@ impl App {
             if let Some(flat) = set_flat {
                 self.set_flat_list(flat);
             }
+            if let Some(collapse) = fold_every {
+                self.fold_all(collapse);
+            }
         }
         if let Some(g) = pick_group {
             self.select(None, Some(g), None);
             self.focus = Focus::Groups;
         }
         actions
+    }
+
+    /// Collapse all (`collapse`) or expand all, by the buttons or by Cmd/Ctrl+Shift+↑ / ↓ (`KEY_COLLAPSE_ALL`,
+    /// `KEY_EXPAND_ALL`), the page's alike: in Compare its tabs and groups, as its Collapse all and Expand all have always
+    /// done; in a tab of Edit the camera's rows that hold others in the group shown (the group column picks one group at a
+    /// time; the Menu's entries are pages, not folds). A row chosen that a fold hides gives way to the nearest row still
+    /// shown, as a click on its heading does, or to none where every row is under a folded one. Nothing elsewhere.
+    pub(crate) fn fold_all(&mut self, collapse: bool) {
+        match (self.mode, self.view.clone()) {
+            (Mode::Compare, _) if !self.compare_records => {
+                if collapse {
+                    let rows = self.compare_rows(self.compare_menu().as_deref(), &self.compare_key(), &self.search);
+                    for (t, _, _) in rows.iter() {
+                        self.matrix_closed.insert((t.clone(), String::new()));
+                    }
+                } else {
+                    self.matrix_closed.clear();
+                }
+            }
+            (Mode::Edit, View::Tab(tab)) => {
+                let groups = self.tab_groups(&tab);
+                let Some((gname, family, rows)) = groups.iter().find(|(n, _, _)| Some(n) == self.group.as_ref()).or(groups.first()) else { return };
+                if *family {
+                    return;
+                }
+                let lines = self.group_lines(rows);
+                for l in &lines {
+                    if let Line::Heading { path, .. } = l {
+                        let k = Self::fold_key(&tab, gname, path);
+                        if collapse { self.folded.insert(k); } else { self.folded.remove(&k); }
+                    }
+                }
+                let hidden = menu_rows::hidden(&lines, |p| self.folded.contains(&Self::fold_key(&tab, gname, p)));
+                let cur = Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref());
+                if let Some(at) = lines.iter().position(|l| matches!(l, Line::Row { index, .. } if Some(*index) == cur)).filter(|&a| hidden[a]) {
+                    let shown = |a: &usize| !hidden[*a] && matches!(lines[*a], Line::Row { .. });
+                    let near = (0..at).rev().find(shown).or_else(|| (at..lines.len()).find(shown));
+                    let row = near.and_then(|a| match lines[a] { Line::Row { index, .. } => Some(rows[index][0].clone()), _ => None });
+                    self.select(None, Some(gname.clone()), row.as_ref().map(|s| (s.name.as_str(), s.key.as_str())));
+                }
+            }
+            _ => {}
+        }
     }
 
     pub(crate) fn search_view(&mut self, ui: &mut egui::Ui) -> Vec<Action> {

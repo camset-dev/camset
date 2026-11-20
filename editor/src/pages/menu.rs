@@ -2510,12 +2510,70 @@ pub(crate) mod facts_tests {
             crate::test_support::texts(&out.shapes)
         }
 
+        /// A key pressed with `modifiers`, then the window settled.
+        fn key_with(&mut self, app: &mut App, key: egui::Key, modifiers: egui::Modifiers) {
+            let _ = self.run(app, vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }]);
+            let _ = self.run(app, vec![]);
+            let _ = self.run(app, vec![]);
+        }
+
         /// An arrow key pressed, then the window settled.
         fn key(&mut self, app: &mut App, key: egui::Key) {
             let _ = self.run(app, vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
             let _ = self.run(app, vec![]);
             let _ = self.run(app, vec![]);
         }
+    }
+
+    /// Item 4: Collapse all and Expand all by Cmd/Ctrl+Shift+↑ / ↓, in Edit (the camera's rows that hold others in the
+    /// group shown: Shooting > Drive Mode) and in Compare (its tabs and groups), leave what the buttons leave; the row
+    /// chosen under a heading gives way to a row still shown; a text field with the keyboard keeps the keys.
+    #[test]
+    fn collapse_and_expand_all_by_the_keys_and_the_buttons() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_keys", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let groups = app.tab_groups(tab);
+        let (_, _, rows) = groups.iter().find(|(g, _, _)| g == group).cloned().unwrap();
+        let lines = app.group_lines(&rows);
+        let heads: Vec<String> = lines.iter().filter_map(|l| match l { Line::Heading { path, .. } => Some(App::fold_key(tab, group, path)), _ => None }).collect();
+        assert!(!heads.is_empty(), "the group has rows that hold others");
+        // a row under one of them (a heading above it)
+        let under = lines.iter().enumerate().find_map(|(at, l)| match l { Line::Row { index, .. } if !menu_rows::headings_above(&lines, at).is_empty() => Some(rows[*index][0].clone()), _ => None }).unwrap();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&under.name, &under.key)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        let by_keys = app.folded.clone();
+        assert!(heads.iter().all(|k| by_keys.contains(k)), "Edit: every row that holds others folded");
+        assert_ne!(app.item_key.as_deref(), Some(under.key.as_str()), "the row chosen gave way to one still shown");
+        assert_eq!(app.group.as_deref(), Some(group), "the group stays");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "Edit: every one shown");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert_eq!(app.folded, by_keys, "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert!(heads.iter().all(|k| !app.folded.contains(k)));
+        // a text field with the keyboard keeps the keys for its text
+        w.ctx.memory_mut(|m| m.request_focus(egui::Id::new(SEARCH_ID)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "the search box had the keyboard");
+        w.ctx.memory_mut(|m| m.surrender_focus(egui::Id::new(SEARCH_ID)));
+        // Compare: its tabs, by the keys as by the button
+        let b = app.doc.as_ref().unwrap().original.clone();
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::b(0)], false);
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        let closed = app.matrix_closed.clone();
+        assert!(!closed.is_empty(), "Compare: every tab folded");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(app.matrix_closed.is_empty());
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert_eq!(app.matrix_closed, closed, "the button leaves what the keys leave");
+        done(&dir, &user);
     }
 
     /// Integration review finding 1: with a row chosen, Up/Down in the groups column move to the next group, with menus

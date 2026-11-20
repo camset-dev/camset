@@ -439,6 +439,7 @@ impl App {
                                         (format!("{} / {}", f(&undo), f(&redo)), "Undo / Redo"),
                                         ("F3 / Shift+F3".into(), "Edit: the next / previous edit. Compare: the next / previous difference (also Alt+Down / Alt+Up)"),
                                         ("← → ↑ ↓".into(), "Edit: move through the menu's columns, as on the camera"),
+                                        (format!("{} / {}", f(&KEY_COLLAPSE_ALL), f(&KEY_EXPAND_ALL)), "Edit and Compare: collapse all / expand all (the rows of the camera's menu that hold others; Compare's tabs and groups)"),
                                         ("Esc".into(), "Close the window on top, or clear the search"),
                                         ("Cmd/Ctrl + / − / 0".into(), "Larger / smaller text / 100%"),
                                     ];

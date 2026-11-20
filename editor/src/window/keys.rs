@@ -30,6 +30,14 @@ pub(crate) const KEY_READ: egui::KeyboardShortcut = egui::KeyboardShortcut::new(
 
 pub(crate) const KEY_SETTINGS: egui::KeyboardShortcut = egui::KeyboardShortcut::new(egui::Modifiers::COMMAND, egui::Key::Comma);
 
+/// Collapse all, in Edit and Compare (`App::fold_all`): Cmd/Ctrl+Shift+↑, the page's too. Arrows sit in the same place
+/// on every keyboard layout; the editor has no other use for them with these modifiers, and outside a text field (which
+/// keeps them for selecting) no browser or desktop it runs on is known to take them.
+pub(crate) const KEY_COLLAPSE_ALL: egui::KeyboardShortcut = egui::KeyboardShortcut::new(egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT), egui::Key::ArrowUp);
+
+/// Expand all, in Edit and Compare (`App::fold_all`): Cmd/Ctrl+Shift+↓, the page's too.
+pub(crate) const KEY_EXPAND_ALL: egui::KeyboardShortcut = egui::KeyboardShortcut::new(egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT), egui::Key::ArrowDown);
+
 /// The search box's id (Edit and Compare have one each, never both on screen): Cmd/Ctrl+F focuses it.
 pub(crate) const SEARCH_ID: &str = "search_box";
 
@@ -65,6 +73,21 @@ impl App {
         let pos = groups.iter().position(|g| Some(g) == self.group.as_ref()).unwrap_or(0);
         if let Some(g) = step_in(groups.len(), pos, step).and_then(|i| groups.get(i)).cloned() {
             self.select(None, Some(g), None);
+        }
+    }
+
+    /// Collapse all and Expand all by the keys (`KEY_COLLAPSE_ALL`, `KEY_EXPAND_ALL`, `fold_all`), taken before the
+    /// arrows move anything (`bar_nav`, `keyboard_nav`), only where something folds (Compare's table, a tab of Edit); a
+    /// text field with the keyboard keeps them for its text, and an open menu or list for itself.
+    pub(crate) fn fold_keys(&mut self, ctx: &egui::Context) {
+        let here = matches!(self.mode, Mode::Compare) && !self.compare_records || matches!((self.mode, &self.view), (Mode::Edit, View::Tab(_)));
+        if self.doc.is_none() || !here || ctx.wants_keyboard_input() || ctx.memory(|m| m.any_popup_open()) {
+            return;
+        }
+        let collapse = ctx.input_mut(|i| i.consume_shortcut(&KEY_COLLAPSE_ALL));
+        let expand = ctx.input_mut(|i| i.consume_shortcut(&KEY_EXPAND_ALL));
+        if collapse || expand {
+            self.fold_all(collapse);
         }
     }
 

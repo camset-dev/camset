@@ -140,6 +140,70 @@ console.log(JSON.stringify({ lines, before, opened, folded, redrawn, unfolded, s
 
 
 @needs_node
+def test_collapse_and_expand_all_by_the_keys_and_the_buttons(tmp_path):
+    """Item 4: Ctrl+Shift+↑ / ↓ (Cmd on a Mac) fold and open everything that folds, as the Collapse all and Expand all
+    buttons do (one function, `foldAll`): in a tab of Edit its groups and the camera's rows that hold others drawn, in
+    Compare its tabs; a group whose rows are not made yet has its headings folded and unfolded too; the keyboard in a
+    group that closes goes to the group's head; a text field with the keyboard keeps the keys; the buttons say the keys
+    and carry them as aria-keyshortcuts."""
+    got = run(tmp_path, LAYOUT + """
+redrawCompare = () => {};
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+// no text field with the keyboard to start with (the harness starts in one)
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+// a third group, closed, its rows not made, a heading of it folded on an earlier visit
+const third = { name: "Third", color: "#111", rows: [row("k:f", "Phi")], layout: [{ head: "Mode", depth: 0, path: ["Mode"] }, { key: "k:f", depth: 1 }] };
+const thirdKey = JSON.stringify(["Shoot", "Third", ["Mode"]]);
+xp.rowFolds.add(thirdKey);
+const drawn = drawTab([drive, other, third], { places: true, flat: false });
+$("content").replaceChildren(...drawn);
+const groups = () => $("content").querySelectorAll("details.grp").map((d) => d.open);
+const heads = () => $("content").querySelectorAll(".rowhead").map((h) => h.classList.contains("folded"));
+const folds = () => ({ groups: groups(), heads: heads(), open: [...openGroups.get("Shoot")].sort(), keys: [...xp.rowFolds].sort() });
+const out = { start: groups() };
+const speed = $("content").querySelector(".rowhead > .name");
+speed.focus();
+out.taken = shortcut(key("ArrowUp"));
+out.focus_to_head = document.activeElement === $("content").querySelector("details.grp").firstChild;
+out.keys_collapsed = folds();
+shortcut(key("ArrowDown"));
+out.keys_expanded = folds();
+const [collapse, expand] = drawn[0].querySelectorAll(".fold-all button");
+collapse.click();
+out.button_collapsed = folds();
+expand.click();
+out.button_expanded = folds();
+out.said = collapse.title.includes(FOLD_KEYS[0]) && collapse.getAttribute("aria-keyshortcuts") === FOLD_ARIA[0]
+  && expand.title.includes(FOLD_KEYS[1]) && expand.getAttribute("aria-keyshortcuts") === FOLD_ARIA[1];
+const input = el("input");
+$("content").append(input);
+input.focus();
+out.typing = shortcut(key("ArrowUp"));
+out.after_typing = groups();
+input.blur();
+view.mode = "compare"; cmp.records = false;
+cmp.last = { rows: [{ tab: "Shoot", group: "Drive" }, { tab: "Look", group: "Color" }] };
+cmp.folded.clear();
+shortcut(key("ArrowUp"));
+out.cmp_keys = [...cmp.folded].sort();
+shortcut(key("ArrowDown"));
+out.cmp_cleared = cmp.folded.size;
+foldAll(true);
+out.cmp_button = [...cmp.folded].sort();
+console.log(JSON.stringify(out));
+""")
+    assert got["start"] == [True, False, False] and got["taken"] is True and got["focus_to_head"] is True
+    keys = sorted(['["Shoot","Drive",["Speed"]]', '["Shoot","Drive",["Empty"]]', '["Shoot","Third",["Mode"]]'])
+    assert got["keys_collapsed"] == {"groups": [False, False, False], "heads": [True], "open": [], "keys": keys}
+    assert got["keys_expanded"] == {"groups": [True, True, True], "heads": [False], "open": ["Drive", "Other", "Third"], "keys": []}
+    assert got["button_collapsed"] == got["keys_collapsed"] and got["button_expanded"] == got["keys_expanded"]
+    assert got["said"] is True
+    assert got["typing"] is False and got["after_typing"] == [True, True, True]
+    assert got["cmp_keys"] == ["t\u0000Look", "t\u0000Shoot"] and got["cmp_cleared"] == 0 and got["cmp_button"] == got["cmp_keys"]
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an

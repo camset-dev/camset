@@ -632,6 +632,8 @@ impl eframe::App for App {
             if undo { self.undo(); }
             if redo { self.redo(); }
         }
+        // Collapse all / Expand all (Cmd/Ctrl+Shift+↑ / ↓) before the arrows move anything (`fold_keys`)
+        self.fold_keys(ctx);
         // Up and Down through the Menu's own entries, before the columns' keys (`bar_nav`)
         self.bar_nav(ctx);
         self.keyboard_nav(ctx);
