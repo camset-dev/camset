@@ -188,6 +188,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A restore's check keeps trying a camera slow to restart for up to 300 s,** the one limit every run and tool goes
+  by, where it gave up at 130 s; twice the camera had only been late.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.
