@@ -191,9 +191,14 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   Down so): a box under that whose outline is whole now counts too.
 - **A row's label is read to the right of the icon the camera draws before it** (a light box with letters in it, or
   a solid mark, found by its pixels and painted over for OCR), in the page model and on a crawl's submenu rows, and
-  the row's `icon` says what was left out, or why the label stayed as read where that cannot be told. The a1 II's
-  scans now name S&Q Settings, ISO and IP Address Setting without a label read by eye, and the crawls Record Setting
-  where the reader read the S&Q box into it.
+  the row's `icon` says what was left out, or why the label stayed as read where that cannot be told. Where a reader
+  read the page, the a1 II's scans now name S&Q Settings, ISO and IP Address Setting without a label read by eye, and
+  its crawls name Record Setting where the reader read the S&Q box into it.
+- **`ROW_NAMES` in a camera's hand tables names each row the records hold by an older name** (an icon the kit read into
+  a label: "Proxy Settings > Px Proxy Recording"), and every comparison of a row's name takes the two as one row: the
+  rows seen opened, `prove_run.py --rows`, the maps, the menu tree, each setting's place, the walk patterns, the
+  definition's proof rows, the report and the ledger. The runs' lines keep their names; no camera's file holds the
+  table yet.
 - **`drive.py` and `crawl_run.py` start and end through the kit's one session, as the provers do,** and a test fails
   any runner that downloads its start file or uploads a file outside it but the few it names with why. With HDMI eyes
   and a working feed, their check after putting the start file back reconnects once the camera is back from its restart,
