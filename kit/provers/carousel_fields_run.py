@@ -864,6 +864,7 @@ def grid_walk(cam, link, eyes, cycle, model, path, option, labels, look_: Look, 
             if g.pos is None:                       # the first visit: the boxes as the base holds them
                 g.outer[0] = held_box(cam, 0, look_, name)
                 into_next(cam, option, 1, count)
+                g.left = box_pic(cam, 0)            # before the scan: box 0 must stand so until Enter (choose_pair)
                 start = held_box(cam, 1, look_, name)
                 g.inner[0], cut = scan(cam, option, 1, count, start, most, name)
                 g.cut |= cut
@@ -873,9 +874,9 @@ def grid_walk(cam, link, eyes, cycle, model, path, option, labels, look_: Look, 
                 p, at = g.pos
                 expect(cam, 0, g.outer[p], name)
                 into_next(cam, option, 1, count)
+                g.left = box_pic(cam, 0)
                 expect(cam, 1, g.inner[p][at], name)
                 flush(g, out)
-            g.left = box_pic(cam, 0)
             i = g.next_at(p)
             if i is None:                           # every pair at this place chosen, box 1 on its low end
                 cam.press("menu")                   # back to the option lit, nothing changed; box 0 again

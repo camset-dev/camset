@@ -1087,19 +1087,24 @@ PAIRS = {f"{ev[:3]} EV {'2 Img. +' if s == 0 else '2 Img. -' if s == 1 else SHOT
          CODES[e] + s for e, ev in enumerate(EVS) for s in range(TOPS[e] + 1)}
 
 
-def grid_cam(held=(0, 2), strict=True, clamp=True, apart=False) -> FieldsCam:
+def grid_cam(held=(0, 2), strict=True, clamp=True, apart=False, drift=False) -> FieldsCam:
     """Bracket Type with Cont. Bracket's pairs: box 1 offers what box 0's step allows. `strict`: box 0 moving while box
     1 stands off its low end fails the test (the grid moves box 0 only from there); else the camera clamps box 1 to what
     the new step allows (`clamp`) or box 0 stands still (a camera whose step refuses the count held). `apart`: beside the
-    pair's record, one of the step alone and one of the count alone (made-up: every camera's rule, not the a1 II's)."""
+    pair's record, one of the step alone and one of the count alone (made-up: every camera's rule, not the a1 II's).
+    `drift`: the first Up on box 1 moves box 0 one step on too."""
     cam = FieldsCam()
     cam.spec = {0: [box("Exposure Value", EVS, EVS[held[0]]), box("Number of Shots", SHOTS_OF, SHOTS_OF[held[1]])],
                 2: FOCUS_BOXES}
     cam.at[0] = list(held)
+    drifted = []
 
     def rule(opt, edit, field, key):
         ev, sh = edit
         d = 1 if key == "up" else -1
+        if field == 1 and drift and key == "up" and not drifted:
+            drifted.append(key)
+            return [ev + 1, max(0, min(TOPS[ev + 1], sh + d))]
         if field == 1:
             return [ev, max(0, min(TOPS[ev], sh + d))]
         to = max(0, min(len(EVS) - 1, ev + d))
@@ -1272,6 +1277,18 @@ def test_a_grid_stops_on_a_box_opening_on_another_pair_than_the_last_ok_chose(ow
     with pytest.raises(SystemExit):
         run_fields(F, root, "Cont. Bracket", "--grid")
     assert "box 1 opened on '5 Images', not '7 Images', which the last OK chose" in capsys.readouterr().out
+
+
+def test_no_enter_where_box_0_moved_during_the_first_scan(own_runs, monkeypatch, capsys):
+    """The review of 2026-11-19: box 0's picture, which the check before Enter compares with, was taken after the first
+    visit's scan of box 1, so a camera that stepped box 0 in that scan passed it, and Enter went on 0.5 EV 9 Img. where
+    the line would say 0.3 EV 9 Img. It is taken as Right reaches box 1: nothing is chosen."""
+    cam = grid_cam(drift=True)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--grid")
+    assert "box 0 changed while box 1 moved" in capsys.readouterr().out
+    assert cam.keys.count("enter") == 1 and fields_lines() == [], "the base's Enter alone"
 
 
 def test_a_grid_takes_two_fields_of_one_box_each(own_runs, monkeypatch, capsys):
