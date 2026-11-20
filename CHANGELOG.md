@@ -193,6 +193,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   left with MENU once the cursor is off its "Don't show this again." box (Framing Stabilizer = On: Manual), where the
   row failed. With `--eyes osd` an axis of a row in the reviewed scope's OSD group is read through the camera's own
   picture as that row's list is, not off a blanked HDMI frame.
+- **`kit/provers/carousel_fields_run.py --grid` proves every pair of an option's two fields, one a download, and
+  `--number N` puts a named number into a digit field with no Enter on the way** (Bracket Type's Cont. and Single
+  Bracket pairs, Focus Bracket's Number of Shots). The report lists the values of a record a whole grid moved, the pair
+  held among every pair, where it counted them as a sample, and credits no named number's put-back.
 - **The coverage ledger keeps every record a look saw change,** where a later look of the same row, action and option
   took that look's place: such a record was left "never seen to change". The row's status is still its latest look's.
 - **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from
