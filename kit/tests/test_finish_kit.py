@@ -1950,6 +1950,36 @@ def test_either_eye_saying_grey_makes_an_option_grey_and_the_reader_decides_wher
                                                        "reader": reader, "question": "lit.v2.grey"}}
 
 
+@pytest.mark.parametrize("pixels, k, known, asked", [
+    (False, 0, None, True), (None, 0, None, True),                   # white or untold: the reader's grey decides
+    (True, 0, None, False),                                          # the pixels' grey stands whatever is said
+    (False, 3, None, False), (True, 3, None, False),                 # the saved value: its put-back whatever is said
+    (False, 0, "reader", False), (True, 0, "reader", False),         # the reader misjudged this row: not heard
+    (True, 0, "pixels", True), (False, 0, "pixels", True),           # the pixels misjudged it: the reader decides
+    (False, 0, "reason", True)])                                     # a reason read: grey is no key, white an Enter
+def test_the_reader_is_asked_only_where_its_answer_can_change_what_is_pressed(monkeypatch, pixels, k, known, asked):
+    """proving.greyed.judge asks the second reader, in line, only where its answer can change what the option gets; where
+    it does not, the line says why ("not_asked") and that the pixels alone told it."""
+    from proving import greyed
+    reasons = {None: {}, "reader": {"Row": greyed.Misjudged(frozenset({"reader"}))},
+               "pixels": {"Row": greyed.Misjudged(frozenset({"pixels"}))},
+               "reason": {"Row": greyed.Reason({"row": "Gamma"}, "help", "00002_guide.png", "B")}}[known]
+    monkeypatch.setattr(greyed, "REASONS", dict(reasons))
+    monkeypatch.setattr(greyed, "drawn_grey", lambda cam: (pixels, 120.0 if pixels else 225.0 if pixels is False
+                                                           else 170.0))
+    calls = []
+    monkeypatch.setattr(greyed, "reader_grey", lambda cam: calls.append(1) or (True, {"question": "lit.v2.grey"}))
+    monkeypatch.setattr(greyed, "by_help", lambda cam, name, label, back: greyed.Reason({"row": "Gamma"}, "help",
+                                                                                        "00003_guide.png", label))
+    what = greyed.judge(SimpleNamespace(), "Row", "A", k, 3, None, say=lambda m: None)
+    assert bool(calls) is asked
+    kept = greyed.readings(what)["grey_readings"]
+    assert ("not_asked" in kept) is (not asked) and (kept["reader"] is None) is (not asked)
+    if not asked and what.told:
+        assert what.told == "pixels"
+    assert greyed.unasked(k, 3, greyed._deaf(reasons.get("Row")), pixels) == kept.get("not_asked", "")
+
+
 def test_a_reader_calling_grey_options_white_presses_nothing_the_pixels_alone_would_not(monkeypatch):
     """PP4's Color Mode with Gamma on HLG as before, the reader reading every option white (or giving no answer): the
     camera gets exactly the keys it gets with no reader at all, and every grey line says the pixels told it."""
@@ -1957,13 +1987,19 @@ def test_a_reader_calling_grey_options_white_presses_nothing_the_pixels_alone_wo
     lines0, _, _ = side_world(monkeypatch, alone)
     for answer in (False, None):
         cam = SideCam()
-        said_by_reader(monkeypatch, cam, dict.fromkeys(range(len(COLOR)), answer))
+        asked = said_by_reader(monkeypatch, cam, dict.fromkeys(range(len(COLOR)), answer))
         lines, said, guides = side_world(monkeypatch, cam)
         assert cam.keys == alone.keys, answer
         assert [x["label"] for x in lines] == [x["label"] for x in lines0]
         grey = [x for x in lines if x.get("greyed") == "drawn"]
         assert len(grey) == 3 and all(x["greyed_by"] == "pixels" for x in grey), grey
-        assert all(x["grey_readings"]["reader"] is answer and "pixels" in x["grey_readings"] for x in lines)
+        # asked only about 709, where its answer could change what is pressed: never on the options the pixels call
+        # grey, nor on BT.2020, the value the row was saved on
+        assert sorted(set(asked)) == [3], asked
+        got = by_label(lines)
+        assert got["709"]["grey_readings"]["reader"] is answer and "not_asked" not in got["709"]["grey_readings"]
+        for x in (*grey, got["BT.2020"]):
+            assert x["grey_readings"]["reader"] is None and x["grey_readings"]["not_asked"], x["label"]
 
 
 def test_an_option_only_the_reader_calls_grey_is_never_chosen(monkeypatch):
@@ -1998,11 +2034,13 @@ def test_a_reader_that_misjudged_never_opens_the_pixels_grey_options(monkeypatch
     assert enters_on(cam, {1, 2}) == enters_on(alone, {1, 2}) == 1 and enters_on(cam, {2}) == 0
     assert got["Movie"]["applied"] and "greyed" not in got["Movie"] and got["Movie"]["grey_readings"]["reader"] is True
     assert got["Still"]["entered"] == "for its reason" and got["Still"]["greyed_by"] == "pixels"
-    assert got["S-Cinetone"]["dat"] is None and got["709"]["applied"]       # 709: the reader's grey, no longer heard
+    assert got["S-Cinetone"]["dat"] is None and got["709"]["applied"]       # 709: the reader no longer heard, or asked
+    assert got["709"]["grey_readings"] == {"pixels": False, "level": 225.0, "reader": None,
+                                           "not_asked": "the reader misjudged an option of this row, and is not heard "
+                                                        "on it"}
     assert [x[0] for x in guides] == ["Picture Profile > PP4 > Color Mode: Movie",
                                       "Picture Profile > PP4 > Color Mode: Still"]
     assert "'Movie' was drawn grey, yet the camera applied it (told by the reader)" in said
-    assert "'709': drawn grey, told by the reader alone, which misjudged an option of this row" in said
 
 
 def test_pixels_that_misjudged_leave_the_readers_grey_judged(monkeypatch):
@@ -2077,7 +2115,7 @@ def test_on_a_carousel_the_reader_alone_tells_an_option_grey(monkeypatch, tmp_pa
     assert greyed.drawn_grey(cam) == (None, None)                       # a carousel's pixels are not judged
     on = by_label(lines)["On"]
     assert (on["greyed"], on["greyed_by"], on["entered"], on["applied"]) == ("drawn", "reader", "for its reason", False)
-    assert guides == ["Flash Sync Spd. Prty.: On"] and sorted(set(asked)) == [0, 1, 2]
+    assert guides == ["Flash Sync Spd. Prty.: On"] and sorted(set(asked)) == [1, 2]     # Auto: the put-back
     assert by_label(lines)["Off"]["applied"] and by_label(lines)["Off"]["grey_readings"]["reader"] is False
     cam2 = CarouselCam(grey=(), refuse=(1,), saved=0)
     said_by_reader(monkeypatch, cam2, {})

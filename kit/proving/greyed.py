@@ -17,7 +17,8 @@ also asks it (camkit.reading.QUESTIONS' ".grey" versions, its "greyed": reader_g
 text needs to include which text is grey"). Either one saying grey makes it grey; where the pixels cannot tell (a
 carousel, whose pixels are not judged; a measure in between), the reader decides; a reader that does not answer changes
 nothing. So a reader calling an option white never makes the kit press on one the pixels call grey: the reader only
-ever adds care. judge's answer (Verdict) says which eyes told it grey ("pixels", "reader" or "both": told) and carries
+ever adds care. The reader is asked, in line, only where its answer can change what is pressed (unasked): never on the
+value the row was saved on, on an option the pixels already call grey, nor on a row where it misjudged an option. judge's answer (Verdict) says which eyes told it grey ("pixels", "reader" or "both": told) and carries
 both readings (Drawing.kept), which every line it judged keeps ("grey_readings"), a grey one with "greyed_by" beside
 "greyed": "drawn" (line, marks).
 
@@ -89,8 +90,8 @@ class Misjudged(NamedTuple):
 class Drawing(NamedTuple):
     """How the option under the cursor is drawn, as each eye tells it on the frame on show: pixels (drawn_grey: True,
     False or None where it cannot be told), level (its measure, or None), reader (the second reader's "greyed": True,
-    False or None where it gave no answer) and asked (what the line keeps of the reader's side: the question, the
-    reader's name, its reading of the item, why it gave no answer)."""
+    False or None where it gave no answer or was not asked) and asked (what the line keeps of the reader's side: the
+    question, the reader's name, its reading of the item, why it gave no answer; or, not asked, why: "not_asked")."""
     pixels: bool | None
     level: float | None
     reader: bool | None
@@ -147,10 +148,27 @@ def reader_grey(cam) -> tuple:
                   **({"why": got.why or "the answer says nothing of grey"} if said is None else {})}
 
 
-def drawing(cam) -> Drawing:
-    """The option under the cursor as both eyes tell it on the frame on show (Drawing)."""
+def unasked(k: int, saved, deaf, pixels) -> str:
+    """Why the reader is not asked about option k, where its answer cannot change what is pressed on it ("" where it
+    can): the value the row was saved on (entered as its put-back, whatever either eye says); a row where the reader
+    misjudged an option (its answer is not heard there); an option the pixels call grey on a row where they are heard
+    (grey, whatever the reader says)."""
+    if k == saved:
+        return "the value the row was saved on, entered as its put-back whatever is said"
+    if "reader" in deaf:
+        return "the reader misjudged an option of this row, and is not heard on it"
+    if pixels and "pixels" not in deaf:
+        return "the pixels tell it grey, which no answer changes"
+    return ""
+
+
+def drawing(cam, why_not=None) -> Drawing:
+    """The option under the cursor as both eyes tell it on the frame on show (Drawing): the pixels always, then the
+    reader unless why_not, a function of the pixels' verdict, says why it is not asked (unasked), which the line then
+    keeps as "not_asked"."""
     grey, level = drawn_grey(cam)
-    said, asked = reader_grey(cam)
+    why = why_not(grey) if why_not is not None else ""
+    said, asked = (None, {"not_asked": why}) if why else reader_grey(cam)
     return Drawing(grey, level, said, asked)
 
 
@@ -214,11 +232,12 @@ def seen(what) -> str:
 def judge(cam, name: str, label: str, k: int, saved, back, say=_say, drawn: Drawing | None = None) -> Verdict:
     """What the prover does with the option `label` (index k) under the cursor of the row `name` (ENTER, TRY or SKIP:
     the module's, as a Verdict), `saved` the index of the value the row was saved on, back() whether the list is still
-    on that option, drawn the option's Drawing where the caller has it (else drawing(cam), on the frame on show). Says,
-    option by option, each one drawn grey and by which eyes, and each one whose drawing no eye could tell."""
-    d = drawn if drawn is not None else drawing(cam)
+    on that option, drawn the option's Drawing where the caller has it (else drawing(cam), on the frame on show, the
+    reader asked only where its answer can change what is pressed: unasked). Says, option by option, each one drawn grey
+    and by which eyes, and each one whose drawing no eye could tell."""
     known = REASONS.get(name)
     deaf = _deaf(known)
+    d = drawn if drawn is not None else drawing(cam, lambda grey: unasked(k, saved, deaf, grey))
     by = d.grey_by(deaf)
     if not by:
         if d.grey_by():
