@@ -278,6 +278,17 @@ def test_a_name_is_right_only_where_the_reading_spells_it_as_published():
         # spelled alike but for case, spacing and a stop: right
         assert judge_name("list", drawn, drawn, [drawn, *others], dict.fromkeys(two, drawn.upper() + "."))[1] == \
             "all agree", drawn
+    # OCR's slips same_label forgives for a label's sake are no spelling: a small l for a capital I, "sec" left out
+    for name, drawn, others in (("Zqx Time lmg.", "Zqx Time Img.", ["Zqx Protect"]),
+                                ("FTP Zqx (This lmg.)", "FTP Zqx (This Img.)", ["Zqx Protect"]),
+                                ("5", "5 sec", ["10 sec", "20 sec"]),
+                                ("Curtain Shutter", "Second Curtain Shutter", ["Zqx Front"])):
+        assert judge_name("list", name, name, [name, *others], dict.fromkeys(two, drawn))[1] != "all agree", name
+    # case, spacing and a full stop still are
+    for name, drawn in (("Zqx Focus Area", "zqx focus area"), ("ZqxFocus Area", "Zqx Focus Area"), ("Zqx Std", "Zqx Std.")):
+        assert judge_name("list", name, name, [name, "Zqx Other"], dict.fromkeys(two, drawn))[1] == "all agree", name
+    looks = ["SH", "PT", "IN"]
+    assert judge_name("look base", "IN", "IN", looks, dict.fromkeys(two, "lN(Instant)"))[1] != "all agree"
     # each picks the option, spelled apart: a verdict of its own
     votes, verdict = judge_name("list", "Zqx Fixed SBY", "Zqx Fixed SBY", ["Zqx Fixed SBY", "Zqx Fixed REC", "Zqx Var"],
                                 {"qwen": "Zqx Fixed STBY", "gemma": "Zqx Fixed SBYY"})

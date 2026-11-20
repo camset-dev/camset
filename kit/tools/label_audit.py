@@ -27,10 +27,11 @@ what backs it (kit/writer/proofs.py NAME_SOURCES). The audit takes:
            looked in and never written, so an answer kept there is not asked again; --parallel, --timeout, --minutes
            (each reader's), --max-questions, --fail-run and --dry-run as the census has them
   judging  the question is whether the name is spelled as drawn, not only whether a reader picks its option: a vote
-           is right only where the reading spells the published name (pass2_report.same_label), or, where that name
-           is a part of the line the camera draws, the part of the reading in its place (after or before the colon:
-           "DRO Bracket: Hi" for Hi), or the name alone of the options held in it as a whole word (a look's base: its
-           code, "PT" of "PT(Portrait)", character by character); a reading that
+           is right only where the reading spells the published name (pass2_report.same_label and
+           camkit.reading.said_key alike: case, spacing and a full stop forgiven, a small l for an I never), or,
+           where that name is a part of the line the camera draws, the part of the reading in its place (after or
+           before the colon: "DRO Bracket: Hi" for Hi), or the name alone of the options held in it as a whole word
+           (a look's base: its code, "PT" of "PT(Portrait)", character by character); a reading that
            picks the option by the census's rule (judge: a loose likeness, an icon left out, the closest option) but
            spells it otherwise is a vote of its own ("spelled otherwise"); a star count, a number and a box's state
            are judged exactly, as the census does. One vote per model family (camkit.reading.model_id: the first
@@ -474,22 +475,30 @@ def part_of(recorded: str, name: str) -> str | None:
     return "held" if held(name, recorded) else None
 
 
+def same_text(text: str, name: str) -> bool:
+    """A reading and a name spelled alike: pass2_report.same_label, and camkit.reading.said_key alike, so that only
+    case, spacing, a full stop at a word's edge, brackets and commas are forgiven, never OCR's slips same_label lets
+    through for a label's sake (a small l for a capital I: "lmg." is not "Img."; "sec", "second" or "seconds" left out:
+    "5" is not "5 sec", "Curtain Shutter" not "Second Curtain Shutter")."""
+    return p2.same_label(text, name) and reading.said_key(text) == reading.said_key(name)
+
+
 def spelled(n: Name, text: str) -> bool:
-    """Whether a reading spells n's published name as the definition does, strictly (pass2_report.same_label: case,
-    spacing, stops and the readers' look-alikes aside, every letter, digit and sign kept): the whole reading, or the
-    part of it that stands where the name stands in the recorded label (Name.part: after or before its colon), or, held,
-    the name as a whole word in it while no other option's name is held there at all; a look's base, its code as the
-    census takes it from the line (its first word), character by character (camkit.reading.code_same)."""
-    if p2.same_label(text, n.name):
+    """Whether a reading spells n's published name as the definition does, strictly (same_text: case, spacing, full
+    stops, brackets and commas aside, every letter, digit and sign kept): the whole reading, or the part of it that
+    stands where the name stands in the recorded label (Name.part: after or before its colon), or, held, the name as a
+    whole word in it while no other option's name is held there at all; a look's base, its code as the census takes it
+    from the line (its first word), character by character (camkit.reading.code_same) and alike by said_key."""
+    if same_text(text, n.name):
         return True
     if n.kind == "look base":         # the look's code, which the carousel line draws before its long name: "PT(Portrait)"
         code = re.split(r"[\s(]", reading.canonical(text).strip(), maxsplit=1)[0]
-        return reading.agree(code, n.name, "code")
+        return reading.agree(code, n.name, "code") and reading.said_key(code) == reading.said_key(n.name)
     head, colon, tail = text.partition(":")
     if n.part == "after":
-        return bool(colon) and p2.same_label(tail, n.name)
+        return bool(colon) and same_text(tail, n.name)
     if n.part == "before":
-        return bool(colon) and p2.same_label(head, n.name)
+        return bool(colon) and same_text(head, n.name)
     if n.part == "held":
         return held(n.name, text) == 2 and not any(held(o, text) for o in n.item.options if o != n.name)
     return False
