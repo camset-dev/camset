@@ -941,3 +941,35 @@ def test_the_writer_says_which_settings_are_in_fewer_menus_than_their_row(tmp_pa
     two = {"model": "TEST", "tabs": ["Shooting"], "menu": [{"tab": "Shooting", "group": "Image Stabilization", "label": "SteadyShot", "order": 0}],
            "settings": [setting("global:0x0001", "SteadyShot", "Image Stabilization"), setting("global:0x0002", "SteadyShot (Movie)", "Image Stabilization")]}
     assert placement.fewer_menus(two, tw, MENUS, placed) == []
+
+
+def test_a_menu_whose_walk_read_a_row_as_a_list_holds_the_rows_its_options_name():
+    """Movie's Playback crawl read Playback Filter Condition as a checklist of its items, while the Stills menu holds
+    those items as rows under it, grown from their proofs' paths. Where a menu's row at the setting's last level has no
+    rows read below it but its options name that last label (exactly, or after a leading token of icon letters, by
+    ROW_NAMES' rule: "W Rating" names Rating), the menu holds the setting there, at the setting's own place. An option
+    naming another label gives nothing; two options that both name it after the icon rule give nothing (no guess, unless
+    one names it exactly); a row with rows read below it is decided by those rows, as before."""
+    def trees(movie_row):
+        stills = [{"tab": "Playback", "pages": [page("1/1", "Selection/Search", row("Playback Filter Condition"))]}]
+        return {"model": "TEST", "firmware": "1.00", "tabs": stills,
+                "modes": [{"mode": "Movie", "tabs": [{"tab": "Playback", "pages": [page("1/1", "Selection/Search", movie_row)]}]}]}
+    d = {"model": "TEST", "tabs": ["Playback"], "menu": [{"tab": "Playback", "group": "Selection/Search", "label": "Playback Filter Condition", "order": 0}],
+         "settings": [{**setting("global:0x0001", "Protect", "Selection/Search", "Playback Filter Condition > Protect"), "tab": "Playback"},
+                      {**setting("global:0x0002", "Rating", "Selection/Search", "Playback Filter Condition > Rating"), "tab": "Playback"},
+                      {**setting("global:0x0003", "Folder", "Selection/Search", "Playback Filter Condition > Folder"), "tab": "Playback"}]}
+    menus = [MENUS[0], MENUS[1]]
+    checklist = row("Playback Filter Condition", options=["Date", "Still Images/Movies", "W Rating", "Protect", "Cancel Filter"],
+                    state="walked")
+    got = placement.by_menu(copy.deepcopy(d), trees(checklist), menus)
+    assert got["global:0x0001"] == {"row_menus": ["Still", "Movie"]}                  # named exactly
+    assert got["global:0x0002"] == {"row_menus": ["Still", "Movie"]}                  # "W Rating": the icon rule
+    assert got["global:0x0003"] == {"row_menus": ["Still"]}                           # no option names Folder
+    twice = row("Playback Filter Condition", options=["W Rating", "X Rating", "Protect"], state="walked")
+    assert placement.by_menu(copy.deepcopy(d), trees(twice), menus)["global:0x0002"] == {"row_menus": ["Still"]}
+    exact = row("Playback Filter Condition", options=["W Rating", "Rating"], state="walked")
+    assert placement.by_menu(copy.deepcopy(d), trees(exact), menus)["global:0x0002"] == {"row_menus": ["Still", "Movie"]}
+    rows_too = row("Playback Filter Condition", row("Still Images/Movies"), row("Folder"), options=["Protect", "W Rating"], state="walked")
+    got = placement.by_menu(copy.deepcopy(d), trees(rows_too), menus)
+    assert got["global:0x0001"] == {"row_menus": ["Still"]} and got["global:0x0002"] == {"row_menus": ["Still"]}   # the rows decide
+    assert got["global:0x0003"]["row_menus"] == ["Still", "Movie"]

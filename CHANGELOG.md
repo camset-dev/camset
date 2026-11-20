@@ -203,6 +203,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   that leaves a mode without a menu, records of one row with overlapping menus, and a Main tile showing an Expert-only
   setting. No place rests on where an option list's reading began, a silent proof's mode comes from the camera's own
   files for placement alone, and a hand place's reason is the private hand evidence's.
+- **A menu holds the rows its walk read as a list's options:** where a mode's walk read a row as a list or checklist,
+  its options name the settings below it there (Movie's and S&Q's Playback Filter Condition).
 - **A definition's menus are rebuilt alike without the runs:** the modes the camera's files give silent proofs are kept
   in their evidence, where placement reads them. At every pass the writer prints the settings listed in fewer menus than
   their row stands in, the mapping's open work.

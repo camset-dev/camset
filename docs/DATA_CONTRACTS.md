@@ -97,7 +97,9 @@ Movie and S&Q), the definition carries them as `camera.menus`, and each placed s
 (`row_menus`; `kit/camkit/placement.py`, `by_menu`):
 
 - **Where a menu's own tree holds the setting's row.** The top row is matched by the merged numbering of a tab's top
-  rows, which serves every menu, and each row below by its label among the rows that menu read.
+  rows, which serves every menu, and each row below by its label among the rows that menu read. A row that menu's
+  walk read as a list or checklist, with nothing read below it, holds a setting whose last label one of its options
+  names: Movie's Playback Filter Condition, a checklist of the items the Stills menu holds as rows.
 - **Where proofs made in one of the menu's modes reach the row.** A proof made in a mode is that mode's reading of
   the row. The mode is the one a proof's context names; for a proof whose context names none, it is the one the
   camera's own files say it was made in, which the writer keeps in the proof's evidence. Rows the menu never read are

@@ -1016,6 +1016,24 @@ def turned(a: list, b: list) -> bool:
     return len(a) == len(b) and a != b and any(a == b[k:] + b[:k] for k in range(1, len(b)))
 
 
+def option_names(node: dict, label: str) -> bool:
+    """Whether a row the walk read as a list or checklist (its "opts", no rows read below it) has one option naming
+    `label`: one option named so exactly, else exactly one named so after a leading token of icon letters (at most
+    row_names.ICON_LEAD characters and the space after it, ROW_NAMES' rule: "W Rating" names Rating). Two options that
+    both name it only after that rule name it no better than none: no guess."""
+    opts = [str(o) for o in node.get("opts") or []]
+    if node.get("kids") or not opts:
+        return False
+    exact = sum(norm(o) == norm(label) for o in opts)
+    if exact:
+        return exact == 1
+
+    def iconed(o):
+        token, _, rest = o.partition(" ")
+        return bool(rest) and 0 < len(token) <= row_names.ICON_LEAD and norm(rest) == norm(label)
+    return sum(iconed(o) for o in opts) == 1
+
+
 def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", options: dict,
               own: dict | None = None) -> dict | None:
     """The setting's place (`place`, the definition's) in another menu `m`, where `m`'s own rows hold it: the same top
@@ -1023,7 +1041,10 @@ def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", o
     read under it (of rows bearing one label, the one at the same place, else the one written alike), the page an
     option opens as `m` holds it (its row named as that option, or as another option settings sit under there, with
     rows under it). None where `m` lacks the top row, read the rows under one and the label is not among them, or never
-    read them (by_menu then places it by that menu's own proofs, or not at all). `own`: the top row in
+    read them (by_menu then places it by that menu's own proofs, or not at all). At the place's last level, a row `m`
+    read as a list or checklist with no rows below it holds the setting where one of its options names the label
+    (option_names: Movie's Playback Filter Condition, a checklist of the items the Stills menu holds as rows), at the
+    setting's own place. `own`: the top row in
     the setting's own menu; where `m`'s rows under a row are its own menu's rows turned round (turned: read from the row
     the camera held), the setting keeps its own place among them, so no place rests on where the camera stood."""
     labels, at, opt = place["row"], place["row_at"], place.get("under_option")
@@ -1049,6 +1070,9 @@ def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", o
             continue
         same = [k for k in kids if norm(k["l"]) == norm(labels[i])] or \
             [k for k in kids if _cut_short(k["l"], labels[i])][:1]
+        if not same and i == len(labels) - 1 and option_names(node, labels[i]):
+            idx.append(at[i])                # an option of the list this menu read names the row: the setting's own place
+            break
         if not same:
             return None
         pick = kids[at[i]] if len(same) > 1 and at[i] < len(kids) and kids[at[i]] in same else \
