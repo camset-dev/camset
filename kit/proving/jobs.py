@@ -292,17 +292,23 @@ def axis_jobs(scope_names=None) -> list:
     (Bracket Type, the drive mode dial on BRK) is never a job of a run made without it. A row inside a submenu is keyed
     by its whole path ("Bracket Settings > Bracket Type"). A row of the reviewed scope's OSD group is read through the
     camera's own picture as its list job is (osd_group: Framing Stabilizer's preview blanks HDMI whenever its On option
-    is lit, and its axis job read its title off the black frame, 2026-11-19)."""
+    is lit, and its axis job read its title off the black frame, 2026-11-19), and on a run that does not read that group
+    so its axis jobs are left out, said, as jobs() leaves out its list job."""
     if not base.AXES.exists():
         return []
     here = None if base.MAP == base.PASS1 / "map_all.json" else base.map_key(base.MAP, base.AXES.parent.parent)
-    osd = osd_group(scope_file()) if OSD_ROWS else set()
+    scope = scope_file()
+    osd, group = osd_group(scope), set(scope["exclude"].get(OSD_GROUP, []))
     out = []
     for row, opts in read_json(base.AXES).items():
         for opt, info in opts.items():
             if info.get("map") != here:
                 continue
             if len(info["values"]) < 2 or (scope_names and f"{row} / {opt}" not in scope_names and row not in scope_names):
+                continue
+            if row in group and row not in osd:
+                print(f"skipping {row} / {opt}: its row is in the reviewed scope's OSD group ({OSD_GROUP}), proved "
+                      "only through the camera's own picture: --eyes osd or osd-all", flush=True)
                 continue
             out.append({"path": row.split(" > "), "kind": "axis", "option": opt, "values": info["values"],
                         **({"eyes": "osd"} if row in osd else {})})

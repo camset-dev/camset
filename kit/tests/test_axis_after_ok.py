@@ -294,18 +294,22 @@ def osd_scope(own_runs, monkeypatch, osd_rows: bool):
     return J
 
 
-def test_with_osd_eyes_an_axis_job_of_the_osd_group_reads_where_its_list_job_reads(own_runs, monkeypatch):
+def test_with_osd_eyes_an_axis_job_of_the_osd_group_reads_where_its_list_job_reads(own_runs, monkeypatch, capsys):
     """--eyes osd (or osd-all): the reviewed scope's OSD group is read through the camera's own picture whenever the
     row's screen is open, the axis job of Framing Stabilizer as its list job ({"eyes": "osd"}), whether or not the list
-    jobs were made first; Drive Mode, outside the group, gets no eyes of its own, and without --eyes osd neither does
-    anything (nor is the group's list job made)."""
+    jobs were made first; Drive Mode, outside the group, gets no eyes of its own. Without --eyes osd the group's axis job
+    is left out as its list job is, and the run says so (over HDMI it would read its title off the blanked frame, 40
+    Downs and a failure, as on 2026-11-19); Drive Mode's is made as before."""
     J = osd_scope(own_runs, monkeypatch, osd_rows=True)
     assert {J.job_key(j): j.get("eyes") for j in J.axis_jobs()} == {JOB_KEY: "osd", DRIVE: None}
     both = J.jobs() + J.axis_jobs()
     assert {J.job_key(j): j.get("eyes") for j in both} == {ROW: "osd", "Drive Mode": None, JOB_KEY: "osd", DRIVE: None}
+    assert "skipping" not in capsys.readouterr().out
     J = osd_scope(own_runs / "plain", monkeypatch, osd_rows=False)
     both = J.jobs() + J.axis_jobs()
-    assert {J.job_key(j): j.get("eyes") for j in both} == {"Drive Mode": None, JOB_KEY: None, DRIVE: None}
+    assert {J.job_key(j): j.get("eyes") for j in both} == {"Drive Mode": None, DRIVE: None}
+    assert f"skipping {JOB_KEY}: its row is in the reviewed scope's OSD group" in capsys.readouterr().out
+    assert J.axis_jobs({DRIVE}) and "skipping" not in capsys.readouterr().out      # a run that does not name it: no word
 
 
 def session_seams(monkeypatch, cam, title=None):
