@@ -1991,7 +1991,7 @@ class GreyPool:
     out when every option is judged); the frames asked about recorded."""
 
     def __init__(self, late=False):
-        self.late, self.asked = late, []
+        self.late, self.asked, self.looked = late, [], []      # looked: the option the cursor was on, a question each
 
     def submit(self, fn, *a):
         from concurrent.futures import Future
@@ -2013,6 +2013,7 @@ def listen_world(monkeypatch, answer, window=None, late=False):
     def bands(cam, labels):
         w = list(window(cam)) if window else list(range(len(labels)))
         shown[cam.frame.path.name] = w
+        pool.looked.append(getattr(cam, "option", None))
         return w
 
     def ask(frame):
@@ -2161,6 +2162,68 @@ def test_a_list_that_scrolls_asks_once_where_the_cursor_reaches_an_option_no_scr
         flags.look(cam, k)                                       # the same frame: never asked twice
     assert len(pool.asked) == asks
     assert all(flags.flag(k)[0] is False for k in range(18))     # every option flagged white, by its label
+
+
+def test_no_whole_list_question_goes_out_where_its_answer_could_not_be_taken(monkeypatch):
+    """PP4's Color Mode with Movie, Still and S-Cinetone grey by their pixels and BT.2020 the saved value: the one
+    question of the row is asked on 709's frame, the first option whose flag could change what it gets; none on the
+    open list (the saved value), the pixel-grey options or the put-back."""
+    cam = SideCam(grey=(0, 1, 2), refuse=(0, 1, 2))
+    pool = listen_world(monkeypatch, entries_of(COLOR))
+    side_world(monkeypatch, cam)
+    assert pool.looked == [3] and len(pool.asked) == 1
+
+
+def test_a_rows_questions_not_started_are_dropped_when_it_ends_however_it_ends(monkeypatch, tmp_path):
+    """proving.greyed.Flags.close, from a finally in prove_row and prove_side_row: a question still queued is
+    cancelled when the row ends, and when it fails."""
+    import prove_run as P
+    from proving import greyed, sidelists as SL
+    closed = []
+    real_close = greyed.Flags.close
+    monkeypatch.setattr(greyed.Flags, "close", lambda self: closed.append(self) or real_close(self))
+    pool = listen_world(monkeypatch, entries_of(COLOR), late=True)
+    side_world(monkeypatch, SideCam(grey=(), refuse=()))
+    assert len(closed) == 1 and pool.asked and all(a.future.cancelled() for a in closed[0].asks)
+    stuck = SideCam(grey=(), refuse=())
+    stuck.read = lambda: SimpleNamespace(kind="submenu", bar=(236, 282))     # Right opens no side list: the row fails
+    job = {"path": ["Picture Profile", "PP4", "Color Mode"], "values": COLOR, "plan": list(range(len(COLOR)))}
+    with pytest.raises(P.Failed):
+        SL.prove_side_row(stuck, SimpleNamespace(download=lambda tag: Path(f"{tag}.DAT")), None, job, Path("s.DAT"),
+                          io.StringIO())
+    assert len(closed) == 2
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(P, "place", lambda c: "here")
+    monkeypatch.setattr(P, "which_option", lambda c, job: None)              # the list row fails too
+    with pytest.raises(P.Failed):
+        P.prove_row(ListCam(grey=(), refuse=()), SimpleNamespace(download=lambda tag: Path(f"{tag}.DAT")),
+                    SimpleNamespace(dir=Path("pass2")), {"path": ["Flash Sync Spd. Prty."], "kind": "list",
+                                                        "labels": SHUTTER}, Path("base.DAT"), io.StringIO())
+    assert len(closed) == 3
+
+
+def test_closing_a_rows_flags_leaves_the_grey_worker_only_the_question_it_is_asking(monkeypatch):
+    """On the real worker: three questions queued behind a slow one; closing the row cancels the three, so that the
+    next row's first question, and a run's end, wait for the slow one alone."""
+    import threading
+
+    from camkit import reading
+    from proving import greyed
+    gate = threading.Event()
+
+    def slow(frame):
+        gate.wait(5)
+        return reading.Asked({"entries": []}, "fake second", "m", "")
+    monkeypatch.setattr(greyed, "ask_entries", slow)
+    monkeypatch.setattr(greyed, "band_options", lambda cam, labels: [cam.k])
+    flags = greyed.Flags([f"Zqx {j}" for j in range(4)])
+    for k in range(4):
+        flags.look(Visit(k=k, frame=SimpleNamespace(path=Path(f"{k:05d}_down.png"), image=None)), k)
+    flags.close()
+    gate.set()
+    first, *queued = [a.future for a in flags.asks]
+    assert all(f.cancelled() for f in queued) and not first.cancelled()
+    assert first.result(timeout=5).answer == {"entries": []}
 
 
 def test_a_reader_standing_in_for_the_second_is_never_asked_about_grey(monkeypatch):

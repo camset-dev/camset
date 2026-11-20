@@ -276,6 +276,12 @@ class Flags:
             self.asks.append(Ask(name, len(bands), frozenset(j for j in bands if j is not None),
                                  _pool().submit(ask_entries, cam.frame)))
 
+    def close(self) -> None:
+        """The row's visit has ended: its questions not started yet are dropped, so that the next row's are not queued
+        behind them and a run's end waits on no more than the one being asked (its press's time at most)."""
+        for a in self.asks:
+            a.future.cancel()
+
     def flag(self, k: int, wait: float = 0.0) -> tuple:
         """(option k's flag: True, False or None; what the line keeps): from the newest answer that lists it once, among
         the questions about a screenful that showed it (else any); a question not answered yet waited for up to `wait`
@@ -361,12 +367,15 @@ def unasked(k: int, saved, deaf, pixels, kind=None) -> str:
 def drawing(cam, why_not=None, k: int | None = None, flags: Flags | None = None) -> Drawing:
     """The option under the cursor as both eyes tell it on the frame on show (Drawing): the pixels always, then the
     reader unless why_not, a function of the pixels' verdict, says why its answer is not taken (unasked), which the
-    line then keeps as "not_asked". A list's flag is waited for only where the pixels cannot tell; where they read
-    white, only an answer already in is taken."""
+    line then keeps as "not_asked". On a list or side list the screenful on show is asked about only then (Flags.look,
+    where no screenful asked showed option k): never for an answer that could not be taken. A list's flag is waited for
+    only where the pixels cannot tell; where they read white, only an answer already in is taken."""
     grey, level = drawn_grey(cam)
     why = why_not(grey) if why_not is not None else ""
     if why:
         return Drawing(grey, level, None, {"not_asked": why})
+    if flags is not None and k is not None and _screen_kind(cam) in LISTS:
+        flags.look(cam, k)
     said, asked = reader_grey(cam, k=k, flags=flags, wait=reading.TIMEOUTS["press"] if grey is None else 0.0)
     return Drawing(grey, level, said, asked)
 
@@ -434,14 +443,12 @@ def judge(cam, name: str, label: str, k: int, saved, back, say=_say, drawn: Draw
     the module's, as a Verdict), `saved` the index of the value the row was saved on, back() whether the list is still
     on that option, drawn the option's Drawing where the caller has it (else drawing(cam), on the frame on show, the
     reader's answer taken only where it can change what is pressed: unasked), flags the row's whole-list answers on a
-    list or side list (Flags: the screenful on show asked about first, in the background, where no screenful asked
-    yet showed option k). Says, option by option, each one drawn grey and by which eyes, and each one whose drawing no
-    eye could tell."""
+    list or side list (Flags: the screenful on show asked about first, in the background, where its answer can be
+    taken for option k and no screenful asked yet showed it). Says, option by option, each one drawn grey and by which
+    eyes, and each one whose drawing no eye could tell, or why the reader's answer was not taken."""
     known = REASONS.get(name)
     deaf = _deaf(known)
     kind = _screen_kind(cam)
-    if drawn is None and flags is not None and kind in LISTS and "reader" not in deaf:
-        flags.look(cam, k)
     d = drawn if drawn is not None else drawing(cam, lambda grey: unasked(k, saved, deaf, grey, kind), k, flags)
     by = d.grey_by(deaf)
     if not by:

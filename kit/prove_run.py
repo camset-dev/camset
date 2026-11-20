@@ -193,7 +193,18 @@ def enter_chosen(cam, evidence: tuple, again) -> tuple:
 
 def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     """Every option of one list row; returns the last download (equal to base_path's settings). Each proof carries
-    the attempt's id; the attempt is recorded as finished (finish_attempt) only when the row ended as it began."""
+    the attempt's id; the attempt is recorded as finished (finish_attempt) only when the row ended as it began. A list's
+    whole-list answers are kept for this visit of the row (proving.greyed.Flags) and its questions not yet started are
+    dropped when the row ends, however it ends."""
+    flags = greyed.Flags(job["labels"]) if job["kind"] == "list" and not job.get("network_row") else None
+    try:
+        return _prove_row(cam, link, run, job, base_path, out, top, flags)
+    finally:
+        if flags is not None:
+            flags.close()
+
+
+def _prove_row(cam, link, run, job, base_path: Path, out, top, flags) -> Path:
     path, labels, kind = job["path"], job["labels"], job["kind"]
     attempt = f"{run.dir.name}-{time.time_ns():x}"
     n = len(labels)
@@ -211,11 +222,6 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     c = which_option(cam, job)
     if c is None:
         raise Failed(f"{name}: could not tell which option the {kind} opened on ({text(cam)!r})")
-    # a list's whole-list answers for this visit of the row (proving.greyed.Flags): the second reader asked about the
-    # screenful on show now, in the background, and again where the cursor reaches an option no screenful asked showed
-    flags = greyed.Flags(labels) if kind == "list" and not job.get("network_row") else None
-    if flags is not None:
-        flags.look(cam, c)
     order = [(c + i) % n for i in range(1, n)] + [c]
     choose = job.get("choose")          # a network row: only the options its decision names (network_jobs_or_exit)
     network_row = job.get("network_row")

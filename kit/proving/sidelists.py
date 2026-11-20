@@ -217,7 +217,16 @@ def by_neighbours(cam, vals: list, hits: list) -> list:
 def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     """A PP side list: its sampled values (or every value, for text), then back to the value it opened
     on. Its own base is downloaded first: opening the PP1 panel committed PP1 as the Picture Profile. A value the list
-    draws grey is never chosen (proving.greyed), and a refused value's line carries no diff."""
+    draws grey is never chosen (proving.greyed), and a refused value's line carries no diff. The row's whole-list
+    answers are kept for this visit (proving.greyed.Flags), its questions not yet started dropped when it ends."""
+    flags = greyed.Flags(job["values"])
+    try:
+        return _prove_side_row(cam, link, run, job, base_path, out, top, flags)
+    finally:
+        flags.close()
+
+
+def _prove_side_row(cam, link, run, job, base_path: Path, out, top, flags) -> Path:
     path, name, vals = job["path"], " > ".join(job["path"]), job["values"]
     n = len(vals)
     row_place = place(cam)
@@ -227,7 +236,6 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     base = camset.read(base_path)
     last, order, c, prev = base_path, None, None, None
     applied_k, greyed_k, tried_k = [], [], []       # what the run says of the row at its end (proving.greyed)
-    flags = greyed.Flags(vals)                       # the row's whole-list answers for this visit (proving.greyed)
     while True:
         if order is not None:
             to_row(cam, path, top, row_place)
@@ -243,7 +251,6 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             raise Failed(f"{name}: could not tell which value the side list opened on ({side_text(cam)!r})")
         if order is None:
             c = prev = cur                  # the value the side list opened on: what a grey option's MENU leaves it on
-            flags.look(cam, c)              # the screenful on show asked about, in the background (proving.greyed)
             plan = job["plan"]
             if SPREAD and len(plan) > 3:                    # a long text list: its first, middle and last
                 plan = sorted({0, len(vals) // 2, len(vals) - 1})
