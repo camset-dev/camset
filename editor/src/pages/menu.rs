@@ -1913,7 +1913,7 @@ pub(crate) mod facts_tests {
         assert!(app.where_in(&tc, 0, Some("Still")).starts_with("Movie > Shooting > TC/UB"));
         done(&dir, &user);
         // without menus: none, and Edit's bar as before
-        let (app, dir, user) = sample_app("menus_none", None);
+        let (app, dir, user) = sample_app("menus_none", Some(crate::test_support::strip_menus));
         assert!(app.menus().is_empty() && app.menu_shown().is_none());
         let keys: Vec<BarKey> = app.edit_entries(0, None, "", false).into_iter().map(|e| e.key).collect();
         let tabs: Vec<BarKey> = app.menu_tabs().into_iter().filter(|t| app.side_bar_lists(t)).map(BarKey::Tab).collect();
@@ -2424,7 +2424,7 @@ pub(crate) mod facts_tests {
         assert!(["ISO (stills)", "ISO (movie)"].iter().all(|n| names.contains(&n.to_string())), "the rows as before menus: {names:?}");
         done(&dir, &user);
         let (one, dir, user) = sample_app("menus_one", Some(one_menu));
-        let (plain, dir2, user2) = sample_app("menus_plain", None);
+        let (plain, dir2, user2) = sample_app("menus_plain", Some(crate::test_support::strip_menus));
         assert!(one.menus().is_empty() && one.menu_shown().is_none());
         let shape = |app: &App, tab: &str| app.tab_groups(tab).into_iter().map(|(g, f, rows)| (g, f, rows.iter().map(|r| r[0].key.clone()).collect::<Vec<_>>())).collect::<Vec<_>>();
         for tab in plain.menu_tabs() {

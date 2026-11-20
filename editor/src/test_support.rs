@@ -22,8 +22,10 @@ pub(crate) fn sample_app(tag: &str, strip: Option<fn(&mut serde_json::Value)>) -
 /// S&Q and Time-lapse modes, with a hover), each with its Main tiles. Every setting placed on a row gets `row_menus`:
 /// the rows only Movie mode's menu has (`row_mode`) and the settings named for Movie ("(Movie)") Movie's and S&Q's;
 /// the ones named for stills ("(Still)"), and those on the same row as one named for Movie, Still's only; every other
-/// placed setting all three. A copy (`copy_of`) and a setting placed nowhere get none; no `row_places`.
+/// placed setting all three. A copy (`copy_of`) and a setting placed nowhere get none; no `row_places`. Whatever menus
+/// the shipped definition lists go first (`strip_menus`), so the stub is the same world whatever it carries.
 pub(crate) fn stub_menus(v: &mut serde_json::Value) {
+    strip_menus(v);
     v["camera"]["menus"] = serde_json::json!([
         { "name": "Still", "modes": ["Stills"], "main_tiles": "Stills" },
         { "name": "Movie", "modes": ["Movie"], "main_tiles": "Movie" },
@@ -46,6 +48,20 @@ pub(crate) fn stub_menus(v: &mut serde_json::Value) {
             &["Still", "Movie", "S&Q"]
         };
         s["row_menus"] = serde_json::json!(menus);
+    }
+}
+
+/// The shipped definition without the camera's menus (`camera.menus`, each setting's `row_menus` and `row_places`):
+/// the editor as before menus, for the tests that say so, whether or not the shipped definition lists menus.
+pub(crate) fn strip_menus(v: &mut serde_json::Value) {
+    if let Some(c) = v["camera"].as_object_mut() {
+        c.remove("menus");
+    }
+    for s in v["settings"].as_array_mut().into_iter().flatten() {
+        if let Some(o) = s.as_object_mut() {
+            o.remove("row_menus");
+            o.remove("row_places");
+        }
     }
 }
 

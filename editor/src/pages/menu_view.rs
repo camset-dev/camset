@@ -590,7 +590,7 @@ impl App {
 #[cfg(test)]
 mod menus_window_tests {
     use super::*;
-    use crate::test_support::{done, sample_app, stub_menus, stub_menus_and_a_place, texts, SAMPLE_BYTES};
+    use crate::test_support::{done, sample_app, strip_menus, stub_menus, stub_menus_and_a_place, texts, SAMPLE_BYTES};
     use eframe::App as _;
     use egui::accesskit::{Action as Ak, ActionRequest, NodeId, Role, Toggled};
 
@@ -695,7 +695,7 @@ mod menus_window_tests {
     /// with All settings first, a tab's rows those of All settings Edit lists under it.
     #[test]
     fn without_menus_the_window_is_as_before() {
-        let (mut app, dir, user) = sample_app("e2_none", None);
+        let (mut app, dir, user) = sample_app("e2_none", Some(strip_menus));
         assert!(app.menus().is_empty() && app.menu_shown().is_none());
         app.view = View::Tab(app.menu_tabs()[0].clone());
         let mut w = Window::new();
@@ -719,6 +719,14 @@ mod menus_window_tests {
         assert!(!said.iter().any(|(_, r, l, _)| *r == Role::ComboBox || l == "Tab compared"), "no list of tabs: the Menu picks");
         assert_eq!(names(&app.matrix_rows()), names(&rows), "All settings: the rows Compare always had");
         assert_eq!(names(&app.matrix_rows_for("", None)), names(&rows));
+        // and those are the definition's live settings outside Expert mode, each record in one row, worked out here
+        let mut records: Vec<String> = rows.iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect();
+        let n = records.len();
+        records.sort();
+        records.dedup();
+        let mut want: Vec<String> = app.schema.settings.iter().filter(|s| s.area == "global" && !App::expert_only(s)).map(|s| s.key.clone()).collect();
+        want.sort();
+        assert_eq!((n, &records), (want.len(), &want), "every live setting once");
         assert_eq!(app.mm_rows.len(), rows.len());
         let cols = app.cols.clone();
         let entries = app.compare_bar(None, "", &|s| app.row_differs(&cols, s));
@@ -730,9 +738,17 @@ mod menus_window_tests {
         let mut seen = std::collections::HashSet::new();
         for k in &edit {
             let BarKey::Tab(t) = k else { continue };
+            let mut got: Vec<String> = Vec::new();
             for r in app.compare_rows(None, k, "").iter() {
                 assert!(r.0 == *t && all.contains(&r.2[0].key) && seen.insert(r.2[0].key.clone()), "{t}: {}", r.2[0].name);
+                got.extend(r.2.iter().map(|s| s.key.clone()));
             }
+            // the records of the rows Edit's own page lists under that tab (`tab_groups`), not Compare's code
+            let mut want: Vec<String> = app.tab_groups(t).into_iter().flat_map(|(_, _, rows)| rows.into_iter().flatten().map(|s| s.key)).collect();
+            got.sort();
+            want.sort();
+            want.dedup();
+            assert_eq!(got, want, "{t}: the records Edit lists under it");
         }
         done(&dir, &user);
     }
@@ -971,7 +987,7 @@ mod menus_window_tests {
             }
         }
         done(&dir, &user);
-        let (mut app, dir, user) = sample_app("e2_main_none", None);
+        let (mut app, dir, user) = sample_app("e2_main_none", Some(strip_menus));
         app.view = View::Main;
         assert_eq!(app.main_tile_set(), (0, true));
         let (_, said) = Window::new().settle(&mut app);

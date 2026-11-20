@@ -5566,8 +5566,8 @@ pub(crate) mod tests {
     /// menus: no selector's keys in the state, no menu in a link or a row, and a menu named in a request changes nothing.
     #[test]
     fn without_camera_menus_the_page_is_as_before() {
-        let mut app = App::new(vec![], Prefs::default());
-        app.open_sample();
+        use crate::test_support::{done, sample_app, strip_menus, stub_menus};
+        let (mut app, dir0, user0) = sample_app("web_menus_none", Some(strip_menus));
         assert!(app.menus().is_empty());
         let s = ask(&mut app, "state", json!({ "target": 0 }));
         for k in ["menus", "menu", "menus_label", "menus_hover", "opened", "column_sets"] {
@@ -5585,8 +5585,8 @@ pub(crate) mod tests {
                 assert!(!text(&plain).contains(k), "{name}: {k}");
             }
         }
+        done(&dir0, &user0);
         // the definition's menus with the flat list: none shown, as before menus
-        use crate::test_support::{done, sample_app, stub_menus};
         let (mut app, dir, user) = sample_app("web_menus_flat", Some(stub_menus));
         app.prefs.flat_list = true;
         let s = ask(&mut app, "state", json!({ "target": 0, "menu": "Movie" }));
