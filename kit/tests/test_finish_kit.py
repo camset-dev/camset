@@ -2193,6 +2193,7 @@ def test_a_rows_questions_not_started_are_dropped_when_it_ends_however_it_ends(m
                           io.StringIO())
     assert len(closed) == 2
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(greyed, "WHOLE_LIST", {"list", "sidelist"})          # lists switched on, to close theirs
     monkeypatch.setattr(P, "place", lambda c: "here")
     monkeypatch.setattr(P, "which_option", lambda c, job: None)              # the list row fails too
     with pytest.raises(P.Failed):
@@ -2480,9 +2481,32 @@ def test_the_cameras_carousels_are_told_grey_by_their_lit_icon(name, grey):
     assert s.kind == "dialog" and PS.drawn_grey(SimpleNamespace(frame=f, read=lambda: s))[0] is grey, name
 
 
+def test_a_list_row_asks_no_whole_list_question_and_presses_what_its_pixels_alone_press(monkeypatch, tmp_path):
+    """By default (greyed.WHOLE_LIST: side lists alone, measured 2026-11-20) a list row makes no Flags, asks the second
+    reader nothing about its whole list and queues nothing: whatever the flags would say, Flash Sync Spd. Prty. gets
+    exactly the keys of the pixels alone, and each line says why the reader was not asked."""
+    from proving import greyed
+    assert "list" not in greyed.WHOLE_LIST and "sidelist" in greyed.WHOLE_LIST
+    monkeypatch.chdir(tmp_path)
+    alone = ListCam(grey=(1,), refuse=(1, 2), saved=0)
+    listen_world(monkeypatch, lambda w: None)
+    list_world(monkeypatch, alone)
+    cam = ListCam(grey=(1,), refuse=(1, 2), saved=0)
+    pool = listen_world(monkeypatch, entries_of(SHUTTER, grey={0, 1, 2}))
+    monkeypatch.setattr(greyed.reading, "ask", lambda *a, **k: pytest.fail("a reader was asked"))
+    lines, said, guides = list_world(monkeypatch, cam)
+    assert cam.keys == alone.keys and pool.asked == [] and pool.looked == []
+    assert by_label(lines)["Off"]["grey_readings"] == {"pixels": False, "level": 120.0, "reader": None,
+                                                       "not_asked": greyed.ON_PIXELS_ALONE}
+    assert by_label(lines)["On"]["greyed_by"] == "pixels"
+
+
 def test_the_list_prover_asks_its_whole_list_once_a_visit(monkeypatch, tmp_path):
-    """prove_row on Flash Sync Spd. Prty.: one whole-list question for the row's visit; Off, white by its pixels and
-    grey by the reader's flag, gets Help and the row's one Enter for its reason."""
+    """With lists switched on (greyed.WHOLE_LIST, as a reader measured well on lists would have them), prove_row on
+    Flash Sync Spd. Prty.: one whole-list question for the row's visit; Off, white by its pixels and grey by the
+    reader's flag, gets Help and the row's one Enter for its reason."""
+    from proving import greyed
+    monkeypatch.setattr(greyed, "WHOLE_LIST", {"list", "sidelist"})
     monkeypatch.chdir(tmp_path)
     cam = ListCam(grey=(), refuse=(2,), saved=0)
     pool = listen_world(monkeypatch, entries_of(SHUTTER, grey={2}))
@@ -2546,8 +2570,9 @@ def test_the_reader_is_asked_the_kinds_grey_question_about_the_frame_on_show(eye
 
     def on(kind, frame):
         return SimpleNamespace(frame=frame, read=lambda: SimpleNamespace(kind=kind))
-    for kind in ("sidelist", "list"):        # no question about the lit option: the row's whole-list answers, none here
-        assert greyed.reader_grey(on(kind, lit)) == (None, {"not_asked": "no whole-list answers kept for this row"})
+    # no question about the lit option: a side list's whole-list answers (none kept here); a list's pixels alone
+    assert greyed.reader_grey(on("sidelist", lit)) == (None, {"not_asked": "no whole-list answers kept for this row"})
+    assert greyed.reader_grey(on("list", lit)) == (None, {"not_asked": greyed.ON_PIXELS_ALONE})
     assert greyed.reader_grey(on("dialog", lit)) == (False, {"question": "carousel.v2.grey",
                                                              "reader_name": "fake second", "read": "ISO 100"})
     assert eyes.asked == ["carousel.v2.grey"]

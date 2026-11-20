@@ -196,7 +196,8 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     the attempt's id; the attempt is recorded as finished (finish_attempt) only when the row ended as it began. A list's
     whole-list answers are kept for this visit of the row (proving.greyed.Flags) and its questions not yet started are
     dropped when the row ends, however it ends."""
-    flags = greyed.Flags(job["labels"]) if job["kind"] == "list" and not job.get("network_row") else None
+    flags = (greyed.Flags(job["labels"]) if job["kind"] in greyed.WHOLE_LIST and not job.get("network_row")
+             else None)          # a list listens to no whole-list flag (greyed.WHOLE_LIST: side lists alone)
     try:
         return _prove_row(cam, link, run, job, base_path, out, top, flags)
     finally:

@@ -219,11 +219,12 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     on. Its own base is downloaded first: opening the PP1 panel committed PP1 as the Picture Profile. A value the list
     draws grey is never chosen (proving.greyed), and a refused value's line carries no diff. The row's whole-list
     answers are kept for this visit (proving.greyed.Flags), its questions not yet started dropped when it ends."""
-    flags = greyed.Flags(job["values"])
+    flags = greyed.Flags(job["values"]) if "sidelist" in greyed.WHOLE_LIST else None
     try:
         return _prove_side_row(cam, link, run, job, base_path, out, top, flags)
     finally:
-        flags.close()
+        if flags is not None:
+            flags.close()
 
 
 def _prove_side_row(cam, link, run, job, base_path: Path, out, top, flags) -> Path:

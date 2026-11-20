@@ -64,6 +64,15 @@ EYES = ("pixels", "reader")
 #   of 60 white, carousel.v2.grey2 (pinned, the census's alone) fewer grey (6 of 13) and as many white
 ASKED = {"dialog": "carousel"}
 LISTS = {"list", "sidelist"}
+# The kinds of screen whose options listen to the second reader's whole-list flag (Flags), measured by the reader
+# census (--variants entries, Qwen3.8-27B): on side lists it called 90.8% of 142 grey entries the cursor was not on grey
+# and no white one (272 and 72 right), so side lists listen; on lists (2026-11-20) it called 3 in 100 lit white entries
+# grey (97.1% of 136 right) and 8 in 100 unlit ones (91.9% of 371), where the pixels told every grey list frame, so a
+# list is told by its pixels alone: it makes no Flags, asks no whole-list question and queues nothing. A reader measured
+# at 99% or more on both white figures can be switched on for lists by adding "list" here.
+WHOLE_LIST = {"sidelist"}
+ON_PIXELS_ALONE = ("a list's options are told by their pixels alone: the whole-list flag called 8 in 100 white "
+                   "entries grey on lists (reader census, 2026-11-20)")
 ENTRIES = "entries.v2"      # camkit.vlm's whole-list question
 NO_STAND_IN = "the second reader is away: a reader standing in for it is never asked whether an option is grey"
 ICON_TELLS = "the carousel's lit icon tells it, which no answer changes"
@@ -328,13 +337,16 @@ class Flags:
 
 def reader_grey(cam, k: int | None = None, flags: Flags | None = None, wait: float = 0.0) -> tuple:
     """(whether the second reader says the option under the cursor is drawn grey: True, False, or None where it gives no
-    answer; what the line keeps of its side). On a list and a side list (LISTS), option k's flag in the row's whole-list
-    answers (Flags.flag, waiting up to `wait` seconds for one asked about a screenful that showed it). On a carousel
-    (ASKED), its question about the lit option (camkit.reading.QUESTIONS' grey_prompt, read by
-    camkit.reading.greyed_of), asked in line through camkit.reading.ask with a press's time, never of a reader standing
-    in for the second (NO_STAND_IN). Any failure is no answer; (None, {}) on any other screen."""
+    answer; what the line keeps of its side). On a side list (WHOLE_LIST), option k's flag in the row's whole-list
+    answers (Flags.flag, waiting up to `wait` seconds for one asked about a screenful that showed it); on a list, which
+    listens to none, nothing (ON_PIXELS_ALONE). On a carousel (ASKED), its question about the lit option
+    (camkit.reading.QUESTIONS' grey_prompt, read by camkit.reading.greyed_of), asked in line through camkit.reading.ask
+    with a press's time, never of a reader standing in for the second (NO_STAND_IN). Any failure is no answer; (None,
+    {}) on any other screen."""
     kind = _screen_kind(cam)
     if kind in LISTS:
+        if kind not in WHOLE_LIST:
+            return None, {"not_asked": ON_PIXELS_ALONE}
         if flags is None or k is None:
             return None, {"not_asked": "no whole-list answers kept for this row"}
         return flags.flag(k, wait)
