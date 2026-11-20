@@ -159,7 +159,9 @@ Compare has Edit's Menu on its left, with All settings first: a click shows that
 the rows that differ. Where the definition lists the camera's menus, Compare follows the one picked: its rows are
 grouped as Edit shows them in that menu, each shows that menu's mode's value in every column, so two files saved in
 different modes are compared like for like, each menu's button counts its differences, and the column picker offers
-that menu's memories. My Menu lists what its page in Edit shows, a row per place and then its own settings; outside
+that menu's memories. The settings only the memories keep (a memory's focus frames, its stored exposure and mode) are
+listed when a memory of the menu shown is one of the columns, where Edit lists them for that memory; the live settings
+hold none of them, so a row's baseline is its first column that keeps the setting. My Menu lists what its page in Edit shows, a row per place and then its own settings; outside
 Expert mode a place is changed on that page only, which keeps the camera's rules for My Menu, so Compare copies none.
 
 Only file A is ever changed. An arrow between two columns copies a value into file A, a right-click on a value copies

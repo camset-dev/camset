@@ -1315,7 +1315,9 @@ impl App {
     /// setting under one entry once: All is every tab's and My Menu's, in the Menu's order; My Menu its own tab's
     /// settings (`text.my_menu_name`); Main the settings of the menu's tiles (`menu_tile_set`, else the first set) under
     /// each tile's caption, which the tabs list too. Compare lists them through `compare_rows`.
-    pub(crate) fn entry_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> Vec<(String, String, Vec<Setting>)> {
+    /// With the settings only the memories keep where `mem` names a memory set (`lists_memory_settings`): those Edit
+    /// lists for that memory under the entry, among the live settings' rows, laid out as Edit lays them out.
+    pub(crate) fn entry_rows_in(&self, menu: Option<&str>, entry: &BarKey, q: &str, mem: Option<usize>) -> Vec<(String, String, Vec<Setting>)> {
         let q = Self::query(q);
         let menu = menu.filter(|m| self.menu_named(m).is_some());
         let matches = |s: &Setting| q.is_empty() || Self::matches_query(s, &q) || Self::matches_query(self.def_of(s), &q);
@@ -1330,7 +1332,7 @@ impl App {
             rows
         };
         match entry {
-            BarKey::All => self.bar_keys(true, 0, menu, "", false).iter().filter(|k| matches!(k, BarKey::Tab(_) | BarKey::MyMenu)).flat_map(|k| self.entry_rows(menu, k, &q)).collect(),
+            BarKey::All => self.bar_keys(true, 0, menu, "", false).iter().filter(|k| matches!(k, BarKey::Tab(_) | BarKey::MyMenu)).flat_map(|k| self.entry_rows_in(menu, k, &q, mem)).collect(),
             BarKey::Main => {
                 let Some(sets) = self.schema.camera.main_tiles.as_ref() else { return Vec::new() };
                 let at = menu.and_then(|m| self.menu_tile_set(m)).unwrap_or(0);
@@ -1340,7 +1342,8 @@ impl App {
                     // every record the tile shows, in the live settings or a memory, as Edit's Main draws it: a fraction's
                     // two parts too, Expert-only or not (`tile_records`)
                     let keys: Vec<&String> = tile.keys.iter().chain(&tile.memory_keys).chain(&tile.numerator_key).chain(&tile.denominator_key).collect();
-                    let list: Vec<Setting> = keys.iter().filter_map(|k| self.index_of_key(k)).map(|i| &self.schema.settings[i])
+                    // a memory's record only with a memory column (`mem`): the live settings hold none of it
+                    let list: Vec<Setting> = keys.iter().filter_map(|k| self.index_of_key(k)).map(|i| &self.schema.settings[i]).filter(|s| mem.is_some() || s.area != "set")
                         .map(|s| match menu { Some(m) => self.row_record(s, m, &Bind::Menu).clone(), None => s.clone() })
                         .filter(|s| matches(s)).collect();
                     out.extend(link(list).into_iter().map(|r| (self.schema.camera.text.main_title().to_string(), tile.caption.clone(), r)));
@@ -1351,7 +1354,7 @@ impl App {
                 // as Edit's My Menu page: its places, page by page, then the settings of its own tab, under its name
                 let name = self.schema.camera.text.my_menu_name().to_string();
                 let mut out = self.place_rows(&q);
-                out.extend(self.entry_rows(menu, &BarKey::Tab(name.clone()), &q));
+                out.extend(self.entry_rows_in(menu, &BarKey::Tab(name.clone()), &q, mem));
                 out
             }
             BarKey::Tab(t) => {
@@ -1359,9 +1362,18 @@ impl App {
                     Some(m) => self.listed_in(0, m, &Bind::Menu, Some(t)),
                     None => self.settings_in(0, Some(t)).cloned().collect(),
                 }.into_iter().filter(|s| matches(s)).collect();
+                // the settings only the memories keep, as Edit lists them for the memory `mem` under this entry
+                if let Some(ms) = mem {
+                    let kept: Vec<Setting> = match menu {
+                        Some(m) => self.listed_in(ms, m, &Bind::Menu, Some(t)),
+                        None => self.settings_in(ms, Some(t)).cloned().collect(),
+                    };
+                    list.extend(kept.into_iter().filter(|s| s.area == "set" && matches(s)));
+                }
                 // the records a Main tile shows that the live settings' rows leave out, under the entry that shows them
-                // (`tile_records`), so Main's rows are All's
-                list.extend(self.tile_records(&q).into_iter().filter(|s| self.entry_here(s) == *t).map(|s| match menu { Some(m) => s.place_in(m), None => s }));
+                // (`tile_records`), so Main's rows are All's; none twice
+                let held: std::collections::HashSet<String> = list.iter().map(|s| s.key.clone()).collect();
+                list.extend(self.tile_records(&q).into_iter().filter(|s| self.entry_here(s) == *t && !held.contains(&s.key) && (mem.is_some() || s.area != "set")).map(|s| match menu { Some(m) => s.place_in(m), None => s }));
                 let groups = self.groups_of(list, t);
                 // a family's setting on the page an option opens comes with that page's group, not again in the family's
                 let on_pages: std::collections::HashSet<String> = groups.iter().filter(|(_, family, _)| !family).flat_map(|(_, _, rows)| rows.iter().flatten().map(|s| s.key.clone())).collect();
@@ -1655,7 +1667,7 @@ pub(crate) mod facts_tests {
         let at = |hits: &[Setting], n: &str| hits.iter().position(|s| s.name == n).unwrap();
         app.search = "continuous".into();
         assert!(at(&app.search_hits(), &speed.name) < at(&app.search_hits(), "Drive Mode Limit: Continuous Shooting: Hi"));
-        let in_compare = |app: &App, n: &str| app.build_matrix_rows("continuous", Some("Shooting")).iter().position(|r| r.2[0].name == n).unwrap();
+        let in_compare = |app: &App, n: &str| app.build_matrix_rows("continuous", Some("Shooting"), false).iter().position(|r| r.2[0].name == n).unwrap();
         assert!(in_compare(&app, &speed.name) < in_compare(&app, "Drive Mode Limit: Continuous Shooting: Hi"));
         app.set_flat_list(true);
         assert!(!app.camera_layout() && app.places(), "the switch stays, set to the flat list");

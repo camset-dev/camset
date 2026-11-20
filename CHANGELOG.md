@@ -59,6 +59,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **Compare lists the settings only the memories keep:** a memory's focus frames, stored exposure and mode are rows
+  whenever a memory of the menu shown is one of the columns, in the window and on the page, as Edit lists them for that
+  memory, with their differences counted between the memories (the live settings hold none of them). A search that
+  finds them with no such column says why none is shown, and a copy never reaches the live settings.
 - **Collapse all and Expand all by the keys, and reverts that keep groups whole:** Cmd/Ctrl+Shift+↑ and ↓ fold and
   open every foldable group of the view in front from any pane, in the window and on the page (Edit's tabs, Compare,
   search, My Menu, Exposure, the record map, and the Memories page, which now folds), each view with its own buttons,

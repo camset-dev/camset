@@ -57,7 +57,6 @@ impl App {
         let mut lines: Vec<String> = Vec::new();
         let mut n = 0;
         if let Some((cols, only_diff, raw)) = compare.filter(|(cols, _, _)| cols.len() >= 2) {
-            let base = cols[0];
             // the record number is Expert mode's, as in the set's export
             let expert = self.prefs.expert;
             let mut head = vec!["Tab".to_string(), "Group".into(), "Setting".into()];
@@ -66,10 +65,11 @@ impl App {
             }
             head.extend(cols.iter().map(|c| quote(&self.col_name_with_file(*c))));
             lines.push(head.join(","));
-            for (tab, group, linked) in self.compare_rows(menu, entry, q).iter() {
+            for (tab, group, linked) in self.compare_rows_in(menu, entry, q, cols).iter() {
                 let s = &linked[0];
-                let b = self.col_value(base, s);
-                let differs = cols[1..].iter().any(|c| (c.section == 0 || s.in_sets) && self.col_value(*c, s) != b);
+                // the window's standing of the row (`row_info`: its baseline the first column that keeps its setting)
+                let info = self.row_info(cols, None, s);
+                let differs = info.differs;
                 if only_diff && !differs {
                     continue;
                 }
@@ -78,8 +78,8 @@ impl App {
                 if expert {
                     row.push(format!("0x{:04x}", s.id));
                 }
-                for c in cols {
-                    let stored = c.section == 0 || s.in_sets;
+                for (i, c) in cols.iter().enumerate() {
+                    let stored = info.stored[i];
                     let v = self.col_value(*c, s);
                     let text = if !stored { String::new() } else if s.text.is_some() { self.col_text(*c, s).unwrap_or_default() } else { Self::describe(s, v) };
                     row.push(quote(&if raw && stored { format!("{text} [{}]", v.map(|v| v.to_string()).unwrap_or_default()) } else { text }));
