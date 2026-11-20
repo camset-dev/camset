@@ -188,6 +188,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`greyrow_run.py` takes a misread "This function is currently disabled." for no reason,** as OCR's "This tunction is
+  currently disabled." was taken for one on five rows, which then got no Right. A real reason is still a reason.
 - **`carousel_fields_run.py` walks the boxes of an option with a short name,** such as movie Self-timer's On: with a
   box lit, OCR's reading of the title stands where it is exactly that option's name, since the second reader then
   answers the lit box. A title naming another option still stops the walk.
