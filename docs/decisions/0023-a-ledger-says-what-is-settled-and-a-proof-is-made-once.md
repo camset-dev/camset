@@ -18,7 +18,9 @@ values would hide thousands untried, and skipping by default would leave holes n
 each would take hours of camera time, and the maintainer chose: "Skip the functions if we can infer, keep mapping".
 On 2026-11-19 the ledger's inference and the definition writer's were found to be two rules with different criteria,
 each inferring over the other's output, and the owner chose one rule and a mark per setting
-([decision 25](0025-a-proof-says-when-its-list-was-lent-by-another-setting.md)).
+([decision 25](0025-a-proof-says-when-its-list-was-lent-by-another-setting.md)). The same day the owner chose to stop
+committing the public form, 450 KB: every byte of it is built from committed files, and no reader used the file but
+its own check.
 
 ## Decision
 
@@ -27,8 +29,10 @@ first that applies in a fixed order, generated each time from the sources that e
 camera's private looks file, never with a value. Its public form is built from the public sources alone and the seen
 file, which holds only what a look establishes for every camera of the model
 ([decision 16](0016-the-owner-s-values-never-reach-the-schema-or-the-docs.md)): two owners' public forms differ only
-in which of those facts they looked for, never in what a fact says. Runs only print what it says unless
-the crawl or the prover is given `--skip-settled`; `kit/drive.py` never skips. A row with values still to try is never
+in which of those facts they looked for, never in what a fact says. The seen file is committed; the public form is
+never kept in a file: `kit/tools/coverage.py --print` prints it, the same bytes in any clone, which holds no runs and
+no private evidence. Runs only print what it says unless the crawl or the prover is given `--skip-settled`;
+`kit/drive.py` never skips. A row with values still to try is never
 settled, and one valid proof of an option is enough. A value no proof chose on its own setting counts as inferred, in
 the private form alone and never as proved, where the definition's writer named it from another setting's proof, a
 shared list (`camkit.definitions.inferred`): the ledger reads that and infers nothing by a rule of its own. The public
@@ -37,13 +41,17 @@ shared list". A row of no setting that a proof went through holds the setting th
 
 Before 2026-11-19 the ledger inferred a value itself (one proved on another setting listing the same values on its row
 or array, two values on its own record as the list names them, no proof reading it as another), and before 2026-11-18
-a value counted only once a proof chose it on its own setting, such a row not yet tried.
+a value counted only once a proof chose it on its own setting, such a row not yet tried. Until 2026-11-19 the public
+form was committed in the data folder, and checked to be the build byte for byte.
 
 ## Consequences
 
-`kit/tools/check_public.py` refuses a public form that is not, byte for byte, the build of the public sources and the
-seen file. "Valid" claims only what the proof records; proofs are made as before; each is marked valid, inferred or
-unchecked, and none is deleted, until the owner decides what to keep. `kit/tools/coverage.py --shared` shows each
-shared list's grounds, what no slot of it proves, and where the list's own proof lines do not bear the writer's
-inference out, which decides nothing. The statuses, the files and the validity rule:
+`kit/tools/check_public.py` refuses a copy of the public form in `data/`, and `.gitignore` ignores one. A pull request
+carries the seen file, not the ledger: `kit/tools/coverage.py --check` says whether the public form the public sources
+and the seen file give is lean and the seen file what the looks give, and the maintainer prints the ledger from the
+pull request's files. A change to the public ledger no longer shows in a diff of `data/`: it is seen by printing the
+ledger before and after. "Valid" claims only what the proof records; proofs are made as before; each is marked valid,
+inferred or unchecked, and none is deleted, until the owner decides what to keep. `kit/tools/coverage.py --shared`
+shows each shared list's grounds, what no slot of it proves, and where the list's own proof lines do not bear the
+writer's inference out, which decides nothing. The statuses, the files and the validity rule:
 [the data files' page](../DATA_CONTRACTS.md#the-coverage-ledger-what-is-settled-and-what-a-proof-needs).

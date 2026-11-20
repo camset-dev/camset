@@ -1,10 +1,11 @@
 """The coverage ledger (kit/camkit/coverage.py, kit/tools/coverage.py; docs/decisions/0023), off the camera: a made-up
 camera (a definition, hand tables, a camera file, a Help Guide list, looks, a crawl row, proofs and leads in folders of
 the test's own) gives every status at least once and each entry exactly one; a status that claims a test cites a look,
-a crawl row or a proof line in the private form; the statuses generated from the definition agree with it (the a1 II's
-committed public form is the public build, byte for byte); the public form is built from the public sources and the
-allow-list alone, so no state seen reaches it, and kit/tools/check_public.py refuses one that holds a private key, a
-date, a hash or a word outside its closed vocabulary; settled() never settles a row with values still to try, nor one
+a crawl row or a proof line in the private form; the statuses generated from the definition agree with it; the public
+form is built from the public sources and the allow-list alone, so no state seen reaches it, and is printed, never
+kept: a tree with no runs/ and no private/ prints the a1 II's (kit/tools/coverage.py --print), public_problems refuses
+one that holds a private key, a date, a hash or a word outside its closed vocabulary, and kit/tools/check_public.py any
+copy of it in data/ (docs/decisions/0023); settled() never settles a row with values still to try, nor one
 of another mode, nor anything when the ledger is missing or stale; the runs only print what it says unless given
 --skip-settled (drive.py never skips), and a ledger error or a look that cannot be written never breaks a run."""
 import contextlib
@@ -256,11 +257,12 @@ def test_regenerating_gives_the_same_bytes(camera, tmp_path):
     b = coverage.text(coverage.public_doc(ledger()))
     assert a == b
     led = ledger(validity=True)
-    out = coverage.write(led, tmp_path / "pub.json", tmp_path / "priv.json", tmp_path / "seen.json")
-    assert out == [tmp_path / "pub.json", tmp_path / "seen.json", tmp_path / "priv.json"]
-    first = (tmp_path / "pub.json").read_bytes()
-    coverage.write(ledger(validity=True), tmp_path / "pub.json", tmp_path / "priv.json", tmp_path / "seen.json")
-    assert (tmp_path / "pub.json").read_bytes() == first
+    out = coverage.write(led, private_path=tmp_path / "priv.json", seen_path=tmp_path / "seen.json")
+    assert out == [tmp_path / "seen.json", tmp_path / "priv.json"]          # the public form is printed, never written
+    first = [(tmp_path / n).read_bytes() for n in ("seen.json", "priv.json")]
+    coverage.write(ledger(validity=True), private_path=tmp_path / "priv.json", seen_path=tmp_path / "seen.json")
+    assert [(tmp_path / n).read_bytes() for n in ("seen.json", "priv.json")] == first
+    assert not (camera.data / f"coverage_{CAM}.json").exists()
     if os.name != "nt":
         assert (tmp_path / "priv.json").stat().st_mode & 0o777 == 0o600
 
@@ -314,8 +316,8 @@ def seen_facts(camera):
 def test_the_allow_listed_facts_live_in_the_seen_file(camera):
     """An information screen (a notice with the kit's address fields: a row label beside them qualifies the look
     privately, never goes public), a row seen to act, a hand check that changed a record and a Sony-listed row
-    confirmed go into the seen file, and the public form is the build of the public sources and that file: a fresh
-    clone's build (no looks) gives its bytes again."""
+    confirmed go into the seen file, and the public form is the build of the public sources and that file: what a
+    fresh clone prints (no looks) is this computer's public form, byte for byte, and no copy of it is written."""
     add_looks(camera,
               look(["Kilo"], screen="notice", fields=["Device Address", "My Camera", "Alpha"]),
               look(["Version"], result="acted"),
@@ -324,22 +326,24 @@ def test_the_allow_listed_facts_live_in_the_seen_file(camera):
     led = coverage.build(CAM)
     assert row(led, "Kilo")["fields"] == ["Device Address", "Alpha"]          # privately, the label too
     written = coverage.write(led)
-    assert coverage.seen_file(CAM) in written and coverage.public_file(CAM) in written
+    assert written == [coverage.seen_file(CAM), coverage.private_file(CAM)]
+    assert not (camera.data / f"coverage_{CAM}.json").exists()
     facts = {(x["kind"], tuple(x["path"])): x for x in seen_facts(camera)}
     assert facts[("info", ("Kilo",))]["fields"] == ["Device Address"]
     assert facts[("info", ("Echo",))]["fields"] == ["IP Address", "MAC Address"]
     assert ("acted", ("Version",)) in facts and ("confirmed", ("Delta",)) in facts
     assert facts[("hand_changed", ("Foxtrot",))]["values"] == {"global:0x0103": [0]}
     assert "option" not in json.dumps(seen_facts(camera))
-    doc = json.loads(coverage.public_file(CAM).read_text(encoding="utf-8"))
+    printed = coverage.public_build_text(CAM)
+    doc = json.loads(printed)
     by = {tuple(r["path"]): r for r in doc["rows"]}
     assert by[("Kilo",)]["status"] == "information screen" and by[("Kilo",)]["fields"] == ["Device Address"]
     assert by[("Version",)]["status"] == "action, nothing to map" and "inferred" not in by[("Version",)]
     assert by[("Foxtrot",)]["status"] == "proved by hand" and by[("Delta",)]["confirmed"] is True
     assert {o["key"]: o for o in doc["options"]}["global:0x0103"]["statuses"]["proved by hand"] == [0]
-    assert coverage.public_file(CAM).read_text(encoding="utf-8") == coverage.public_build_text(CAM)
+    assert coverage.text(coverage.public_doc(led)) == printed
+    assert coverage.public_build_problems(CAM) == []
     from camkit import datafiles
-    assert datafiles.evidence_in_public(coverage.public_file(CAM)) == []
     assert datafiles.evidence_in_public(coverage.seen_file(CAM)) == []
 
 
@@ -373,35 +377,28 @@ def test_a_write_keeps_committed_facts_and_a_local_retraction_takes_one_out(came
     coverage.write(coverage.build(CAM))
     assert not any(x["path"] == ["Kilo"] for x in seen_facts(camera))
     assert any(x["path"] == ["Echo"] for x in seen_facts(camera))                # its own look still stands
-    by = {tuple(r["path"]): r for r in json.loads(coverage.public_file(CAM).read_text(encoding="utf-8"))["rows"]}
+    by = {tuple(r["path"]): r for r in json.loads(coverage.public_build_text(CAM))["rows"]}
     assert by[("Kilo",)]["status"] == "not yet tried"
 
 
-def test_a_hand_edit_of_the_public_form_or_the_seen_file_is_refused(camera):
-    """L1: the committed form must be the build of the public sources and the seen file. A row edited to "needs
-    equipment" with a lens, an information screen, an action or a value proved by hand written into the form by hand
-    are refused; an edit of the seen file shows there, and words its sources do not know (a field that is no address
-    field, a value no setting has) are refused in it."""
+def test_a_public_form_in_data_is_refused_and_an_edit_of_the_seen_file_shows_there(camera):
+    """L1: no public form is kept in data/, so a copy there is refused whatever it says, the build itself or one edited
+    by hand ("needs equipment" with a lens); the facts a look established live in the seen file alone, where an edit
+    shows in review, words its sources do not know (a field that is no address field, a value no setting has, a group
+    no source names) are refused, and a good fact is what the printed form says."""
     from camkit import datafiles
     coverage.write(coverage.build(CAM, public=True))
-    pub, seen = coverage.public_file(CAM), coverage.seen_file(CAM)
-    clean = pub.read_text(encoding="utf-8")
-    assert datafiles.evidence_in_public(pub) == [] and datafiles.evidence_in_public(seen) == []
-    edits = {
-        "needs equipment": ('"path": ["Kilo"], "status": "not yet tried"',
-                            '"path": ["Kilo"], "status": "needs equipment", "equipment": "a lens"'),
-        "information screen": ('"path": ["Kilo"], "status": "not yet tried"',
-                               '"path": ["Kilo"], "status": "information screen", "fields": ["SSID", "Password"]'),
-        "action": ('"path": ["Kilo"], "status": "not yet tried"', '"path": ["Kilo"], "status": "action, nothing to map"'),
-        "proved by hand": ('{"key": "global:0x0103", "statuses": {"not yet tried": [0, 1]}}',
-                           '{"key": "global:0x0103", "statuses": {"proved by hand": [0], "not yet tried": [1]}}'),
-    }
-    for what, (a, b) in edits.items():
-        assert clean.count(a) == 1, what
-        pub.write_text(clean.replace(a, b), encoding="utf-8")
+    seen = coverage.seen_file(CAM)
+    assert datafiles.evidence_in_public(seen) == []
+    pub = camera.data / f"coverage_{CAM}.json"
+    clean = coverage.public_build_text(CAM)
+    a = '"path": ["Kilo"], "status": "not yet tried"'
+    assert clean.count(a) == 1
+    for t in (clean, clean.replace(a, '"path": ["Kilo"], "status": "needs equipment", "equipment": "a lens"')):
+        pub.write_text(t, encoding="utf-8")
         found = datafiles.evidence_in_public(pub)
-        assert any("not the public build" in x for x in found), what
-    pub.write_text(clean, encoding="utf-8")
+        assert len(found) == 1 and "no longer kept" in found[0] and f"coverage.py --camera {CAM} --print" in found[0]
+    pub.unlink()
     doc = json.loads(seen.read_text(encoding="utf-8"))
     for fact, said in (({"kind": "info", "mode": "Stills", "tab": "Shooting", "group": "G1", "path": ["Kilo"],
                          "fields": ["SSID", "Password", "Alpha"]}, "field 'Alpha'"),
@@ -411,11 +408,13 @@ def test_a_hand_edit_of_the_public_form_or_the_seen_file_is_refused(camera):
                         "group 'Home'")):
         seen.write_text(coverage.text(dict(doc, facts=[fact])), encoding="utf-8")
         assert any(said in x for x in datafiles.evidence_in_public(seen)), said
-    # a good fact by hand shows in the seen file, and the form must then be its build
+        assert any(said in x for x in coverage.public_build_problems(CAM)), said           # --check says it too
+    # a good fact by hand shows in the seen file, and the printed form says it
     seen.write_text(coverage.text(dict(doc, facts=[{"kind": "acted", "mode": "Stills", "tab": "Shooting",
                                                     "group": "G1", "path": ["Kilo"]}])), encoding="utf-8")
-    assert datafiles.evidence_in_public(seen) == []
-    assert any("not the public build" in x for x in datafiles.evidence_in_public(pub))
+    assert datafiles.evidence_in_public(seen) == [] and coverage.public_build_problems(CAM) == []
+    by = {tuple(r["path"]): r for r in json.loads(coverage.public_build_text(CAM))["rows"]}
+    assert by[("Kilo",)]["status"] == "action, nothing to map"
 
 
 def test_the_public_form_validates_and_holds_no_private_key(camera, tmp_path):
@@ -436,17 +435,14 @@ def test_the_public_form_validates_and_holds_no_private_key(camera, tmp_path):
 def test_the_checkers_refuse_a_state_word_a_date_a_run_a_commit_and_free_text(camera, tmp_path, monkeypatch):
     """The reviewer's probes: a blocker naming a row with its value, a remote blocker carrying a date with its time, a
     run and a short commit, field names that are no address field, a 12-hex prefix in a note; also a greyed row not
-    inferred from an inactive_when, a value said tested, and "runs/". coverage.public_problems,
-    datafiles.evidence_in_public and check_public's commit check refuse each."""
+    inferred from an inactive_when, a value said tested, and "runs/". coverage.public_problems refuses each (what
+    --print, --check and --write ask of the form); datafiles.evidence_in_public and check_public's commit check refuse
+    a copy of the form in data/, the clean one too."""
     import check_public as C
     from camkit import datafiles
     add_looks(camera, look(["Kilo"], screen="notice", fields=["IP Address"]))
     coverage.write(coverage.build(CAM))
-    folder = tmp_path / "pubcheck" / "data" / CAM
-    folder.mkdir(parents=True)
-    for n in (f"camera_{CAM}.json", f"help_guide_menu_{CAM}.jsonl", f"hand_tables_{CAM}.json", f"seen_{CAM}.json"):
-        (folder / n).write_text((camera.data / n).read_text(encoding="utf-8"), encoding="utf-8")
-    doc = json.loads(coverage.public_file(CAM).read_text(encoding="utf-8"))
+    doc = json.loads(coverage.public_build_text(CAM))
     assert not coverage.public_problems(doc, camera=CAM)
     rows = {tuple(r["path"]): i for i, r in enumerate(doc["rows"])}
     probes = {
@@ -467,18 +463,17 @@ def test_the_checkers_refuse_a_state_word_a_date_a_run_a_commit_and_free_text(ca
         "a group unknown": lambda d: d["rows"][rows[("Bravo",)]].update(group="Home Network"),
         "about changed": lambda d: d.update(about="seen on the owner's camera"),
     }
-    f = folder / f"coverage_{CAM}.json"
     for what, change in probes.items():
         bad = json.loads(json.dumps(doc))
         change(bad)
         t = coverage.text(bad)
         assert coverage.public_problems(json.loads(t), t, camera=CAM), what
-        f.write_text(t, encoding="utf-8")
-        assert datafiles.evidence_in_public(f), what
-        assert C.blob_problems(f"data/{CAM}/coverage_{CAM}.json", t), what       # a commit's blob, the same checks
+    folder = tmp_path / "pubcheck" / "data" / CAM
+    folder.mkdir(parents=True)
+    f = folder / f"coverage_{CAM}.json"
     f.write_text(coverage.text(doc), encoding="utf-8")
-    assert datafiles.evidence_in_public(f) == []
-    assert C.blob_problems(f"data/{CAM}/coverage_{CAM}.json", coverage.text(doc)) == []
+    for found in (datafiles.evidence_in_public(f), C.blob_problems(f"data/{CAM}/coverage_{CAM}.json", coverage.text(doc))):
+        assert len(found) == 1 and "no longer kept" in found[0], found
     # each text check stands on its own, beside the vocabulary: a date with its time, seven hex digits, a run folder
     for word, said in (("seen 2026-11-14T05:41:07", "a date"), ("kit 1dadd7b", "a hash or a kit commit"),
                        ("sha 3f9a8b7c6d5e", "a hash or a kit commit"), ("runs/x", "a run's folder")):
@@ -495,100 +490,164 @@ def test_a_public_row_names_a_blocker_by_its_row_alone():
     assert coverage._row_out(e, coverage.ROW_PRIVATE, private=True)["blocker"] == e["blocker"]
 
 
-def test_check_public_refuses_a_public_form_with_private_keys(camera, tmp_path, monkeypatch):
+def test_check_public_refuses_a_public_form_or_a_looks_file_in_data(camera, tmp_path, monkeypatch):
+    """No public form is kept in data/ (docs/decisions/0023): check_public's data check refuses a copy there in one
+    line, with the command that prints it, whether it holds private keys or is the build itself; the looks file too.
+    A seen file of a camera with no definition is refused, as its words cannot be checked."""
     import check_public as C
     from camkit import datafiles
     d = camera.data
-    f = d / f"coverage_{CAM}.json"
-    f.write_text(json.dumps({"rows": [{"path": ["Alpha"], "status": "proved", "t": "x", "start_sha256": SHA}],
-                             "records": [{"key": "global:0x0001", "status": "unmapped", "cites": [{"run": "r"}]}]}),
-                 encoding="utf-8")
     monkeypatch.setattr(C, "ROOT", camera.data.parent.parent)
-    found = C.data_problems()
-    assert found and any(x.startswith(f"data/{CAM}/coverage_{CAM}.json: ") for x in found)
-    said = datafiles.evidence_in_public(f)
-    assert any("'t'" in x for x in said) and any("start_sha256" in x for x in said) and any("'cites'" in x for x in said)
-    assert any("schema" in x for x in said)
-    assert any("kit/tools/coverage.py --write" in x for x in found)
+    assert C.data_problems() == []
+    f = d / f"coverage_{CAM}.json"
+    for t in (json.dumps({"rows": [{"path": ["Alpha"], "status": "proved", "t": "x", "start_sha256": SHA}],
+                          "records": [{"key": "global:0x0001", "status": "unmapped", "cites": [{"run": "r"}]}]}),
+              coverage.public_build_text(CAM)):
+        f.write_text(t, encoding="utf-8")
+        found = C.data_problems()
+        assert found == [f"data/{CAM}/coverage_{CAM}.json: {datafiles.evidence_in_public(f)[0]}"], found
+        assert f"kit/tools/coverage.py --camera {CAM} --print" in found[0] and "carries evidence" not in found[0]
+    f.unlink()
     looks = d / f"looks_{CAM}.jsonl"
     looks.write_text("{}\n", encoding="utf-8")
     assert any("looks file" in x for x in datafiles.evidence_in_public(looks))
     looks.unlink()
-    f.write_text(coverage.public_build_text(CAM), encoding="utf-8")
-    assert datafiles.evidence_in_public(f) == []
     assert C.data_problems() == []
-    # a camera with no definition: its words cannot be checked, so it is refused
     other = tmp_path / "data" / "ILCE-0X0_fw1.00"
     other.mkdir(parents=True)
-    g = other / "coverage_ILCE-0X0_fw1.00.json"
-    g.write_text(coverage.text(dict(coverage.public_doc(ledger()), model="ILCE-0X0", firmware="1.00")),
-                 encoding="utf-8")
+    g = other / "seen_ILCE-0X0_fw1.00.json"
+    g.write_text(coverage.text(coverage.seen_doc("ILCE-0X0_fw1.00", [])), encoding="utf-8")
     assert any("no definition" in x for x in datafiles.evidence_in_public(g))
 
 
 def test_the_a1_ii_public_form_agrees_with_its_definition():
-    """The committed form (data/ILCE-1M2_fw4.00/coverage_ILCE-1M2_fw4.00.json): its schema, no private key, no word
-    outside its vocabulary, every value it calls proved (or, of a setting whose list was proved partly on another
-    setting, proved or named from a shared list) or not offered is so in the definition and the other way round, every
-    top row and record of the definition's file is in it once. A definition written since needs
-    kit/tools/coverage.py --write."""
+    """The a1 II's public form as every clone prints it (its public sources and seen file): its schema, no private
+    key, no word outside its vocabulary, every value it calls proved (or, of a setting whose list was proved partly on
+    another setting, proved or named from a shared list) or not offered is so in the definition and the other way
+    round, every top row and record of the definition's file is in it once."""
     import jsonschema
-    f = coverage.public_file(A1)
-    doc = json.loads(f.read_text(encoding="utf-8"))
+    t = coverage.public_build_text(A1)
+    doc = json.loads(t)
     jsonschema.Draft202012Validator(json.loads((ROOT / "schemas" / "coverage.schema.json").read_text(
         encoding="utf-8"))).validate(doc)
-    assert coverage.public_problems(doc, f.read_text(encoding="utf-8"), camera=A1) == []
+    assert coverage.public_problems(doc, t, camera=A1) == []
     defn = definitions.load_public(A1)
     by_key = {o["key"]: o["statuses"] for o in doc["options"]}
-    again = "; run kit/tools/coverage.py --write"
     for s in defn["settings"]:
         if not s.get("values"):
             continue
         st = by_key.get(s["key"])
-        assert st is not None, s["key"] + again
+        assert st is not None, s["key"]
         p = s.get("proved") or {}
         linear = (p.get("sampled") or {}).get("linear") is True
         proved = {v for v, _ in s["values"]} if linear else (set() if "sampled" in p else set(p.get("values") or []))
         if p.get("shared") and not linear:      # the setting's mark: its listed values, never one of them "proved"
             proved = set()
-            assert set(st.get(coverage.PROVED_OR_SHARED, [])) == set(p.get("values") or []), s["key"] + again
-        assert set(st.get("proved", [])) == proved, s["key"] + again
+            assert set(st.get(coverage.PROVED_OR_SHARED, [])) == set(p.get("values") or []), s["key"]
+        assert set(st.get("proved", [])) == proved, s["key"]
         marks = {x["value"] for x in s.get("not_offered") or []} - proved - set(p.get("values") or [])
-        assert set(st.get("not offered", [])) == marks, s["key"] + again
+        assert set(st.get("not offered", [])) == marks, s["key"]
     tops = {(r["tab"], r["path"][0], r.get("nth", 0)) for r in doc["rows"] if len(r["path"]) == 1 and r["mode"] ==
             coverage.MENU_MODE}
     seen = {}
     for m in defn["menu"]:
         n = seen.get((m["tab"], m["label"]), 0)
         seen[(m["tab"], m["label"])] = n + 1
-        assert (m["tab"], m["label"], n) in tops, m["label"] + again
+        assert (m["tab"], m["label"], n) in tops, m["label"]
     assert len(doc["records"]) == len({r["key"] for r in doc["records"]})
     serial = next(r for r in doc["rows"] if r["path"] == ["Display Serial Number"])
     assert serial["status"] == "information screen" and serial["inferred"] == "class"
 
 
-def test_the_a1_ii_public_form_is_the_public_build():
-    """kit/tools/coverage.py --check and check_public, as CI runs them: the committed form is, byte for byte, what the
-    public sources give with its seen file's facts (no runs, no looks file here), and the seen file is clean."""
-    from camkit import datafiles
-    assert coverage.public_build_text(A1) == coverage.public_file(A1).read_text(encoding="utf-8"), \
-        "run kit/tools/coverage.py --write"
-    assert datafiles.evidence_in_public(coverage.public_file(A1)) == []
-    assert datafiles.evidence_in_public(coverage.seen_file(A1)) == []
+def test_a_tree_without_runs_or_private_prints_the_a1_iis_public_form(tmp_path):
+    """The gate of docs/decisions/0023's change of 2026-11-19, the public form no longer committed: a tree holding the
+    kit's code (kit/camkit, kit/tools/coverage.py), schemas/, the a1 II's definition with its sample and its data
+    folder, and no runs/ and no private/, prints the public form with kit/tools/coverage.py --print: a lean form (its
+    schema, its words, no evidence), the same bytes as this clone's own build (where the mapper's runs and evidence,
+    when they are here, change nothing), and nothing written into the tree."""
+    import shutil
+    import subprocess
+    tree = tmp_path / "clone"
+    shutil.copytree(ROOT / "kit" / "camkit", tree / "kit" / "camkit", ignore=shutil.ignore_patterns("__pycache__"))
+    (tree / "kit" / "tools").mkdir()
+    shutil.copy2(ROOT / "kit" / "tools" / "coverage.py", tree / "kit" / "tools" / "coverage.py")
+    shutil.copytree(ROOT / "schemas", tree / "schemas")
+    shutil.copytree(ROOT / "data" / A1, tree / "data" / A1)
+    (tree / "editor" / "definitions").mkdir(parents=True)
+    defn = ROOT / "editor" / "definitions" / f"{A1}.json"
+    for p in (defn, definitions.sample(definitions.load_public(defn), defn)):
+        shutil.copy2(p, tree / "editor" / "definitions" / p.name)
+    assert not (tree / "data" / A1 / f"coverage_{A1}.json").exists()
+
+    def files():
+        return sorted(p.relative_to(tree).as_posix() for p in tree.rglob("*") if "__pycache__" not in p.parts)
+    before = files()
+    env = {k: v for k, v in os.environ.items() if k not in ("CAMSET_RUNS", "CAMSET_LOOKS_DIR", "CAMSET_EVIDENCE_DIR",
+                                                             "CAMSET_CAMERA")}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    r = subprocess.run([sys.executable, str(tree / "kit" / "tools" / "coverage.py"), "--camera", A1, "--print"],
+                       cwd=tree, env=env, capture_output=True, text=True, encoding="utf-8", timeout=300)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert files() == before and not (tree / "runs").exists() and not (tree / "private").exists()
+    doc = json.loads(r.stdout)
+    assert coverage.public_problems(doc, r.stdout, camera=A1) == []
+    assert doc["model"] == "ILCE-1M2" and doc["firmware"] == "4.00" and doc["rows"] and doc["options"] and doc["records"]
+    assert r.stdout == coverage.public_build_text(A1)
 
 
-def test_the_tool_checks_the_committed_form(camera, monkeypatch, capsys):
+@pytest.mark.parametrize("key", sorted(p.stem for p in (ROOT / "editor" / "definitions").glob("*.json")
+                                       if paths.KEY.fullmatch(p.stem)))
+def test_every_definitions_public_form_is_lean_and_its_seen_file_clean(key):
+    """What kit/tools/coverage.py --check asks in a clone, of every definition shipped: the public form its public
+    sources and seen file give passes its schema and its closed vocabulary and holds no evidence, the seen file, where
+    there is one, its own; and no copy of the form is in its data folder."""
+    assert coverage.public_build_problems(key) == []
+    assert not (definitions.data_dir(key) / f"coverage_{key}.json").exists(), "the public form is printed, never kept"
+
+
+def test_gitignore_keeps_a_public_form_out_and_the_seen_file_in():
+    """A copy of the public form printed into data/ is ignored by git; the seen file and the camera file beside it are
+    not."""
+    import shutil
+    import subprocess
+    if shutil.which("git") is None or not (ROOT / ".git").exists():
+        pytest.skip("not a git clone")
+
+    def ignored(f):
+        return subprocess.run(["git", "check-ignore", "-q", "--no-index", f], cwd=ROOT).returncode == 0
+    assert ignored(f"data/{A1}/coverage_{A1}.json") and ignored("data/ILCE-0X0_fw1.00/coverage_ILCE-0X0_fw1.00.json")
+    assert not ignored(f"data/{A1}/seen_{A1}.json") and not ignored(f"data/{A1}/camera_{A1}.json")
+
+
+def test_the_tool_prints_the_public_form_and_checks_the_seen_file(camera, monkeypatch, capsys):
+    """--print prints the public build (the public sources and the seen file as they stand, never this computer's
+    looks) and writes nothing; --check exits 1 while this computer's looks would change the seen file (Echo's look is
+    in no seen file yet), passes once --write has written it (no public form written into data/), and --print then
+    says what the look found; a camera with no definition prints nothing."""
     import coverage as tool
-    want = coverage.public_build_text(CAM)
-    coverage.public_file(CAM).write_text(want, encoding="utf-8")
-    monkeypatch.setattr(sys, "argv", ["coverage.py", "--check"])
-    tool.main()
-    out = capsys.readouterr().out
-    assert "is the public build" in out and "would change" in out          # Echo's look is not in a seen file yet
-    coverage.public_file(CAM).write_text(want.replace('"Alpha"', '"Alpha "', 1), encoding="utf-8")
-    with pytest.raises(SystemExit) as e:
+
+    def run(*argv):
+        monkeypatch.setattr(sys, "argv", ["coverage.py", *argv])
         tool.main()
-    assert "differs from the public build" in str(e.value)
+        return capsys.readouterr().out
+    listed = sorted(p.name for p in camera.data.iterdir())
+    out = run("--print")
+    assert out == coverage.public_build_text(CAM)
+    assert {tuple(r["path"]): r for r in json.loads(out)["rows"]}[("Echo",)]["status"] == "not yet tried"
+    assert sorted(p.name for p in camera.data.iterdir()) == listed
+    with pytest.raises(SystemExit) as e:
+        run("--check")
+    assert "would change" in str(e.value) and "kit/tools/coverage.py --write" in str(e.value)
+    run("--write")
+    assert sorted(p.name for p in camera.data.iterdir()) == sorted([*listed, f"seen_{CAM}.json"])
+    out = run("--check")
+    assert "lean" in out and "would change" not in out
+    out = run("--print")
+    assert {tuple(r["path"]): r for r in json.loads(out)["rows"]}[("Echo",)]["status"] == "information screen"
+    monkeypatch.setattr(tool, "camera_or_exit", lambda: "ILCE-0X0_fw1.00")
+    with pytest.raises(SystemExit) as e:
+        run("--print")
+    assert "no definition" in str(e.value)
 
 
 def test_a_definition_never_carries_the_camera_files_own_list():
@@ -1911,10 +1970,11 @@ def test_a_notice_info_ok_did_not_pass_is_greyed_and_one_it_passed_is_looked_at(
     assert row(led, "Juliet")["status"] == "not yet tried" and row(led, "Juliet")["looked"] == 1
 
 
-def test_a_commit_range_builds_each_commits_public_form_from_that_commit(camera, tmp_path):
-    """check_public --commits: a commit that edits the public form by hand ("needs equipment" with a lens) is refused
-    by the build check, made from that SAME commit's definition, data folder and seen file taken out of git, even when
-    a later commit of the range puts the form right; a clean commit and the commit that mends it pass."""
+def test_a_commit_range_refuses_a_public_form_in_any_commit_and_judges_the_seen_file(camera, tmp_path):
+    """check_public --commits: a commit that adds the public form to data/ is refused, whatever it holds (the clean
+    build here) and whatever .gitignore says (this repository has none), even when a later commit of the range takes
+    it out again: the form is printed, never kept (docs/decisions/0023). A commit that changes the seen file is held
+    to the seen file's own rules: a clean one passes, one naming a group no public source has is refused."""
     import shutil
     import subprocess
     import check_public as C
@@ -1941,26 +2001,28 @@ def test_a_commit_range_builds_each_commits_public_form_from_that_commit(camera,
     data.mkdir(parents=True)
     for n in (f"camera_{CAM}.json", f"hand_tables_{CAM}.json", f"help_guide_menu_{CAM}.jsonl"):
         (data / n).write_text((camera.data / n).read_text(encoding="utf-8"), encoding="utf-8")
-    (data / f"seen_{CAM}.json").write_text(coverage.text(coverage.seen_doc(CAM, [])), encoding="utf-8")
-    clean = coverage.public_build_text(CAM)
-    (data / f"coverage_{CAM}.json").write_text(clean, encoding="utf-8")
+    seen = data / f"seen_{CAM}.json"
+    seen.write_text(coverage.text(coverage.seen_doc(CAM, [])), encoding="utf-8")
     git("add", "-A")
-    git("commit", "-q", "--no-verify", "-m", "the ledger")
-    first = git("rev-parse", "HEAD")[:12]
-    a = '"path": ["Kilo"], "status": "not yet tried"'
-    (data / f"coverage_{CAM}.json").write_text(
-        clean.replace(a, '"path": ["Kilo"], "status": "needs equipment", "equipment": "a lens"'), encoding="utf-8")
-    git("commit", "-q", "--no-verify", "-am", "an edit by hand")
-    edited = git("rev-parse", "HEAD")[:12]
-    (data / f"coverage_{CAM}.json").write_text(clean, encoding="utf-8")
-    git("commit", "-q", "--no-verify", "-am", "put right")
-    mended = git("rev-parse", "HEAD")[:12]
-    found = [x for x in C.commit_problems(f"{base}..HEAD", repo=repo) if "not the public build" in x]
-    assert any(x.startswith(f"{edited} data/{CAM}/coverage_{CAM}.json: ") for x in found), found
-    assert not any(x.startswith((first, mended)) for x in found), found
-    # the commit's own files, not the tree's: a seen file changed in a commit is built with that commit's form
-    assert C.coverage_commit_problems(git("rev-parse", "HEAD"), [f"data/{CAM}/seen_{CAM}.json"], C._Objects(repo),
-                                      repo) == []
+    git("commit", "-q", "--no-verify", "-m", "the data")
+    (data / f"coverage_{CAM}.json").write_text(coverage.public_build_text(CAM), encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "--no-verify", "-m", "the form, printed into data/")
+    added = git("rev-parse", "HEAD")[:12]
+    git("rm", "-q", f"data/{CAM}/coverage_{CAM}.json")
+    git("commit", "-q", "--no-verify", "-m", "taken out again")
+    fact = {"kind": "acted", "mode": "Stills", "tab": "Shooting", "group": "G1", "path": ["Kilo"]}
+    seen.write_text(coverage.text(coverage.seen_doc(CAM, [fact])), encoding="utf-8")
+    git("commit", "-q", "--no-verify", "-am", "a good fact")
+    seen.write_text(coverage.text(coverage.seen_doc(CAM, [dict(fact, group="Home")])), encoding="utf-8")
+    git("commit", "-q", "--no-verify", "-am", "a group no source names")
+    bad = git("rev-parse", "HEAD")[:12]
+    found = C.commit_problems(f"{base}..HEAD", repo=repo)
+    form = [x for x in found if f"data/{CAM}/coverage_{CAM}.json" in x]
+    assert form and all(x.startswith(f"{added} data/{CAM}/coverage_{CAM}.json: ") and "no longer kept" in x
+                        for x in form), found
+    said = [x for x in found if f"data/{CAM}/seen_{CAM}.json" in x]
+    assert said and all(x.startswith(bad) for x in said) and any("group 'Home'" in x for x in said), found
 
 
 def test_a_map_whose_options_sit_on_a_panel_is_counted(camera):

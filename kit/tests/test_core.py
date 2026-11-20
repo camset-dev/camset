@@ -3428,7 +3428,7 @@ def schema_checked() -> list:
     and CI check (docs/DATA_CONTRACTS.md, "What a mapping delivers")."""
     out = [(p.relative_to(ROOT).as_posix(), "definition") for p in sorted((ROOT / "editor" / "definitions").glob("*.json"))]
     for kind, schema in (("camera", "camera"), ("help", "help-file"), ("settings_reset", "settings-reset"),
-                         ("hand_tables", "hand-tables"), ("coverage", "coverage"), ("seen", "coverage-seen")):
+                         ("hand_tables", "hand-tables"), ("seen", "coverage-seen")):
         out += [(p.relative_to(ROOT).as_posix(), schema) for p in sorted((ROOT / "data").glob(f"*/{kind}_*_fw*.json"))]
     # the mapper's own menu trees, private whole (camkit.datafiles), and hand evidence (kit/writer/hand_evidence.py),
     # where this computer has them

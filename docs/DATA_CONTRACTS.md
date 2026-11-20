@@ -34,17 +34,17 @@ Initialize leaves are taken from each profile's own Reset, and the limits of tha
 | `help_<model>_fw<fw>.json`: each setting's help | By hand, in your own words, never Sony's (decision 13): what each setting a person meets in the menus does; records shown in Expert mode only get none | Optional |
 | `hand_tables_<model>_fw<fw>.json`: what the mapping found by hand | By hand, as the mapping finds each fact (the playbook, Phase 6), never by a kit step | Optional: `kit/schema_update.py` applies it to the definition ([below](#the-hand-tables-file-what-the-mapping-found-by-hand)) |
 | `settings_reset_<model>_fw<fw>.json`: which settings Camera Settings Reset and Initialize put back | By hand, from the downloads before and after each reset, only where the owner allows one (the playbook, Phase 5) | Optional: the model page shows it |
-| `coverage_<model>_fw<fw>.json`: the coverage ledger's public form | `kit/tools/coverage.py --write`, never by hand | Optional; once there, `kit/tools/check_public.py` and a test refuse one that is not, byte for byte, the build of its sources |
-| `seen_<model>_fw<fw>.json`: the facts your looks established that hold for every camera of the model | `kit/tools/coverage.py --write`, where your looks file is | With the public form |
+| `seen_<model>_fw<fw>.json`: the facts your looks established that hold for every camera of the model | `kit/tools/coverage.py --write`, where your looks file is | Optional: the coverage ledger's public form is built from the public sources and this file ([below](#the-coverage-ledger-what-is-settled-and-what-a-proof-needs)) |
 
 What would differ between owners stays with whoever maps the camera, in `private/evidence/<model>_fw<fw>/`: the menu
 tree ([below](#the-menu-tree-the-cameras-menus)), the accepted rulings
 ([below](#the-accepted-file-what-the-report-leaves-open)), the record shapes (the value shapes of the records no
 setting covers, which the proof viewer shows), and the coverage ledger's looks file and private form.
-`kit/tools/check_public.py` refuses each in `data/`: one found there is moved by hand into that folder. Pass 1's map, `runs/<model>_fw<fw>/kit2_pass1/map_all.json`, stays with the runs, written by `kit/pass1_map.py`.
+`kit/tools/check_public.py` refuses each in `data/`: one found there is moved by hand into that folder. It refuses
+the coverage ledger's public form there too, which is printed and never kept. Pass 1's map, `runs/<model>_fw<fw>/kit2_pass1/map_all.json`, stays with the runs, written by `kit/pass1_map.py`.
 
 The pre-commit hooks and CI (`.github/workflows/kit-ci.yml`) check every definition and every data folder's camera,
-help, reset, hand tables, coverage and seen files against their schemas; the Help Guide's menu list has none yet. The
+help, reset, hand tables and seen files against their schemas; the Help Guide's menu list has none yet. The
 kit's tests check the menu tree, the accepted file, the hand evidence file and the looks file against theirs where they
 are present.
 
@@ -347,7 +347,8 @@ The ledger says, for every menu row, every value of every setting and every reco
 ([decision 23](decisions/0023-a-ledger-says-what-is-settled-and-a-proof-is-made-once.md)), so no session does the
 same work twice. It is generated each time from the sources that already exist, so it cannot drift:
 `kit/camkit/coverage.py` builds it (its docstring lists the sources, the two forms and what counts as settled), and
-`kit/tools/coverage.py` prints and writes it (`--todo`, `--row`, `--record`, `--proofs`, `--bundles`: its `--help`).
+`kit/tools/coverage.py` prints and writes it (`--print`, `--todo`, `--row`, `--record`, `--proofs`, `--bundles`: its
+`--help`).
 
 **The looks file.** Of a row, what was done and the option, the latest line wins, except one that did not reach the
 row, and the records an earlier line saw change stay seen; `kit/tools/coverage.py --record ... --result retract`
@@ -355,8 +356,11 @@ withdraws one.
 
 {{ schema_fields("looks") }}
 
-**Two forms.** `kit/tools/coverage.py --write` also writes the private form beside the looks file: the full build,
-each status with its citations; `--check`, and a test in CI, says whether the committed public form is the build.
+**Two forms.** The public form is never kept in a file: `kit/tools/coverage.py --print` prints it, built from the
+public sources and the seen file, the same in any clone ([decision 23](decisions/0023-a-ledger-says-what-is-settled-and-a-proof-is-made-once.md)).
+`--write` writes the seen file and, beside the looks file, the private form: the full build, each status with its
+citations. `--check` exits 1 unless the public form and the seen file are lean and, where your looks file is, the
+seen file is what `--write` writes from it; the kit's tests check every definition's public form in CI.
 
 {{ schema_fields("coverage") }}
 

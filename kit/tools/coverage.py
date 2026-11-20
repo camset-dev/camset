@@ -1,10 +1,11 @@
 """The coverage ledger: what is settled about a camera's menus and its file, and what is left (docs/decisions/0023).
 
     .venv/bin/python kit/tools/coverage.py                     # counts per tab and status, options, records and bytes
-    .venv/bin/python kit/tools/coverage.py --write             # the public form into data/, the private form beside
+    .venv/bin/python kit/tools/coverage.py --public-only       # the same from the public sources alone (a fresh clone)
+    .venv/bin/python kit/tools/coverage.py --print             # the public form, as JSON: what any clone prints
+    .venv/bin/python kit/tools/coverage.py --write             # the seen file into data/, the private form beside
                                                                # the looks file (private/evidence/<model>_fw<fw>/)
-    .venv/bin/python kit/tools/coverage.py --write --public-only   # from the public sources alone (a fresh clone)
-    .venv/bin/python kit/tools/coverage.py --check             # does data/'s public form match the public build?
+    .venv/bin/python kit/tools/coverage.py --check             # is the seen file current, the public form lean?
     .venv/bin/python kit/tools/coverage.py --todo [--tab T] [--mode Movie] [--needs remote-look|remote-proof|hand|
                                                     equipment|decision|kit] [--limit N]
     .venv/bin/python kit/tools/coverage.py --row "Wi-Fi Connect" [--public]
@@ -21,18 +22,18 @@ The camera is the one the kit works on (--camera, CAMSET_CAMERA or private/confi
 generated each time from the definition, the hand tables, the camera file, the Help Guide's list, camkit.safety and,
 on the computer that holds them, the camera's looks file, runs and leads (camkit.coverage says which and how), so it
 cannot drift from them. The counts and --todo, --row, --bundles and --proofs read that full build; --public-only reads
-the public sources alone. The public form (data/<model>_fw<fw>/coverage_<model>_fw<fw>.json,
-schemas/coverage.schema.json) is always the PUBLIC build's: the public sources and the few facts a look establishes
-that hold for every camera of the model (camkit.coverage.ALLOWED: an information screen and its address field names,
-a row that acts when opened, a hand check that changed a record, a row of the maker's Save/Load list confirmed), which
-live in a small file of their own beside it, the seen file (data/<model>_fw<fw>/seen_<model>_fw<fw>.json,
-schemas/coverage-seen.schema.json): --write writes it where the looks file is on this computer (the committed facts
-with the looks' own, a retraction of the looks taking a committed one out), or where there is none yet. The public
-form holds never a state seen, a run, a date, a hash, a frame, a current option or a value, and is byte for byte the
-build of the public sources and the seen file: kit/tools/check_public.py refuses one that is not, or that breaks its
-schema or closed vocabulary (the seen file too). Writing it twice from the same sources gives the same bytes, and
---check (which CI's tests run too) says whether the committed form is that build, and whether this computer's looks
-would change the seen file.
+the public sources alone. The public form (schemas/coverage.schema.json) is always the PUBLIC build's: the public
+sources and the few facts a look establishes that hold for every camera of the model (camkit.coverage.ALLOWED: an
+information screen and its address field names, a row that acts when opened, a hand check that changed a record, a row
+of the maker's Save/Load list confirmed), which live in a small file of their own, the seen file
+(data/<model>_fw<fw>/seen_<model>_fw<fw>.json, schemas/coverage-seen.schema.json): --write writes it where the looks
+file is on this computer (the committed facts with the looks' own, a retraction of the looks taking a committed one
+out), or where there is none yet. The public form holds never a state seen, a run, a date, a hash, a frame, a current
+option or a value, and is never kept in a file (docs/decisions/0023): --print prints it, the same bytes in any clone,
+which has no runs/ and no private/, and kit/tools/check_public.py refuses a copy in data/. --check says whether the
+public form the public sources and the seen file give is lean (its schema, its closed vocabulary, no evidence), the
+seen file too, and, where this computer holds the looks file, whether the seen file is what --write writes from them;
+it exits 1 when any is not.
 
 --record writes one look for an owner's hand check into the looks file (by "hand"), which it leaves owner-only: the
 row (its tab and group first when the path starts with a tab's name), what was done (--did), the option, and the
@@ -48,7 +49,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import coverage as ledger, paths  # noqa: E402
+from camkit import coverage as ledger, definitions, paths  # noqa: E402
 
 
 def camera_or_exit() -> str:
@@ -140,12 +141,51 @@ def record(a, camera: str) -> None:
           f"differ: {', '.join(keys) or 'none'} (into {paths.shown(ledger.looks_file(camera))})")
 
 
+def print_public(camera: str) -> None:
+    """The public form on standard output: the public build of the public sources and the seen file as they stand
+    (never this computer's looks or runs), so any clone prints the same bytes; nothing written."""
+    if not definitions.path(camera).exists():
+        sys.exit(f"no definition for {camera}: kit/schema_update.py --write makes one")
+    t = ledger.public_build_text(camera)
+    why = ledger.public_problems(json.loads(t), t, camera=camera)
+    if why:
+        sys.exit(f"the public form would hold what decision 16 keeps private, so it is not printed: {'; '.join(why[:3])}")
+    sys.stdout.write(t)
+
+
+def check(camera: str, led) -> None:
+    """--check: the public form the public sources and the seen file give, and the seen file, lean
+    (camkit.coverage.public_build_problems); where the looks file is on this computer, the seen file what --write
+    writes from it. Exit status 1, with what to do, when any is not so."""
+    seen = ledger.seen_file(camera)
+    found = ledger.public_build_problems(camera)
+    for x in found:
+        print(f"  {x}")
+    stale = False
+    if led.src.private and led.src.looks_present:
+        local = ledger.text(ledger.seen_doc(camera, ledger.public_seen(led)))
+        stale = not seen.exists() or seen.read_text(encoding="utf-8") != local
+    if found:
+        sys.exit(f"the public form of {camera} or {paths.shown(seen)} holds what it may not ({len(found)} places, above)"
+                 + ("; this computer's looks would also change the seen file" if stale else ""))
+    if stale:
+        sys.exit(f"this computer's looks would change {paths.shown(seen)}: kit/tools/coverage.py --write writes it")
+    print(f"the public form of {camera}, built from the public sources and "
+          f"{paths.shown(seen) if seen.exists() else 'no seen file'}, is lean"
+          + (", and the seen file is what this computer's looks give" if led.src.private and led.src.looks_present
+             else " (no looks file read, so the seen file is judged as it stands)"))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--write", action="store_true", help="write the public form (and the private one)")
+    ap.add_argument("--write", action="store_true", help="write the seen file (and the private form)")
     ap.add_argument("--public-only", action="store_true", help="from the public sources alone, as a fresh clone")
+    ap.add_argument("--print", action="store_true",
+                    help="print the public form, as JSON: the public sources and the seen file's build, as any clone "
+                         "prints it (it is never kept in a file)")
     ap.add_argument("--check", action="store_true",
-                    help="say whether data/'s public form is the public build (exit status 1 when it is not)")
+                    help="say whether the public form is lean, the seen file too, and whether this computer's looks "
+                         "would change the seen file (exit status 1 when any is so)")
     ap.add_argument("--todo", action="store_true", help="what is left, by expected yield")
     ap.add_argument("--tab")
     ap.add_argument("--mode")
@@ -177,6 +217,9 @@ def main():
     camera = camera_or_exit()
     if a.record:
         record(a, camera)
+        return
+    if a.print:
+        print_public(camera)
         return
     src = ledger.load_sources(camera, public=a.public_only, leads=a.leads)
     if not src.definition:
@@ -211,18 +254,7 @@ def main():
         print(json.dumps(led.proof_summary, indent=1))
         return
     if a.check:
-        # the committed form against the public sources and the committed seen file alone (CI's check too); then whether
-        # this computer's looks would change the seen file
-        want = ledger.public_build_text(camera)
-        have, seen = ledger.public_file(camera), ledger.seen_file(camera)
-        if not have.exists() or have.read_text(encoding="utf-8") != want:
-            sys.exit(f"{paths.shown(have)} {'differs from' if have.exists() else 'is missing; it would be'} the public "
-                     f"build of the public sources and {paths.shown(seen)}: kit/tools/coverage.py --write")
-        print(f"{paths.shown(have)} is the public build of the public sources and {paths.shown(seen)}")
-        if led.src.private and led.src.looks_present:
-            local = ledger.text(ledger.seen_doc(camera, ledger.public_seen(led)))
-            if not seen.exists() or seen.read_text(encoding="utf-8") != local:
-                print(f"this computer's looks would change {paths.shown(seen)}: kit/tools/coverage.py --write")
+        check(camera, led)
         return
     show_counts(led, public=a.public_only)
     if a.write:

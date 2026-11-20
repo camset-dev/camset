@@ -1218,9 +1218,10 @@ def _ordinary_verdicts(labels_or_bars, kind, known_groups=()):
 
 
 def ordinary_inputs():
-    """Every row label of the a1 II's definition (its menu and every setting's row path) and of
-    data/ILCE-1M2_fw4.00/ (the coverage ledger's paths, the Help Guide's menu items, the seen facts' paths, the settings
-    reset's names), each as written, one space dropped, every space dropped and with one OCR slip; and each label's own
+    """Every row label of the a1 II's definition (its menu and every setting's row path), of its coverage ledger's
+    public form (printed from its public sources, never kept: docs/decisions/0023) and of data/ILCE-1M2_fw4.00/ (the
+    Help Guide's menu items, the seen facts' paths, the settings reset's names), each as written, one space dropped,
+    every space dropped and with one OCR slip; and each label's own
     values beside it (the definition's), with each of those readings of the label."""
     d = json.loads((ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
     data = ROOT / "data" / "ILCE-1M2_fw4.00"
@@ -1232,7 +1233,7 @@ def ordinary_inputs():
         if row:
             values.setdefault(row[-1], set()).update(str(v[1]) for v in s.get("values") or []
                                                      if isinstance(v, list) and len(v) > 1 and isinstance(v[1], str))
-    cov = json.loads((data / "coverage_ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    cov = json.loads(coverage.public_build_text("ILCE-1M2_fw4.00"))
     labels |= {x for r in cov.get("rows") or [] for x in r.get("path") or [] if isinstance(x, str)}
     seen = json.loads((data / "seen_ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
     labels |= {x for r in seen.get("facts") or [] for x in r.get("path") or [] if isinstance(x, str)}

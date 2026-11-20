@@ -28,21 +28,23 @@ and, where they are on this computer (the mapper's own, never published):
                             changed in the camera's own downloads, and the rows of the steps they changed in
                             (kit/tools/leads.py --write; never a value)
 
-Two forms are written by kit/tools/coverage.py --write. The PUBLIC lean form, data/<model>_fw<fw>/coverage_<model>_
-fw<fw>.json, is built from the public sources ALONE (load_sources(public=True): the definition without its evidence,
-the hand tables, the camera file, the Help Guide's list, camkit.safety) and a short allow-list of what a look
-establishes that is true of every camera of the model (ALLOWED: a row opens an information screen, with the kit's
-address field names it showed, safety.ADDRESS_FIELDS'; a row acted when opened; a hand check changed a record; a row on
-the maker's Save/Load list was seen to change nothing, "confirmed"). Those facts live in a small public file of their
-own, the seen file, data/<model>_fw<fw>/seen_<model>_fw<fw>.json (schemas/coverage-seen.schema.json), which --write
-writes where the looks file is on the computer (its facts with the looks' own, the looks' retractions taking committed
-ones out): an edit of a fact shows in review as a change to that one small file, and the public form is always, byte
-for byte, the build of the public sources and the seen file (public_build, build_problems, which check_public runs).
-Nothing observed about the camera's state goes public: no "tested, no record changes", no "greyed in state" but the
-definition's inactive_when, no "needs equipment" but an unproved_reason's, no "kit cannot read", never a run, date,
-hash, frame, current option or value (public_problems and seen_problems, which kit/tools/check_public.py runs: the
-schemas, a closed vocabulary and PRIVATE_KEYS). The PRIVATE form, beside the looks file, is the full build: each
-status's citations, the proofs' validity and one evidence bundle per valid proof.
+Two forms. The PUBLIC lean form (schemas/coverage.schema.json) is built from the public sources ALONE
+(load_sources(public=True): the definition without its evidence, the hand tables, the camera file, the Help Guide's
+list, camkit.safety) and a short allow-list of what a look establishes that is true of every camera of the model
+(ALLOWED: a row opens an information screen, with the kit's address field names it showed, safety.ADDRESS_FIELDS'; a
+row acted when opened; a hand check changed a record; a row on the maker's Save/Load list was seen to change nothing,
+"confirmed"). Those facts live in a small public file of their own, the seen file, data/<model>_fw<fw>/seen_<model>_
+fw<fw>.json (schemas/coverage-seen.schema.json), which kit/tools/coverage.py --write writes where the looks file is on
+the computer (its facts with the looks' own, the looks' retractions taking committed ones out): an edit of a fact shows
+in review as a change to that one small file. The public form itself is never kept in a file (docs/decisions/0023,
+since 2026-11-19): it is the build of the public sources and the seen file (public_build), the same bytes in any
+clone, which kit/tools/coverage.py --print prints; a copy in data/ is refused (camkit.datafiles). Nothing observed
+about the camera's state goes public: no "tested, no record changes", no "greyed in state" but the definition's
+inactive_when, no "needs equipment" but an unproved_reason's, no "kit cannot read", never a run, date, hash, frame,
+current option or value (public_problems and seen_problems, which --print, --check, --write and
+kit/tools/check_public.py run: the schemas, a closed vocabulary and PRIVATE_KEYS; public_build_problems). The PRIVATE
+form, written by --write beside the looks file, is the full build: each status's citations, the proofs' validity and
+one evidence bundle per valid proof.
 
 settled(): drive.py, crawl_run.py and prove_run.py ask it before they press on a row (the gates below), and by default
 only PRINT what it says ("coverage: <row>: <status> ..."), from the private build made once a run, reading no download
@@ -276,10 +278,6 @@ def private_file(camera: str) -> Path:
 
 def leads_file(camera: str) -> Path:
     return looks_dir() / camera / f"leads_{camera}.json"
-
-
-def public_file(camera: str) -> Path:
-    return definitions.data_dir(camera) / f"coverage_{camera}.json"
 
 
 def seen_file(camera: str, data_dir: Path = None) -> Path:
@@ -901,7 +899,7 @@ def _build(camera, src, public, validity) -> Ledger:
 
 
 def public_ledger(led: Ledger) -> Ledger:
-    """The ledger the public form is written from: `led` itself where it was built from the public sources alone (with
+    """The ledger the public form is made from: `led` itself where it was built from the public sources alone (with
     the seen file's facts), else one built again from them (the private build's own stand-ins: its definition file,
     data folder and record ids) with the facts public_seen gives: the seen file's, and where the looks file is on this
     computer its own allow-listed facts too, its retractions taking committed ones out. Nothing the private sources
@@ -926,7 +924,7 @@ def public_ledger(led: Ledger) -> Ledger:
 
 
 def public_seen(led: Ledger) -> list:
-    """The seen file's facts the public form is written with (normalized_facts): public_ledger's."""
+    """The seen file's facts the public form is made with (normalized_facts): public_ledger's."""
     if not led.src.private:
         return normalized_facts(led.src.allowed, led)
     public_ledger(led)
@@ -934,9 +932,9 @@ def public_seen(led: Ledger) -> list:
 
 
 def public_build(camera: str, data_dir: Path = None, definition: Path = None) -> Ledger:
-    """The public build check_public and --check compare the committed form with: the camera's public sources and its
-    seen file alone (`data_dir`: the folder they are in, else the camera's own; `definition`: its definition file,
-    else the camera's own), no looks, no runs."""
+    """The public build, the public form as kit/tools/coverage.py --print prints it in any clone: the camera's public
+    sources and its seen file alone (`data_dir`: the folder they are in, else the camera's own; `definition`: its
+    definition file, else the camera's own), no looks, no runs."""
     return build(src=load_sources(camera, public=True, data_dir=data_dir, definition=definition))
 
 
@@ -2464,7 +2462,7 @@ ROW_PRIVATE = ROW_PUBLIC + ("values_inferred", "through", "source", "cites", "ki
                             "cites_changed", "looked", "options_seen", "proofs")
 # a blocker's keys the public form holds: the row an inactive_when names, never an option (the state it stood in)
 PUBLIC_BLOCKER_KEYS = ("row",)
-ABOUT = ("What is settled about this camera's menus and file, generated by kit/tools/coverage.py --write from the "
+ABOUT = ("What is settled about this camera's menus and file, printed by kit/tools/coverage.py --print from the "
          "public sources alone (the definition, the hand tables, the camera file, the Help Guide's menu list, "
          "camkit.safety) and the few facts a look establishes that hold for every camera of the model (an "
          "information screen and its field names, a row that acts when opened, a hand check that changed a record, "
@@ -2513,7 +2511,7 @@ def _doc(led: Ledger, private: bool) -> dict:
 
 
 def public_doc(led: Ledger) -> dict:
-    """The public lean form (data/<model>_fw<fw>/coverage_<model>_fw<fw>.json), written from public_ledger(led): the
+    """The public lean form (kit/tools/coverage.py --print; never kept in a file), made from public_ledger(led): the
     public sources and the allow-listed facts alone, whatever else `led` was built from."""
     return _doc(public_ledger(led), private=False)
 
@@ -2700,8 +2698,7 @@ def public_problems(doc, raw: str = None, vocab: Vocab = None, camera: str = Non
     """Where a public coverage form holds what decision 16 keeps private, in words; [] for a lean one: _text_problems,
     what the schema refuses (schemas/coverage.schema.json) and any word outside its closed vocabulary
     (vocabulary_problems: `vocab`, else the camera's, `camera` or the form's own model and firmware, its Help Guide list
-    and camera file in `data_dir`). That the form is the public build of its sources and seen file, check_public asks
-    besides (build_problems)."""
+    and camera file in `data_dir`)."""
     vocab, camera = _vocab_for(doc, vocab, camera, data_dir)
     return _text_problems(doc, raw) + schema_problems(doc) + vocabulary_problems(doc, vocab, camera)
 
@@ -2737,21 +2734,29 @@ def public_build_text(camera: str, data_dir: Path = None, definition: Path = Non
     return text(public_doc(public_build(camera, data_dir, definition)))
 
 
-def build_problems(p: Path, definition: Path = None) -> list:
-    """Where the committed public form at `p` is not, byte for byte, the public build of its camera's public sources
-    and the seen file beside it (`definition`: the definition file of the same commit, else the camera's own): a hand
-    edit of the form (a status, an equipment, a field) is one, which only kit/tools/coverage.py --write mends; the facts
-    a look established live in the seen file alone. check_public runs it on the tree, and on each commit of a range
-    with that commit's definition and data folder (its sample beside the definition) taken out of git."""
-    camera = Path(p).parent.name
+def public_build_problems(camera: str, data_dir: Path = None) -> list:
+    """Where the camera's public form, as its public sources and seen file give it (public_build_text), is not one the
+    public form may be (public_problems: its schema, its closed vocabulary, no private key, date, hash or run), or its
+    seen file is not (seen_problems, each line starting with the file's name), in words; [] for a lean pair. The form
+    is printed, never kept (docs/decisions/0023), so there is no file to compare it with: this is what
+    kit/tools/coverage.py --check and the tests ask of it, in any clone."""
+    if not definitions.path(camera).exists():
+        return [f"no definition for {camera}: kit/schema_update.py --write makes one"]
     try:
-        want = public_build_text(camera, Path(p).parent, definition)
+        t = public_build_text(camera, data_dir)
     except (SystemExit, OSError, ValueError) as e:
         return [f"its public build could not be made ({type(e).__name__}: {e})"]
-    if Path(p).read_text(encoding="utf-8") != want:
-        return [f"it is not the public build of {camera}'s public sources and its seen file, seen_{camera}.json (an "
-                "edit by hand, or a definition changed since): kit/tools/coverage.py --write"]
-    return []
+    vocab = vocabulary(camera, data_dir)
+    out = public_problems(json.loads(t), t, vocab=vocab, camera=camera)
+    seen = seen_file(camera, data_dir)
+    if seen.exists():
+        st = seen.read_text(encoding="utf-8")
+        try:
+            doc = json.loads(st)
+        except ValueError:
+            return out + [f"{seen.name}: it is not valid JSON"]
+        out += [f"{seen.name}: {x}" for x in seen_problems(doc, st, vocab=vocab, camera=camera)]
+    return out
 
 
 def seen_doc(camera: str, facts: list) -> dict:
@@ -2770,14 +2775,13 @@ def _replace(p: Path, t: str, private: bool = False) -> Path:
     return p
 
 
-def write(led: Ledger, public_path: Path = None, private_path: Path = None, seen_path: Path = None) -> list:
-    """The public form, its seen file and (unless private_path is False) the private form written; the paths written.
-    The seen file (public_seen: the committed facts with the looks' own, the looks' retractions taking committed ones
-    out) is written where the looks file is on this computer, or where there is none yet; the public form is the build
-    of the public sources and those facts, so check_public finds it the public build. A form or a seen file
-    public_problems or seen_problems refuses is not written (ValueError)."""
+def write(led: Ledger, private_path: Path = None, seen_path: Path = None) -> list:
+    """The seen file and (unless private_path is False) the private form written; the paths written. The public form
+    is never written (docs/decisions/0023): kit/tools/coverage.py --print prints it, the build of the public sources and
+    the seen file. The seen file (public_seen: the committed facts with the looks' own, the looks' retractions taking
+    committed ones out) is written where the looks file is on this computer, or where there is none yet. Nothing is
+    written when seen_problems refuses the seen file or public_problems the public form it gives (ValueError)."""
     out = []
-    pub = Path(public_path) if public_path is not None else public_file(led.camera)
     seen = Path(seen_path) if seen_path is not None else seen_file(led.camera, led.src.given.get("data_dir"))
     vocab = vocab_of(public_ledger(led).src)
     t = text(public_doc(led))
@@ -2785,10 +2789,10 @@ def write(led: Ledger, public_path: Path = None, private_path: Path = None, seen
     st = text(seen_doc(led.camera, public_seen(led)))
     why += seen_problems(json.loads(st), st, vocab=vocab, camera=led.camera)
     if why:
-        raise ValueError(f"the public form would hold private evidence: {'; '.join(why[:3])}")
+        raise ValueError(f"nothing written: the seen file or the public form it gives would hold private evidence: "
+                         f"{'; '.join(why[:3])}")
     if led.src.looks_present or not seen.exists():
         out.append(_replace(seen, st))
-    out.insert(0, _replace(pub, t))
     if private_path is not False and led.src.private:
         out.append(_replace(Path(private_path) if private_path is not None else private_file(led.camera),
                             text(private_doc(led)), private=True))

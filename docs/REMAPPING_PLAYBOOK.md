@@ -388,8 +388,9 @@ After new proofs, run these in order.
    The pull request carries the gate's count line.
 5. Stage the definition (`git add editor/definitions/<model>_fw<fw>.json`), run the report and `--write` again:
    `git diff --exit-code editor/definitions/<model>_fw<fw>.json` must print nothing.
-6. `kit/tools/build_docs.py`, `kit/tools/leads.py --write`, then `kit/tools/coverage.py --write` (commit what it
-   writes; never edit it by hand), then `cd editor && cargo test` and `.venv/bin/zensical build --strict`.
+6. `kit/tools/build_docs.py`, `kit/tools/leads.py --write`, then `kit/tools/coverage.py --write` and `--check`
+   (commit the seen file it writes in `data/`; never edit it by hand; the ledger's public form is printed, never
+   kept: `--print`), then `cd editor && cargo test` and `.venv/bin/zensical build --strict`.
 
 ## 8. Pitfalls already paid for
 
@@ -576,7 +577,7 @@ After the owner's Initialize, before the next run (after Reset Network Set., the
 - Records only the owner can change (dial, orientation, registration, resets) are proved in sessions, and records a
   file cannot set carry a note saying so.
 - The `data/<model>_fw<fw>/` folder holds the files [Data files](DATA_CONTRACTS.md#what-a-mapping-delivers) lists as
-  required, with the coverage ledger's public form, and the model's page is in `docs/models/`. The definition is as
+  required, `kit/tools/coverage.py --check` passes, and the model's page is in `docs/models/`. The definition is as
   `kit/schema_update.py --write` wrote it, opens the owner's files in the editor, and no other camera's definition
   changed; `kit/tools/check_public.py --all` exits 0, and its evidence stays in `private/`.
 - The camera holds the owner's own file again: an upload, then a download that differs only in the records a file

@@ -71,7 +71,6 @@ jobs:
           check-jsonschema --schemafile schemas/help-file.schema.json data/*/help_*_fw*.json
           check-jsonschema --schemafile schemas/settings-reset.schema.json data/*/settings_reset_*_fw*.json
           check-jsonschema --schemafile schemas/hand-tables.schema.json data/*/hand_tables_*_fw*.json
-          check-jsonschema --schemafile schemas/coverage.schema.json data/*/coverage_*_fw*.json
           check-jsonschema --schemafile schemas/coverage-seen.schema.json data/*/seen_*_fw*.json
 
   # the kit's tests on Windows as well (first run there by hand on 2026-11-12, docs/PORTING.md): only the tests, the

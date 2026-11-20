@@ -51,12 +51,6 @@ repos:
         language: python
         pass_filenames: false
         files: ^(data/[^/]+/hand_tables_[^/]*_fw[^/]*\.json$|schemas/)
-      - id: coverage-json
-        name: the coverage ledgers' public forms match their JSON Schema (statuses only, no evidence)
-        entry: python kit/tools/hook.py check-jsonschema --schemafile schemas/coverage.schema.json "data/*/coverage_*_fw*.json"
-        language: python
-        pass_filenames: false
-        files: ^(data/[^/]+/coverage_[^/]*_fw[^/]*\.json$|schemas/)
       - id: coverage-seen-json
         name: the coverage ledgers' seen files match their JSON Schema (allow-listed facts only)
         entry: python kit/tools/hook.py check-jsonschema --schemafile schemas/coverage-seen.schema.json "data/*/seen_*_fw*.json"

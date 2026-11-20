@@ -21,7 +21,8 @@ private/config.json: camkit.paths), its output shown as it prints it:
                                           it took, and stops when the third still changed something)
   3. kit/tools/build_docs.py --no-viewer  the generated files the definition gives
   4. kit/tools/leads.py --write           the mining's leads (private)
-  5. kit/tools/coverage.py --write        the coverage ledger, its public form and its private one
+  5. kit/tools/coverage.py --write        the coverage ledger's seen file and its private form (the public form is
+                                          printed, never written: kit/tools/coverage.py --print)
   6. the editor's golden menu, re-blessed where the camera has one (editor/tests/data/menu_<model>_fw<fw>.json):
      CAMSET_BLESS=1 cargo test --release the_default_menu_is_the_golden_one, in editor/; where cargo is not on this
      computer the rebuild says that command instead

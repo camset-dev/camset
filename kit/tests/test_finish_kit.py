@@ -2106,22 +2106,13 @@ def test_a_row_on_the_acts_on_open_list_with_a_setting_placed_on_it_is_no_action
     assert T.row(T.ledger(), "Zoom", group="Zoom")["status"] != "action, nothing to map"
 
 
-def test_the_a1_iis_public_build_says_zoom_is_an_action_and_only_that_changes():
-    """The a1 II's committed public sources (data/, editor/definitions/: in every clone): its public build's Zoom row is
-    an action, inferred from its class; every other row of the committed form as it was. The committed form is written
-    by the data rebuild, never by hand (kit/tools/coverage.py --write)."""
+def test_the_a1_iis_public_build_says_zoom_is_an_action():
+    """The a1 II's committed public sources (data/, editor/definitions/: in every clone): its public build's Zoom row,
+    as kit/tools/coverage.py --print prints it, is an action, inferred from its class."""
     import json
 
-    from camkit import ROOT, coverage
-    cam = paths.A1II
-    committed = ROOT / "data" / cam / f"coverage_{cam}.json"
-    if not committed.exists():
-        pytest.skip("no committed public form")
-    built = json.loads(coverage.public_build_text(cam, committed.parent))
-    old = json.loads(committed.read_text(encoding="utf-8"))
+    from camkit import coverage
+    built = json.loads(coverage.public_build_text(paths.A1II))
     rows = {(r["mode"], r["tab"], r["group"], tuple(r["path"]), r.get("nth", 0)): r for r in built["rows"]}
     zoom = rows[("Stills", "Shooting", "Zoom", ("Zoom",), 0)]
     assert zoom["status"] == "action, nothing to map" and zoom["inferred"] == "class"
-    changed = [r for r in old["rows"] if rows.get((r["mode"], r["tab"], r["group"], tuple(r["path"]), r.get("nth", 0)))
-               != r]
-    assert all(r["path"] == ["Zoom"] for r in changed), changed
