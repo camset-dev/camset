@@ -32,9 +32,11 @@ For one row, the cursor on it on a menu or submenu page, in this order, each ste
      second Right.
 
 The line written (the module's outcomes, "right" whether the Right went out): what was read and pressed. The guide's and
-the notice's words are Sony's and the camera's state: they stay in the run's folder (decision 13). What a data pass may
-take public is the blocker as camkit.coverage.blocker_of gives it (the row label, never its value), as the option
-provers' lines carry theirs (proving.greyed)."""
+the notice's words are Sony's and the camera's state: they stay in the run's folder (decision 13). The blocker a line
+names (camkit.coverage.blocker_of: the row label, never its value, as the option provers' lines carry theirs,
+proving.greyed) is a lead, the setting to try, never the values that grey the row: the value the camera held is the
+owner's (decision 16). Those come only from runs where the kit set each value of the blocker itself from a known start
+file and saw the row grey or white."""
 import re
 
 import numpy as np

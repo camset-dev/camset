@@ -21,8 +21,11 @@ checked (the run chooses nothing, so nothing should differ). Lines: <run>/greyro
 runs/<model>_fw<fw>/ (the run kit2_greyrow unless --run names another), one a row: the mode and --context, the start
 file, the outcome, whether the row's one Right is spent ("spent") and went out ("right"), the guide's and the notice's
 words and frames (Sony's text and the camera's state: they stay in runs/, decision 13), and the blocker the notice names
-(camkit.coverage.blocker_of: the row label, never its value), which a data pass takes to the hand tables'
-inactive_when with the start file's record of that row (docs/REMAPPING_PLAYBOOK.md, Phase 3). A row is the row the kit
+(camkit.coverage.blocker_of: the row label, never its value). That blocker is a lead, the setting to try, never the
+values that grey the row: the value the start file holds is the owner's (decision 16), so a hand table's inactive_when
+takes its values and the value that un-greys the row only from runs where the kit set each value of that setting
+itself from a known start file and saw the row grey or white, every value classified before the entry is written
+(docs/REMAPPING_PLAYBOOK.md, Phase 3). A row is the row the kit
 finds (row_keys: its labels folded as camkit.first_open folds them, and the row the page scan leads to), so a row named
 twice, spelled or read otherwise, is asked once; a row whose Right is spent in this run folder, mode and context (each
 compared folded) gets none again: another --context (another state) or --run asks again.
