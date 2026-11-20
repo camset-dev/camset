@@ -193,6 +193,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   whose own menu tree holds its row, and `row_places` where one places it otherwise. `HAND_PLACES` places a record no
   proof path can (one a row's own function writes, or a row no walk reads, seen on the camera), and
   `kit/tools/menu_tree.py --add` takes one group's pages from a page scan into a tree.
+- **The camera's menus tell more records apart:** one setting kept in two records that Stills and Movie each move
+  alone keeps each in its own mode's menu, and a row given by hand reaches the second of two rows of one label (`#1`)
+  or a row named as its group. The camera file may word the menu buttons' label and hover (`camera.text.menus_label`,
+  `menus_hover`).
 - **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
   counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
