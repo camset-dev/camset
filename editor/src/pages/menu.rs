@@ -50,6 +50,9 @@ type MenuGroups = std::rc::Rc<std::collections::HashSet<(String, String)>>;
 
 /// Where a row sits in a menu, to tell a row alone on its place: its area, labels, sort key, tab and group.
 type PlaceKey = (String, Vec<String>, Vec<i64>, String, String);
+/// The heading rows sit under in a menu (`listed`): area, tab and group as the camera's layout has them, the labels and
+/// positions of the rows above.
+type HeadKey = (String, String, String, Vec<String>, Vec<i64>);
 
 /// How many listings of menus are kept (three menus, two ways of picking records, a little room).
 const MENUS_KEPT: usize = 12;
@@ -1147,16 +1150,27 @@ impl App {
         }
         if !expert {
             // a row alone on its place in the camera's menu (among the live settings', or one memory set's, that are
-            // not Expert mode's), titled as the camera draws it
+            // not Expert mode's), titled as the camera draws it (`menu_rows::drawn`), unless another row under the same
+            // heading would then be titled alike
             let place = |s: &Setting| (s.area.clone(), s.row.clone(), s.row_at.clone(), menu_rows::camera_tab(s).to_string(), menu_rows::camera_group(s).to_string());
+            let above = |s: &Setting| s.row.len().saturating_sub(1);
+            let head = |s: &Setting| -> HeadKey { (s.area.clone(), menu_rows::camera_tab(s).to_string(), menu_rows::camera_group(s).to_string(), s.row[..above(s)].to_vec(), s.row_at[..above(s).min(s.row_at.len())].to_vec()) };
+            let counted = |s: &Setting| s.placed() && s.under_option.is_none() && !Self::expert_only(s);
             let mut on: std::collections::HashMap<PlaceKey, usize> = Default::default();
-            for s in rows.iter().filter(|s| s.placed() && s.under_option.is_none() && !Self::expert_only(s)) {
+            for s in rows.iter().filter(|s| counted(s)) {
                 *on.entry(place(s)).or_default() += 1;
             }
-            for s in rows.iter_mut().filter(|s| s.placed() && s.under_option.is_none() && !s.on_page() && !Self::expert_only(s)) {
-                if on.get(&place(s)) == Some(&1) {
-                    if let Some(label) = s.row.last().filter(|l| !l.is_empty()) {
-                        s.name = label.clone();
+            let titles: Vec<Option<String>> = rows.iter().map(|s| {
+                (counted(s) && !s.on_page() && on.get(&place(s)) == Some(&1)).then(|| s.row.last().map(|l| menu_rows::drawn(l).to_string()).filter(|l| !l.is_empty())).flatten()
+            }).collect();
+            let mut alike: std::collections::HashMap<(HeadKey, String), usize> = Default::default();
+            for (s, t) in rows.iter().zip(&titles).filter(|(s, _)| counted(s)) {
+                *alike.entry((head(s), t.clone().unwrap_or_else(|| s.name.clone()))).or_default() += 1;
+            }
+            for (s, t) in rows.iter_mut().zip(titles) {
+                if let Some(t) = t {
+                    if alike.get(&(head(s), t.clone())) == Some(&1) {
+                        s.name = t;
                     }
                 }
             }
@@ -2015,6 +2029,48 @@ pub(crate) mod facts_tests {
         app.set_menu("S&Q");
         app.go_to(&audio);
         assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some("S&Q"), Some(audio.key.as_str())));
+        done(&dir, &user);
+    }
+
+    /// Review finding 6: a row alone on its place keeps its full name where another row under the same heading would
+    /// be titled alike (the a1 II's Recording Media and Recording Media (Movie), each alone on its place under Rec.
+    /// Media Settings, both in Movie's menu); and a label the definition tells apart from another of the same words by
+    /// `#n` (docs/DATA_CONTRACTS.md) is drawn without it, in a row's title and in a heading, and told apart with it.
+    #[test]
+    fn rows_titled_alike_under_one_heading_keep_their_names() {
+        let (mut app, dir, user) = sample_app("menus_titles_clash", Some(crate::test_support::stub_menus));
+        let (media, movie, adjust) = (setting(&app, "global:0x0298"), setting(&app, "global:0x029a"), setting(&app, "global:0x02fb"));
+        let title = |app: &App, s: &Setting, menu: &str| app.listed_record(s, 0, menu).name;
+        assert_eq!((title(&app, &media, "Movie"), title(&app, &movie, "Movie")), (media.name.clone(), movie.name.clone()), "in Movie's menu, each its full name");
+        assert_eq!(title(&app, &adjust, "Still"), "SteadyShot Adjust.", "a row alone, as the camera draws it");
+        // in no menu two rows under one heading titled alike where one is retitled
+        for m in ["Still", "Movie", "S&Q"] {
+            let rows: Vec<Setting> = app.settings_in_menu(0, m, None).into_iter().filter(|s| s.placed() && s.under_option.is_none()).collect();
+            for s in rows.iter().filter(|s| s.name != app.full_name(s)) {
+                let head = |x: &Setting| (x.tab.clone(), x.group.clone(), x.row[..x.row.len() - 1].to_vec(), x.row_at[..x.row.len() - 1].to_vec());
+                assert!(!rows.iter().any(|x| x.key != s.key && x.name == s.name && head(x) == head(s)), "{m}: {} twice under one heading", s.name);
+            }
+        }
+        // labels told apart by `#n`
+        for s in app.schema.settings.iter_mut() {
+            match s.key.as_str() {
+                "global:0x0298" => s.row = vec!["Rec. Media Settings#1".into(), "Recording Media".into()],
+                "global:0x029a" => s.row = vec!["Rec. Media Settings#1".into(), "Recording Media#1".into()],
+                "global:0x02fb" => s.row = vec!["SteadyShot Adjust.#1".into()],
+                _ => {}
+            }
+        }
+        app.schema_gen += 1;
+        assert_eq!((title(&app, &media, "Movie"), title(&app, &movie, "Movie")), (media.name.clone(), movie.name.clone()), "drawn alike: each its full name");
+        assert_eq!(title(&app, &media, "Still"), "Recording Media", "alone under its heading in Still's menu");
+        assert_eq!(title(&app, &adjust, "Still"), "SteadyShot Adjust.", "drawn without its #1");
+        let groups = app.tab_groups_in(0, Some("Still"), &media.tab, "", false);
+        let (_, _, rows) = groups.iter().find(|(g, _, _)| *g == media.group).unwrap();
+        let lines = menu_rows::lay_out(rows);
+        assert!(lines.iter().any(|l| matches!(l, Line::Heading { label, path, .. } if label == "Rec. Media Settings" && path == &["Rec. Media Settings#1".to_string()])), "{lines:?}");
+        assert_eq!(menu_rows::place_words(&media).map(|_| ()), Some(()));
+        let placed = app.schema.settings.iter().find(|s| s.key == movie.key).cloned().unwrap();
+        assert_eq!(menu_rows::place_words(&placed).as_deref(), Some("On the camera: Rec. Media Settings > Recording Media"));
         done(&dir, &user);
     }
 

@@ -18,6 +18,12 @@ OTHER_TAB = "Other"          # the editor's entry for the tabs a definition does
 MORE = "More settings in this group"
 
 
+def drawn(label: str) -> str:
+    """A row's label as the camera draws it, without the `#n` that tells two rows of one label apart (menu_rows::drawn)."""
+    head, sep, n = (label or "").rpartition("#")
+    return head if sep and head and n.isascii() and n.isdigit() else label
+
+
 def norm(s) -> str:
     """Lower-case letters and digits only, as the editor compares menu labels (menu_rows::norm)."""
     return "".join(c for c in (s or "").lower() if c.isascii() and (c.islower() or c.isdigit()))
@@ -200,7 +206,7 @@ def _nest(rows: list, firsts: list, placed_rows: list, mode, strip, lines: list)
             continue
         row_here = None
         for level in range(common, len(path)):
-            label = path[level][1]
+            label = drawn(path[level][1])
             labels = ([mode] if mode else []) + [p[1] for p in path[:level + 1]]
             opened.append(path[level])
             mine = node(s, level + 1)
@@ -383,11 +389,17 @@ class Menu:
         if not expert:
             def key(s):
                 return (s.get("area"), tuple(s["row"]), tuple(s["row_at"]), camera_tab(s), camera_group(s))
+
+            def head(s):
+                return (s.get("area"), camera_tab(s), camera_group(s), tuple(s["row"][:-1]), tuple(s["row_at"][:len(s["row"]) - 1]))
             alone = [s for s in rows if placed(s) and s.get("under_option") is None and not s.get("expert")]
             count = collections.Counter(key(s) for s in alone)
-            for s in alone:
-                if not on_page(s) and count[key(s)] == 1 and s["row"][-1]:
-                    s["name"] = s["row"][-1]
+            # titled as the camera draws the row, unless another row under the same heading would then be titled alike
+            titles = [drawn(s["row"][-1]) if not on_page(s) and count[key(s)] == 1 and drawn(s["row"][-1]) else None for s in alone]
+            alike = collections.Counter((head(s), t or s["name"]) for s, t in zip(alone, titles, strict=True))
+            for s, t in zip(alone, titles, strict=True):
+                if t and alike[(head(s), t)] == 1:
+                    s["name"] = t
         return rows
 
     def layout_tab(self, s) -> str:

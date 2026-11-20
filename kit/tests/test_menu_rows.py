@@ -168,6 +168,23 @@ def test_what_one_menu_lists():
     assert all(x["row_menus"] == ["Movie"] for x in listed)
 
 
+def test_rows_titled_alike_under_one_heading_keep_their_names():
+    """editor/src/pages/menu.rs's test of the same name: a row alone on its place keeps its full name where another row
+    under the same heading would be titled alike; a label told apart by `#n` is drawn without it, in a title and a
+    heading, and told apart with it."""
+    doc = {"tabs": ["Shooting"], "camera": {"menus": MENUS[:2]}, "settings": [
+        s("rm", "Recording Media", ["Rec. Media Settings#1", "Recording Media"], [16, 0], row_menus=["Still", "Movie"], group="Media"),
+        s("rmm", "Recording Media (Movie)", ["Rec. Media Settings#1", "Recording Media#1"], [16, 1], row_menus=["Movie"], group="Media"),
+        s("adj", "SteadyShot Adjust", ["SteadyShot Adjust.#1"], [64], row_menus=["Still"], group="Media")]}
+    menu = mr.Menu(doc)
+    names = lambda m: {x["key"]: x["name"] for x in menu.listed(m, "Stills")}          # noqa: E731
+    assert names("Movie") == {"rm": "Recording Media", "rmm": "Recording Media (Movie)"}
+    assert names("Still") == {"rm": "Recording Media", "adj": "SteadyShot Adjust."}
+    lines = mr.lay_out([[x] for x in menu.listed("Still", "Stills")])
+    assert ("heading", "Rec. Media Settings", 0, ["Rec. Media Settings#1"]) in lines
+    assert mr.drawn("Fn Menu Settings#12") == "Fn Menu Settings" and mr.drawn("#1") == "#1" and mr.drawn("A#b") == "A#b"
+
+
 def test_a_copy_in_its_settings_row_sits_in_its_settings_tab_and_group():
     """editor/src/pages/menu.rs's test of the same name: a copy shown in its setting's row takes the setting's tab and
     group, whatever its own say (White Balance's fine-tune movie copy, its own place Shooting > Other settings)."""
