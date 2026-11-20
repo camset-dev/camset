@@ -336,10 +336,16 @@ impl App {
     /// camera's menu (`Setting::shown_in`) is told of by the definition's own setting (`def_of`), and outside Expert
     /// mode the copies rule's part is said in that menu's terms (`menu_copies_note`).
     pub(crate) fn copy_note(&self, s: &Setting, section: usize) -> Option<(String, String)> {
+        self.copy_note_bound(s, section, &self.bind_for(section))
+    }
+
+    /// `copy_note` for a row shown where rows pick their records as `bind` says: Edit's (`bind_for`), or Compare's
+    /// (`Bind::Menu`, each menu its own mode's copy), so a menu row's note names the other menus whose rows there change.
+    pub(crate) fn copy_note_bound(&self, s: &Setting, section: usize, bind: &Bind) -> Option<(String, String)> {
         let menu = s.shown_in.clone().filter(|_| !self.prefs.expert);
         let s = self.def_of(s);
         let copies = match menu {
-            Some(menu) => self.menu_copies_note(s, &menu, section),
+            Some(menu) => self.menu_copies_note(s, &menu, section, bind),
             None => self.copies_note(s, section),
         };
         let note = match (copies, self.apart_note(s, section)) {
@@ -429,7 +435,7 @@ impl App {
     /// and how this menu's alone is changed (on the camera the switch `keeps_apart` names, where one does; here Expert
     /// mode). That this menu's changes alone where other menus show the setting and none of them changes with it.
     /// Where the set does not keep what the camera keeps, the words of `copies_note`. None where no other menu shows it.
-    fn menu_copies_note(&self, s: &Setting, menu: &str, section: usize) -> Option<(String, String)> {
+    fn menu_copies_note(&self, s: &Setting, menu: &str, section: usize, bind: &Bind) -> Option<(String, String)> {
         let d = self.doc.as_ref()?;
         let rule = self.rule_of(s)?;
         if !rule.main.kept_in(section) {
@@ -445,9 +451,8 @@ impl App {
             std::iter::once(main.key.as_str()).chain(rule.in_step(&d.baseline, section).filter(|p| p.value(&d.edited, section).is_some()).map(|p| self.schema.settings[p.setting].key.as_str())).collect()
         };
         // the record each other menu's row of the setting shows in this set
-        let bind = self.bind_for(section);
         let shows: Vec<(String, String)> = self.menus().iter().filter(|m| m.name != menu).filter_map(|m| {
-            let listed = self.listed(&m.name, &bind);
+            let listed = self.listed(&m.name, bind);
             listed.by_key.get(&main.key).map(|&i| &listed.rows[i]).filter(|r| kept_in(r, section)).map(|r| (m.name.clone(), r.key.clone()))
         }).collect();
         if shows.is_empty() {

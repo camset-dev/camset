@@ -515,7 +515,8 @@ impl App {
                     let r = match self.compare_why(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
                     // a fraction's part says it goes with its other part (`fraction_words`)
                     let r = match self.fraction_words(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
-                    let r = match self.copy_note(s, c.section).filter(|_| c.editable()) { Some((note, _)) => r.on_hover_text(note), None => r };
+                    // the other menus named as Compare binds their rows (`Bind::Menu`)
+                    let r = match self.copy_note_bound(s, c.section, &Bind::Menu).filter(|_| c.editable()) { Some((note, _)) => r.on_hover_text(note), None => r };
                     // a value of file A that can change opens Compare's picker on a click (or the menu's "Change…",
                     // the frame after its menu closes)
                     let changeable = editable && self.cell_editable(*c, linked);

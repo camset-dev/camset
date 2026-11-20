@@ -2075,7 +2075,7 @@ impl App {
                     .chain(self.locked_why(s, c.section).filter(|_| file_a).map(|(w, _)| w))
                     .chain(self.compare_why(s).filter(|_| file_a))
                     .chain(self.fraction_words(s).filter(|_| file_a))
-                    .chain(self.copy_note(s, c.section).filter(|_| file_a).map(|(w, _)| w)).collect();
+                    .chain(self.copy_note_bound(s, c.section, &Bind::Menu).filter(|_| file_a).map(|(w, _)| w)).collect();
                 if !why.is_empty() {
                     cell["why"] = json!(why.join("\n\n"));
                 }
