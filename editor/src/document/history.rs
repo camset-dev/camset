@@ -149,7 +149,7 @@ impl App {
                             ui.label(&line.name);
                             ui.label(&line.before);
                             ui.label(RichText::new(&line.after).color(tone::edit(ui.visuals())));
-                            let words = self.edit_line_revert_words(line, true).unwrap_or_else(|| "Put this setting back to its value before this edit; later edits stay".to_string());
+                            let words = self.history_revert_words(i, line, &doc.edited).unwrap_or_else(|| "Put this setting back to its value before this edit; later edits stay".to_string());
                             if ui.add_enabled(self.editable(), egui::Button::new("Revert").small()).on_hover_text(words).on_disabled_hover_text("View only: this file cannot be edited, so nothing is reverted.").clicked() {
                                 actions.extend(line.put_back(before, &doc.edited));
                             }
@@ -367,6 +367,21 @@ impl App {
         } else {
             self.mymenu_revert_all().0
         })
+    }
+
+    /// History's words for line `l` of edit `step` (`edit_line_revert_words`); a fraction tile's line also names the
+    /// parts a later edit changed since (`current`: the file now), which go back with it, as My Menu's line says of its
+    /// later changes.
+    pub(crate) fn history_revert_words(&self, step: usize, l: &EditLine, current: &CamSet) -> Option<String> {
+        let words = self.edit_line_revert_words(l, true)?;
+        let Some((n, d, _)) = l.key.as_deref().and_then(|k| self.index_of_key(k)).and_then(|at| self.fraction_of(&self.schema.settings[at])) else { return Some(words) };
+        let after = self.undo.get(step + 1).unwrap_or(current);
+        let value = |cs: &CamSet, s: &Setting| cs.sections.get(l.si).and_then(|x| x.get(s.id)).and_then(|r| r.get(s.slot().1));
+        let later: Vec<String> = [n, d].into_iter().filter(|s| value(after, s) != value(current, s)).map(|s| s.name.clone()).collect();
+        if later.is_empty() {
+            return Some(words);
+        }
+        Some(format!("{words}. A later edit changed {} since: that goes back too", later.join(" and ")))
     }
 }
 

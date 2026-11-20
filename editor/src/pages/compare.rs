@@ -1732,6 +1732,15 @@ pub(crate) mod copy_tests {
             let line = app.history_lines(0, &doc.edited).iter().find(|l| l.slots.contains(&num.slot())).cloned().unwrap();
             assert!(line.slots.contains(&den.slot()), "expert {expert}: the first step's line holds both parts");
             assert!(app.edit_line_revert_words(&line, true).is_some_and(|w| w.contains(&tile.caption)), "expert {expert}: its words");
+            // the reviewer's finding 2: the later change to the other part goes back too, and its words say so; the
+            // second step's line, with nothing changed since, says nothing of the kind, the page as the window
+            let words = app.history_revert_words(0, &line, &doc.edited).unwrap();
+            assert!(words.contains(&format!("A later edit changed {} since", den.name)), "expert {expert}: {words}");
+            let second = app.history_lines(1, &doc.edited).iter().find(|l| l.slots.contains(&den.slot())).cloned().unwrap();
+            assert!(!app.history_revert_words(1, &second, &doc.edited).unwrap().contains("later edit"), "expert {expert}");
+            let j: serde_json::Value = serde_json::from_slice(&crate::web::tests::answer(&mut app, "history", serde_json::json!({})).body).unwrap();
+            assert!(j["steps"].as_array().unwrap().iter().any(|s| s["step"] == 0 && s["revert_words"].as_str().is_some_and(|w| w.contains("A later edit changed"))), "expert {expert}: the page");
+            let doc = app.doc.as_ref().unwrap();
             let acts = line.put_back(&app.undo[0], &doc.edited);
             app.history_revert(acts);
             assert_eq!(speed(&app), opened, "expert {expert}: the pair as before that step");

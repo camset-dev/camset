@@ -3112,7 +3112,7 @@ impl App {
             // setting by setting, as the window's History lists them (`edit_lines`), a Revert putting back that setting alone
             for l in self.edit_lines(before, after) {
                 steps.push(json!({ "step": i, "section": l.si, "id": l.id, "key": l.key, "name": self.placed_name(l.si, &l.name), "before": l.before, "after": l.after,
-                    "revert": self.editable(), "revert_words": self.edit_line_revert_words(&l, true) }));
+                    "revert": self.editable(), "revert_words": self.history_revert_words(i, &l, &doc.edited) }));
             }
         }
         json!({ "steps": steps })
