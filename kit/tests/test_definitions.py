@@ -1838,6 +1838,38 @@ def test_a_single_letter_is_no_word_and_snap_still_mends_a_one_letter_slip(monke
     assert word_swapped("Av Zqx Switch", "Tv Zqx Switch") and not word_swapped("S&d Zqx", "S&Q Zqx")
 
 
+def af_crossing_row(option: str, key: str, sure: bool) -> dict:
+    """A made-up pass-2 row of the stills Fn Menu's picker at `option`, its slot `key` proving code 294, which the
+    camera draws "AF Lvl for Crossing" and the definition names "Lvl for Crossing": a "wording" note, sure where two
+    readers read it."""
+    return {"row": f"Fn Menu Settings / {option}", "options": 1, "notices": [],
+            "records": {key: {"verdict": "wording", "proved": {"AF Lvl for Crossing": 294}, "linear": None,
+                              "names": {"AF Lvl for Crossing": "two readers" if sure else "one reader (ocr)"},
+                              "notes": [{"value": 294, "camera": "AF Lvl for Crossing", "schema": "Lvl for Crossing",
+                                         "kind": "wording", "sure": sure}]}}}
+
+
+@needs_evidence
+def test_a_name_a_family_correction_replaces_is_derived_never_schema_kept(tmp_path, monkeypatch, capsys):
+    """The review of 2026-11-20: a slot whose own reading was not sure keeps the schema's name for the moment ("schema
+    kept", listed for review), but where a sure slot of its family corrects that name, the correction reaches it and
+    its name is no longer the schema's: its source is "derived", as the family pass makes it, never "schema kept"."""
+    report = [af_crossing_row("Still Upper / 1", "global:0x0445[0]", sure=False),
+              af_crossing_row("Still Lower / 6", "global:0x0445[11]", sure=True)]
+    proofs = [{"path": ["Fn Menu Settings"], "kind": "table", "option": o, "opens": "picker", "index": 0,
+               "label": "• AF Lvl for Crossing", "applied": True, "changes": []}
+              for o in ("Still Upper / 1", "Still Lower / 6")]
+    S, target, write = a1_run(tmp_path, monkeypatch, report, A1_PROOFS + proofs)
+    said = write(capsys)
+    doc = definitions.load(target)
+    by = {s["key"]: s for s in doc["settings"]}
+    for k in ("global:0x0445[0]", "global:0x0445[11]", "global:0x0445[5]"):
+        assert dict((v, lab) for v, lab in by[k]["values"])[294] == "AF Lvl for Crossing", k
+    names = by["global:0x0445[0]"]["proved"].get("names") or {}
+    assert names.get("294") == "derived", names.get("294")
+    assert "review global:0x0445[0]   294: schema 'Lvl for Crossing', camera read 'AF Lvl for Crossing'" in said
+
+
 # a made-up report of one row, a KEEP_LABELS record whose label stands against the camera's reading (Proxy Rec.
 # Settings, which the a1 II's accepted file does not list)
 GATE_REPORT = [{"row": "Proxy Rec. Settings", "options": 2, "notices": [],
