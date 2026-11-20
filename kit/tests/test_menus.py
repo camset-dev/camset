@@ -691,13 +691,14 @@ def places_of(d):
     return {s["key"]: {f: s.get(f) for f in fromdata.PLACE_KEYS} for s in d["settings"]}
 
 
-def test_a_definition_read_without_its_proof_paths_keeps_every_place_whatever_proofs_the_pass_adds(tmp_path, monkeypatch):
+def test_a_definition_read_without_its_proof_paths_keeps_every_place_whatever_proofs_the_pass_adds(tmp_path, monkeypatch, capsys):
     """With a menu tree on the computer, a write from a definition read without its proof paths (its evidence not
     there) keeps every setting's place and the camera's menus as the definition has them, though the pass gives a few
     settings proof paths: the writer never takes a place from a setting for want of evidence it cannot see (2026-11-20:
     a made-up pass of three rows took the row off 1,676 settings). The places are rebuilt where the definition as read
     held proof paths, and a row no path places then goes (a stale one, on the mapper's computer), or where it held no
-    place at all (a new camera's first pass places what its proofs reach)."""
+    place at all (a new camera's first pass places what its proofs reach). The console says which of the two keeps them:
+    the evidence not on this computer, or there and holding no proof path."""
     S = _test_camera(tmp_path, monkeypatch)
     whole = S.from_data(doc(*copy.deepcopy(SETTINGS)))                  # the mapper's write: places from the paths
     assert fromdata.places_rebuilt(whole)
@@ -705,8 +706,17 @@ def test_a_definition_read_without_its_proof_paths_keeps_every_place_whatever_pr
     assert not fromdata.places_rebuilt(public) and places_of(public) == places_of(whole)
     read = copy.deepcopy(public)
     read["settings"][0]["proved"] = {"menu": ["Drive Mode"]}             # the pass proves one row
-    kept = S.from_data(copy.deepcopy(read), fromdata.places_rebuilt(public))
+    capsys.readouterr()
+    kept = S.from_data(copy.deepcopy(read), fromdata.places_as_read(public))
     assert places_of(kept) == places_of(whole) and kept["camera"]["menus"] == whole["camera"]["menus"]
+    assert f"places: the definition was read without its proof paths ({fromdata.NO_EVIDENCE})" in capsys.readouterr().out
+    held = copy.deepcopy(whole)          # its evidence here (how a meaning was found), no proof path left in it
+    for s in held["settings"]:
+        (s.get("proved") or {}).pop("menu", None)
+    held["settings"][0]["source"] = "two readers"
+    assert fromdata.places_as_read(held) == fromdata.NO_PATHS and fromdata.places_as_read(whole) is True
+    S.from_data(copy.deepcopy(read), fromdata.places_as_read(held))
+    assert f"({fromdata.NO_PATHS})" in capsys.readouterr().out
     # the same read with its evidence: every place rebuilt, a row neither a path nor the tree reaches gone (Breathing
     # Comp., Movie's alone, whose path was its only way there)
     rebuilt = {s["key"]: s for s in S.from_data(copy.deepcopy(read), True)["settings"]}
@@ -731,6 +741,12 @@ def test_a_main_tile_whose_setting_lost_its_row_in_this_write_says_so_not_to_tak
     said = str(e.value.code)
     assert said.startswith("TEST_fw1.00: the Movie page's tile 'Record Setting' shows global:0x0030")
     assert "no proof path of it is here" in said and "'Record'" in said and "take the key off" not in said
+    # a path of it is here, but reaches no row of today's tree (the tree changed since its place was written)
+    lost = {**copy.deepcopy(rec), "proved": {"menu": ["Gone Row"]}}
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(doc(*copy.deepcopy(SETTINGS), lost))
+    said = str(e.value.code)
+    assert "its proof paths reach no row of the menu tree here" in said and "no proof path of it is here" not in said
     rec["proved"] = {"menu": ["Rec. Media Settings"]}
     got = {s["key"]: s for s in S.from_data(doc(*copy.deepcopy(SETTINGS), rec))["settings"]}
     assert got["global:0x0030"]["row"] == ["Rec. Media Settings"] and not got["global:0x0030"].get("expert")

@@ -17,7 +17,7 @@ from . import hand_evidence, listgaps, hand_facts, hand_tables
 from .copies import copy_names, with_copies, with_keeps_apart
 from .limits import with_limit_pairs
 from .frames import with_frames
-from .fromdata import from_data, model_refused, places_rebuilt, say_stale, write_definition
+from .fromdata import from_data, model_refused, places_as_read, say_stale, write_definition
 from .gate import gate, questions
 from .labels import clean
 from .offered import check_video_systems, with_video_systems
@@ -403,7 +403,7 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
     if not report_file.exists():
         sys.exit(f"schema_update: no pass-2 report in {run} (kit/pass2_report.py writes it)")
     doc = definitions.load(target) if target.exists() else seed(camera, run)
-    rebuild = places_rebuilt(doc)           # on the definition as read, before this pass's proofs (from_data)
+    rebuild = places_as_read(doc)           # on the definition as read, before this pass's proofs (from_data)
     why = model_refused(run, doc)
     if why:
         sys.exit(f"schema_update: {why}")

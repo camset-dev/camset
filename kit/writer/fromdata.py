@@ -184,11 +184,23 @@ def places_rebuilt(doc: dict) -> bool:
     return any("menu" in (s.get("proved") or {}) for s in settings) or not any("row" in s for s in settings)
 
 
-KEPT_PLACES = ("the definition was read without its proof paths (its evidence is not on this computer), so each "
-               "setting's place on the camera and the camera's menus stay as it has them, though this pass proves a few")
+# why a write keeps the places of a definition read without proof paths (places_as_read), then what that keeps
+NO_EVIDENCE = "its evidence is not on this computer"
+NO_PATHS = "its evidence is here but holds no proof path"
+KEPT_PLACES = ("the definition was read without its proof paths ({}), so each setting's place on the camera and the "
+               "camera's menus stay as it has them, though this pass proves a few")
 
 
-def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = True, icons: dict = None) -> dict | None:
+def places_as_read(doc: dict) -> bool | str:
+    """True where a write may rebuild the places of the definition `doc` as it was read (places_rebuilt), else why it
+    keeps them, in words: its evidence is not on this computer (no setting holds any: camkit.definitions.split), or it
+    is and holds no proof path (NO_EVIDENCE, NO_PATHS)."""
+    if places_rebuilt(doc):
+        return True
+    return NO_PATHS if definitions.split(doc)[1]["settings"] else NO_EVIDENCE
+
+
+def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool | str = True, icons: dict = None) -> dict | None:
     """Each setting's place on the camera, from the camera's menu tree (the Stills menu, and the other shooting modes'
     menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths, or its rows
     given by hand (`hand`: HAND_PLACES, {key: [row paths]}, camkit.placement.with_hand) (camkit.placement, the proof
@@ -197,14 +209,14 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = Tru
     "row_menus" and, where a menu places it otherwise, "row_places" too (camkit.placement.by_menu, the camera's Help Guide
     menu list telling records that differ by mode apart). None, so the places stay as they are, for a definition read without its
     evidence (no setting holds its proof paths, proved.menu, which are evidence: camkit.definitions; or `rebuild`
-    False: places_rebuilt said so of the definition as read, before the pass gave a few settings proof paths) or with no
-    menu tree on this computer (a fresh clone, CI: the places are what is public of the menus).
+    other than True: places_as_read said so of the definition as read, before the pass gave a few settings proof paths,
+    False or why) or with no menu tree on this computer (a fresh clone, CI: the places are what is public of the menus).
     Once every place is found and every menu looked up, a row the camera tells from a row of its label beside it by
     its icon alone takes that icon's words in its label (`icons`: ROW_ICONS, camkit.placement.with_icons)."""
     if not any("menu" in (s.get("proved") or {}) for s in doc["settings"]):
         return None
-    if not rebuild:
-        print(f"places: {KEPT_PLACES}")         # each write that keeps them says so, on the console
+    if rebuild is not True:          # each write that keeps them says so, and why, on the console
+        print("places: " + KEPT_PLACES.format(rebuild if isinstance(rebuild, str) else NO_EVIDENCE))
         return None
     tree = definitions.menu_tree_file(definitions.key(doc))
     if not tree.exists():
@@ -453,7 +465,7 @@ def with_place(s: dict, place: dict) -> dict:
     return out if "order" in s else {**out, **place}
 
 
-def from_data(doc: dict, rebuild: bool = None) -> dict:
+def from_data(doc: dict, rebuild: bool | str = None) -> dict:
     """The parts of a definition the kit takes from data/ alone, whatever the runs hold: the format and the camera
     section, the memory copies named from it, the project's own help, the menu list (with_menu) and each setting's
     place on the camera's menus; and the kit's own rules over it, the Expert marks, the photographer's words (with_plain_words), each note tidy (with_tidy_note) and its evidence apart (shown in
@@ -462,10 +474,10 @@ def from_data(doc: dict, rebuild: bool = None) -> dict:
     (without_written_with: it told how the camera was set).
     The camera's menus (camera.menus from the MENUS table, each setting's row_menus and row_places) are rebuilt only
     where the places are (places: the menu tree and the proof paths here); elsewhere (a fresh clone, CI) they stay
-    exactly as the definition has them, what the writer cannot rebuild left untouched. `rebuild`: places_rebuilt of the
+    exactly as the definition has them, what the writer cannot rebuild left untouched. `rebuild`: places_as_read of the
     definition as the pass read it, before its proofs (schema_update.main and the plain pass give it), else of `doc`.
     main() ends the same way, so on the committed data this gives the committed definition."""
-    rebuild = places_rebuilt(doc) if rebuild is None else rebuild
+    rebuild = places_as_read(doc) if rebuild is None else rebuild
     had_row = {s["key"] for s in doc["settings"] if "row" in s}          # the rows the definition holds as read
     kept = (doc.get("camera") or {}).get("menus")          # the definition's own, for a write that cannot rebuild them
     doc = with_menu(with_camera(doc))
@@ -501,13 +513,17 @@ def from_data(doc: dict, rebuild: bool = None) -> dict:
         s = hit[2]
         word = MAPPING_WORDS.search(s["name"])
         if s["key"] in had_row and "row" not in s and word:
-            # the row went in this write, for no proof path of it is here: the camera file is not the cause
+            # the row went in this write: no proof path of it is here, or its paths reach no row of today's menu tree; the
+            # camera file is not the cause
+            gone = ("its proof paths reach no row of the menu tree here (the tree changed since its place was written)"
+                    if placement.proof_paths(s) else "no proof path of it is here to place it")
             why = main_tile_refusal(doc, lambda x: (
-                f"it has no row in this write, for no proof path of it is here to place it, and on no row its name's "
-                f"{word.group(0)!r} reads as a word of how the kit found the record"))
-            raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: write where the definition's "
-                                      "evidence is (its proof paths place the setting), or prove that row again, then run "
-                                      "the command again.")
+                f"it has no row in this write, for {gone}, and on no row its name's {word.group(0)!r} reads as a word of "
+                "how the kit found the record"))
+            what = ("crawl or prove that row again, so a path of it reaches a row of the tree" if placement.proof_paths(s)
+                    else "write where the definition's evidence is (its proof paths place the setting), or prove that row again")
+            raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: {what}, then run the command "
+                                      "again.")
         because = expert_why(s, slots, mirror, by_hand)
         why = main_tile_refusal(doc, lambda x: because)
         if (because or "").startswith(NO_ROW):

@@ -159,7 +159,7 @@ from writer.mirror import (mirror_key, mirror_names, mirror_of, mirror_place)  #
 from writer.notes import (ALLOWANCE, EVIDENCE, PAREN, TAIL, add_line, apply_fix, fix_differs, note_is,  # noqa: E402,F401
                           put_note, split_evidence, with_evidence_apart, with_tidy_note)
 from writer.fromdata import (BUTTON_WORD, EXPERT_WORDS, MAPPING_WORDS, PLACE_KEYS, RECORD_REF,  # noqa: E402,F401
-                             SETTING_GROUPS, expert, from_data, model_refused, mymenu_slots, own_help, places, places_rebuilt,
+                             SETTING_GROUPS, expert, from_data, model_refused, mymenu_slots, own_help, places, places_as_read,
                              plain_reason, refresh_from_data, reset_names, say_stale, text, with_camera,
                              with_expert, with_menu, with_place, with_plain_words, write_definition)
 from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis_value_rows,  # noqa: E402,F401
@@ -984,8 +984,8 @@ def main():
         sys.exit(hand_facts.hand_proof_stop(paths.A1II, gaps))
     doc = definitions.load(target)
     # whether this write rebuilds the places, judged on the definition as read, before this pass's proofs: read without
-    # its evidence, it keeps every place it has (fromdata.places_rebuilt)
-    rebuild = places_rebuilt(doc)
+    # its proof paths, it keeps every place it has, and says why (fromdata.places_as_read)
+    rebuild = places_as_read(doc)
     writer_proofs.CONTEXT_WORDS.update(CONTEXT_WORDS)      # this body's contexts the runs reworded (menu_row)
     why = model_refused(RUN, doc)
     if why:

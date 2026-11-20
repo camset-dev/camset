@@ -198,6 +198,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   column,** as the editor lays it out for the settings saved in that mode; Expert still lists every setting, the other
   menus' rows among them. The proof viewer hangs every record on the row the definition places it on, rows given by
   hand included.
+- **A line under the Menu title says which camera menu it is,** and that the settings only the other menus list are
+  under Expert. A write that keeps a definition's places says whether its evidence is missing or holds no proof path,
+  and a Main tile refusal says when a setting's proof paths no longer reach a row of the tree.
 - A file the viewer refuses shows its size and first bytes as a hex dump, to paste into a problem report: the file was
   read in your browser and never left it, but check that the dump holds nothing of yours before pasting it anywhere
   public.

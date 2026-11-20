@@ -94,7 +94,7 @@ none of the six fields, and the editor lists it after the camera's rows, under "
 
 Where the camera's hand tables hold `MENUS` (a menu for each position of its shooting-mode switch: the a1 II's Still,
 Movie and S&Q), the definition carries them as `camera.menus`, and each placed setting the menus that hold it
-(`row_menus`; `kit/camkit/placement.py`, `by_menu`):
+(`row_menus`, in `MENUS`' order; `kit/camkit/placement.py`, `by_menu`):
 
 - **Where a menu's own tree holds the setting's row.** The top row is matched by the merged numbering of a tab's top
   rows, which serves every menu, and each row below by its label among the rows that menu read. A row that menu's
