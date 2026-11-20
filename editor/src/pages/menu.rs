@@ -1039,35 +1039,33 @@ impl App {
     }
 
     /// Where a jump to setting `s` (the definition's, or as a menu lays it out) lands for set `target`, the Menu showing
-    /// menu `now`: the menu (`now` where it lists `s`, else the menu of the set's mode where it lists it, else the first
-    /// that does; a copy shown in its setting's row, first the menus where its row shows it: `row_record`; None without
-    /// menus), the Menu entry and the group that show it there. The page's links carry the three (`open_menu`, …).
+    /// menu `now`: the menu (`menu_for`; None without menus), the Menu entry and the group that show it there. A search
+    /// hit's "Where" says these, and the page's links carry the three (`open_menu`, …).
     pub(crate) fn jump_place(&self, s: &Setting, target: usize, now: Option<&str>) -> (Option<String>, String, String) {
         let menu = self.menu_for(s, target, now);
         let shown = match &menu { Some(m) => self.listed_record(s, target, m), None => s.clone() };
         (menu, self.entry_here(&shown), self.group_here(&shown))
     }
 
-    /// The menu of `jump_place`.
+    /// The menu of `jump_place`: of the menus that list `s`'s row (`menus_of`), those whose row shows that very record
+    /// (`listed_record`: a setting the camera keeps once, every one; the setting itself, the menu of the set's mode; a
+    /// copy, the menus whose mode it is the copy for), and of those `now`, else the menu of the set's mode, else the
+    /// first. Where no row shows it (the copy for the set's own mode, whose value the setting itself shows there): the
+    /// menu of that copy's mode, on the row that shows its setting itself. Else as before: `now` where it lists the row,
+    /// the set's mode's, the first.
     fn menu_for(&self, s: &Setting, target: usize, now: Option<&str>) -> Option<String> {
         if self.menus().is_empty() {
             return None;
         }
         let d = self.def_of(s);
-        let mut fit = self.menus_of(d);
-        // a copy shown in its setting's row: the menus where that row shows it first
-        if let Some(main) = self.main_of(d) {
-            let bind = self.bind_for(target);
-            let showing: Vec<String> = fit.iter().filter(|m| self.row_record(main, m, &bind).key == d.key).cloned().collect();
-            if !showing.is_empty() {
-                fit = showing;
-            }
-        }
+        let fit = self.menus_of(d);
         let own = self.opening_menu(target);
-        now.filter(|n| fit.iter().any(|m| m == n)).map(str::to_string)
-            .or_else(|| own.filter(|o| fit.contains(o)))
-            .or_else(|| fit.first().cloned())
-            .or_else(|| now.map(str::to_string))
+        let pick = |among: &[String]| now.filter(|n| among.iter().any(|m| m == n)).map(str::to_string)
+            .or_else(|| own.clone().filter(|o| among.contains(o)))
+            .or_else(|| among.first().cloned());
+        let showing: Vec<String> = fit.iter().filter(|m| self.listed_record(d, target, m).key == d.key).cloned().collect();
+        let of_its_mode: Vec<String> = fit.iter().filter(|m| self.schema.camera.menu_named(m).is_some_and(|md| md.modes.iter().any(|x| d.copy_for.contains(x)))).cloned().collect();
+        pick(&showing).or_else(|| pick(&of_its_mode)).or_else(|| pick(&fit)).or_else(|| now.map(str::to_string))
     }
 
     /// The setting the rows of menu `menu` show for the definition's setting `s` in set `target` (`listed`): `s` as that
@@ -2017,6 +2015,76 @@ pub(crate) mod facts_tests {
         app.set_menu("S&Q");
         app.go_to(&audio);
         assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some("S&Q"), Some(audio.key.as_str())));
+        done(&dir, &user);
+    }
+
+    /// Where the selection is, in the words of a search hit's "Where": the menu, the entry and the group.
+    fn where_now(app: &App) -> String {
+        let View::Tab(tab) = &app.view else { panic!("{:?}", app.view) };
+        format!("{} > {tab} > {}", app.menu_shown().unwrap(), app.group.clone().unwrap())
+    }
+
+    /// Review finding 5: a jump to a record opens the menu whose row shows that record (the one shown first, then the
+    /// file's mode's, then the first); where no row shows it (the copy for the file's own mode), the menu of that copy's
+    /// mode, on the row that shows its setting itself; a jump to the setting itself, the menu of the file's mode. A
+    /// search hit's "Where" names the place a click on it opens. A setting the camera keeps once stays in the menu shown.
+    #[test]
+    fn a_jump_to_a_record_opens_the_menu_whose_row_shows_it() {
+        let (mut app, dir, user) = sample_app("menus_jump_record", Some(crate::test_support::stub_menus));
+        let (iso, stills, movie) = (setting(&app, "global:0x0334"), setting(&app, "global:0x0df2"), setting(&app, "global:0x0df4"));
+        // a setting the camera keeps once, a row of every menu, its search hit itself
+        let steady = app.schema.settings.iter().find(|s| s.copies.is_empty() && s.copy_of.is_none() && s.area == "global" && menu_rows::is_own(s) && !App::expert_only(s)
+            && app.menus_of(s).len() == 3 && app.search_hits_in(0, None, &s.name).iter().any(|(h, _)| h.key == s.key)).cloned().unwrap();
+        assert_eq!(app.opening_menu(0).as_deref(), Some("Still"), "a file saved in Stills");
+        for (from, s, menu, row) in [
+            ("Movie", &stills, "Still", &iso), ("S&Q", &stills, "Still", &iso),
+            ("Movie", &iso, "Still", &iso), ("S&Q", &iso, "Still", &iso),
+            ("Still", &movie, "Movie", &movie), ("S&Q", &movie, "S&Q", &movie),
+            ("Movie", &steady, "Movie", &steady), ("S&Q", &steady, "S&Q", &steady),
+        ] {
+            app.set_menu(from);
+            let said = app.where_shown(s);
+            app.go_to(s);
+            assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some(menu), Some(row.key.as_str())), "{} from {from}", s.name);
+            assert_eq!(said, where_now(&app), "{} from {from}: the hit's Where", s.name);
+            // the search hit, with its Where, opens the same place
+            let (hit, at) = app.search_hits_in(0, Some(from), &s.name).into_iter().find(|(h, _)| h.key == s.key).unwrap();
+            assert_eq!((at.as_deref(), app.where_in(&hit, 0, Some(from))), (Some(menu), said.clone()), "{} from {from}", s.name);
+        }
+        done(&dir, &user);
+    }
+
+    /// Review finding 4: Compare's Open in Edit stays in the menu Compare showed where that menu lists the setting's
+    /// row, on its row there, whatever record Compare's row showed: a file saved in Movie, Compare in Movie's menu on
+    /// the ISO row (the movie copy, as Compare shows each menu's mode), opens Edit in Movie's menu on its ISO row.
+    #[test]
+    fn open_in_edit_stays_in_the_menu_compare_showed() {
+        let (mut app, dir, user) = sample_app("menus_open_in_edit", Some(crate::test_support::stub_menus));
+        let lm = app.schema.camera.live_mode.clone().unwrap();
+        let rec = setting(&app, &lm.key);
+        let mut c = crate::camera::job::test_parse(crate::test_support::SAMPLE_BYTES).unwrap();
+        c.sections[0].get_mut(rec.id).unwrap().put(rec.index, 1).unwrap();
+        let f = dir.join("CAMSET05.DAT");
+        std::fs::write(&f, c.to_bytes()).unwrap();
+        app.open(f);
+        assert_eq!(app.opening_menu(0).as_deref(), Some("Movie"), "a file saved in Movie");
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::a(1)], false);
+        app.set_menu("Movie");
+        let iso = setting(&app, "global:0x0334");
+        let bound = app.row_record(&iso, "Movie", &Bind::Menu).key.clone();
+        assert_eq!(bound, "global:0x0df4", "Compare's row shows Movie's copy");
+        let row = app.compare_rows(Some("Movie"), &BarKey::All, "").iter().find(|r| r.2[0].key == bound).cloned().unwrap();
+        // the page's link on that row says the same place
+        let a = crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["a", 1]], "menu": "Movie", "only_diff": false }));
+        let j: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+        let link = j["rows"].as_array().unwrap().iter().find(|r| r["key"] == bound.as_str()).cloned().unwrap();
+        app.open_in_edit_from_compare(&row.2[0], 0);
+        app.follow_selection();
+        assert!(app.mode == Mode::Edit);
+        assert_eq!(app.menu_shown().as_deref(), Some("Movie"));
+        assert_eq!(app.item_key, Some(app.listed_record(&iso, 0, "Movie").key), "its row in Movie's menu");
+        let View::Tab(tab) = app.view.clone() else { panic!() };
+        assert_eq!((link["open_menu"].as_str(), link["open_key"].as_str(), link["open_tab"].as_str(), link["open_group"].as_str()), (Some("Movie"), app.item_key.as_deref(), Some(tab.as_str()), app.group.as_deref()), "the page: {link}");
         done(&dir, &user);
     }
 

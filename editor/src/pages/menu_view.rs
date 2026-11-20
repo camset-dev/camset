@@ -991,9 +991,11 @@ mod menus_window_tests {
     #[test]
     fn the_detail_panel_names_the_setting_in_full() {
         let (mut app, dir, user) = sample_app("e2_detail", Some(stub_menus));
-        let (iso, _, other, copy) = iso_and_its_copy(&app);
+        let (_, _, other, copy) = iso_and_its_copy(&app);
         app.set_menu(&other);
-        app.go_to(&iso);
+        // the record that menu's ISO row shows (a jump to the setting itself opens the file's mode's menu)
+        app.go_to(&copy);
+        assert_eq!(app.menu_shown(), Some(other));
         let title = app.item.clone().unwrap();
         assert!(title != copy.name, "the row titled as the camera draws it: {title}");
         let (drawn, _) = Window::new().settle(&mut app);

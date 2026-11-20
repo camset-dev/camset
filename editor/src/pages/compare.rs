@@ -622,9 +622,10 @@ impl App {
     }
 
     /// Compare's "Open in Edit": Edit on the setting `s` in `section` of file A (the live settings when that section
-    /// does not keep it), opened as every jump opens one (`go_to`: the camera's menu Compare shows where it lists the
-    /// setting, its page, the group as Edit shows it, a family by its title, and its row), with "← Back to Compare" to
-    /// the row it came from. Only edited is turned off when it would hide the setting.
+    /// does not keep it), opened as every jump opens one (`go_to`: its page, the group as Edit shows it, a family by its
+    /// title, and its row): in the camera's menu Compare shows where that menu lists the setting's row, on that row
+    /// whatever record it shows in Edit, else the menu a jump to `s` opens; with "← Back to Compare" to the row it came
+    /// from. Only edited is turned off when it would hide the setting.
     pub(crate) fn open_in_edit_from_compare(&mut self, s: &Setting, section: usize) {
         let menu = self.compare_menu();
         // the Compare row it came from, by its entry's name (a tab, Main, My Menu…) and the setting's key
@@ -632,11 +633,17 @@ impl App {
             .find(|r| r.2.iter().any(|x| x.key == s.key)).map_or_else(|| s.tab.clone(), |r| r.0.clone());
         self.mode = Mode::Edit;
         self.target = if section == 0 || s.in_sets { section } else { 0 };
-        // Edit in the menu Compare showed, which the jump keeps where it lists the setting
-        if let Some(m) = &menu {
-            self.set_menu(m);
+        // Edit in the menu Compare showed, on the setting's row there, where that menu lists it
+        let d = self.def_of(s);
+        let main = self.main_of(d).unwrap_or(d).clone();
+        match menu.filter(|m| self.menus_of(&main).contains(m)) {
+            Some(m) => {
+                self.set_menu(&m);
+                let row = self.listed_record(&main, self.target, &m);
+                self.go_to(&row);
+            }
+            None => self.go_to(s),
         }
-        self.go_to(s);
         if self.only_changed && !self.changed(s) {
             self.only_changed = false;
         }

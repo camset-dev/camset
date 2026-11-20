@@ -1241,6 +1241,25 @@ impl App {
         out
     }
 
+    /// Where Compare's Open in Edit on its row of `s` lands in set `target`, Compare showing menu `menu`, as the window's
+    /// (`open_in_edit_from_compare`): where that menu lists the setting's row, that row there (`open_key` where it shows
+    /// another record than `s`), else where a jump to `s` lands (`web_place`).
+    fn compare_place(&self, s: &Setting, target: usize, menu: Option<&str>) -> serde_json::Map<String, Value> {
+        let d = self.def_of(s);
+        let main = self.main_of(d).unwrap_or(d);
+        match menu.filter(|m| self.menus_of(main).iter().any(|x| x == m)) {
+            Some(m) => {
+                let row = self.listed_record(main, target, m);
+                let mut out = self.web_place(&row, target, Some(m));
+                if row.key != s.key {
+                    out.insert("open_key".into(), json!(row.key));
+                }
+                out
+            }
+            None => self.web_place(s, target, menu),
+        }
+    }
+
     /// `v`, an object, with the link to setting `s` that `web_place` gives.
     fn with_place(&self, mut v: Value, s: &Setting, target: usize, now: Option<&str>) -> Value {
         if let Some(o) = v.as_object_mut() {
@@ -2042,15 +2061,19 @@ impl App {
             // as the window's right-click menu offers none (`copy_targets`)
             let locked: Vec<usize> = (0..self.n_sections()).filter(|&si| self.locked(s, si)).collect();
             // its name opens it in Edit in the first column of file A that keeps it (the page's `cmpOpenInEdit`), where
-            // a jump of the window lands from this menu (`web_place`)
+            // the window's Open in Edit lands from this menu (`compare_place`)
             let into = cols.iter().find(|c| c.editable() && stored(c, s)).map_or(0, |c| c.section);
-            self.with_place(json!({
+            let mut row = json!({
                 "tab": t, "group": g, "color": css_color(tab_color(&self.schema.camera, t)),
                 "key": s.key, "name": self.setting_title(s), "record": format!("0x{:04x}", s.id), "in_sets": s.in_sets, "locked": locked,
                 // the name's hover, as the window's (the record number in Expert mode only), by the setting's own name
                 "where": self.where_kept(self.def_of(s)),
                 "three": class.map(word), "differs": d, "mark": mark, "arrows": arrows, "cells": cells,
-            }), s, into, menu)
+            });
+            if let Some(o) = row.as_object_mut() {
+                o.extend(self.compare_place(s, into, menu));
+            }
+            row
         }).collect();
         out["total"] = json!(rows.len());
         out["shown"] = json!(list.len());
