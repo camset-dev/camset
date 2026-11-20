@@ -180,10 +180,29 @@ def test_states_options_my_menu_items_and_page_counters_change_nothing():
                 pg["page"] = f"{i + 7}/63"
                 stir(pg["rows"])
         menu["tabs"].insert(0, {"tab": "My Menu", "pages": [page("1/63", "My Menu1", row("Drive Mode"), row("Gamma")),
-                                                          page("2/63", "My Menu Setting", row("Add Item"))]})
-    d = doc(*copy.deepcopy(SETTINGS))
+                                                          page("2/63", "My Menu Setting", row("Add Item")),
+                                                          page("3/63", "MyMenu 2", row("Time Code Run"))]})
+    # proved in S&Q mode on a row no menu's own pages hold, only the owner's item page
+    d = doc(*copy.deepcopy(SETTINGS), setting("global:0x0040", "Time Code Run", "TC/UB", "Time Code Run [S&Q mode]"))
     assert placement.settings(d, other) == placement.settings(d, base)
     assert by_key(d, other) == by_key(d, base) and by_key(d, base) == by_key(d)
+    assert "global:0x0040" not in placement.settings(d, other)
+
+
+def test_a_row_only_an_owners_item_page_holds_is_in_no_menu_by_it():
+    """A setting proved in Movie and in S&Q mode, on a row the S&Q menu's own pages lack and only one of its My Menu
+    item pages holds (an owner's item, decision 16): in the Movie menu alone, as with no item page."""
+    tree = copy.deepcopy(TREE)
+    sq = tree["modes"][1]["tabs"][0]["pages"]
+    sq[1]["rows"] = [r for r in sq[1]["rows"] if r["label"] != "Time Code Format"]
+    d = doc(setting("global:0x0002", "Time Code Format", "TC/UB", "Time Code Format [Movie mode]", "Time Code Format [S&Q mode]"))
+    plain = by_key(copy.deepcopy(d), tree)
+    assert plain["global:0x0002"] == {"row_menus": ["Movie"]}
+    for name in ("My Menu1", "MyMenu1", "★My Menu1", "My Menu Page 1"):
+        mine = copy.deepcopy(tree)
+        mine["modes"][1]["tabs"].insert(0, {"tab": "My Menu", "pages": [page("1/9", name, row("Time Code Format"))]})
+        assert by_key(copy.deepcopy(d), mine) == plain, name
+    assert placement.item_page("My Menu1", "My Menu") and not placement.item_page("My Menu Setting", "My Menu")
 
 
 def test_a_row_given_by_hand_is_placed_in_every_menu_that_has_it():

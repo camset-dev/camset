@@ -50,6 +50,15 @@ def nth(label: str) -> tuple:
     return (m[1], int(m[2])) if m else (label, None)
 
 
+def item_page(group: str, tab: str) -> bool:
+    """Whether a page of the menu tree is one of its tab's item pages: named as its tab and a number, however written
+    ("My Menu1", "MyMenu 2", "★My Menu3", "My Menu Page 1"): My Menu's pages of the owner's own items (decision 16),
+    which placement never reads (Tree) and kit/tools/menu_tree.py --add never takes in. My Menu's own setting page ("My
+    Menu Setting") is none."""
+    t = norm(tab)
+    return bool(t) and re.fullmatch(rf"{re.escape(t)}(?:page)?\d+", norm(group)) is not None
+
+
 def split(path: str) -> list:
     """A proof's menu path as its labels, the context in brackets left out, the row as the camera draws it where the
     records name it otherwise (camkit.row_names)."""
@@ -150,7 +159,8 @@ class Tree:
     """The camera's tabs, groups and rows (the menu tree), each group under the schema's name for it, and each row a
     node: {"id", "l" (its label), "st", "why", "opts", "walk", "kids", "recs", "subs"}, the shape the proof viewer
     draws. `walks` gives a row its pass 1 frames by its path (the viewer's; none here otherwise). `mode` names one of
-    the tree's other shooting modes ("modes": Movie, S&Q) to read that mode's menu instead of the Stills menu."""
+    the tree's other shooting modes ("modes": Movie, S&Q) to read that mode's menu instead of the Stills menu. One of
+    My Menu's item pages (item_page: the owner's own items) is never read, in any menu."""
 
     def __init__(self, doc, tree, walks=None, mode=None):
         walks, n = walks or {}, [0]
@@ -164,6 +174,8 @@ class Tree:
         for tb in menus:
             groups, tops = [], 0
             for pg in tb["pages"]:
+                if item_page(pg["group"], tb["tab"]):
+                    continue                # the owner's own items (decision 16): no place rests on them
                 g = next((x for x in groups if x["name"] == pg["group"]), None)
                 if not g:
                     g = {"name": pg["group"], "num": len(groups) + 1, "rows": [], "extra": []}

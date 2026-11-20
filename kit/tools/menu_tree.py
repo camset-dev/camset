@@ -268,7 +268,7 @@ def added(menu: dict, scan: Path, tab: str, group: str) -> list:
     after it in the scan (last when none does). Refused (SystemExit) where the menu holds that group already, the scan
     holds none of its pages, or the group is named as its tab and a number (a page of the owner's own items). What it
     did, one line each."""
-    if re.fullmatch(rf"{re.escape(tab)}\s*\d+", group.strip()):
+    if placement.item_page(group, tab):
         sys.exit(f"{tab} > {group} is a page of the owner's own items (its tab's name and a number): never taken into a "
                  "tree (docs/decisions/0016)")
     if any(pg.get("group") == group for t in menu.get("tabs") or [] if t["tab"] == tab for pg in t.get("pages") or []):
