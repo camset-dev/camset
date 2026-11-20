@@ -202,6 +202,18 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   Bracket pairs, Focus Bracket's Number of Shots, each end taken only after presses the camera answered). The report
   lists the values of a record every pair of a whole grid moved, the pair held among them, where it counted them as a
   sample, and credits no named number's put-back.
+- **`kit/tools/menu_tree.py --fold CRAWL` takes a later crawl's walk into the existing menu tree, its rows found by
+  label,** and a proof path names the second of two rows of one label with `#1`, so rows grown from proof paths take
+  the camera's order (the a1 II's Bracket Type options, Aspect Marker Disp., the movie Recording Media row).
+- **A record name in `docs/formats/sony_camset_ids_<model>_fw<fw>.ksy` stays with its record:** a new or renamed record
+  never takes one the file gives another, and the a1 II's file gives back the names three records lost
+  (`jpeg_heif_quality`, `jpeg_heif_image_size`, `unknown_camera_state`).
+- **A sampled record every value of which a walk chose, the one the camera held among them, is proved whole,** its
+  values listed with their readers (the a1 II's Playback Aspect Marker Level, published "sampled" beside its sixteen
+  values).
+- **A `NEW_RECORDS` entry can say `"live_only": true`:** the record is laid out kept out of the memory sets, where its id
+  there is another setting's (the a1 II's 0x023c, which follows the video system).
+- **A reader's Unsloth dynamic build ("UD") counts as the same model,** one vote with its other builds (decision 22).
 - **The coverage ledger keeps every record a look saw change,** where a later look of the same row, action and option
   took that look's place: such a record was left "never seen to change". The row's status is still its latest look's.
 - **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from
