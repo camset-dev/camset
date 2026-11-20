@@ -192,7 +192,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   currently disabled." was taken for one on five rows, which then got no Right. A real reason is still a reason.
 - **`carousel_fields_run.py` walks the boxes of an option with a short name,** such as movie Self-timer's On: with a
   box lit, OCR's reading of the title stands where it is exactly that option's name, since the second reader then
-  answers the lit box. A title naming another option still stops the walk.
+  answers the lit box. A title naming another option still stops the walk, and so does a proof that moves the option's
+  own record, which each line now keeps beside the title read.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.
