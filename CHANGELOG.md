@@ -180,6 +180,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A carousel option's lit box holding a long value is seen as lit,** where the pixel reader took only a box 60 %
+  orange or more and "2 Images (+)" or "2 Images (-)" over HDMI leaves 58-60 % (Bracket Type's grid stopped at its first
+  Down so): a box under that whose outline is whole now counts too.
 - **`drive.py` and `crawl_run.py` start and end through the kit's one session, as the provers do,** and a test fails
   any runner that downloads its start file or uploads a file outside it but the few it names with why. With HDMI eyes
   and a working feed, their check after putting the start file back reconnects once the camera is back from its restart,
