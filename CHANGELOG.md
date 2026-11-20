@@ -194,11 +194,12 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the row's `icon` says what was left out, or why the label stayed as read where that cannot be told. Where a reader
   read the page, the a1 II's scans now name S&Q Settings, ISO and IP Address Setting without a label read by eye, and
   its crawls name Record Setting where the reader read the S&Q box into it.
-- **`ROW_NAMES` in a camera's hand tables names each row the records hold by an older name** (an icon the kit read into
-  a label: "Proxy Settings > Px Proxy Recording"), and every comparison of a row's name takes the two as one row: the
-  rows seen opened, `prove_run.py --rows`, the maps, the menu tree, each setting's place, the walk patterns, the
-  definition's proof rows, the report and the ledger. The runs' lines keep their names; no camera's file holds the
-  table yet.
+- **`ROW_NAMES` in a camera's hand tables names a row the records hold by an older name, its last label with an icon's
+  letters in front or the kit's own name for one of two rows of a label** ("Proxy Settings > Px Proxy Recording"), and
+  every comparison of a row's name takes the two as one row (the first-open procedure, `prove_run.py --rows`, the
+  maps, the menu tree, each setting's place, the walk patterns, the definition's proof rows, the report, the viewer
+  and the ledger), never a safety check, which judges the label the camera draws. Any other entry is refused, the runs'
+  lines keep their names, and no camera's file holds the table yet.
 - **`drive.py` and `crawl_run.py` start and end through the kit's one session, as the provers do,** and a test fails
   any runner that downloads its start file or uploads a file outside it but the few it names with why. With HDMI eyes
   and a working feed, their check after putting the start file back reconnects once the camera is back from its restart,
