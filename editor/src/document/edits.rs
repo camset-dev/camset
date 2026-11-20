@@ -772,6 +772,7 @@ impl App {
         self.limits_moved = Default::default();
         // rows a copy left alone (`copy_row`): said once, after what the copy itself said
         let skipped = self.copy_skipped.replace(Left::default());
+        self.copy_shown.take();
         // a copy of several rows at once (`pin_families`): a refusal says what to do about the copy
         let copied = self.rows_copied.replace(None);
         self.rows_set.take();

@@ -371,9 +371,11 @@ impl App {
             return (false, false);
         }
         // a column takes no value of a setting that is view only in its set outside Expert mode (`locked_why`), nor of
-        // one of My Menu's places, which its page changes (`place_why`)
+        // one of My Menu's places, which its page changes (`place_why`), nor of a fraction's part whose other part the
+        // two columns do not both keep (`copy_row`)
         let place = self.place_why(s).is_some();
-        let takes = |c: Col| c.editable() && !self.locked(s, c.section) && !place;
+        let half = self.fraction_of(s).is_some_and(|(n, d, _)| [n, d].iter().any(|p| self.col_value(left, p).is_none() || self.col_value(right, p).is_none()));
+        let takes = |c: Col| c.editable() && !self.locked(s, c.section) && !place && !half;
         match (self.col_value(left, s), self.col_value(right, s)) {
             (Some(l), Some(r)) if l != r => (takes(left), takes(right)),
             _ => (false, false),
@@ -436,6 +438,52 @@ impl App {
             .collect()
     }
 
+    /// The two parts of the fraction tile `s` is one of (`TileKind::Fraction`: its `numerator_key` and `denominator_key`,
+    /// the definition's settings) and the tile's label; None for any other setting. Taken from the definition's own
+    /// tiles, never from a name.
+    pub(crate) fn fraction_of(&self, s: &Setting) -> Option<(Setting, Setting, String)> {
+        let key = &self.def_of(s).key;
+        let sets = self.schema.camera.main_tiles.as_ref()?;
+        sets.0.iter().flat_map(|set| &set.tiles).filter(|t| t.kind == TileKind::Fraction).find_map(|t| {
+            let (n, d) = (t.numerator_key.as_ref()?, t.denominator_key.as_ref()?);
+            if n != key && d != key {
+                return None;
+            }
+            let find = |k: &String| self.index_of_key(k).map(|i| self.schema.settings[i].clone());
+            Some((find(n)?, find(d)?, t.caption.clone()))
+        })
+    }
+
+    /// What one is told before a copy of a fraction's part (`fraction_of`), where one presses (an arrow, a cell, a
+    /// right-click), the window's and the page's: the two go together. None for any other setting.
+    pub(crate) fn fraction_words(&self, s: &Setting) -> Option<String> {
+        let (n, d, caption) = self.fraction_of(s)?;
+        Some(format!("{} and {} are the two parts of {caption}: a copy takes both from the same column, in one step, or neither, so the value is always one a file held. Neither part takes a value of its own here.", n.name, d.name))
+    }
+
+    /// A copy over rows: the rows it goes over as shown (every record of each), so that a fraction's part whose other
+    /// part is not among them is left, and counted (`copy_row`). Kept until the step is applied (`apply`).
+    pub(crate) fn copying_over<'a>(&self, rows: impl IntoIterator<Item = &'a Row>) {
+        *self.copy_shown.borrow_mut() = Some(rows.into_iter().flat_map(|r| r.2.iter().map(|s| self.def_of(s).key.clone())).collect());
+    }
+
+    /// A three-way merge over the rows Compare shows (`rows`), the window's buttons and the page's alike: each row whose
+    /// standing among `cols` (base, A, B: `three_way`) is `want` takes column `take`'s values into A (`copy_row`, a
+    /// fraction's two parts together: `copying_over`), each place of a family kept as the rows leave it
+    /// (`pin_families`). The actions, and how many rows.
+    pub(crate) fn merge_rows(&self, rows: &[Row], cols: (Col, Col, Col), want: Three, take: Col) -> (Vec<Action>, usize) {
+        self.copying_over(rows);
+        let (mut actions, mut n) = (Vec::new(), 0);
+        for (_, _, linked) in rows {
+            if self.three_way(cols, &linked[0]) == want {
+                n += 1;
+                actions.extend(self.copy_row(linked, take, cols.1));
+            }
+        }
+        self.pin_families(None, cols.1.section, &mut actions);
+        (actions, n)
+    }
+
     /// Why one of My Menu's places (`is_mymenu_place`) takes no value from Compare outside Expert mode, in the window
     /// and on the page alike: Compare writes a record at a time and would pass by every rule the My Menu page keeps for
     /// its items (`mymenu_set`: an item once, the pages packed, what the camera takes). None for any other setting, and
@@ -479,6 +527,33 @@ impl App {
     /// setting and the copies in step with it along, as its row says (`copy_note`); a copy of several rows at once keeps
     /// each row's own value (`pin_families`).
     pub(crate) fn copy_row(&self, linked: &[Setting], from: Col, to: Col) -> Vec<Action> {
+        // a fraction tile's part (`fraction_of`) goes with its other part, from the same column, in this same step, or not
+        // at all: where one of the two is not kept in both columns, is view only there, has another shape, or is not
+        // among the rows a copy over rows shows (`copying_over`), neither is written, and the row is counted as left
+        let mut with_other: Vec<Setting>;
+        let linked = match linked.first().and_then(|l| self.fraction_of(l)) {
+            None => linked,
+            Some((num, den, _)) => {
+                let parts = [num, den];
+                let held: Vec<(Option<i64>, Option<i64>)> = parts.iter().map(|p| (self.col_value(from, p), self.col_value(to, p))).collect();
+                if held.iter().all(|(a, b)| a.is_none() || b.is_none()) || held.iter().all(|(a, b)| a == b) {
+                    return Vec::new();
+                }
+                let src = self.set_for(from.src);
+                let whole = held.iter().all(|(a, b)| a.is_some() && b.is_some())
+                    && parts.iter().all(|p| !self.locked(p, to.section) && self.shape_ok_in(p, to.section) && src.is_some_and(|c| shape_ok_for(c, from.section, p)));
+                let shown = self.copy_shown.borrow().as_ref().is_none_or(|keys| parts.iter().all(|p| keys.contains(&p.key)));
+                if !whole || !shown {
+                    let mut left = self.copy_skipped.get();
+                    left.fraction += 1;
+                    self.copy_skipped.set(left);
+                    return Vec::new();
+                }
+                with_other = linked.to_vec();
+                with_other.extend(parts.into_iter().filter(|p| !linked.iter().any(|l| l.key == p.key)));
+                &with_other
+            }
+        };
         let pairs: Vec<(&Setting, i64, i64)> = linked.iter().filter_map(|l| Some((l, self.col_value(from, l)?, self.col_value(to, l)?))).collect();
         // every place this row leaves at the other column's value (`rows_set`): one holding it already, and one set to
         // it below; not one left alone (view only, another video system's, another shape)
@@ -1224,6 +1299,122 @@ pub(crate) mod copy_tests {
             assert_eq!(app.entry_of(&place), app.schema.camera.text.my_menu_name());
             assert_eq!(app.view_of(&place), View::MyMenu);
             assert!(app.menu_tabs().iter().all(|t| !app.settings_in(0, Some(t)).any(|s| s.key == place.key)), "under no tab");
+            done(&dir, &user);
+        }
+    }
+
+    /// The decision on a fraction's two parts: in every way Compare writes, the two parts of a fraction tile (the
+    /// definition's own tile: the Shutter Speed tile's `numerator_key` and `denominator_key`) go together, from the same
+    /// column, in one undo step, or not at all, so the speed written is always the source's. The arrows and a
+    /// right-click copy (`copy_row`), the picker (none for one part), a copy over rows with both parts shown or one
+    /// (`copying_over`: left, and said), the page's copy and copy of the rows shown, a merge in the window
+    /// (`merge_rows`) and on the page, a register from the live settings (which keep neither part: nothing written,
+    /// nothing said), and a memory that keeps one part only (left, said, no arrow); the words where one presses name
+    /// both parts. Without menus and in each of the stub's menus.
+    #[test]
+    fn a_fractions_two_parts_are_copied_together() {
+        use crate::test_support::{done, sample_app, strip_menus, stub_menus, SAMPLE_BYTES};
+        for (with_menus, stub) in [(false, strip_menus as fn(&mut serde_json::Value)), (true, stub_menus)] {
+            let (mut app, dir, user) = sample_app("cmp_fraction", Some(stub));
+            let tile = app.schema.camera.main_tiles.clone().unwrap().0[0].tiles.iter().find(|t| t.kind == TileKind::Fraction).cloned().unwrap();
+            let find = |app: &App, k: &str| app.schema.settings.iter().find(|s| s.key == k).cloned().unwrap();
+            let (num, den) = (find(&app, tile.numerator_key.as_deref().unwrap()), find(&app, tile.denominator_key.as_deref().unwrap()));
+            let (m1, m2) = (app.dial_sets()[0], app.dial_sets()[1]);
+            // a file whose memories hold the speeds given (numerator, denominator)
+            let file = |speeds: &[(usize, i64, i64)]| {
+                let mut c = test_parse(SAMPLE_BYTES).unwrap();
+                for &(m, n, d) in speeds {
+                    c.sections[m].get_mut(num.id).unwrap().put(num.index, n).unwrap();
+                    c.sections[m].get_mut(den.id).unwrap().put(den.index, d).unwrap();
+                }
+                c
+            };
+            let f = dir.join("CAMSET02.DAT");
+            std::fs::write(&f, file(&[(m1, 2, 1), (m2, 1, 2)]).to_bytes()).unwrap();
+            app.open(f);
+            let speed = |app: &App, c: Col| (app.col_value(c, &num), app.col_value(c, &den));
+            let (a1, a2) = (Col::a(m1), Col::a(m2));
+            let (two, half) = ((Some(2), Some(1)), (Some(1), Some(2)));
+            assert_eq!((speed(&app, a1), speed(&app, a2)), (two, half));
+            let page = |app: &mut App, name: &str, mut body: serde_json::Value, menu: Option<&str>| -> serde_json::Value {
+                if let Some(m) = menu { body["menu"] = serde_json::json!(m); }
+                let a = crate::web::tests::answer(app, name, body);
+                assert_eq!(a.status, 200, "{name}: {}", String::from_utf8_lossy(&a.body));
+                serde_json::from_slice(&a.body).unwrap()
+            };
+            // with menus, Compare always shows one (and the page names it in every request)
+            let menus: Vec<Option<String>> = if app.menus().is_empty() { vec![None] } else { app.menus().iter().map(|m| Some(m.name.clone())).collect() };
+            for menu in &menus {
+                let menu = menu.as_deref();
+                let at = format!("menus {with_menus} menu {menu:?}");
+                let main = app.compare_rows(menu, &BarKey::Main, "");
+                let row_of = |k: &str| main.iter().find(|r| r.2.iter().any(|s| s.key == k)).cloned().unwrap();
+                let (nrow, drow) = (row_of(&num.key), row_of(&den.key));
+                // the words where one presses, and no picker for one part
+                let words = app.fraction_words(&nrow.2[0]).unwrap();
+                assert!(words.contains(&num.name) && words.contains(&den.name) && words.contains(&tile.caption), "{at}: {words}");
+                assert!(!app.cell_editable(a2, &nrow.2) && !app.cell_editable(a2, &drow.2), "{at}: no value of one part alone");
+                // an arrow or a right-click copy of either part: both, from that column, undone in one step
+                for row in [&nrow, &drow] {
+                    assert_eq!(app.arrows_between(a1, a2, &row.2[0]), (true, true), "{at}");
+                    assert!(app.copy_targets(a1, &row.2[0]).contains(&a2));
+                    let acts = app.copy_row(&row.2, a1, a2);
+                    app.apply(acts);
+                    assert_eq!(speed(&app, a2), two, "{at}: {}", row.2[0].name);
+                    app.undo();
+                    assert_eq!(speed(&app, a2), half, "{at}: one undo step");
+                }
+                // a copy over rows: one part shown is left, and said; both shown, the source's speed
+                app.copying_over([&nrow]);
+                assert!(app.copy_row(&nrow.2, a1, a2).is_empty());
+                assert_eq!(app.copy_skipped.get().fraction, 1);
+                app.apply(Vec::new());
+                assert!(app.status.contains("two parts of a value a Main tile shows as a fraction") && speed(&app, a2) == half, "{at}: {}", app.status);
+                app.copying_over([&nrow, &drow]);
+                let acts: Vec<Action> = [&nrow, &drow].iter().flat_map(|r| app.copy_row(&r.2, a1, a2)).collect();
+                app.apply(acts);
+                assert_eq!(speed(&app, a2), two, "{at}: both shown");
+                app.undo();
+                // the page: a copy of one part, a copy of the rows shown with one part and with both
+                page(&mut app, "copy", serde_json::json!({ "from": ["a", m1], "to": ["a", m2], "key": num.key, "entry": "main" }), menu);
+                assert_eq!(speed(&app, a2), two, "{at}: the page's copy");
+                app.undo();
+                let j = page(&mut app, "copy_rows", serde_json::json!({ "from": ["a", m1], "to": ["a", m2], "keys": [num.key], "entry": "main" }), menu);
+                assert!(j["message"].as_str().is_some_and(|m| m.contains("as a fraction")) && speed(&app, a2) == half, "{at}: {j}");
+                page(&mut app, "copy_rows", serde_json::json!({ "from": ["a", m1], "to": ["a", m2], "keys": [num.key, den.key], "entry": "main" }), menu);
+                assert_eq!(speed(&app, a2), two, "{at}: the page's copy of both");
+                app.undo();
+                // a merge: base 1/2, A 1/4 (its denominator changed), B 3/2 (its numerator): B's speed, in the window
+                // and on the page; with only the numerator shown, nothing
+                app.apply(vec![Action::Set(m2, den.slot(), 4)]);
+                app.base = Some((PathBuf::from("base.DAT"), file(&[(m1, 2, 1), (m2, 1, 2)])));
+                app.compare = Some((PathBuf::from("B.DAT"), file(&[(m1, 2, 1), (m2, 3, 2)])));
+                let cols = (Col::base(m2), a2, Col::b(m2));
+                let all = app.compare_rows(menu, &BarKey::All, "");
+                let (acts, _) = app.merge_rows(&all, cols, Three::BOnly, Col::b(m2));
+                app.apply(acts);
+                assert_eq!(speed(&app, a2), (Some(3), Some(2)), "{at}: the window's merge");
+                app.undo();
+                let j = page(&mut app, "merge", serde_json::json!({ "base": ["base", m2], "a": ["a", m2], "b": ["b", m2], "kind": "b_into_a", "entry": "all" }), menu);
+                assert_eq!(speed(&app, a2), (Some(3), Some(2)), "{at}: the page's merge: {j}");
+                app.undo();
+                let one: Vec<Row> = all.iter().filter(|r| r.2[0].key != den.key).cloned().collect();
+                let (acts, _) = app.merge_rows(&one, cols, Three::BOnly, Col::b(m2));
+                app.apply(acts);
+                assert_eq!(speed(&app, a2), (Some(1), Some(4)), "{at}: one part shown: left");
+                app.undo();
+                (app.base, app.compare) = (None, None);
+                // a register from the live settings, which keep neither part: the memory's speed as it was, nothing said
+                let j = page(&mut app, "register", serde_json::json!({ "memory": m1, "shown": true, "entry": "main" }), menu);
+                assert!(speed(&app, a1) == two && !j["message"].as_str().unwrap_or("").contains("fraction"), "{at}: {j}");
+                app.undo();
+            }
+            // a memory that keeps one part only: no arrow, the copy left and counted
+            for s in app.schema.settings.iter_mut().filter(|s| s.key == den.key) { s.in_sets = false; }
+            app.schema_gen += 1;
+            assert_eq!(app.arrows_between(a1, a2, &num), (false, false));
+            app.copy_skipped.set(Default::default());
+            assert!(app.copy_row(std::slice::from_ref(&num), a1, a2).is_empty() && app.copy_skipped.get().fraction == 1);
             done(&dir, &user);
         }
     }

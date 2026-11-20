@@ -146,6 +146,9 @@ struct App {
     review_rev: Option<u64>,
     /// Settings a copy left alone, by why (`copy_row`, `Left`); `apply` says how many.
     copy_skipped: std::cell::Cell<Left>,
+    /// The keys of the rows a copy over rows goes over (`copying_over`), until `apply`: a fraction's part whose other part
+    /// is not among them is left (`copy_row`).
+    copy_shown: std::cell::RefCell<Option<std::collections::HashSet<String>>>,
     /// The actions `apply` takes next are a copy of several rows at once (`pin_families`), from another file (`Some(None)`)
     /// or from a set of file A (`Some(Some(set))`: a memory recalled or registered): only then does a Set to the value a
     /// record holds pass the lock guard, and a refusal says what to do about the copy.
@@ -343,6 +346,7 @@ impl App {
             close_ok: false,
             review_rev: None,
             copy_skipped: Default::default(),
+            copy_shown: Default::default(),
             rows_copied: Default::default(),
             rows_set: Default::default(),
             limits_moved: Default::default(),

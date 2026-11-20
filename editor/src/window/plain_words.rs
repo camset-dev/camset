@@ -114,7 +114,8 @@ pub(crate) fn read_problem(e: &std::io::Error) -> &'static str {
 /// `Setting::other_system`); a copy the camera keeps of a setting that took no value (following its setting, put back,
 /// or taken along), its record being of another shape than mapped (`copies_shape`, `App::apply`); a place of the
 /// camera's own menu (My Menu), which Compare leaves to that menu's page outside Expert mode (`places`,
-/// `App::place_why`).
+/// `App::place_why`); one part of a fraction a Main tile shows, which a copy takes with its other part or not at all
+/// (`fraction`, `App::copy_row`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Left {
     pub(crate) shape: usize,
@@ -122,12 +123,13 @@ pub(crate) struct Left {
     pub(crate) other_system: usize,
     pub(crate) copies_shape: usize,
     pub(crate) places: usize,
+    pub(crate) fraction: usize,
 }
 
 impl Left {
     /// How many, whatever the reason.
     pub(crate) fn total(self) -> usize {
-        self.shape + self.locked + self.other_system + self.copies_shape + self.places
+        self.shape + self.locked + self.other_system + self.copies_shape + self.places + self.fraction
     }
 }
 
@@ -188,6 +190,8 @@ fn left_alone_words(left: Left) -> Option<String> {
             "they are view only outside Expert mode, as no proof on the camera stands for them here. Expert mode (⚙ Settings > Editing & Compare) copies them."),
         one(left.other_system, "its value is offered only with the camera set to another video system than file A was saved with.",
             "their values are offered only with the camera set to another video system than file A was saved with."),
+        one(left.fraction, "it is one of the two parts of a value a Main tile shows as a fraction, and its other part could not be copied with it (not shown, or not kept in both columns), so it was left rather than make a value neither column holds.",
+            "each is one of the two parts of a value a Main tile shows as a fraction, and its other part could not be copied with it (not shown, or not kept in both columns), so they were left rather than make values neither column holds."),
         one(left.copies_shape, "a copy the camera keeps of a setting was not changed with it, as the file holds it in another shape than the editor knows; it holds its old value.",
             "copies the camera keeps of settings were not changed with them, as the file holds them in another shape than the editor knows; they hold their old values."),
     ].into_iter().flatten().collect::<Vec<_>>().join(" "))

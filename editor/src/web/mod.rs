@@ -543,9 +543,18 @@ impl App {
                 let rows = (*self.compare_rows(None, &BarKey::All, "")).clone();
                 self.rows_set.take();               // what this copy's rows cover, and nothing left from another
                 let (mut actions, mut n, mut name) = (Vec::new(), 0, String::new());
-                for key in keys {
-                    let row = shown.iter().chain(rows.iter()).find(|(_, _, l)| l.iter().any(|s| s.key == key));
-                    let Some((_, _, linked)) = row else { return WebReply::error(404, "No such setting here.") };
+                let mut chosen: Vec<&Row> = Vec::new();
+                for key in &keys {
+                    match shown.iter().chain(rows.iter()).find(|(_, _, l)| l.iter().any(|s| s.key == *key)) {
+                        Some(row) => chosen.push(row),
+                        None => return WebReply::error(404, "No such setting here."),
+                    }
+                }
+                // a copy of the rows shown: a fraction's part goes with its other part only where both are shown
+                if action == "copy_rows" {
+                    self.copying_over(chosen.iter().copied());
+                }
+                for (_, _, linked) in chosen {
                     for d in &dsts {
                         let row = self.copy_row(linked, src, *d);
                         n += usize::from(!row.is_empty());
@@ -595,14 +604,8 @@ impl App {
                 // of the Menu in its camera's menu, with its search
                 let entry = Self::web_entry(&body);
                 self.rows_set.take();
-                let (mut actions, mut n) = (Vec::new(), 0);
-                for (_, _, linked) in self.compare_rows(menu, &entry, body["q"].as_str().unwrap_or("").trim()).iter() {
-                    if self.three_way((tb, ta, tbb), &linked[0]) == want {
-                        n += 1;
-                        actions.extend(self.copy_row(linked, take, ta));
-                    }
-                }
-                self.pin_families(None, ta.section, &mut actions);
+                let rows = self.compare_rows(menu, &entry, body["q"].as_str().unwrap_or("").trim());
+                let (actions, n) = self.merge_rows(&rows, (tb, ta, tbb), want, take);
                 let left = self.copy_skipped.get();
                 // a switch that keeps copies apart, unticked by the merge, asks first unless its family comes too
                 match self.web_untick_apply(actions, &body) {
@@ -2062,6 +2065,7 @@ impl App {
                 let why: Vec<String> = self.unnamed_why(s, v).filter(|_| st).into_iter()
                     .chain(self.locked_why(s, c.section).filter(|_| file_a).map(|(w, _)| w))
                     .chain(self.place_why(s).filter(|_| file_a))
+                    .chain(self.fraction_words(s).filter(|_| file_a))
                     .chain(self.copy_note(s, c.section).filter(|_| file_a).map(|(w, _)| w)).collect();
                 if !why.is_empty() {
                     cell["why"] = json!(why.join("\n\n"));
@@ -2273,6 +2277,7 @@ impl App {
             self.memory_rows()
         };
         self.rows_set.take();
+        self.copying_over(rows.iter());
         let mut actions: Vec<Action> = rows.iter().flat_map(|r| self.copy_row(&r.2, src, dst)).collect();
         let n = actions.len();
         self.pin_families(Some(src.section), dst.section, &mut actions);

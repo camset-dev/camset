@@ -149,7 +149,7 @@ impl App {
                 }
                 if !on {
                     ui.allocate_exact_size(Self::ARROW, egui::Sense::hover());
-                } else if Self::arrow_button(ui, glyph, &Self::arrow_words(&self.col_name(from), &self.col_name(to))).clicked() {
+                } else if Self::arrow_button(ui, glyph, &[Some(Self::arrow_words(&self.col_name(from), &self.col_name(to))), self.fraction_words(&linked[0])].into_iter().flatten().collect::<Vec<_>>().join("\n\n")).clicked() {
                     out.extend(self.copy_row(linked, from, to));
                 }
             }
@@ -315,25 +315,16 @@ impl App {
                 if editable {
                     let mergeable = count(Three::BOnly);
                     if ui.add_enabled(mergeable > 0, egui::Button::new(format!("Merge B into A ({mergeable})"))).on_hover_text("Take every change B made where A kept the base value. Conflicts are left alone.").clicked() {
-                        for (r, c) in rows.iter().zip(&classes) {
-                            if *c == Three::BOnly { actions.extend(self.copy_row(&r.2, tbb, ta)); }
-                        }
-                        self.pin_families(None, ta.section, &mut actions);
+                        actions.extend(self.merge_rows(&rows, tc, Three::BOnly, tbb).0);
                         self.status = format!("{mergeable} of B's changes merged into A; save the file to keep them");
                     }
                     let conflicts = count(Three::Conflict);
                     if ui.add_enabled(conflicts > 0, egui::Button::new("Conflicts: take B")).on_hover_text("Where A and B changed a setting differently, use B's value").clicked() {
-                        for (r, c) in rows.iter().zip(&classes) {
-                            if *c == Three::Conflict { actions.extend(self.copy_row(&r.2, tbb, ta)); }
-                        }
-                        self.pin_families(None, ta.section, &mut actions);
+                        actions.extend(self.merge_rows(&rows, tc, Three::Conflict, tbb).0);
                         self.status = format!("{conflicts} conflicts resolved with B's values; save the file to keep them");
                     }
                     if ui.add_enabled(conflicts > 0, egui::Button::new("Conflicts: take Base")).on_hover_text("Where A and B changed a setting differently, go back to the base value").clicked() {
-                        for (r, c) in rows.iter().zip(&classes) {
-                            if *c == Three::Conflict { actions.extend(self.copy_row(&r.2, tb, ta)); }
-                        }
-                        self.pin_families(None, ta.section, &mut actions);
+                        actions.extend(self.merge_rows(&rows, tc, Three::Conflict, tb).0);
                         self.status = format!("{conflicts} conflicts reset to the base values; save the file to keep them");
                     }
                 }
@@ -420,6 +411,7 @@ impl App {
                     }
                     for t in cols.iter().filter(|t| t.editable() && *t != c) {
                         if editable && ui.button(format!("Copy all shown rows to {}", self.col_name(*t))).clicked() {
+                            self.copying_over(shown.iter().copied());
                             for (_, _, linked) in &shown { actions.extend(self.copy_row(linked, *c, *t)); }
                             self.pin_families((c.src == Src::A).then_some(c.section), t.section, &mut actions);
                             ui.close_menu();
@@ -521,6 +513,8 @@ impl App {
                     let r = match self.locked_why(s, c.section).filter(|_| c.editable()) { Some((why, _)) => r.on_hover_text(why), None => r };
                     // one of My Menu's places says where it is changed instead (`place_why`)
                     let r = match self.place_why(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
+                    // a fraction's part says it goes with its other part (`fraction_words`)
+                    let r = match self.fraction_words(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
                     let r = match self.copy_note(s, c.section).filter(|_| c.editable()) { Some((note, _)) => r.on_hover_text(note), None => r };
                     // a value of file A that can change opens Compare's picker on a click (or the menu's "Change…",
                     // the frame after its menu closes)
@@ -544,6 +538,9 @@ impl App {
                     r.context_menu(|ui| {
                         if can_copy {
                             ui.label(RichText::new(format!("Copy {} from {}", s.name, self.col_name(*c))).color(tone::weak(ui.visuals())).small());
+                            if let Some(w) = self.fraction_words(s) {
+                                ui.label(RichText::new(w).color(tone::weak(ui.visuals())).small());
+                            }
                             for t in &targets {
                                 // the arrow points from this cell's column toward the column the value goes into
                                 let arrow = if cols.iter().position(|x| x == t).is_some_and(|p| p < i) { "◀" } else { "▶" };

@@ -259,6 +259,7 @@ impl App {
         let Some(ask) = self.untick_ask(&actions) else { return actions };
         let rev = self.doc.as_ref().map_or(0, |d| d.rev);
         let (copied, rows_set, skipped) = (self.rows_copied.take(), self.rows_set.take(), self.copy_skipped.take());
+        self.copy_shown.take();
         self.untick_pending = Some(UntickPending { ask, actions, rev, copied, rows_set, skipped });
         Vec::new()
     }
