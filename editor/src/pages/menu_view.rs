@@ -406,11 +406,24 @@ impl App {
         });
 
         if *family {
+            let mut fold_every = None;
             egui::CentralPanel::default().show_inside(ui, |ui| {
+                // the family's table folded or open (`fold_all`), with its keys, as on the page
+                ui.horizontal(|ui| {
+                    let ctx = ui.ctx().clone();
+                    let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+                    if ui.small_button("Collapse all").on_hover_text(format!("Fold the table ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
+                    if ui.small_button("Expand all").on_hover_text(format!("Open the table ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
+                });
                 egui::ScrollArea::both().id_salt("family_scroll").auto_shrink([false, false]).show(ui, |ui| {
                     self.pp_table(ui, gname, &rows[0], editable, &mut actions);
                 });
             });
+            self.head_fold = None;
+            if let Some(collapse) = fold_every {
+                self.fold_all(collapse);
+                ui.ctx().request_repaint();
+            }
         } else {
             // column 4: the selected item
             egui::SidePanel::right("detail").resizable(true).default_width(330.0).show_inside(ui, |ui| {
@@ -604,7 +617,8 @@ impl App {
     /// Collapse all (`collapse`) or expand all, by the buttons or by Cmd/Ctrl+Shift+↑ / ↓ (`KEY_COLLAPSE_ALL`,
     /// `KEY_EXPAND_ALL`), the page's alike: in Compare its tabs and groups, as its Collapse all and Expand all have always
     /// done; in a tab of Edit the camera's rows that hold others in the group shown (the group column picks one group at a
-    /// time; the Menu's entries are pages, not folds); on the exposure page its "What decides" sections (`ex_fold`). A row
+    /// time; the Menu's entries are pages, not folds), or a family group's table; on the exposure page its "What decides"
+    /// sections (`head_fold`). A row
     /// chosen that a fold hides gives way to the nearest row still shown, as a click on its heading does, or to none where
     /// every row is under a folded one. The rule: every foldable group of the view in front, as on the page.
     pub(crate) fn fold_all(&mut self, collapse: bool) {
@@ -622,7 +636,9 @@ impl App {
             (Mode::Edit, View::Tab(tab)) => {
                 let groups = self.tab_groups(&tab);
                 let Some((gname, family, rows)) = groups.iter().find(|(n, _, _)| Some(n) == self.group.as_ref()).or(groups.first()) else { return };
+                // a family's table (Picture Profiles, Creative Looks): its one collapsing header
                 if *family {
+                    self.head_fold = Some(collapse);
                     return;
                 }
                 let lines = self.group_lines(rows);
@@ -645,7 +661,7 @@ impl App {
                     }
                 }
             }
-            (Mode::Edit, View::Exposure) => self.ex_fold = Some(collapse),
+            (Mode::Edit, View::Exposure) => self.head_fold = Some(collapse),
             _ => {}
         }
     }

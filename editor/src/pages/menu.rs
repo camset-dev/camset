@@ -2577,6 +2577,34 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The reviewer's inventory, A: a family group's table (Picture Profiles, Creative Looks) folds and opens by the keys
+    /// as by its own Collapse all and Expand all, as on the page.
+    #[test]
+    fn a_family_groups_table_folds_by_the_keys_and_the_buttons() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_family", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        let (tab, group) = app.schema.tabs.iter().find_map(|t| app.tab_groups(t).into_iter().find(|(_, family, _)| *family).map(|(g, _, _)| (t.clone(), g))).expect("a family group");
+        app.select(Some(View::Tab(tab)), Some(group), None);
+        let open = |w: &mut Win, app: &mut App| {
+            for _ in 0..8 {
+                let _ = w.run(app, vec![]);
+            }
+            w.drawn(app).iter().any(|t| t.contains("Values the camera never produces are not offered."))
+        };
+        assert!(open(&mut w, &mut app), "open to start with");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(!open(&mut w, &mut app), "Collapse all by the keys");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(open(&mut w, &mut app), "Expand all by the keys");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert!(!open(&mut w, &mut app), "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert!(open(&mut w, &mut app));
+        done(&dir, &user);
+    }
+
     /// The owner's report ("in the edit, when in the pane 3 of 4 I'm not able to collapse or expand"): the keys fold
     /// and open from every pane of Edit (the Menu, the groups, the settings, a control with egui's focus) and of Compare,
     /// and only a text field with the caret in it keeps them.

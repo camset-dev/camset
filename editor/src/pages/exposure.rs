@@ -406,7 +406,7 @@ impl App {
                 if ui.small_button("Collapse all").on_hover_text(format!("Fold every \"What decides\" section ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
                 if ui.small_button("Expand all").on_hover_text(format!("Open every \"What decides\" section ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
             });
-            let forced = self.ex_fold.take();
+            let forced = self.head_fold.take();
             for (side, name, effect) in EFFECTS {
                 egui::CollapsingHeader::new(format!("What decides {name}")).id_salt(("ex", name)).open(forced.map(|collapse| !collapse)).show(ui, |ui| {
                     ui.label(RichText::new(effect).small());

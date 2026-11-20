@@ -191,9 +191,10 @@ struct App {
     mm_visible: Option<(usize, usize)>,
     /// Compare view: the tabs (tab, "") and groups (tab, group) folded shut.
     matrix_closed: std::collections::HashSet<(String, String)>,
-    /// The exposure page's "What decides" sections, all to fold (true) or all to open (false) the next time the page is
-    /// drawn (`fold_all`); their state is egui's, as a click on one leaves it.
-    ex_fold: Option<bool>,
+    /// The collapsing headers of the view in front (the exposure page's "What decides" sections, a family group's
+    /// table), all to fold (true) or all to open (false) the next time it is drawn (`fold_all`); their state is egui's,
+    /// as a click on one leaves it.
+    head_fold: Option<bool>,
     /// The control that had egui's focus when the fold keys were pressed, to have it back the next frame: egui moves the
     /// focus with an arrow whatever the modifiers (`fold_keys`).
     refocus: Option<egui::Id>,
@@ -377,7 +378,7 @@ impl App {
             mm_rows: Vec::new(),
             mm_visible: None,
             matrix_closed: Default::default(),
-            ex_fold: None,
+            head_fold: None,
             refocus: None,
             target: 0,
             mode: Mode::Edit,
