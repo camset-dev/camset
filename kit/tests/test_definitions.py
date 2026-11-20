@@ -1775,6 +1775,34 @@ def test_snap_never_crosses_a_digit():
     assert S.snap("Subject Reccgnition AF", ["Subject Recognition AF"]) == "Subject Recognition AF"
 
 
+def test_a_picker_name_less_a_word_of_the_camera_is_no_agreement_and_the_reading_is_not_snapped_back(monkeypatch):
+    """A function picker's schema label that is the camera's reading less a word ("Transition Speed" for "AF Transition
+    Speed", "Auto/Manual Switch" for "Av Auto/Manual Switch": 2026-11-20, five codes in 101 slots) is no agreement but
+    "wording", sure where two readers read it, so the writer gives the camera's words; snap never takes such a reading
+    back to the cut name, nor to a name with another word in a word's place ("Tv ..." for "Av ..."). An icon's capitals,
+    an icon repeating the name, a lead every option draws and the kit's "(2)" are no word: those still agree. Made-up
+    labels."""
+    import pass2_report as R
+    import schema_update as S
+    monkeypatch.setattr(R, "SURE", {"AF Zqx Speed", "Qv Zqx Switch"})
+    vals = {"AF Zqx Speed": 1, "Qv Zqx Switch": 2, "Zqx Hold (2)": 3, "MR Zqx Memory": 4, "Zqx Speed Mde": 5,
+            "Zqx Other": 6, "50M L: 50M": 7}
+    known = {1: "Zqx Speed", 2: "Zqx Switch", 3: "Zqx Hold", 4: "Zqx Memory", 5: "Zqx Speed Mode", 6: "Nothing Alike",
+             7: "L: 50M"}
+    verdict, notes = R.judge_functions(vals, known)
+    by = {n["value"]: n for n in notes}
+    assert verdict == "conflict" and set(by) == {1, 2, 6}
+    assert by[1]["kind"] == by[2]["kind"] == "wording" and by[1]["sure"] and by[2]["sure"] and by[6]["kind"] == "conflict"
+    assert R.cut_words("Zqx Speed", "AF Zqx Speed") == "AF" and R.cut_words("Zqx Mode", "Zqx Mode (2)") is None
+    assert R.cut_words("Zqx Alpha", "Qrw Zqx Alpha", ["Qrw Zqx Alpha", "Qrwl Zqx Beta"]) is None      # an icon column
+    assert R.cut_words("Zqx Alpha", "Qrw Zqx Alpha", ["Qrw Zqx Alpha", "Zqx Beta"]) == "Qrw"
+    assert R.cut_words("Hi", "Zqx Mode Hi") == "Zqx Mode" and R.cut_words("Zqx", "Zqxy") is None
+    assert S.snap("Qv Zqx Switch", ["Zqx Switch", "Tv Zqx Switch"]) == "Qv Zqx Switch"
+    assert S.snap("AF Zqx Speed", ["Zqx Speed", "AF Zqx Speed"]) == "AF Zqx Speed"
+    assert S.snap("faZqx Regist. Face", ["Zqx Regist. Face"]) == "Zqx Regist. Face"           # glued icon letters
+    assert S.snap("Zqx Reccgnition Mode", ["Zqx Recognition Mode"]) == "Zqx Recognition Mode"   # a slip in a word
+
+
 # a made-up report of one row, a KEEP_LABELS record whose label stands against the camera's reading (Proxy Rec.
 # Settings, which the a1 II's accepted file does not list)
 GATE_REPORT = [{"row": "Proxy Rec. Settings", "options": 2, "notices": [],

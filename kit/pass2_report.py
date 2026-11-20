@@ -6,7 +6,8 @@ Per proved row: the records its options changed and, per option, label -> value.
 compared with the definition of the camera the kit works on, editor/definitions/<model>_fw<fw>.json (camkit.paths;
 key "global:0x...", values [[value, label], ...]):
   agrees      every proved value has the schema's label for it (same text, ignoring case/spaces)
-  wording     the same meaning worded another way ("Fixed" / "Fix")
+  wording     the same meaning worded another way ("Fixed" / "Fix"), or, on a function picker, the schema's label
+              the camera's less a word ("Transition Speed" for "AF Transition Speed": cut_words)
   missing     the schema has the record but lacks a proved value, or its label is blank
   conflict    the schema gives a value the label of another proved option, or a label nothing like
               the camera's: the schema is wrong for that value, or the option was renamed
@@ -365,18 +366,55 @@ def name_of(o: dict) -> tuple:
     return L, "ocr disagrees", seen
 
 
+TWIN_MARK = re.compile(r"\(\d+\)")          # the kit's own mark of a second option drawn alike ("(2)": picker_names)
+
+
+def cut_words(name, label, options=()) -> str | None:
+    """The words a name lacks of the label it was read as, where the name is that label less a leading or a trailing
+    group of whole words, case and spacing aside: "AF" for "Transition Speed" read "AF Transition Speed", "Av" for
+    "Auto/Manual Switch" read "Av Auto/Manual Switch"; else None. None too where the part is no word of the camera's: a
+    glyph (no letter or digit), an icon's capitals before the words they stand for ("STD" of "STD Standard":
+    writer.labels.icon_word), an icon that repeats the name's own text ("50M" of "50M L: 50M", the size icon), a lead
+    every other one of `options` (the row's labels as read) starts with too (an icon column: "RAW" of "RAW Compressed"
+    beside "RAW Uncompressed", "RAWL Lossless Comp (L)"), or the kit's own mark of a second option drawn alike ("(2)",
+    TWIN_MARK)."""
+    a, b = (re.sub(r"\s+", " ", str(x or "")).strip() for x in (label, name))
+    la, lb = a.casefold(), b.casefold()
+    if not lb or la == lb:
+        return None
+    if la.endswith(lb) and la[-len(lb) - 1:-len(lb)] == " ":
+        part, lead = a[:-len(b)].strip(), True
+    elif la.startswith(lb) and la[len(lb):len(lb) + 1] == " ":
+        part, lead = a[len(b):].strip(), False
+    else:
+        return None
+    from writer.labels import icon_word     # here: writer.labels reads this module
+    icon = icon_word(a)
+    bare = re.sub(r"[^a-z0-9]", "", part.casefold())
+    others = [str(o).strip().casefold() for o in options if str(o).strip().casefold() not in (la, "")]
+    column = lead and len(bare) >= 2 and others and all(o.startswith(part.casefold()[:3]) for o in others)
+    if not bare or TWIN_MARK.fullmatch(part) or (icon and icon[0] == part) or bare in re.sub(r"[^a-z0-9]", "", lb) \
+            or column:
+        return None
+    return part
+
+
 def judge_functions(vals: dict, known: dict) -> tuple:
     """A function picker's record: the code is what was proved; the schema's label stands when the
     camera's reading is loosely like it (OCR of icons and arrows), and only labels nothing like it
-    are conflicts, for a person to look at."""
+    are conflicts, for a person to look at. A schema label that is the reading less a word of the camera's (cut_words:
+    "Transition Speed" for "AF Transition Speed") is no agreement but "wording": the camera's words replace it where two
+    readers read them (the writer, "sure"); until 2026-11-20 the likeness let it stand."""
     notes, worst = [], "agrees"
+    rank = ["agrees", "wording", "missing", "conflict"]
     for lab, v in vals.items():
         s = known.get(v)
-        if s and close(s, lab) >= 0.6:
+        lost = cut_words(s, lab, vals) if s else None
+        if s and close(s, lab) >= 0.6 and not lost:
             continue
-        kind = "missing" if not s else "conflict"
+        kind = "missing" if not s else "wording" if lost else "conflict"
         notes.append({"value": v, "camera": lab, "schema": s, "kind": kind, "sure": lab in SURE})
-        worst = "conflict" if kind == "conflict" or worst == "conflict" else "missing"
+        worst = max(worst, kind, key=rank.index)
     return worst, notes
 
 

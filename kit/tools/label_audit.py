@@ -30,15 +30,19 @@ what backs it (kit/writer/proofs.py NAME_SOURCES). The audit takes:
            is right only where the reading spells the published name (pass2_report.same_label and
            camkit.reading.said_key alike: case, spacing and a full stop forgiven, a small l for an I never), or,
            where that name is a part of the line the camera draws, the part of the reading in its place (after or
-           before the colon: "DRO Bracket: Hi" for Hi), or the name alone of the options held in it as a whole word
-           (a look's base: its code, "PT" of "PT(Portrait)", character by character); a reading that
-           picks the option by the census's rule (judge: a loose likeness, an icon left out, the closest option) but
-           spells it otherwise is a vote of its own ("spelled otherwise"); a star count, a number and a box's state
-           are judged exactly, as the census does. One vote per model family (camkit.reading.model_id: the first
-           reader of a family that answered); per name, with two families or more: all agree, some agree, none agree
-           and all on another reading (one other option, or one other text alike, the name's own option spelled
-           otherwise among them), each picks the option but they spell it apart, or none agree and they differ; with
-           one family, "one family" (as published or not), never "all agree"
+           before the colon: "DRO Bracket: Hi" for Hi), or the name alone of the options held in it as a whole word,
+           what else it holds an icon (a look's base: its code, "PT" of "PT(Portrait)", character by character); a
+           reading of which the name is a cut form, the name less a word of the camera's (pass2_report.cut_words:
+           "AF Transition Speed" for "Transition Speed"; an icon's capitals, an icon repeating the name, a lead
+           every line of the row draws are no word), is never right but a vote of its own ("cut form"); a reading
+           that picks the option by the census's rule (judge: a loose likeness, an icon left out, the closest option)
+           but spells it otherwise is a vote of its own ("spelled otherwise"); a star count, a number and a box's
+           state are judged exactly, as the census does. One vote per model family (camkit.reading.model_id: the
+           first reader of a family that answered); per name, with two families or more: all agree, some agree, none
+           agree and all on another reading (one other option, or one other text alike, the name's own option
+           spelled otherwise among them), a cut form of what some family read (none spells it), each picks the
+           option but they spell it apart, or none agree and they differ; with one family, "one family" (as
+           published or not), never "all agree"
 Left out, and counted: a name the report credits no label with, or whose label has no proof line under it, a value the
 definition names nothing, two values of one record sharing a name, a line of an identity or connection row a network
 decision opened (decision 8), a frame of a run that opened a row an owner decision names (camkit.vlm.NO_READER_MARKER,
@@ -53,12 +57,12 @@ label, value or file name: decision 16, as the census prints); --json prints the
 on standard output. The names not every family confirmed go, one JSON line each, to <root>/_label_audit/labels.jsonl
 (LEDGER), owner-only (0600 in a 0700 folder on POSIX): the setting's key, the value's code, the published name, its
 source, the kind, the report row, the frame's path from <root>, each reader's model, family, reading and vote, and the
-verdict, ordered by verdict (LISTED), "none agree, all on another reading" first. A run that read some name rewrites it whole, its own lines with every line
-of before whose name it did not read (outside its scope, or not answered about) and the definition still publishes as
-it was; a run that read none, and a dry run, leave it as it was. It is kept beside the
-frames it names, in the camera's run root, because it holds what the runs hold (the camera's labels, the readers'
-readings, the frames' names): runs/ is git-ignored and kit/tools/check_public.py refuses any file under it, so it never
-reaches a commit, an issue or the docs (decision 16).
+verdict, ordered by verdict (LISTED), "none agree, all on another reading" first, "a cut form of what is read" next.
+A run that read some name rewrites it whole, its own lines with every line of before whose name it did not read
+(outside its scope, or not answered about) and the definition still publishes as it was; a run that read none, and a
+dry run, leave it as it was. It is kept beside the frames it names, in the camera's run root, because it holds what
+the runs hold (the camera's labels, the readers' readings, the frames' names): runs/ is git-ignored and
+kit/tools/check_public.py refuses any file under it, so it never reaches a commit, an issue or the docs (decision 16).
 
 It changes nothing: not the definition, not a map, not a proof line, nothing in the runs but its own file. A name found
 wrong, read by eye on its frame, is pinned in the camera's hand table (VALUE_FIXES, [key, code, name], in
@@ -89,9 +93,10 @@ ITEM_KINDS = {"list": ("list", "scale", "star rating"), "sidelist": ("side list"
               "dialog": ("carousel",), "axis": ("axis",), "lookbase": ("look base",), "checklist": ("checklist",),
               "fields": ("number field",), "wbgrid": ("wb grid",), "look": ("look",)}
 LABEL_KINDS = {"list", "scale", "side list", "table picker", "carousel", "axis", "look base"}
-VERDICTS = ("none agree, all on another reading", "picks the option, spelled otherwise", "none agree, apart",
-            "some agree", "one family, not as published", "one family, spelled as published", "all agree", "not read")
-LISTED = VERDICTS[:5]                                   # the verdicts the private file lists, in this order
+VERDICTS = ("none agree, all on another reading", "a cut form of what is read", "picks the option, spelled otherwise",
+            "none agree, apart", "some agree", "one family, not as published", "one family, spelled as published",
+            "all agree", "not read")
+LISTED = VERDICTS[:6]                                   # the verdicts the private file lists, in this order
 DEFAULTS = {"minutes": 60.0, "timeout": 60.0}
 
 
@@ -101,12 +106,14 @@ class Name:
     checklist line's: whether the value is the one the box's visit wrote), frame, kind (the census's), item (the
     reader_census.Item judged against the published name), question; why: the reason it is left out, or None;
     hosted_why: why a hosted reader is sent its frame for no reading, or None; part: how the published name stands in
-    the label the run recorded where it is not the whole of it (part_of), or None."""
+    the label the run recorded where it is not the whole of it (part_of), or None; drawn: the row's options as the runs
+    recorded them (an icon column every line draws: pass2_report.cut_words)."""
 
     def __init__(self, key, value, name, source):
         self.key, self.value, self.name, self.source = key, str(value), name, source
         self.row = self.line = self.after = self.frame = self.kind = self.item = self.question = None
         self.why, self.hosted_why, self.part = None, None, None
+        self.drawn = ()
 
 
 # ------------------------------------------------------------------------------------------------ the names
@@ -340,7 +347,7 @@ def judged(n: Name, item, fixes: dict) -> tuple:
                 values[name].add(value)
         if len(values.get(n.name, {n.value})) > 1:
             return None, "two values of its record share the name"
-        n.part = part_of(own, n.name)
+        n.part, n.drawn = part_of(own, n.name), tuple(item.options)
         return rc.Item(k, item.frame, n.name, options, None, item.box, item.old, item.extra), None
     if k == "checklist":
         if n.after is None:
@@ -490,8 +497,10 @@ def spelled(n: Name, text: str) -> bool:
     """Whether a reading spells n's published name as the definition does, strictly (same_text: case, spacing, full
     stops, brackets and commas aside, every letter, digit and sign kept): the whole reading, or the part of it that
     stands where the name stands in the recorded label (Name.part: after or before its colon), or, held, the name as a
-    whole word in it while no other option's name is held there at all; a look's base, its code as the census takes it
-    from the line (its first word), character by character (camkit.reading.code_same) and alike by said_key."""
+    whole word in it while no other option's name is held there at all and what else it holds is an icon, not a word of
+    the camera's that the name lacks (cut_form: "AF Transition Speed" never spells "Transition Speed"); a look's base,
+    its code as the census takes it from the line (its first word), character by character (camkit.reading.code_same)
+    and alike by said_key."""
     if same_text(text, n.name):
         return True
     if n.kind == "look base":         # the look's code, which the carousel line draws before its long name: "PT(Portrait)"
@@ -503,8 +512,17 @@ def spelled(n: Name, text: str) -> bool:
     if n.part == "before":
         return bool(colon) and same_text(head, n.name)
     if n.part == "held":
-        return held(n.name, text) == 2 and not any(held(o, text) for o in n.item.options if o != n.name)
+        return held(n.name, text) == 2 and not any(held(o, text) for o in n.item.options if o != n.name) \
+            and not cut_form(n, text)
     return False
+
+
+def cut_form(n: Name, text: str) -> bool:
+    """The published name is the reading less a leading or trailing word of the camera's (pass2_report.cut_words: an
+    icon's capitals, an icon that repeats the name, a lead every line of the row draws and the kit's "(2)" are no word),
+    where the name stands for the whole line: never a carousel axis's part after or before its colon, nor a look's code,
+    which are parts by design."""
+    return n.part in (None, "held") and n.kind != "look base" and bool(p2.cut_words(n.name, text, n.drawn))
 
 
 def reading_of(n: Name, got) -> tuple:
@@ -513,9 +531,9 @@ def reading_of(n: Name, got) -> tuple:
     as published (spelled); a reading that picks its option by the census's rule (reader_census.judge: a loose likeness,
     an icon left out, the closest option; for a name published as a part of its line, first by the part of the reading
     in the name's place, then by the option whose name it holds alone, within) but spells it otherwise is "spelled
-    otherwise"; else "another option", "no option" or
-    "no answer". A star count, a number, a white balance readout and a checklist box's state are judged as the census
-    judges them, which is exact."""
+    otherwise"; one of which the name is a cut form (cut_form: the reading holds it and a word of the camera's more) is
+    "cut form"; else "another option", "no option" or "no answer". A star count, a number, a white balance readout and a
+    checklist box's state are judged as the census judges them, which is exact."""
     value = rc.NEW_PICK.get(n.kind, rc._selected)(got, n.item)
     if value is None or (isinstance(value, str) and not value.strip()) or (isinstance(value, list) and not value) \
             or (n.kind == "checklist" and not isinstance(value, list)):
@@ -533,6 +551,8 @@ def reading_of(n: Name, got) -> tuple:
     text = str(value) if isinstance(value, (str, int, float)) and not isinstance(value, bool) else ""
     if spelled(n, text):
         return "right", value, None
+    if cut_form(n, text):
+        return "cut form", value, other_text(text)
     head, colon, tail = text.partition(":")
     i = rc._named(n.item, {"after": tail, "before": head}[n.part]) if colon and n.part in ("after", "before") else None
     if i is None and n.part:
@@ -556,9 +576,10 @@ def other_text(text: str) -> tuple | None:
 def verdict_of(votes: dict) -> str:
     """The name's verdict from its families' votes ({family: (vote, reading, other)}): with one family, "one family"
     (spelled as published, or not); with two or more, "all agree" when every one spells it as published, "some agree"
-    when some do, and where none does, "none agree, all on another reading" when they all name one other option or
-    read one other text alike (the published name's own option spelled otherwise among them), "picks the option,
-    spelled otherwise" when each picks its option but they spell it apart, else "none agree, apart"."""
+    when some do, and where none does, "a cut form of what is read" when some family read the name with a word of the
+    camera's more (its vote "cut form": never confirmed), "none agree, all on another reading" when they all name one
+    other option or read one other text alike (the published name's own option spelled otherwise among them), "picks
+    the option, spelled otherwise" when each picks its option but they spell it apart, else "none agree, apart"."""
     if not votes:
         return "not read"
     rights = sum(v == "right" for v, _, _ in votes.values())
@@ -568,6 +589,8 @@ def verdict_of(votes: dict) -> str:
         return "all agree"
     if rights:
         return "some agree"
+    if any(v == "cut form" for v, _, _ in votes.values()):
+        return "a cut form of what is read"
     others = {o for _, _, o in votes.values()}
     if len(others) == 1 and None not in others:
         return "none agree, all on another reading"

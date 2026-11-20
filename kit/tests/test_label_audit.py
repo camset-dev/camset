@@ -272,8 +272,7 @@ def test_a_name_is_right_only_where_the_reading_spells_it_as_published():
     for name, drawn, others in (("Zqx Fixed SBY", "Zqx Fixed STBY", ["Zqx Fixed REC", "Zqx Var"]),
                                 ("EZqx Frame Display", "Zqx Frame Display", ["Zqx Peaking", "Zqx Grid Line"]),
                                 ("Shorest", "Shortest", ["Short", "Long"]),
-                                ("8fs", "8fps", ["30fps", "60fps"]),
-                                ("Record Setting", "S&Q Record Setting", ["Movie Zqx", "Time-lapse Zqx"])):
+                                ("8fs", "8fps", ["30fps", "60fps"])):
         votes, verdict = judge_name("list", name, name, [name, *others], dict.fromkeys(two, drawn))
         assert votes == ["spelled otherwise"] * 2 and verdict == "none agree, all on another reading", name
         # spelled alike but for case, spacing and a stop: right
@@ -309,6 +308,31 @@ def test_a_name_is_right_only_where_the_reading_spells_it_as_published():
     held = {"Zqx 50M L: 50M": {("1", "L: 50M")}, "Zqx 21M M: 21M": {("2", "M: 21M")}}
     assert judge_name("table picker", "L: 50M", "Zqx 50M L: 50M", list(held), dict.fromkeys(two, "Zqx 50M L: 50M"),
                       held)[1] == "all agree"
+
+
+def test_a_name_less_a_word_of_what_is_read_is_never_confirmed():
+    """A published name that is the reading less a leading or trailing word of the camera's ("Transition Speed" read
+    "AF Transition Speed", the proof having recorded the whole: 2026-11-20) is no longer right by the held rule but a
+    vote of its own, "cut form", and a verdict of its own, listed second; one family spelling it as published makes it
+    "some agree". An icon's text is still no word: one repeating the name ("50M" of "50M L: 50M"), a lead every line
+    of the row draws ("Qrw"), and a carousel axis's part after its colon. Made-up labels."""
+    import label_audit as la
+    two = {"qwen": None, "gemma": None}
+    opts = ["AF Zqx Speed", "Zqx Mode", "Zqx Hold"]
+    assert judge_name("table picker", "Zqx Speed", "AF Zqx Speed", opts, dict.fromkeys(two, "AF Zqx Speed")) == \
+        (["cut form"] * 2, "a cut form of what is read")
+    assert judge_name("table picker", "Zqx Speed", "AF Zqx Speed", opts,
+                      {"qwen": "AF Zqx Speed", "gemma": "Zqx Speed"})[1] == "some agree"
+    # the run recorded the cut name itself: a reading of the whole line is still a cut form
+    assert judge_name("list", "Record Setting", "Record Setting", ["Record Setting", "Movie Zqx", "Time-lapse Zqx"],
+                      dict.fromkeys(two, "S&Q Record Setting")) == (["cut form"] * 2, "a cut form of what is read")
+    held = ["50M L: 50M", "21M M: 21M"]
+    assert judge_name("table picker", "L: 50M", "50M L: 50M", held, dict.fromkeys(two, "50M L: 50M"))[1] == "all agree"
+    column = ["Qrw Zqx Alpha", "Qrw Zqx Beta", "Qrwl Zqx Gamma"]
+    assert judge_name("list", "Zqx Alpha", "Qrw Zqx Alpha", column, dict.fromkeys(two, "Qrw Zqx Alpha"))[1] == "all agree"
+    axis = {"Zqx Mode: Hi": {("1", "Hi")}, "Zqx Mode: Lo": {("0", "Lo")}}
+    assert judge_name("axis", "Hi", "Zqx Mode: Hi", list(axis), dict.fromkeys(two, "Zqx Mode: Hi"), axis)[1] == "all agree"
+    assert la.LISTED.index("a cut form of what is read") == 1 and la.VERDICTS[1] == "a cut form of what is read"
 
 
 def test_all_agree_needs_two_families():
