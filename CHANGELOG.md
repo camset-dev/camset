@@ -184,6 +184,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`carousel_fields_run.py --number` no longer passes every number over on Focus Bracket's digit boxes:** the camera
+  held each number as asked, but the check before Enter compared a box's picture taken with one box lit against one
+  taken with another, and the pixel reader finds a box's sides where the lit box beside it leaves them. Each box's
+  stepping is now judged by the other boxes' pictures before and after it with that box lit, so a camera that carries
+  or clamps between boxes still has its number passed over.
 - **`carousel_fields_run.py` asks the third readers where OCR's plain reading of the lit box and the second reader's
   are two numbers,** in turn, the second reader's own question, and takes the reading that stands by the kit's one
   counting rule, its proof line keeping every vote with its reader's model ("read_by": "votes"); where none stands the
