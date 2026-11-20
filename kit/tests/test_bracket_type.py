@@ -1252,6 +1252,23 @@ def test_the_option_is_judged_lit_on_the_frame_its_title_was_read_from(monkeypat
             "kit2_pass2/shots/270325_reread.png": "kit2_pass2/shots/270328_reread.png"}), "On", SELF_TIMER, 0, None)
 
 
+def test_the_box_is_judged_lit_on_the_frame_its_title_was_read_from(monkeypatch):
+    """box_refused saw box 0 lit on the frame before the title settled (270327, just after the Right) and the title was
+    read from the settled frame, no box lit there (270326, the option lit; the order is made up from the day's frames):
+    the box is not taken for lit, whatever the title names, so into_box never ends on a frame with no box lit (an empty
+    look, nothing proved, exit 0) and no Up, Down or Enter goes on what is the option."""
+    F, asked = replayed(monkeypatch, SELF_TIMER_SAID)
+    stale = {"kit2_pass2/shots/270327_right.png": "kit2_pass2/shots/270326_fresh.png"}
+    cam = TitleReplay("kit2_pass2/shots/270327_right.png", settles=stale)
+    assert F.box_refused(cam, "On", SELF_TIMER, 0, 2) == "box None is lit, not box 0"
+    assert asked == ["270326_fresh.png"], "the title read from the settled frame, the option lit there"
+    cam = TitleReplay("kit2_pass2/shots/270326_fresh.png", {"kit2_pass2/shots/270326_fresh.png":
+                                                         {"right": "kit2_pass2/shots/270327_right.png"}}, stale)
+    with pytest.raises(F.Failed, match="Right on the option did not light its first box: box None is lit, not box 0"):
+        F.into_box(cam, "On", SELF_TIMER, 0, None)
+    assert cam.keys == ["right"]
+
+
 @pytest.mark.parametrize("name, option, field", [("kit2_fin_brtype_cont/shots/00006_right.png", "Cont. Bracket", 0),
                                                  ("kit2_fin_brtype_cont_img/shots/00007_right.png", "Cont. Bracket", 1),
                                                  ("kit2_fin_brtype_f_look2/shots/00008_right.png", "Focus Bracket", 0)])

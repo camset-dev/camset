@@ -253,17 +253,24 @@ def option_refused(cam, option: str, labels: list) -> str:
 
 def box_refused(cam, option: str, labels: list, b: int, count: int | None) -> str:
     """Why the frame on show is not `option`'s box b lit (of `count` boxes, where known), or "": the pixel reader's
-    dialog with box b the lit one, as many boxes as before; the title read only where asked (`labels`)."""
-    s = cam.read()
-    if s.kind != "dialog":
-        return f"the screen reads as {s.kind}, not the carousel"
-    if getattr(s, "field", None) != b:
-        return f"box {getattr(s, 'field', None)} is lit, not box {b}"
-    if count is not None and len(s.boxes) != count:
-        return f"{len(s.boxes)} boxes are drawn, not {count}"
-    if labels and not is_option(title_reads(cam, labels, box_lit=True), option):
-        return f"its title no longer names {option!r}"
-    return ""
+    dialog with box b the lit one, as many boxes as before; the title read only where asked (`labels`). The lit box and
+    the count are judged again on the frame the title was read from, as option_refused judges the option (title_reads'
+    settled look may take a later frame than the one judged first): no box b lit there is no box b, whatever the title
+    says, so into_box never ends on a frame with no box lit."""
+    def lit_here() -> str:
+        s = cam.read()
+        if s.kind != "dialog":
+            return f"the screen reads as {s.kind}, not the carousel"
+        if getattr(s, "field", None) != b:
+            return f"box {getattr(s, 'field', None)} is lit, not box {b}"
+        if count is not None and len(s.boxes) != count:
+            return f"{len(s.boxes)} boxes are drawn, not {count}"
+        return ""
+    why = lit_here()
+    if why or not labels:
+        return why
+    named = title_reads(cam, labels, box_lit=True)
+    return lit_here() or ("" if is_option(named, option) else f"its title no longer names {option!r}")
 
 
 def lit_box(cam) -> tuple:
@@ -832,7 +839,7 @@ def keep(cam, link, eyes, path, option, labels, look_: Look, b, w: Walk, place_,
 
 
 KEEP_OPENED: dict = {}          # box -> the pictures of every box as its walk first opened it (other_values)
-BASE_MOVED: set = set()         # the records the base moved from the session's start: the option's own (body)
+BASE_MOVED: set = set()         # every record the base moved from the session's start, the option's own among them (body)
 
 
 def not_this_option(rec: dict, ch, name: str) -> str:
@@ -841,7 +848,9 @@ def not_this_option(rec: dict, ch, name: str) -> str:
     the option's own boxes moves: Enter chose its boxes under another option, whatever its title read (a short title OCR
     read as this option's exactly). The line is marked "applied": false with "option_moved" the records, and the walk
     stops on the reason returned; none of the camera's 262 carousel-fields lines of 2026-11-19/20 touches such a
-    record."""
+    record. What it does not cover: a session that started on the option already (125 of those 262 lines) has a base
+    that moved nothing, so nothing is guarded there; and BASE_MOVED holds every record the base moved, not the option's
+    alone, so a box value that rightly writes one of the others would be stopped too (none of the 262 has)."""
     moved = sorted(c.key for c in ch if c.key in BASE_MOVED)
     if not moved:
         return ""
