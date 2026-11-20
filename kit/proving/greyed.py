@@ -14,10 +14,11 @@ it, and why it is greyed is read once a row (the row's one Enter for that, which
 Whether an option is drawn grey, two eyes can tell, each on the frame the cursor stands on (drawing): the pixels
 (proving.screens.drawn_grey: a list's and a side list's lit band, a carousel's lit icon) and the second reader, never
 a third nor one standing in for the second (the owner, 2026-11-19: "the VLM text needs to include which text is
-grey"). On a list and a side list the reader's flag for the option comes from its answer about the whole list on show
-(Flags: camkit.vlm's entries.v2, asked in the background when the list opens and again where the cursor reaches an
-option no screenful asked showed, never once an option), matched to the option by its label; on a carousel, from its
-question about the lit option (carousel.v2.grey), asked in line and only where the lit icon cannot tell. Either eye
+grey"). On a side list the reader's flag for the option comes from its answer about the whole list on show (Flags:
+camkit.vlm's entries.v2, asked in the background where the cursor reaches an option no screenful asked showed, never
+once an option), matched to the option by its label; a list was measured so too and is told by its pixels alone
+(WHOLE_LIST); on a carousel, from its question about the lit option (carousel.v2.grey), asked in line and only where
+the lit icon cannot tell. Either eye
 saying grey makes it grey; where the pixels cannot tell, the reader's flag decides (waited for); where they read white,
 an answer already in is taken and none is waited for; a reader that gives no flag changes nothing, so a reader calling
 an option white never makes the kit press on one the pixels call grey: the reader only ever adds care. Its answer is
@@ -53,8 +54,9 @@ LABELS: set | None = None   # the row labels a blocker is named by (labels(): th
 FOLLOWS = re.compile(r"not available as follows\b", re.I)
 EYES = ("pixels", "reader")
 # What the second reader is asked whether an option is grey, by the kind of screen (reader census, 2026-11-19):
-# - a list and a side list (LISTS): the whole list, every entry with its flag (entries.v2: Flags), once a screenful,
-#   in the background. Asked about the lit item alone, Qwen3.8-27B and GLM-4.6V-Flash called none of 60 grey side-list
+# - a side list (WHOLE_LIST, below; a list is told by its pixels alone): the whole list, every entry with its flag
+#   (entries.v2: Flags), once a screenful, in the background. Asked about the lit item alone, Qwen3.8-27B and
+#   GLM-4.6V-Flash called none of 60 grey side-list
 #   entries grey, while the menu question's per-row flag matched the pixels on 99% of rows; asked the whole list, Qwen
 #   (the second reader) called grey 90.8% of the 142 grey side-list entries the cursor was not on and 59.5% of the 37 it
 #   was on, and no white entry grey (272 and 72), 7.5 s an answer at four at once. The third readers are never asked

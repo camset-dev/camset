@@ -17,7 +17,8 @@ A list that offers a single option (Rec Frame Rate under PAL with XAVC HS 8K) ca
 display proves it instead (prove_by_display), the option read by OCR and the vision model, nothing chosen, and the
 value its row's records hold in the download the proof starts from (a proof line with "proof": "display").
 
-An option the list, side list or carousel draws grey (by its pixels, or the second reader's flag: proving.greyed) is
+An option the list, side list or carousel draws grey (by its pixels; a side list's or carousel's also by the second
+reader's flag: proving.greyed) is
 never entered to choose it (2026-11-19): the row's first one gets the
 camera's own Help through the kit's guarded Help (C4 where the footer draws the help button, its In-Camera Guide, OK),
 and where that names no reason, one Enter to read the camera's notice, said as such (--never-enter-grey: none); the
@@ -193,9 +194,9 @@ def enter_chosen(cam, evidence: tuple, again) -> tuple:
 
 def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     """Every option of one list row; returns the last download (equal to base_path's settings). Each proof carries
-    the attempt's id; the attempt is recorded as finished (finish_attempt) only when the row ended as it began. A list's
-    whole-list answers are kept for this visit of the row (proving.greyed.Flags) and its questions not yet started are
-    dropped when the row ends, however it ends."""
+    the attempt's id; the attempt is recorded as finished (finish_attempt) only when the row ended as it began. Where
+    the row's kind listens to the whole-list flag (proving.greyed.WHOLE_LIST: no list today, measured), its whole-list
+    answers are kept for this visit (proving.greyed.Flags), the questions not yet started dropped when the row ends."""
     flags = (greyed.Flags(job["labels"]) if job["kind"] in greyed.WHOLE_LIST and not job.get("network_row")
              else None)          # a list listens to no whole-list flag (greyed.WHOLE_LIST: side lists alone)
     try:
@@ -275,7 +276,7 @@ def _prove_row(cam, link, run, job, base_path: Path, out, top, flags) -> Path:
             if network_row:         # inside a network row only the map's own option names are kept (KEPT)
                 now = kept_option(now, labels)
             return frame, seen, now
-        # an option the list draws grey is never entered to choose it (proving.greyed: by its pixels or the reader's flag): the
+        # an option the list draws grey is never entered to choose it (proving.greyed: a list's by its pixels): the
         # row's first one, the camera's Help on it, then, where Help names no reason, its one Enter to read the notice;
         # the others no key at all. Not inside a network row, whose screens take no key but its own (camkit.live)
         evidence = chosen_now()                 # the cursor on option k, checked before anything is pressed on it
@@ -1026,7 +1027,8 @@ def main():
                          "with the whole run through the OSD (an OSD page scan and map, no --start), for when the "
                          "capture may not come back between rows, and for another mode's rows")
     ap.add_argument("--never-enter-grey", action="store_true",
-                    help="no Enter on an option drawn grey, ever (by its pixels, or by the second reader's flag): each "
+                    help="no Enter on an option drawn grey, ever (by its pixels, or a side list's or carousel's by the "
+                         "second reader's flag): each "
                          "is recorded greyed as drawn with what the camera's Help on the row's "
                          "first one said, or no reason (by default that first one takes one Enter to read the camera's "
                          "notice where Help names no reason, which the camera may apply: proving.greyed)")
