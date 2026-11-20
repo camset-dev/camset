@@ -243,6 +243,47 @@ console.log(JSON.stringify({ search, mymenu, nothing, none }));
 
 
 @needs_node
+def test_the_keys_fold_the_exposure_pages_sections(tmp_path):
+    """The exposure page's "What decides" sections fold and open by the keys as by its own Collapse all and Expand all
+    (every foldable group of the view in front), kept as a click keeps them; the keyboard in a section that closes goes
+    to its head; a text field with the keyboard keeps the keys."""
+    got = run(tmp_path, """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+const set = (key) => ({ key, name: key, tab: "T", group: "G", open_group: "G", open_tab: "T", live: true, proved: null });
+const j = { title: "Exposure", intro: "i", sides: [["aperture", "Aperture"], ["shutter", "Shutter speed"], ["iso", "ISO"]],
+  scales: { aperture: null, shutter: null, iso: null }, columns: [],
+  decides: [{ side: "aperture", name: "the aperture", effect: "e", settings: [set("a")] },
+            { side: "iso", name: "ISO", effect: "e", settings: [set("b")] }] };
+view.mode = "edit"; view.page = "exposure"; view.q = "";
+const drawn = drawExposure(j);
+$("content").replaceChildren(...drawn);
+const opened = () => $("content").querySelectorAll("details.ex").map((d) => d.open);
+const out = { start: opened() };
+out.taken = shortcut(key("ArrowDown"));
+out.keys_expanded = opened(); out.kept = [...exOpen].sort();
+$("content").querySelector("details.ex .ex-set button").focus();
+shortcut(key("ArrowUp"));
+out.keys_collapsed = opened(); out.kept_after = [...exOpen];
+out.focus_to_head = document.activeElement === $("content").querySelector("details.ex").firstChild;
+const bs = $("content").querySelectorAll(".ex-whats > .fold-all button");
+out.buttons = bs.map((b) => [b.textContent, b.getAttribute("aria-keyshortcuts"), b.title]);
+bs[1].click(); out.button_expanded = opened();
+bs[0].click(); out.button_collapsed = opened();
+const input = el("input"); $("content").append(input); input.focus();
+out.typing = shortcut(key("ArrowDown")); out.after_typing = opened();
+console.log(JSON.stringify(out));
+""")
+    assert got["start"] == [False, False] and got["taken"] is True
+    assert got["keys_expanded"] == [True, True] and got["kept"] == ["aperture", "iso"]
+    assert got["keys_collapsed"] == [False, False] and got["kept_after"] == [] and got["focus_to_head"] is True
+    assert got["buttons"] == [["Collapse all", "Control+Shift+ArrowUp", 'Fold every "What decides" section (Ctrl+Shift+\u2191)'],
+                              ["Expand all", "Control+Shift+ArrowDown", 'Open every "What decides" section (Ctrl+Shift+\u2193)']]
+    assert got["button_expanded"] == got["keys_expanded"] and got["button_collapsed"] == got["keys_collapsed"]
+    assert got["typing"] is False and got["after_typing"] == [False, False]
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an

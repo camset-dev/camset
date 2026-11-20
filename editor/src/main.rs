@@ -191,6 +191,9 @@ struct App {
     mm_visible: Option<(usize, usize)>,
     /// Compare view: the tabs (tab, "") and groups (tab, group) folded shut.
     matrix_closed: std::collections::HashSet<(String, String)>,
+    /// The exposure page's "What decides" sections, all to fold (true) or all to open (false) the next time the page is
+    /// drawn (`fold_all`); their state is egui's, as a click on one leaves it.
+    ex_fold: Option<bool>,
     target: usize,
     mode: Mode,
     view: View,
@@ -367,6 +370,7 @@ impl App {
             mm_rows: Vec::new(),
             mm_visible: None,
             matrix_closed: Default::default(),
+            ex_fold: None,
             target: 0,
             mode: Mode::Edit,
             view: View::Tab(first_tab),

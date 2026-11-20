@@ -1500,7 +1500,7 @@ function onlyEdited(groups) {
 function drawTab(groups, j = {}) {
   const t = (state.tab_info || []).find((x) => x.name === view.tab);
   groups = onlyEdited(groups);
-  const head = el("div", { class: "head" }, cmpBackButton(), el("h1", { style: { color: t && t.color } }, view.tab), groups.length ? foldButtons("of this tab") : null, j.places ? layoutSwitch(j.flat) : null);
+  const head = el("div", { class: "head" }, cmpBackButton(), el("h1", { style: { color: t && t.color } }, view.tab), groups.length ? groupFolds("of this tab") : null, j.places ? layoutSwitch(j.flat) : null);
   if (!groups.length) return [head, el("p", {}, "No settings match.")];
   return [head, ...drawGroups(groups, view.tab, view.only)];
 }
@@ -1511,7 +1511,7 @@ function drawSearch(groups) {
   if (!hits) return [head, el("p", {}, "Nothing matches. The search looks at setting names, groups and value labels.")];
   groups = onlyEdited(groups);
   if (!groups.length) return [head, el("p", {}, `No edited settings match: none of the ${hits} setting(s) that match is edited.`)];
-  head.append(foldButtons("of the results"));
+  head.append(groupFolds("of the results"));
   return [head, el("p", { class: "small weak" }, `${hits} setting(s)${view.only ? ", the edited ones shown" : ""}`),
     ...drawGroups(groups, "?", true)];
 }
@@ -2262,12 +2262,13 @@ function drawExposure(j) {
           typeof s.proved === "boolean" ? el("span", { class: "small " + (s.proved ? "ex-proved" : "weak") }, s.proved_words || (s.proved ? "proved on the camera" : "not proved on the camera yet")) : null,
           el("button", { class: "small", onclick: () => exShowInMenu(s) }, "Show in menu")))));
     det.addEventListener("toggle", () => { if (det.open) exOpen.add(d.side); else exOpen.delete(d.side); });
+    det._side = d.side;
     return det;
   });
   return [el("div", { class: "head" }, el("h1", {}, j.title)),
     el("p", { class: "small weak" }, j.intro),
     el("div", { class: "scrollx ex-wrap" }, grid),
-    el("div", { class: "ex-whats" }, ...decides)];
+    el("div", { class: "ex-whats" }, decides.length ? foldButtons("Fold every \"What decides\" section", "Open every \"What decides\" section") : null, ...decides)];
 }
 
 // --- My Menu ---
@@ -2300,7 +2301,7 @@ function myMenuItems(r, done = () => {}) {
  *  that opens the setting it opens (with that setting's value), Remove and Move up / Move down; then the settings of
  *  My Menu's own tab by group, as rows. Always the live settings, which a note says while a memory is edited. */
 function drawMyMenu(j) {
-  const out = [el("div", { class: "head" }, el("h1", {}, j.name), j.groups.length ? foldButtons("below") : null)];
+  const out = [el("div", { class: "head" }, el("h1", {}, j.name), j.groups.length ? groupFolds("below") : null)];
   if (j.memory) out.push(el("p", {}, j.memory));
   if (!j.pages) out.push(el("p", {}, j.missing));
   else {
@@ -4275,18 +4276,24 @@ const ON_MAC = /Mac|iPhone|iPad/.test(navigator.platform || "");
 const FOLD_KEYS = ON_MAC ? ["⌘⇧↑", "⌘⇧↓"] : ["Ctrl+Shift+↑", "Ctrl+Shift+↓"];
 const FOLD_ARIA = ON_MAC ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"] : ["Control+Shift+ArrowUp", "Control+Shift+ArrowDown"];
 
-/** Collapse all and Expand all over the groups of the view in front (`foldAll`), with their keys in words and as
- *  `aria-keyshortcuts`: every group `where` says ("of this tab", "of the results", "below"). */
-function foldButtons(where) {
+/** Collapse all and Expand all over what folds in the view in front (`foldAll`), each saying what it does (`fold`,
+ *  `open`) and its keys, in words and as `aria-keyshortcuts`. */
+function foldButtons(fold, open) {
   return el("span", { class: "fold-all" },
-    el("button", { class: "small", title: `Fold every group ${where} and every row of the camera's menu that holds others (${FOLD_KEYS[0]})`, "aria-keyshortcuts": FOLD_ARIA[0], onclick: () => foldAll(true) }, "Collapse all"),
-    el("button", { class: "small", title: `Open every group ${where} and every row of the camera's menu (${FOLD_KEYS[1]})`, "aria-keyshortcuts": FOLD_ARIA[1], onclick: () => foldAll(false) }, "Expand all"));
+    el("button", { class: "small", title: `${fold} (${FOLD_KEYS[0]})`, "aria-keyshortcuts": FOLD_ARIA[0], onclick: () => foldAll(true) }, "Collapse all"),
+    el("button", { class: "small", title: `${open} (${FOLD_KEYS[1]})`, "aria-keyshortcuts": FOLD_ARIA[1], onclick: () => foldAll(false) }, "Expand all"));
+}
+
+/** `foldButtons` over groups of settings: every group `where` says ("of this tab", "of the results", "below"). */
+function groupFolds(where) {
+  return foldButtons(`Fold every group ${where} and every row of the camera's menu that holds others`, `Open every group ${where} and every row of the camera's menu`);
 }
 
 /** Collapse all (`collapse`) or expand all, by the buttons or the keys, as the window's (`fold_all`): in Compare its
  *  tabs and groups (`cmp.folded`, as its Collapse all and Expand all have always done); in Edit every group of the view
  *  in front, whichever it is (a tab, the search results, My Menu's tab: `openGroups`), and the camera's rows that hold
- *  others in them (`xp.rowFolds`); the window draws the search results and My Menu as lists, with nothing to fold. The
+ *  others in them (`xp.rowFolds`), and the exposure page's "What decides" sections (`exOpen`); the window draws the
+ *  search results and My Menu as lists, with nothing to fold. The
  *  page keeps them as it keeps any fold, while it is open. A control with the keyboard in a group a fold closes gives
  *  it to that group's head. False where nothing folds, so the browser keeps the keys there. */
 function foldAll(collapse) {
@@ -4298,7 +4305,12 @@ function foldAll(collapse) {
     return true;
   }
   const groups = [...$("content").querySelectorAll("details.grp")].filter((d) => d._where !== undefined);
-  if (!groups.length) return false;
+  const sections = [...$("content").querySelectorAll("details.ex")].filter((d) => d._side !== undefined);
+  if (!groups.length && !sections.length) return false;
+  for (const d of sections) {
+    if (collapse) exOpen.delete(d._side); else exOpen.add(d._side);
+    d.open = !collapse;
+  }
   for (const d of groups) {
     if (!openGroups.has(d._where)) openGroups.set(d._where, new Set());
     const open = openGroups.get(d._where);

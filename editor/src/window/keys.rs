@@ -77,10 +77,10 @@ impl App {
     }
 
     /// Collapse all and Expand all by the keys (`KEY_COLLAPSE_ALL`, `KEY_EXPAND_ALL`, `fold_all`), taken before the
-    /// arrows move anything (`bar_nav`, `keyboard_nav`), only where something folds (Compare's table, a tab of Edit); a
-    /// text field with the keyboard keeps them for its text, and an open menu or list for itself.
+    /// arrows move anything (`bar_nav`, `keyboard_nav`), only where something folds (Compare's table, a tab of Edit, the
+    /// exposure page); a text field with the keyboard keeps them for its text, and an open menu or list for itself.
     pub(crate) fn fold_keys(&mut self, ctx: &egui::Context) {
-        let here = matches!(self.mode, Mode::Compare) && !self.compare_records || matches!((self.mode, &self.view), (Mode::Edit, View::Tab(_)));
+        let here = matches!(self.mode, Mode::Compare) && !self.compare_records || matches!((self.mode, &self.view), (Mode::Edit, View::Tab(_) | View::Exposure));
         if self.doc.is_none() || !here || ctx.wants_keyboard_input() || ctx.memory(|m| m.any_popup_open()) {
             return;
         }

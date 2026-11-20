@@ -2576,6 +2576,42 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The exposure page's "What decides" sections fold and open by Cmd/Ctrl+Shift+↑ / ↓ as by its own Collapse all and
+    /// Expand all (every foldable group of the view in front), and a text field with the keyboard keeps the keys.
+    #[test]
+    fn the_exposure_pages_sections_fold_by_the_keys_and_the_buttons() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_keys_ex", None);
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        app.view = View::Exposure;
+        // which sections show what they hold, once the header's animation is over
+        let open = |w: &mut Win, app: &mut App| {
+            for _ in 0..8 {
+                let _ = w.run(app, vec![]);
+            }
+            let drawn = w.drawn(app);
+            crate::pages::exposure::EFFECTS.iter().map(|(_, _, effect)| drawn.iter().any(|t| t.contains(&effect[..24]))).collect::<Vec<_>>()
+        };
+        assert_eq!(open(&mut w, &mut app), [false; 3], "folded to start with");
+        let heads = w.drawn(&mut app);
+        assert!(["What decides the aperture", "What decides the shutter speed", "What decides ISO"].iter().all(|h| heads.iter().any(|t| t == h)), "the page is drawn: {heads:?}");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert_eq!(open(&mut w, &mut app), [true; 3], "Expand all by the keys");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert_eq!(open(&mut w, &mut app), [false; 3], "Collapse all by the keys");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert_eq!(open(&mut w, &mut app), [true; 3], "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert_eq!(open(&mut w, &mut app), [false; 3]);
+        // a text field with the keyboard keeps the keys for its text
+        w.ctx.memory_mut(|m| m.request_focus(egui::Id::new(SEARCH_ID)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert_eq!(open(&mut w, &mut app), [false; 3], "the search box had the keyboard");
+        done(&dir, &user);
+    }
+
     /// Integration review finding 1: with a row chosen, Up/Down in the groups column move to the next group, with menus
     /// as without ("JPEG/HEIF Switch" chosen, Left, Down: the group after Image Quality/Rec); a row picked on the My Menu
     /// page and then a click on Setup in the Menu opens Setup; and a menu picked with a row chosen keeps that row where

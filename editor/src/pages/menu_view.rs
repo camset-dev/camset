@@ -569,8 +569,9 @@ impl App {
     /// Collapse all (`collapse`) or expand all, by the buttons or by Cmd/Ctrl+Shift+↑ / ↓ (`KEY_COLLAPSE_ALL`,
     /// `KEY_EXPAND_ALL`), the page's alike: in Compare its tabs and groups, as its Collapse all and Expand all have always
     /// done; in a tab of Edit the camera's rows that hold others in the group shown (the group column picks one group at a
-    /// time; the Menu's entries are pages, not folds). A row chosen that a fold hides gives way to the nearest row still
-    /// shown, as a click on its heading does, or to none where every row is under a folded one. Nothing elsewhere.
+    /// time; the Menu's entries are pages, not folds); on the exposure page its "What decides" sections (`ex_fold`). A row
+    /// chosen that a fold hides gives way to the nearest row still shown, as a click on its heading does, or to none where
+    /// every row is under a folded one. The rule: every foldable group of the view in front, as on the page.
     pub(crate) fn fold_all(&mut self, collapse: bool) {
         match (self.mode, self.view.clone()) {
             (Mode::Compare, _) if !self.compare_records => {
@@ -605,6 +606,7 @@ impl App {
                     self.select(None, Some(gname.clone()), row.as_ref().map(|s| (s.name.as_str(), s.key.as_str())));
                 }
             }
+            (Mode::Edit, View::Exposure) => self.ex_fold = Some(collapse),
             _ => {}
         }
     }
