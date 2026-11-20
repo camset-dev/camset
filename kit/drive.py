@@ -205,12 +205,13 @@ from crawl_run import find_position, go_to, group_shown, tab_shown  # noqa: E402
 from prove_run import enter_any  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, LOOK_LAP,  # noqa: E402
                     add_info_ok_argument, add_network_argument, add_owner_argument, add_scan_argument,
-                    cards_statement_refused, changes_kept, close_for_restore, confirm_phrase_or_exit, defined_values,
-                    definition, end_session, info_ok_or_exit, row_labels,
+                    cards_statement_refused, changes_kept, close_for_restore, close_menu_and_wait,
+                    confirm_phrase_or_exit, defined_values, definition, end_session, info_ok_or_exit, row_labels,
                     known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
                     menu_from_shooting,
                     network_decided_or_exit, network_readings, network_values, owner_decided_or_exit,
-                    restore_checked, restoring, row_readings, row_values, screen_named, values_withheld, wait_shooting)
+                    restart_watched, restore_checked, restoring, row_readings, row_values, screen_named, session_start,
+                    values_withheld, wait_shooting)
 
 
 # camkit.session.wait_lock's clock: the monotonic clock the lock is measured on, and this module's time.sleep (which a
@@ -1656,11 +1657,13 @@ def main():
             hdmi.attach(link)
             ledger.say()            # the ledger's word, built while the link opened
             budget.report(run)      # and what waiting for it took (camkit.budget)
-            if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
-                link.press("menu", cleanup=True)        # wait_for's grace covers the menu closing: no second slept
-            wait_for(hdmi, ("shooting",), "the settings download", link=link)
-            before = link.download("before")
-            wait_lock(monotonic(), hdmi, clock=LOCK_CLOCK)  # the menu's lock after it (camkit.session.wait_lock)
+            # the session's start, every runner's (runner.session_start): a menu page closed with one MENU, then the
+            # shooting screen waited for (runner.close_menu_and_wait on this module's screen reader and wait_for, whose
+            # grace covers the menu closing: no second slept), the start download, and the menu's lock after it from
+            # the download's reply (camkit.session.wait_lock on LOCK_CLOCK)
+            before = session_start(link, hdmi, "the settings download", reach=functools.partial(
+                close_menu_and_wait, read=screen.read, wait=wait_for), say=False,
+                lock=lambda eyes, since: wait_lock(since, eyes, clock=LOCK_CLOCK), clock=LOCK_CLOCK)
             cam = LiveCamera(link, hdmi, run, may_open=a.allow, network=cam_network, screens=bool(address),
                              options=options, values=values, readings=readings, labels=known, look=look,
                              **({"owner": owner_cam} if owner_cam else {}))
@@ -2186,8 +2189,11 @@ def main():
         # while this run's own marker is there, the reconnection that checks the restore opens as
         # kit/tools/upload_check.py's does: to check that very start file (camkit.link pending_restore)
         checking = {"link_class": functools.partial(Link, pending_restore=True)} if byhand else {}
+        # after an upload the check watches the eyes for the camera's restart, as every runner's does
+        # (runner.restart_watched)
         restored = (False if byhand and (byhand not in ("question", "answered") or unfinished)
-                    else restore_checked(run, ending, before, **checking, **values_withheld(private)))
+                    else restore_checked(run, ending, before, **checking, **values_withheld(private),
+                                         **restart_watched(ending, hdmi)))
     finally:
         hdmi.close()
         log.close()

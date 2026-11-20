@@ -101,10 +101,11 @@ from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
 from proving.base import LOCK_S, wait_lock  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, LOOK_LAP,  # noqa: E402
-                    add_network_argument, add_scan_argument, cards_statement_refused, close_for_restore, end_session,
-                    known_groups,
+                    add_network_argument, add_scan_argument, cards_statement_refused, close_for_restore,
+                    close_menu_and_wait, end_session, known_groups,
                     known_labels, label_readings, load_scan, network_decided_or_exit, network_readings, network_values,
-                    restore_checked, row_readings, row_values, values_withheld, wait_shooting)
+                    restart_watched, restore_checked, row_readings, row_values, session_start, values_withheld,
+                    wait_shooting)
 from runner import add_info_ok_argument, definition, info_ok_for, info_ok_or_exit, row_labels  # noqa: E402
 
 
@@ -808,29 +809,34 @@ def main():
     # (camkit.budget.made_beside: its error first, the eyes then closed)
     hdmi = budget.made_beside("readers check", check_readers, lambda: eyes_from_config(run))
     results = open(run.dir / "rows.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
-    ending, refused, complete, first = None, False, False, None
+    ending, refused, complete, first, ledger = None, False, False, None, None
     try:
         with Link(run) as link:
             why = first_open.other_body(link, run.root.name)
             if why:
                 sys.exit(f"{why}: nothing was sent to the camera")
             hdmi.attach(link)
-            if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
-                # a plain menu page: close it ourselves; wait_for's grace covers its closing, so no second is slept
-                link.press("menu", cleanup=True)
-            wait_for(hdmi, ("shooting",), "the first settings download", link=link)
-            before = link.download("before")
-            downloaded = time.monotonic()
-            print(f"settings saved: {before.name}", flush=True)
-            ledger = coverage.crawl_gate(run, a, before)    # the ledger's word on each row; --skip-settled skips
-            budget.report(run)                              # what waiting for the ledger took (camkit.budget)
-            # a look lap writes a row's name as rows.jsonl keeps it, the name it keeps or its placeholder (kept_label,
-            # row_names: the definition's rows among them, a value or not)
-            names = {safety.plain(x) for x in row_names(model, network)} if look else None
-            first = first_open.FirstOpens(link, hdmi, run, before, seen, skip_why, LOCK_S, private=look,
-                                          per=a.first_open_check,
-                                          name=functools.partial(kept_label, known=names) if look else None)
-            wait_lock(downloaded, hdmi, clock=time)     # the menu's lock after the download (camkit.session.wait_lock)
+
+            def prepared(start):
+                """What the lap needs of its start file, made while the menu's lock runs from the download's reply: the
+                start line, the ledger's word on each row (--skip-settled skips) and the rows' first opens."""
+                nonlocal ledger, first
+                print(f"settings saved: {start.name}", flush=True)
+                ledger = coverage.crawl_gate(run, a, start)
+                budget.report(run)                          # what waiting for the ledger took (camkit.budget)
+                # a look lap writes a row's name as rows.jsonl keeps it, the name it keeps or its placeholder
+                # (kept_label, row_names: the definition's rows among them, a value or not)
+                names = {safety.plain(x) for x in row_names(model, network)} if look else None
+                first = first_open.FirstOpens(link, hdmi, run, start, seen, skip_why, LOCK_S, private=look,
+                                              per=a.first_open_check,
+                                              name=functools.partial(kept_label, known=names) if look else None)
+            # the session's start, every runner's (runner.session_start): a plain menu page closed with one MENU, then
+            # the shooting screen waited for (runner.close_menu_and_wait on this module's screen reader and wait_for,
+            # whose grace covers the menu closing: no second slept), the start download, what the lap needs of it
+            # (prepared), and the menu's lock after it from the download's reply (camkit.session.wait_lock)
+            before = session_start(link, hdmi, "the first settings download", reach=functools.partial(
+                close_menu_and_wait, read=screen.read, wait=wait_for), say=False, prepare=prepared,
+                lock=lambda eyes, since: wait_lock(since, eyes, clock=time), clock=time)
             # no options: inside a network row the camera lets nothing be chosen (camkit.live, safety.look_refused). The
             # row labels and the values the kit knows go to every run: an opening check judges the row, never a value
             # shown beside it (safety.row_judged); a look lap's camera knows the labels this body was seen to open
@@ -866,7 +872,10 @@ def main():
         # while a first open's marker is there, the check reconnects as kit/tools/upload_check.py does
         held = first is not None and first.marker is not None
         checking = {"link_class": functools.partial(Link, pending_restore=True)} if held else {}
-        restored = restore_checked(run, ending, before, **values_withheld(look), **checking)
+        # after an upload the check watches the eyes for the camera's restart, as every runner's does
+        # (runner.restart_watched)
+        restored = restore_checked(run, ending, before, **values_withheld(look), **checking,
+                                   **restart_watched(ending, hdmi))
     finally:
         hdmi.close()
         results.close()

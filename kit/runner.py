@@ -14,8 +14,10 @@ proofs file holds them, and a session with the camera that always ends restoring
     with prover_session(run, eyes) as s: ...      a runner's whole session: the start download, a LiveCamera (s.cam),
                                                   the body, and the end above, the restore checked (s.restored); its
                                                   hooks for a walker's or a tool's own way (reach, readers, camera...)
-    start = session_start(link, eyes)             its start alone, for a session that does not end restoring: the
-                                                  shooting screen, the start download, the menu's lock waited out
+    start = session_start(link, eyes)             its start alone, for a runner that writes the rest of its session
+                                                  around it (drive, crawl_run, prove_run): the shooting screen, the
+                                                  start download, the menu's lock waited out; restart_watched(ending,
+                                                  eyes), the eyes its restore check then watches the restart with
     sys.exit(EXIT_UNRESTORED)                     a runner's exit when the camera is not known to be as its start file
     with restoring(): ...                         a restore that raises is said and exits EXIT_UNRESTORED
     add_network_argument(ap)                      --network: the Wi-Fi and Bluetooth rows a dated owner decision names
@@ -1262,39 +1264,51 @@ def close_for_restore(cam, link, start: Path) -> None:
             print(f"closing: {withheld_on(cam, f'{type(e).__name__}: {e}')}; restoring all the same", flush=True)
 
 
-def close_menu_and_wait(link, eyes, why: str) -> None:
+def close_menu_and_wait(link, eyes, why: str, read=None, wait=None) -> None:
     """A session's way to the shooting screen for a walker that closes a plain menu page alone (help_run,
-    card_actions): MENU, a cleanup press, where the screen reads as a menu page or the Main tiles, then the shooting
-    screen waited for (camkit.session.wait_for, whose 2 s grace covers the menu closing; on any other screen it asks
-    for a hand, at most WAIT_LIMIT s)."""
-    if screen.read(eyes.grab(save=False)).kind in ("menu", "tiles"):
+    card_actions, and the starts of kit/drive.py and kit/crawl_run.py): MENU, a cleanup press, where the screen reads
+    as a menu page or the Main tiles, then the shooting screen waited for (camkit.session.wait_for, whose 2 s grace
+    covers the menu closing; on any other screen it asks for a hand, at most WAIT_LIMIT s). `read` and `wait`: the
+    screen reader and the wait a runner reads the screen with itself (its own names: camkit.screen.read and
+    camkit.session.wait_for as it imports them)."""
+    if (read or screen.read)(eyes.grab(save=False)).kind in ("menu", "tiles"):
         link.press("menu", cleanup=True)
-    session.wait_for(eyes, ("shooting",), why, link=link)
+    (wait or session.wait_for)(eyes, ("shooting",), why, link=link)
 
 
 def session_start(link, eyes, why: str = "the start download", tag: str = "before", reach=None, say: bool = True,
-                  settle: float = SETTLE_S, prepare=None, lock=None) -> Path:
+                  settle: float = SETTLE_S, prepare=None, lock=None, clock=time) -> Path:
     """A session's start, the one place a runner downloads its start file (decision 15), its link open and its eyes
     attached: the shooting screen (`reach(link, eyes, why)`: proving.nav.to_shooting by default, MENU until it shows),
-    the start download (`tag`), its name said (`say`), `prepare(start)` (what a runner checks against the start file
-    before anything is pressed: whatever it raises ends the start there, with no wait), then the menu's lock after the
-    download waited out from the download's reply: camkit.session.wait_lock (watched with HDMI eyes in a mode
-    measured, else `settle` s), or `lock(eyes, since)`, a runner's own watch (kit/page_scan.py). Returns the start
-    file."""
+    the start download (`tag`), its name said (`say`), `prepare(start)` (what a runner does with the start file before
+    anything is pressed, while the lock runs from the download's reply: a check, whatever it raises ending the start
+    there with no wait; kit/crawl_run.py's own line, its ledger's gate and its first opens), then the menu's lock after
+    the download waited out from the download's reply: camkit.session.wait_lock (watched with HDMI eyes in a mode
+    measured, else `settle` s), or `lock(eyes, since)`, a runner's own watch (kit/page_scan.py) or its own clock's
+    (kit/drive.py). `clock`: the time module the download's reply is timed on and the wait sleeps on (a runner's own,
+    which its tests make sleep nothing). Returns the start file."""
     if reach is None:
         from proving.nav import to_shooting as reach
     reach(link, eyes, why)
     start = link.download(tag)
-    since = time.monotonic()
+    since = clock.monotonic()
     if say:
         print(f"start file: {start.name}", flush=True)
     if prepare is not None:
         prepare(start)
     if lock is None:
-        session.wait_lock(since, eyes, clock=time, longest=settle)
+        session.wait_lock(since, eyes, clock=clock, longest=settle)
     else:
         lock(eyes, since)
     return start
+
+
+def restart_watched(ending, eyes) -> dict:
+    """restore_checked's keywords for a session's eyes: {"eyes": eyes} where the session's end uploaded the start file,
+    so the check watches for the camera's restart (camkit.session.restarted: with HDMI eyes the shooting screen after
+    the restart's notice, else RESTART_FIRST s), as prover_session's and kit/prove_run.py's checks do; {} where nothing
+    was uploaded, the check then reconnecting to nothing."""
+    return {"eyes": eyes} if ending is not None and getattr(ending, "uploaded", False) else {}
 
 
 @dataclass

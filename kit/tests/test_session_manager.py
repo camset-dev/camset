@@ -262,16 +262,26 @@ def test_a_walkers_reach_closes_a_plain_menu_page_alone_then_waits(world, tmp_pa
 
 # the start tags the runners give their start downloads (and every tag given to the manager, collected below)
 START_TAGS = {"before", "session", "p3-start", "before-set", "bracket-before"}
-# runners whose session is still written out by hand, and why: each keeps the start downloads it had, no more
+# runners whose start download is still written out by hand, and why: each keeps the start downloads it had, no more
 LEFT = {
-    "kit/drive.py": "the owner's route (--owner, --network, the armed last press, a row's first open): its guard "
-                    "tests fake the session's parts in drive.py itself, so a move could not be shown by them unchanged",
-    "kit/crawl_run.py": "the first-open procedure: its guard tests (test_first_open, test_network_rows, "
-                        "test_step3_acceptance) fake the session's parts in crawl_run.py itself",
-    "kit/tools/take_picture.py": "the release: its guard tests (test_first_open) fake the session's parts in "
-                                 "take_picture.py itself",
+    "kit/tools/take_picture.py": "the one release, which only the owner runs at their own terminal: no run can try a "
+                                 "change to it afterwards, and its tests never reach the menu its start may close, so "
+                                 "it is left as it was (its waits come before the release, never a lock to watch)",
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
+# runners that upload a file themselves (Link.upload) rather than through the session's end (runner.end_session,
+# camkit.session.finish and put_back), and why: each keeps exactly the uploads it has
+UPLOADS_LEFT = {
+    "kit/prove_run.py": "--start's file put back before the first session, where the camera differs from it "
+                        "(put_start_back), its check camkit.session.verify_restore",
+    "kit/tools/upload_check.py": "its work: a start file put back by hand, after a run that could not put it back",
+    "kit/provers/mode_switch.py": "the start file put back once the switch is seen (the camera in another mode), its "
+                                  "check camkit.session.verify_restore",
+    "kit/provers/shootmode_run.py": "each Shoot Mode choice put back before the next, its check "
+                                    "camkit.session.verify_restore",
+}
+# the manager's own modules, where the start download and the put-back are made
+MANAGER = ("kit/runner.py", "kit/camkit/session.py", "kit/camkit/link.py")
 
 def kit_sources():
     for p in sorted(KIT.rglob("*.py")):
@@ -323,6 +333,39 @@ def test_no_runner_downloads_its_start_file_outside_the_session_manager():
                 found.setdefault(rel, []).append(node.lineno)
     assert set(found) <= set(LEFT), {rel: lines for rel, lines in found.items() if rel not in LEFT}
     assert all(len(found.get(rel, ())) == 1 for rel in LEFT), {rel: found.get(rel) for rel in LEFT}
+
+
+def test_no_runner_restores_outside_the_session_manager():
+    """The start file goes back in one place, the session's end (runner.end_session: camkit.session.finish, whose
+    put_back uploads it where anything differs, its check camkit.session.check_restore): a runner that uploads a file
+    of its own (Link.upload) fails here. The runners that still do are named, each with why, and keep exactly the
+    uploads they had; drive.py and crawl_run.py are not among them, nor in LEFT above."""
+    found = {}
+    for rel, tree in kit_sources():
+        if rel in MANAGER:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and called(node) == "upload":
+                found.setdefault(rel, []).append(node.lineno)
+    assert set(found) <= set(UPLOADS_LEFT), {rel: lines for rel, lines in found.items() if rel not in UPLOADS_LEFT}
+    assert all(len(found.get(rel, ())) == 1 for rel in UPLOADS_LEFT), {rel: found.get(rel) for rel in UPLOADS_LEFT}
+    for rel in ("kit/drive.py", "kit/crawl_run.py"):
+        assert rel not in LEFT and rel not in UPLOADS_LEFT
+
+
+@pytest.mark.parametrize("rel", ["kit/drive.py", "kit/crawl_run.py"])
+def test_drive_and_crawl_start_and_end_through_the_manager(rel):
+    """drive.py and crawl_run.py: their start through runner.session_start (once), their end through
+    runner.end_session and runner.restore_checked (once each), and no download, upload or restore check of their own
+    besides (no camkit.session.finish, ended, put_back, check_restore or verify_restore called by them)."""
+    tree = ast.parse((ROOT / rel).read_text(encoding="utf-8"))
+    nodes = [n for n in ast.walk(tree) if isinstance(n, ast.Call)]
+    calls = [called(n) for n in nodes]
+    assert calls.count("session_start") == 1 and calls.count("end_session") == 1 and calls.count("restore_checked") == 1
+    assert calls.count("download") == 0 and calls.count("upload") == 0
+    own = {called(n) for n in nodes if isinstance(n.func, ast.Name)} | \
+        {called(n) for n in nodes if isinstance(n.func, ast.Attribute) and getattr(n.func.value, "id", "") == "session"}
+    assert not {"finish", "ended", "put_back", "check_restore", "verify_restore"} & own
 
 
 # ---------------------------------------------------------------- the walkers
