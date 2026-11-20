@@ -31,10 +31,11 @@ what backs it (kit/writer/proofs.py NAME_SOURCES). The audit takes:
            camkit.reading.said_key alike: case, spacing and a full stop forgiven, a small l for an I never), or,
            where that name is a part of the line the camera draws, the part of the reading in its place (after or
            before the colon: "DRO Bracket: Hi" for Hi), or the name alone of the options held in it as a whole word,
-           what else it holds an icon (a look's base: its code, "PT" of "PT(Portrait)", character by character); a
-           reading of which the name is a cut form, the name less a word of the camera's (pass2_report.cut_words:
-           "AF Transition Speed" for "Transition Speed"; an icon's capitals, an icon repeating the name, a lead
-           every line of the row draws are no word), is never right but a vote of its own ("cut form"); a reading
+           what else it holds an icon (a look's base: its code, "PT" of "PT(Portrait)", character by character); on
+           a function picker, a reading of which the name is a cut form, the name less a word of the camera's
+           (pass2_report.cut_words: "AF Transition Speed" for "Transition Speed"; an icon's capitals, an icon
+           repeating the name, a lead every line of the row draws are no word), and that spells no other option of
+           the row, is never right but a vote of its own ("cut form"); a reading
            that picks the option by the census's rule (judge: a loose likeness, an icon left out, the closest option)
            but spells it otherwise is a vote of its own ("spelled otherwise"); a star count, a number and a box's
            state are judged exactly, as the census does. One vote per model family (camkit.reading.model_id: the
@@ -522,10 +523,12 @@ def cut_form(n: Name, text: str) -> bool:
     icon's capitals, an icon that repeats the name, a lead every line of the row draws and the kit's "(2)" are no word),
     where the name stands for the whole line: never a carousel axis's part after or before its colon, nor a look's code,
     which are parts by design, and never a reading that spells another option of the row, which names that option
-    ("S&Q Record Setting" where 765 and 767 are both functions of the list)."""
-    if any(same_text(text, o) for o in n.item.options if o != n.name):
+    ("S&Q Record Setting" where 765 and 767 are both functions of the list). A function picker's name alone, as the
+    writer's rule is (pass2_report.judge_functions): a list's or a scale's name the run recorded with its unit, tail or
+    an icon's letters ("8" of "8 shots", "2" of "2 Sec") is read whole as before."""
+    if n.kind != "table picker" or any(same_text(text, o) for o in n.item.options if o != n.name):
         return False
-    return n.part in (None, "held") and n.kind != "look base" and bool(p2.cut_words(n.name, text, n.drawn))
+    return n.part in (None, "held") and bool(p2.cut_words(n.name, text, n.drawn))
 
 
 def reading_of(n: Name, got) -> tuple:

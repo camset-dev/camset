@@ -272,7 +272,8 @@ def test_a_name_is_right_only_where_the_reading_spells_it_as_published():
     for name, drawn, others in (("Zqx Fixed SBY", "Zqx Fixed STBY", ["Zqx Fixed REC", "Zqx Var"]),
                                 ("EZqx Frame Display", "Zqx Frame Display", ["Zqx Peaking", "Zqx Grid Line"]),
                                 ("Shorest", "Shortest", ["Short", "Long"]),
-                                ("8fs", "8fps", ["30fps", "60fps"])):
+                                ("8fs", "8fps", ["30fps", "60fps"]),
+                                ("Record Setting", "S&Q Record Setting", ["Movie Zqx", "Time-lapse Zqx"])):
         votes, verdict = judge_name("list", name, name, [name, *others], dict.fromkeys(two, drawn))
         assert votes == ["spelled otherwise"] * 2 and verdict == "none agree, all on another reading", name
         # spelled alike but for case, spacing and a stop: right
@@ -324,15 +325,29 @@ def test_a_name_less_a_word_of_what_is_read_is_never_confirmed():
     assert judge_name("table picker", "Zqx Speed", "AF Zqx Speed", opts,
                       {"qwen": "AF Zqx Speed", "gemma": "Zqx Speed"})[1] == "some agree"
     # the run recorded the cut name itself: a reading of the whole line is still a cut form
-    assert judge_name("list", "Record Setting", "Record Setting", ["Record Setting", "Movie Zqx", "Time-lapse Zqx"],
+    assert judge_name("table picker", "Record Setting", "Record Setting", ["Record Setting", "Movie Zqx", "Zqx Hold"],
                       dict.fromkeys(two, "S&Q Record Setting")) == (["cut form"] * 2, "a cut form of what is read")
     held = ["50M L: 50M", "21M M: 21M"]
     assert judge_name("table picker", "L: 50M", "50M L: 50M", held, dict.fromkeys(two, "50M L: 50M"))[1] == "all agree"
     column = ["Qrw Zqx Alpha", "Qrw Zqx Beta", "Qrwl Zqx Gamma"]
-    assert judge_name("list", "Zqx Alpha", "Qrw Zqx Alpha", column, dict.fromkeys(two, "Qrw Zqx Alpha"))[1] == "all agree"
+    assert judge_name("table picker", "Zqx Alpha", "Qrw Zqx Alpha", column,
+                      dict.fromkeys(two, "Qrw Zqx Alpha"))[1] == "all agree"
     axis = {"Zqx Mode: Hi": {("1", "Hi")}, "Zqx Mode: Lo": {("0", "Lo")}}
     assert judge_name("axis", "Hi", "Zqx Mode: Hi", list(axis), dict.fromkeys(two, "Zqx Mode: Hi"), axis)[1] == "all agree"
     assert la.LISTED.index("a cut form of what is read") == 1 and la.VERDICTS[1] == "a cut form of what is read"
+
+
+def test_the_cut_form_is_a_function_pickers_alone():
+    """The review of 2026-11-20: the cut-form vote is the writer's rule, a function picker's: a list's or a scale's name
+    recorded with its unit, tail or icon ("8" of "8 shots", "1" of "1 (Narrow)", "Custom" of "Custom 1", an icon's
+    letters before or after a name) is confirmed by a reading of the whole line, as before. Made-up labels."""
+    two = {"qwen": None, "gemma": None}
+    for kind, name, recorded, others in (("list", "8", "8 shots", ["16 shots", "32 shots"]),
+                                         ("list", "1", "1 (Narrow)", ["2", "3"]),
+                                         ("list", "Custom", "Custom 1", ["Off", "Standard"]),
+                                         ("list", "Zqx Settings", "Px Zqx Settings", ["Zqx Other"]),
+                                         ("list", "Zqx Comp (M)", "Zqx Comp (M) KAW", ["Zqx Other"])):
+        assert judge_name(kind, name, recorded, [recorded, *others], dict.fromkeys(two, recorded))[1] == "all agree", name
 
 
 def test_a_reading_that_spells_another_option_names_that_option_never_a_cut_form():
