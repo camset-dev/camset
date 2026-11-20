@@ -185,6 +185,10 @@ def prove_item(cam, link, run, cycle, model, i: int, start: Path, out, say) -> i
             cur = j - 1                           # the chooser opens on the option chosen last
         move_to(cam, cur, j, n)
         shown, chosen, seen = bar_text(cam), cam.frame.path.name, later(vlm_option, cam)
+        from proving.greyed import choice_refused
+        why = choice_refused(cam, name, shown)
+        if why:
+            raise Failed(why)
         cam.press("enter")
         if cam.read().kind != "checklist" or not is_box(box_label(cam), ITEMS, i):
             raise Failed(f"{name}: after choosing {labels[j]!r} the screen is {cam.read().kind} "
@@ -234,6 +238,10 @@ def grid_tick(cam, name: str, b: int):
     s = cam.read()
     if s.kind != "checklist" or s.focus != "rows" or s.row != b:
         raise Failed(f"{name}: the cursor is not on box {b} ({s.kind}, row {s.row}, {cam.frame.path.name})")
+    from proving.greyed import choice_refused
+    why = choice_refused(cam, name, f"box {b}")
+    if why:
+        raise Failed(why)
     before = check_state(cam)
     cam.press("enter")
     after = check_state(cam)
@@ -329,6 +337,10 @@ def untick_item(cam, link, run, cycle, model, i: int, key: str | None, out, say)
         open_chooser(cam)
         if cam.read().kind != "list":
             raise Failed(f"{name}: {cam.read().kind} ({cam.frame.path.name}), not the chooser, to tick the box again")
+        from proving.greyed import choice_refused
+        why = choice_refused(cam, name, "the value the box held")      # no OCR here: the frame alone decides
+        if why:
+            raise Failed(why)
         cam.press("enter")                        # back on the checklist, the cursor in the value column
         if cam.read().kind != "checklist" or in_box_column(cam) is not True:
             raise Failed(f"{name}: the box did not tick ({cam.frame.path.name})")
@@ -342,6 +354,10 @@ def untick_item(cam, link, run, cycle, model, i: int, key: str | None, out, say)
         if in_box_column(cam) is not True:
             raise Failed(f"{name}: the box is not ticked on the box column ({cam.frame.path.name})")
     ticked = cam.frame.path.name
+    from proving.greyed import choice_refused
+    why = choice_refused(cam, name, "the box")
+    if why:
+        raise Failed(why)
     cam.press("enter")
     if cam.read().kind != "checklist" or box_state(cam) is not False:
         raise Failed(f"{name}: Enter in the box column did not untick the box ({cam.read().kind}, "

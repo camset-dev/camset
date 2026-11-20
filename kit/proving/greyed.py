@@ -558,3 +558,62 @@ def leave(cam, name: str) -> None:
     cam.press("menu")
     if cam.read().kind not in ("menu", "submenu"):
         raise Failed(f"{name}: MENU on the list left {cam.read().kind}, not the row's page ({cam.frame.path.name})")
+
+
+# ------------------------------------------------------------------ an entry chosen by a caller's word (2026-11-20)
+# The provers that press Enter on an entry a caller names (mode_switch's Shoot Mode choice, prove_run --first on an
+# axis, carousel_fields_run's option, bracket_run --option, optboxes_run --option, grid_run's cells, filter_run's
+# chooser and boxes, customshoot_run's ticks, orient_run's choice) and the checklist boxes prove_run flips under
+# --never-enter-grey judge the entry first, here, on the frame on show, by the kit's pixel readings alone (no reader):
+# a list's or a side list's lit band and a carousel's lit icon (proving.screens.drawn_grey), and a checklist item's
+# label on its row's band (CHECK_X, GREY_LINE's rule as drawn_grey reads a list's). Drawn grey is never entered (the
+# owner's rule); a drawing no reading can tell is not entered either (no guess), and either refusal says what it is,
+# what the reading saw, and that nothing was pressed on it.
+CHECK_X = (72, 560)             # a checklist item's label, right of its box (20-66), left of its value column (595)
+
+
+def choice_drawing(cam) -> tuple:
+    """(drawn grey: True, False or None where it cannot be told; the measure or None; how it was judged, in words) for
+    the entry under the cursor on the frame on show: a list's or side list's lit band and a carousel's lit icon by
+    proving.screens.drawn_grey (the icon's red: bright where the camera takes the entry, dim where it greys it; a green
+    icon, Intelligent Auto's, or a function's, is no red one and cannot be told), a checklist item by its label's text
+    on the row's band (CHECK_X); any other screen (a grid of boxes, a table, a screen of no known kind) cannot be."""
+    from camkit import screen as camscreen
+    import numpy as np
+    from .screens import GREY_INK, GREY_LINE, GREY_MIN, GREY_TELL
+    s = cam.read()
+    kind = getattr(s, "kind", None)
+    image = getattr(getattr(cam, "frame", None), "image", None)
+    if kind in ("list", "sidelist", "dialog"):
+        grey, level = drawn_grey(cam)
+        icon = "its lit icon" if level is not None else \
+            "its lit icon is not the red one the reading measures (an Intelligent Auto's or a function's)"
+        return grey, level, icon if kind == "dialog" else "its lit band's text"
+    if kind == "checklist" and getattr(s, "bar", None) and image is not None:
+        t, b = s.bar
+        x0, x1 = CHECK_X
+        g = camscreen._grey(image)[t + 6:b - 6, x0:x1]
+        o = camscreen._orange(image)[t + 6:b - 6, x0:x1]
+        ink = g[(g > GREY_INK) & ~o]
+        if len(ink) < GREY_MIN:
+            return None, None, "its label shows too little text on the row's band to read"
+        p = float(np.percentile(ink, 95))
+        grey = True if p <= GREY_LINE - GREY_TELL else False if p >= GREY_LINE + GREY_TELL else None
+        return grey, p, "its label's text on the row's band"
+    return None, None, f"the kit has no pixel reading for an entry of a {kind!r} screen"
+
+
+def choice_refused(cam, name: str, label: str) -> str:
+    """Why the entry `label` under the cursor of `name`, about to be chosen with Enter by a caller's word, is not, or
+    "" where it is drawn white (choice_drawing, on the frame on show). Plain words for the run's failure: what it is,
+    that it is drawn grey or cannot be told, what the reading saw, and that nothing was pressed on it."""
+    grey, level, how = choice_drawing(cam)
+    if grey is False:
+        return ""
+    frame = getattr(getattr(getattr(cam, "frame", None), "path", None), "name", "")
+    read = f", it reads {level:.0f}" if level is not None else ""
+    if grey:
+        return (f"{name}: {label!r} is drawn grey ({how}{read}, {frame}), and a greyed entry is never entered to "
+                "choose it: nothing was pressed on it")
+    return (f"{name}: whether {label!r} is drawn grey cannot be told ({how}{read}, {frame}), so it is not entered on "
+            "a guess: nothing was pressed on it")

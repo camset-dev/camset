@@ -220,6 +220,10 @@ def shoot_mode(cam, cycle, model, family: int, mode: str | None, say) -> str:
             raise Failed(f"Shoot Mode: {mode!r} did not come round in the {FAMILIES[family]} family (saw {seen})")
     if got.startswith("MR"):
         raise Failed(f"Shoot Mode: the {FAMILIES[family]} family is on {got!r}, a memory recall: never chosen")
+    from proving.greyed import choice_refused
+    refused = choice_refused(cam, "Shoot Mode", f"{FAMILIES[family]}, {got}")       # never OK on a greyed entry
+    if refused:
+        raise Failed(refused)
     say(f"Shoot Mode: {FAMILIES[family]} family, {got!r}: OK")
     cam.press("enter")
     if cam.read().kind == "notice":

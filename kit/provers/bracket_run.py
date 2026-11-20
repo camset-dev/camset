@@ -210,6 +210,11 @@ def commit(cam, option: str, label: str | None = None):
         t = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
         if safety.confirmation(t):
             raise Failed(f"the screen reads like a confirmation ({safety.confirmation(t)})")
+        if getattr(cam.read(), "field", None) is None:      # OK on the carousel: the option --option names
+            from proving.greyed import choice_refused
+            why = choice_refused(cam, "Drive Mode", option)
+            if why:
+                raise Failed(why)
         cam.press("enter")
         if match.key(title(cam)) != match.key(option):
             return after_ok(cam, f"Drive Mode > {option}", label=label)

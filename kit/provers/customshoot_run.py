@@ -187,6 +187,10 @@ def visit(cam, link, hdmi, cycle, model, h: int, cells: list) -> dict:
     flipped, refused = [], []
     for k in sorted(cells):
         to_item(cam, k)
+        from proving.greyed import choice_refused
+        why = choice_refused(cam, "Recall Custom hold", ITEMS[k])
+        if why:
+            raise Failed(why)
         before = tick(cam)
         cam.press("enter")
         after = tick(cam)

@@ -202,6 +202,11 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
                 seen = screen.box_stars(cam.frame.image, cam.read())
                 raise Failed(f"{name}: the cursor is on {('★' * seen) if seen else check_box_label(cam)!r}, "
                              f"not {labels[box]!r}")
+            from . import greyed
+            if greyed.NEVER_ENTER:              # --never-enter-grey: a box drawn grey, or not told, is not flipped
+                why = greyed.choice_refused(cam, name, labels[box])
+                if why:
+                    raise Failed(why)
             before = check_state(cam)
             cam.press("enter")
             after = check_state(cam)
