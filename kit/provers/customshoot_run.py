@@ -275,6 +275,9 @@ def put_back(run, hdmi, cycle, model, allow, start: Path, ended: float, stopped:
         wait_lock(ended, hdmi, clock=time)
         done = False
         if told_to_stop(run, stopped):
+            if not any(isinstance(e, StopRequested) for e in stopped):
+                # the STOP came after the session's body (during its restore): the run ends as a stopped one
+                stopped.append(StopRequested(run.stop_reason()))
             print("the run was told to stop: no press goes out to put the working copy back", flush=True)
         else:
             cam = LiveCamera(link, hdmi, run, may_open=set(allow))     # the owner's word for Reg. Custom Shoot Set
@@ -301,9 +304,11 @@ def run_end(run, restored: bool, last: list, stopped: list, opened, done: bool, 
       EXIT_UNRESTORED, as ever;
     - a stop during the run (in its session or in the put-back): EXIT_INCOMPLETE, the start file back and checked;
       where this run opened a hold's screen (`opened`: OPENED as the session left it, or the hold --put-back opens)
-      and the copy was not put back, that it was not, why, and the command that puts it back (put_back_command); where
-      it opened none, that nothing else is owed. A refusal that ended the run EXIT_REFUSED, any other failure
-      EXIT_INCOMPLETE, the copy put back;
+      and the copy was not put back, that it was not, why (the stop; or, for --put-back alone, the failure that ended
+      it), and the command that puts it back (put_back_command); where it opened none, that nothing else is owed,
+      unless the working copy's record differs from the start file, which is never nothing owed: EXIT_UNRESTORED. A
+      STOP that came during the session's restore counts as a stop (put_back keeps it). A refusal that ended the run
+      EXIT_REFUSED, any other failure EXIT_INCOMPLETE, the copy put back;
     - else 0, or EXIT_UNRESTORED when the working copy's record differs after it was put back."""
     stop = next((e for e in stopped if isinstance(e, StopRequested)), None)
     left = getattr(run, "_left", None) or []
@@ -317,12 +322,17 @@ def run_end(run, restored: bool, last: list, stopped: list, opened, done: bool, 
     copy = [c.key for c in last if c.key in keys]
     if stopped:
         print("the start file is back and checked", flush=True)
+        # why the copy was not put back: a stop, or (--put-back alone) the failure that ended its one session
+        why = "the run was told to stop" if stop is not None else f"{type(stopped[0]).__name__}: {stopped[0]}"
         if not done and opened is not None:
-            # (a stop alone leaves the copy where it is: put_back raises on any other error before this)
             print(f"the hold's working copy ({' '.join(sorted(keys)) or 'its record'}'s fourth slot, which no settings "
-                  f"file sets back) was not put back, because the run was told to stop"
+                  f"file sets back) was not put back, because {why}"
                   f"{'; it still differs from the start file' if copy else ''}. Put it back with:\n"
                   f"  {put_back_command(scan)}", flush=True)
+        elif not done and copy:
+            print(f"the working copy's record ({', '.join(copy)}) differs from the start file though this run opened no "
+                  "hold's screen: a record that differs is owed", flush=True)
+            return EXIT_UNRESTORED
         elif not done:
             print("no hold's screen was opened, so nothing else is owed", flush=True)
         if stop is None and isinstance(stopped[0], safety.Refused):

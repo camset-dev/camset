@@ -213,7 +213,8 @@ def wire(tmp_path, monkeypatch, files: dict, log: dict):
     import runner
     events = log["events"]
     run = SimpleNamespace(dir=tmp_path / "ILCE-1M2_fw4.00" / "kit2_pass2", root=tmp_path, log=lambda *a, **k: None,
-                          stop_requested=lambda: log["stop"], _left=[])
+                          stop_requested=lambda: log["stop"], _left=[],
+                          stop_reason=lambda: "STOP: the run's STOP file asks it to stop")
     dat = run.dir / "dat"
     dat.mkdir(parents=True)
     log.setdefault("stop", False)
@@ -585,6 +586,54 @@ def test_a_stop_stops_put_back_like_any_run(lone, capsys):
     assert "was not put back, because the run was told to stop" in out and "--put-back" in out
     lone["run"]._left = [Path("STOP")]
     assert exits(lone["go"]) == 4
+
+
+def test_put_back_that_fails_says_what_failed_not_that_it_was_told_to_stop(lone, capsys, monkeypatch):
+    """--put-back whose hold 3 did not open (its title another screen's): no stop was asked for, so the words name the
+    failure, never "because the run was told to stop"."""
+    from exit_status import EXIT_INCOMPLETE
+
+    def cancel_hold(c, link, cycle, model, h):
+        CR.OPENED["hold"] = h
+        raise V.Failed("Right on hold 3 opened unknown ('x'), not its items")
+    monkeypatch.setattr(CR, "cancel_hold", cancel_hold)
+    monkeypatch.setattr(V, "cancel_hold", cancel_hold)
+    assert exits(lone["go"]) == EXIT_INCOMPLETE
+    out = capsys.readouterr().out
+    assert "told to stop" not in out
+    assert "was not put back, because Failed: Right on hold 3 opened unknown ('x'), not its items" in out
+
+
+def test_a_stop_during_the_sessions_restore_counts_as_a_stop(world, capsys, monkeypatch):
+    """The body done, a STOP arriving during the session's end (a chain's limit while it restores): the put-back
+    presses nothing, and the run ends as a stopped one: exit 8, never 0 or 4, with the words on the copy."""
+    import runner
+    from exit_status import EXIT_INCOMPLETE
+    finish = runner.session.finish
+
+    def finish_then_stop(link, start, tag="after", **kw):
+        world["stop"] = True
+        return finish(link, start, tag, **kw)
+    monkeypatch.setattr(runner.session, "finish", finish_then_stop)
+    assert exits(world["go"]) == EXIT_INCOMPLETE                        # the copy as the start file has it
+    assert world["events"][-len(NO_PUT_BACK):] == NO_PUT_BACK
+    world["stop"] = False
+    world["events"].clear()
+    world["files"]["end"] = made(world["files"]["end"].parent / "end_copy.DAT", live=1, held=[1, 1, 1, 1],
+                                 copy=[0, 0, 0, 2])
+    assert exits(world["go"]) == EXIT_INCOMPLETE                        # the copy differs: the words say so
+    assert "because the run was told to stop; it still differs from the start file" in capsys.readouterr().out
+
+
+def test_a_stop_before_any_hold_was_opened_with_the_copy_differing_is_never_nothing_owed(world, capsys):
+    world["stop_on"] = "0.5EV"
+    world["files"]["end"] = made(world["files"]["end"].parent / "end_copy.DAT", live=1, held=[1, 1, 1, 1],
+                                 copy=[0, 0, 0, 2])
+    assert exits(world["go"]) == 4
+    out = capsys.readouterr().out
+    assert "nothing else is owed" not in out
+    assert f"the working copy's record ({COPY_KEY}) differs from the start file though this run opened no hold's " \
+        "screen" in out
 
 
 def test_open_hold_marks_the_hold_opened_once_its_right_went_out(monkeypatch):
