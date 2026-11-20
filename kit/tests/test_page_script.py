@@ -386,6 +386,35 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_collapse_all_closes_the_rows_details_too(tmp_path):
+    """The reviewer's inventory, D: the page's Collapse all closes a row's own details too (by the keys as by the
+    button); Expand all opens the groups and leaves every row's details closed, as the window shows one setting's at a
+    time."""
+    got = run(tmp_path, LAYOUT + """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+const withHelp = (g) => ({ ...g, rows: g.rows.map((r) => ({ ...r, help: "Help for " + r.name })) });
+const drawn = drawTab([withHelp(drive), withHelp(other)], { places: true, flat: false });
+$("content").replaceChildren(...drawn);
+const name = $("content").querySelector(".row .name.dt");
+const open = () => $("content").querySelectorAll(".row.open").length;
+name.click();
+const out = { opened: open(), kept: xp.detail.size };
+shortcut(key("ArrowUp"));
+out.after_keys = [open(), xp.detail.size];
+shortcut(key("ArrowDown"));
+out.after_expand = [open(), xp.detail.size, $("content").querySelectorAll("details.grp").every((d) => d.open)];
+name.click();
+drawn[0].querySelectorAll(".fold-all button")[0].click();
+out.after_button = [open(), xp.detail.size];
+console.log(JSON.stringify(out));
+""")
+    assert got["opened"] == 1 and got["kept"] == 1, got
+    assert got["after_keys"] == [0, 0] and got["after_expand"] == [0, 0, True] and got["after_button"] == [0, 0]
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an

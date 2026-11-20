@@ -1824,6 +1824,7 @@ function drawRow(r) {
       show(on);
     });
     show(xp.detail.has(r.key));
+    row._show = show;
     row.append(box);
   }
   // where it sits on the camera, as the window's hover says
@@ -4351,6 +4352,12 @@ function foldAll(collapse) {
   }
   for (const h of $("content").querySelectorAll(".rowhead[data-fold]")) if (h._show) h._show();
   for (const d of groups) if (d._body) foldRows(d._body);
+  // Collapse all closes the rows' own details too, those of every row the groups hold, drawn or not; Expand all opens
+  // none: a row's details are one setting's own (its help, its proof), as the window shows one setting's at a time
+  if (collapse) {
+    for (const d of groups) for (const r of (d._group && d._group.rows) || []) xp.detail.delete(r.key);
+    for (const row of $("content").querySelectorAll(".row")) if (row._show && row.dataset.key) row._show(xp.detail.has(row.dataset.key));
+  }
   // the keyboard where it can still be seen: a group closed over it gives it to that group's head
   const a = document.activeElement;
   const shut = a && a.closest && a.closest("details.grp");
