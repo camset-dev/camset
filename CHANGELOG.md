@@ -180,6 +180,12 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   and a working feed, their check after putting the start file back reconnects once the camera is back from its restart,
   about 12 to 14 s into the check where it waited 20 s, and that watch, the provers' too, no longer takes a notice
   already on show for the restart's.
+- **The third role in `private/config.json` may name several readers, `"third": ["gemma", "glm"]`, asked in turn
+  where OCR and the second reader differ until two independent votes name one option;** one that does not answer the
+  start check is skipped for the run and said so, and one name, or none, works as before.
+- **`kit/tiebreak.py` asks each third reader in turn and `kit/pass1_map.py` counts one vote per model family, so two
+  builds of one model no longer outvote OCR;** `kit/tiebreak.py RUN --revote --was MODEL` asks today's third readers
+  about the lines already there, each line's readings kept and the old file beside it.
 - **The coverage ledger keeps every record a look saw change,** where a later look of the same row, action and option
   took that look's place: such a record was left "never seen to change". The row's status is still its latest look's.
 - **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from
