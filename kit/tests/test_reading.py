@@ -1312,8 +1312,9 @@ def test_greyed_asks_a_grey_question_for_its_grey_alone():
     text = (ROOT / "kit" / "proving" / "greyed.py").read_text(encoding="utf-8")
     assert not re.search(r"reading\.(read|region|choice_of|agree|tally|outcome)\(|with_options|ask_named_reader", text)
     from proving import greyed
-    assert {k: reading.QUESTIONS[v].grey_prompt for k, v in greyed.ASKED.items()} == {
-        "list": "lit.v2.grey", "sidelist": "lit.v2.grey", "dialog": "carousel.v2.grey"}
+    # a carousel's alone: on a list and a side list the readers saw no grey (reader census, 2026-11-19)
+    assert {k: reading.QUESTIONS[v].grey_prompt for k, v in greyed.ASKED.items()} == {"dialog": "carousel.v2.grey"}
+    assert {"list", "sidelist"} == greyed.PIXELS_ALONE and not greyed.PIXELS_ALONE & set(greyed.ASKED)
     assert "grey_prompt" in text and not re.search(r"\.prompt\b", text)      # never the kind's own question
 
 

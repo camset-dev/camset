@@ -12,8 +12,8 @@
     fields      number fields          sidelists   Picture Profile's side lists     checklists  checkboxes
     looks       Creative Look panels   wbgrid      White Balance fine-tune grids    tables      tables, tiles, keys
     helptext    --help-text: the In-Camera Guide of each row and option
-    greyed      an option of a list, side list or carousel its pixels or the second reader call grey: never entered to
-                choose it, its reason read once a row
+    greyed      an option drawn grey (a list's and side list's by their pixels, a carousel's by the second reader):
+                never entered to choose it, its reason read once a row
 
 The list prover itself (prove_row, with its display proof), the carousels' second axes (prove_axis_row), the session
 and main stay in kit/prove_run.py, which also gives every name here under its old place (prove_run.option_key), so

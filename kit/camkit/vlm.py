@@ -25,8 +25,8 @@ its run folder so (LOCAL_MARKER); every tool that reads a run folder's frames af
 set. A run that opened a row an owner decision names (kit/drive.py --owner) marks its folder NO_READER_MARKER too, and
 local_only_runs stops a tool pointed at it before any reader is built: no reader reads those frames. PROMPTS holds the questions the kit asks today and, beside them, one question per kind of
 screen (the ".v2" keys, camkit.reading.QUESTIONS), which no run asks yet, and a ".grey" version of each question about
-a setting's options that also asks whether the item read is drawn grey, which a list prover asks for that alone
-(proving.greyed).
+a setting's options that also asks whether the item read is drawn grey, kept as measured (one, a carousel's, asked
+for that alone: proving.greyed).
 """
 import base64
 import contextlib
@@ -244,8 +244,12 @@ PROMPTS.update({
 # variant "grey"); the numbers .v2 and .v3 already mean a question per kind of screen and a third measured better. On a
 # list the item's letters are drawn grey instead of white (kit2_pass2 260193: ~120 against ~225); on a carousel the
 # orange line stays orange, and the option's lit icon in the column at the left is drawn dim, dark red, instead of
-# bright (kit2_pass2 119947 against 119966). proving.greyed asks the kind's (camkit.reading.QUESTIONS) for its "greyed"
-# alone, beside its own pixel test, and only ever to be more careful.
+# bright (kit2_pass2 119947 against 119966). Measured by the census on 2026-11-19 (Qwen3.8-27B on vLLM, GLM-4.6V-Flash):
+# each read the text as well as its original, but asked about the lit item alone neither reader saw grey on a side
+# list (none of 60 options the camera drew grey called grey, by lit.v2.grey or option.grey; all 60 white right), and on
+# a carousel only Qwen did, carousel.v2.grey right on 8 of 13 grey with 6 of 60 white called grey. Kept, pinned, as
+# that record: no run asks them but proving.greyed a carousel's carousel.v2.grey, for its "greyed" alone (its pixels
+# are not judged) and only ever to be more careful; a list's whole-list question, "entries.v2", is measured next.
 _GREY = "as the camera draws an item it will not take"
 _GREY_LETTERS = f"its letters drawn grey instead of white, {_GREY}"
 _GREY_ICON = ("in the column of icons at the left, its lit icon drawn dim, dark red or grey, instead of bright, " + _GREY)

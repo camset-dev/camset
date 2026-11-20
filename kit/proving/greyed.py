@@ -11,16 +11,18 @@ it, and why it is greyed is read once a row (the row's one Enter for that, which
             other eye had told grey (Misjudged); not with NEVER_ENTER
     SKIP    drawn grey and its reason read, or NEVER_ENTER: no key at all on it; the line says greyed as drawn
 
-Whether an option is drawn grey, two eyes tell, each on the frame the cursor stands on (drawing): the pixels
+Whether an option is drawn grey, two eyes can tell, each on the frame the cursor stands on (drawing): the pixels
 (proving.screens.drawn_grey, on a list and a side list) and the second reader, asked the kind of screen's question that
-also asks it (camkit.reading.QUESTIONS' ".grey" versions, its "greyed": reader_grey; the owner, 2026-11-19: "the VLM
-text needs to include which text is grey"). Either one saying grey makes it grey; where the pixels cannot tell (a
-carousel, whose pixels are not judged; a measure in between), the reader decides; a reader that does not answer changes
-nothing. So a reader calling an option white never makes the kit press on one the pixels call grey: the reader only
-ever adds care. The reader is asked, in line, only where its answer can change what is pressed (unasked): never on the
-value the row was saved on, on an option the pixels already call grey, nor on a row where it misjudged an option. judge's answer (Verdict) says which eyes told it grey ("pixels", "reader" or "both": told) and carries
-both readings (Drawing.kept), which every line it judged keeps ("grey_readings"), a grey one with "greyed_by" beside
-"greyed": "drawn" (line, marks).
+also asks it (camkit.reading.QUESTIONS' grey_prompt, its "greyed": reader_grey; the owner, 2026-11-19: "the VLM text
+needs to include which text is grey"). On a list and a side list the pixels alone tell it, as before: asked about the
+lit item alone, the readers called none of 60 side-list options the camera drew grey grey (kit/tools/reader_census.py,
+2026-11-19), so no reader is asked there (ASKED). On a carousel, whose pixels are not judged, the reader decides. Either
+eye saying grey makes it grey; a reader that does not answer changes nothing, so a reader calling an option white
+never makes the kit press on one the pixels call grey: the reader only ever adds care. The reader is asked, in line,
+only where its answer can change what is pressed (unasked): never on the value the row was saved on, on an option the
+pixels already call grey, nor on a row where it misjudged an option. judge's answer (Verdict) says which eyes told it
+grey ("pixels", "reader" or "both": told) and carries both readings (Drawing.kept), which every line it judged keeps
+("grey_readings"), a grey one with "greyed_by" beside "greyed": "drawn" (line, marks).
 
 The reason (REASONS, a row's for the run): first the camera's own Help on that first grey option, through the kit's
 guarded Help alone (drive.help_refused: a menu or option screen whose footer draws the help button; help_run.guide:
@@ -47,9 +49,15 @@ REASONS: dict = {}          # {row name: Reason, or Misjudged} read this run: on
 LABELS: set | None = None   # the row labels a blocker is named by (labels(): the definition's and the page model's)
 FOLLOWS = re.compile(r"not available as follows\b", re.I)
 EYES = ("pixels", "reader")
-# the kinds of screen a list prover meets, and the kind whose question (camkit.reading.QUESTIONS) asks, beside the lit
-# item's text, whether it is drawn grey
-ASKED = {"list": "list", "sidelist": "side list", "dialog": "carousel"}
+# the kind of screen whose lit option the reader is asked about, and the kind whose question (camkit.reading.QUESTIONS'
+# grey_prompt) asks, beside its text, whether it is drawn grey: a carousel alone. On a list and a side list (PIXELS_ALONE)
+# the readers asked so saw no grey: Qwen3.8-27B and GLM-4.6V-Flash called none of 60 side-list options the camera drew
+# grey grey, by lit.v2.grey or option.grey, and the pixels told every one (reader census, 2026-11-19); a question about
+# the whole list (camkit.vlm's entries.v2) is measured before any prover asks it
+ASKED = {"dialog": "carousel"}
+PIXELS_ALONE = {"list", "sidelist"}
+NOT_ON_A_LIST = ("on a list the pixels alone tell it: asked about the lit option alone the readers saw no grey "
+                 "(reader census, 2026-11-19)")
 
 
 def _say(message: str) -> None:
@@ -130,10 +138,14 @@ def reader_grey(cam) -> tuple:
     answer; what the line keeps of its side): asked the question of the screen's kind that also asks it (ASKED,
     camkit.reading.QUESTIONS, read by camkit.reading.greyed_of), through camkit.reading.ask (camkit.vlm.ask_role: a
     stand-in for the second reader where it will not connect, never about a black frame, nothing while its reader is
-    down), with a press's time (camkit.reading.TIMEOUTS). Any failure is no answer. (None, {}) on a screen no question
-    of the kind asks it of."""
+    down), with a press's time (camkit.reading.TIMEOUTS). Any failure is no answer. On a list and a side list nothing
+    is asked (None, {"not_asked": NOT_ON_A_LIST}: PIXELS_ALONE); (None, {}) on any other screen no question asks it
+    of."""
     read = getattr(cam, "read", None)
-    kind = ASKED.get(getattr(read(), "kind", None)) if callable(read) else None
+    screen_kind = getattr(read(), "kind", None) if callable(read) else None
+    if screen_kind in PIXELS_ALONE:
+        return None, {"not_asked": NOT_ON_A_LIST}
+    kind = ASKED.get(screen_kind)
     if kind is None:
         return None, {}
     q = reading.QUESTIONS[kind]
