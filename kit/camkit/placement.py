@@ -1097,9 +1097,10 @@ def split_by_guide(doc, top: dict, out: dict, menus: list, guide: list, paths_of
 def split_by_proofs(doc, top: dict, out: dict, menus: list, paths_of, every) -> int:
     """One setting kept in several records on one row (one name, one place, no copy among them: the editor's linked
     records) whose proofs of that row were made in modes no two of them share (proof_modes: Stills moved one, Movie the
-    other): each record is kept in the menus of its own proofs' modes, and in every menu whose modes none of their
-    proofs name (nothing tells those apart: as before). Records that moved together in each mode, or whose proofs share a
-    mode, keep their menus. How many settings it cut."""
+    other), every menu that holds them named by one of those modes: each record is kept in the menus of its own proofs'
+    modes, so their menus are apart. Records that moved together in each mode, whose proofs share a mode, or that a menu
+    no proof names holds (nothing tells them apart there), keep their menus, one row: linked records' row_menus are
+    equal or apart, never overlapping (a menu would show the row twice). How many settings it cut."""
     modes = {m["name"]: set(m.get("modes") or ()) for m in menus}
     groups = collections.defaultdict(list)
     for s in doc["settings"]:
@@ -1114,8 +1115,11 @@ def split_by_proofs(doc, top: dict, out: dict, menus: list, paths_of, every) -> 
         if any(a & b for i, a in enumerate(sets) for b in sets[i + 1:]):
             continue
         named = set().union(*sets)
+        held = {m for s in ss for m in out[s["key"]]["row_menus"]}
+        if any(not modes[m] & named for m in held):
+            continue                     # a menu no proof names: nothing tells the records apart there
         for s, mine in zip(ss, sets, strict=True):
-            keep = [m for m in out[s["key"]]["row_menus"] if modes[m] & mine or not modes[m] & named]
+            keep = [m for m in out[s["key"]]["row_menus"] if modes[m] & mine]
             if keep and keep != out[s["key"]]["row_menus"]:
                 out[s["key"]]["row_menus"] = keep
                 for m in list(out[s["key"]].get("row_places") or {}):

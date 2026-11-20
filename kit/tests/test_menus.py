@@ -389,16 +389,19 @@ def test_a_menus_place_says_what_differs_and_gives_the_settings_own_tab_back():
 
 
 @pytest.mark.parametrize("proofs, menus", [
-    # (a) Stills moved one record, Movie the other: each in its own mode's menu; S&Q, which no proof names, keeps both
-    ((["D-Range Optimizer"], ["D-Range Optimizer [Movie mode]"]), (["Still", "S&Q"], ["Movie", "S&Q"])),
+    # (a) Stills moved one record, Movie the other, and S&Q too: each in its own modes' menus, which never overlap
+    ((["D-Range Optimizer"], ["D-Range Optimizer [Movie mode]", "D-Range Optimizer [S&Q mode]"]), (["Still"], ["Movie", "S&Q"])),
+    # (a') the same with no proof in S&Q: a menu no proof names cannot be told apart, and the two stay one row in
+    # every menu (one record's menus overlapping another's unequal would show the row twice there)
+    ((["D-Range Optimizer"], ["D-Range Optimizer [Movie mode]"]), (["Still", "Movie", "S&Q"], ["Still", "Movie", "S&Q"])),
     # (b) both moved together in each mode: one row in every menu, as before
     ((["D-Range Optimizer", "D-Range Optimizer [Movie mode]"], ["D-Range Optimizer", "D-Range Optimizer [Movie mode]"]),
      (["Still", "Movie", "S&Q"], ["Still", "Movie", "S&Q"])),
 ])
 def test_one_settings_records_proved_in_different_modes_are_each_kept_to_their_own(proofs, menus):
-    """D-Range Optimizer kept in two records on one row: where Stills moved one and Movie the other, each keeps its own
-    mode's menu (and the menus no proof names, which nothing tells apart); where both moved in each mode, both stay in
-    every menu."""
+    """D-Range Optimizer kept in two records on one row: where each menu's mode moved one record alone, each keeps its
+    own modes' menus; where a menu that holds them is named by no proof, or both moved in each mode, both stay in every
+    menu, one row: their row_menus are equal, or apart, never overlapping."""
     rows = [page("1/1", "Color/Tone", row("D-Range Optimizer"))]
     tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}],
             "modes": [{"mode": m, "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}]} for m in ("Movie", "S&Q")]}
@@ -486,8 +489,10 @@ def test_with_no_menu_tree_the_definitions_menus_stay_as_they_are(tmp_path, monk
     menus = [{"name": "Still", "modes": ["Stills"]}, {"name": "Movie", "modes": ["Movie"]}, {"name": "S&Q", "modes": ["S&Q", "Time-lapse"]}]
     doc["camera"]["menus"] = menus
     placed = [s for s in doc["settings"] if s.get("row") and not s.get("copy_of")]
-    for i, s in enumerate(placed):
-        s["row_menus"] = ["Still", "Movie"] if i % 2 else ["Still"]
+    rows = {}                                  # one row in the editor (one name, one place): one set of menus
+    for s in placed:
+        k = rows.setdefault((s["name"], tuple(s["row"]), tuple(s["row_at"]), s.get("under_option")), len(rows))
+        s["row_menus"] = ["Still", "Movie"] if k % 2 else ["Still"]
     placed[0]["row_places"] = {"Still": {"row": placed[0]["row"], "row_at": [0] + placed[0]["row_at"][1:]}}
     placed[0]["proved"] = {"menu": [" > ".join(placed[0]["row"])]}          # evidence there, the tree not
     was = {s["key"]: {f: s.get(f) for f in ("row_menus", "row_places")} for s in doc["settings"]}
@@ -814,3 +819,23 @@ def test_where_an_option_list_began_shapes_no_place():
     got = [placement.settings(copy.deepcopy(e), tree_with("Exposure Comp.", o))["global:0x0051"].get("under_option")
            for o in (["Auto", "Daylight", "Shade", "Cloudy"], ["Shade", "Cloudy", "Auto", "Daylight"])]
     assert got == ["Shade", "Shade"]
+
+
+def test_records_one_row_in_the_editor_carry_equal_or_apart_menus():
+    """The editor shows records of one name in one place (its linked records, the records a proof writes together) as
+    one row only where their row_menus and row_places are equal; records of one row kept to their own modes' menus
+    (split by mode) have menus apart. The writer refuses any other: menus that overlap unequal, or equal menus with
+    places that differ, would show the row twice in a menu."""
+    def s(key, menus, places=None, **more):
+        return {"key": key, "name": "D-Range Optimizer", "row": ["D-Range Optimizer"], "row_at": [3], "row_menus": menus,
+                **({"row_places": places} if places else {}), **more}
+    ok = {"settings": [s("global:0x0001", ["Still", "Movie"]), s("global:0x0002", ["Still", "Movie"]),
+                       s("global:0x0003", ["S&Q"], name="Other"), s("global:0x0004", ["Still"], row_at=[4]), s("global:0x0005", ["Movie"], row_at=[4]),
+                       s("global:0x0006", ["Still", "S&Q"], copy_of="global:0x0001")]}
+    assert fromdata.linked_refusal(ok) is None
+    overlap = {"settings": [s("global:0x0001", ["Still", "S&Q"]), s("global:0x0002", ["Movie", "S&Q"])]}
+    why = fromdata.linked_refusal(overlap)
+    assert "global:0x0001" in why and "global:0x0002" in why and "twice" in why
+    places = {"settings": [s("global:0x0001", ["Still", "Movie"], {"Movie": {"row": ["D-Range Optimizer"], "row_at": [2]}}),
+                           s("global:0x0002", ["Still", "Movie"])]}
+    assert "row_places" in fromdata.linked_refusal(places)

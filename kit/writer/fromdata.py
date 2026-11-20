@@ -321,6 +321,31 @@ def with_menu(doc: dict) -> dict:
     return doc
 
 
+def linked_refusal(doc: dict) -> str | None:
+    """Why the camera's menus would show a row twice, in one plain sentence, or None: records of one name in one place
+    (row, row_at, row_mode, under_option; no copy among them: the editor's linked records, a setting kept in several
+    records that a proof writes together) carry equal row_menus and row_places, or row_menus apart (kept to their own
+    modes' menus, camkit.placement.split_by_proofs and split_by_guide). Menus that overlap unequal, or equal menus with
+    places that differ, would show the row twice in a menu."""
+    rows = {}
+    for s in doc.get("settings") or []:
+        if s.get("row") and "row_menus" in s and not s.get("copy_of"):
+            k = (s.get("name"), tuple(s["row"]), tuple(s.get("row_at") or []), s.get("row_mode"), s.get("under_option"))
+            rows.setdefault(k, []).append(s)
+    for ss in rows.values():
+        for i, a in enumerate(ss):
+            for b in ss[i + 1:]:
+                ma, mb = a["row_menus"], b["row_menus"]
+                if ma != mb and set(ma) & set(mb):
+                    return (f"{a['key']} and {b['key']} ({a['name']}) are one row in the editor, but their row_menus "
+                            f"overlap unequal ({', '.join(ma)} and {', '.join(mb)}): the row would show twice in "
+                            f"{', '.join(m for m in ma if m in mb)}")
+                if ma == mb and (a.get("row_places") or {}) != (b.get("row_places") or {}):
+                    return (f"{a['key']} and {b['key']} ({a['name']}) are one row in the editor in the same menus, but "
+                            "their row_places differ: the row would show twice there")
+    return None
+
+
 def main_tile_refusal(doc: dict) -> str | None:
     """Why the camera's Main tiles cannot stand beside the definition's Expert marks, in one plain sentence, or None: a
     tile's own key (its keys, its memory_keys) is never a setting shown in Expert mode only, for the editor's Compare
@@ -381,6 +406,11 @@ def from_data(doc: dict) -> dict:
     by_hand = frozenset(tables.HAND_PLACES)
     doc["settings"] = [with_expert(placed(with_plain_words(with_evidence_apart(with_tidy_note(s)), names)), slots, mirror, by_hand)
                        for s in doc["settings"]]
+    why = linked_refusal(doc)
+    if why:
+        raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: prove the row in the mode of each "
+                                  "menu the records share, or give them rows by hand (HAND_PLACES), then run the "
+                                  "command again.")
     why = main_tile_refusal(doc)
     if why:
         raise hand_tables.Refused(f"{paths.shown(definitions.camera_file(definitions.key(doc)))}: {why}. Nothing was "
