@@ -13,6 +13,7 @@ from camkit import definitions, placement
 from writer import fromdata, hand_tables
 
 import check_public
+import menu_tree
 
 
 def row(label, *kids, options=(), state="", why=""):
@@ -281,3 +282,25 @@ def test_check_public_refuses_what_a_menu_must_never_say():
         assert words in got, words
     assert check_public.menu_problems({**doc(), "settings": [{"key": "k", "row_menus": ["Still"]}]}) == \
         ["k: row_menus or row_places without camera.menus", "k: row_menus names 'Still', no camera menu"]
+
+
+def test_a_tree_takes_in_a_group_from_a_page_scan_never_the_owners_items(tmp_path, monkeypatch):
+    """menu_tree.py --add: My Menu's own setting page from a page scan into a Stills menu written without it, a tab of
+    its own where the scan has it, its rows as a page no crawl reached; the same group twice, a group the scan lacks
+    and a page of the owner's items (its tab's name and a number) are refused."""
+    scan = tmp_path / "scan"
+    scan.mkdir()
+    (scan / "model.json").write_text(json.dumps([
+        {"page": "1/9", "breadcrumb": "My Menu > My Menu1", "rows": [{"slot": 0, "label": "Drive Mode"}]},
+        {"page": "2/9", "breadcrumb": "My Menu > My Menu Setting", "rows": [{"slot": 0, "label": "Add Item"},
+                                                                        {"slot": 1, "label": "Display From My Menu"}]},
+        {"page": "3/9", "breadcrumb": "Shooting > Rec", "rows": [{"slot": 0, "label": "Rec. Media Settings"}]}]))
+    menu = copy.deepcopy({"tabs": STILLS})
+    said = menu_tree.added(menu, scan, "My Menu", "My Menu Setting")
+    assert [t["tab"] for t in menu["tabs"]] == ["My Menu", "Shooting"] and said
+    assert [r["label"] for r in menu["tabs"][0]["pages"][0]["rows"]] == ["Add Item", "Display From My Menu"]
+    assert menu["tabs"][0]["pages"][0]["rows"][1]["state"] == "seen"
+    for group, words in (("My Menu Setting", "already"), ("Nothing", "holds no page"), ("My Menu1", "owner's own items")):
+        with pytest.raises(SystemExit) as e:
+            menu_tree.added(menu, scan, "My Menu", group)
+        assert words in str(e.value.code), words
