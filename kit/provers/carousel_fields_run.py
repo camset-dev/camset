@@ -24,8 +24,13 @@ box's picture nothing, on a fresh frame too and one more press), then, where it 
 same way; at most --most values each way (MOST, the deadline; the run says where it cut a walk short). Each value is
 one visit: the row, the option, Right to the box, the box checked on the value the last OK chose, the keys to the next
 value (each step through a value already seen checked against its picture), the value read, Enter, a download, a proof
-line. The value held is proved last, put back so, and its download must equal the base. The session's start file goes
-back on at the end, as every prover's.
+line, written once the next opening shows the camera kept the value. A value it did not keep is a finding, not a
+failure (Focus Bracket's number of shots 000, kept as 2, its lowest, 2026-11-19): where the box opens on another value
+and the download after that OK bears it out (a record holds the number the box's field now makes, or the same changes
+as that value's own line), the line says "applied": false, "asked" and "kept" (as drawn), credits nothing, and the
+walk steps the box back onto the place asked and goes on from there; otherwise the walk stops. The value held is proved
+last, put back so, and its download must equal the base. Each box's walk is an attempt of its own, so a later box's
+stop takes back no box that finished. The session's start file goes back on at the end, as every prover's.
 
 Readings, as kit/provers/optboxes_run.py reads its boxes: the lit box by OCR, the second reader asked about the lit box
 itself on every doubt (camkit.reading.doubts) and always where the value decides a proof (the owner's rule: the reader is
@@ -371,6 +376,9 @@ class Walk:
     def __init__(self, held: str, pic):
         self.values, self.pics, self.pos = {0: held}, {0: pic}, 0
         self.cut = False                # the deadline cut a way short: the walk is not the field's whole list
+        self.changes = {0: []}          # place -> the records its line changed (bears_out)
+        self.pending = None             # the last value's line, written once the next opening shows what was kept
+        self.off = None                 # (picture, reading) of a value the camera kept in place of the one asked
 
     def known(self, text, pic) -> int | None:
         """The place of a value seen before, by its picture, else by its reading."""
@@ -390,10 +398,9 @@ def visit(cam, link, eyes, cycle, model, path, option, labels, look_: Look, b, w
     row = open_row(cam, cycle, model, path)
     to_option(cam, option, labels)
     into_box(cam, option, labels, b, count)
-    pic = box_pic(cam, b)
-    if not same_pic(pic, w.pics[w.pos]) and key(lit_read(cam, False).text) != key(w.values[w.pos]):
-        raise Failed(f"{name}: box {b} opened on {lit_read(cam, False).text!r}, not {w.values[w.pos]!r}, which the "
-                     f"last OK chose ({cam.frame.path.name})")
+    on_opening(cam, look_, b, w, out, name)
+    if w.off is not None:
+        find_asked(cam, option, b, count, w, name)      # from the value the camera kept, back onto the one asked
     way = "up" if target > w.pos else "down"
     at = w.pos
     while at != target:
@@ -441,6 +448,89 @@ def visit(cam, link, eyes, cycle, model, path, option, labels, look_: Look, b, w
     return keep(cam, link, eyes, path, option, labels, look_, b, w, 0, r, row, base, out, attempt, "back")
 
 
+SEARCH = 2 * MOST               # presses at most each way stepping back onto a value the camera did not keep (find_asked)
+
+
+def on_opening(cam, look_: Look, b: int, w: Walk, out, name: str) -> None:
+    """The box on opening, checked against what the last OK left, and the last value's line written then (w.pending).
+    On the value chosen (its picture, else its reading): the line as it stands. Where the camera kept another value
+    (w.off since an earlier opening): that value again. On another value than the last OK chose: where the download
+    after that OK bears the box out (bears_out: the camera's own correction, Focus Bracket's 000 kept as 2), the line
+    says what was asked and what the camera kept ("applied": false, "asked", "kept", as drawn), credits nothing, and
+    the walk goes on from the place asked (find_asked); otherwise the walk stops, as it did before 2026-11-19."""
+    pic = box_pic(cam, b)
+    if w.off is not None:
+        if not same_pic(pic, w.off[0]) and key(lit_read(cam, False).text) != key(w.off[1]):
+            raise Failed(f"{name}: box {b} opened on {lit_read(cam, False).text!r}, not {w.off[1]!r}, which the camera "
+                         f"kept ({cam.frame.path.name})")
+        return
+    if same_pic(pic, w.pics[w.pos]) or key(lit_read(cam, False).text) == key(w.values[w.pos]):
+        flush(w, out)
+        return
+    shown = lit_read(cam, True).text
+    if w.pending is None or not bears_out(w, look_, b, shown, pic):
+        raise Failed(f"{name}: box {b} opened on {shown!r}, not {w.values[w.pos]!r}, which the last OK chose "
+                     f"({cam.frame.path.name})")
+    print(f"   box {b}: the camera kept {shown!r}, not {w.pending['box']!r}, the value asked (its download bears the "
+          "box out): nothing credited to it", flush=True)
+    flush(w, out, applied=False, asked=w.pending["box"], kept=shown)
+    p = w.known(shown, pic)
+    if p is not None and same_pic(pic, w.pics.get(p)):
+        w.pos = p                                       # a value seen before: the walk stands on its place
+    else:
+        w.off = (pic, shown)
+
+
+def bears_out(w: Walk, look_: Look, b: int, shown: str, pic) -> bool:
+    """Whether the download after the last OK shows the record on the value box b now shows (`shown`, its picture
+    `pic`): a record it changed now holds the number box b's field now makes (Focus Bracket's 000 kept as 2: 0x10aa 2),
+    or the box shows a value seen before whose own line changed the same records to the same values."""
+    changes = w.pending["changes"]
+    values = list(look_.values)
+    values[b] = shown
+    field = next(f for f in look_.fields(values) if f["label"] == look_.labels[b])
+    try:
+        number = float(key(field["value"]))
+    except ValueError:
+        number = None
+    if number is not None and any(isinstance(c.get("after"), (int, float)) and not isinstance(c.get("after"), bool)
+                                  and c["after"] == number for c in changes):
+        return True
+    p = w.known(shown, pic)
+    return p is not None and p != w.pos and w.changes.get(p) == changes
+
+
+def flush(w: Walk, out, **said) -> None:
+    """The last value's line written (w.pending), with what the opening after it found (`said`), and forgotten."""
+    if w.pending is None:
+        return
+    out.write(json.dumps({**w.pending, **said}, ensure_ascii=False) + "\n")
+    out.flush()
+    w.pending = None
+
+
+def find_asked(cam, option: str, b: int, count: int, w: Walk, name: str) -> None:
+    """From the value the camera kept (w.off), box b stepped back onto the place asked (its picture, w.pics[w.pos]):
+    Down first, then Up, SEARCH presses at most each way, a way given up where a press moves nothing (an end, on a fresh
+    look too); every press checked as any step in the box. Failed where the place asked never shows again."""
+    want = w.pics[w.pos]
+    for way in ("down", "up"):
+        for _ in range(SEARCH):
+            before = box_pic(cam, b)
+            step(cam, option, b, count, way)
+            now = box_pic(cam, b)
+            if same_pic(now, before):
+                cam.refresh("field-again")
+                now = box_pic(cam, b)
+            if same_pic(now, want):
+                w.off = None
+                return
+            if same_pic(now, before):
+                break
+    raise Failed(f"{name}: box {b} never showed {w.values[w.pos]!r} again from {w.off[1]!r}, which the camera kept "
+                 f"({cam.frame.path.name})")
+
+
 def other_values(cam, look_: Look, b: int, opened: dict) -> list:
     """Every box's value on the frame on show: box b's from its reading, the others as the look read them while their
     pictures stay as they were when its walk first opened it (`opened`: box -> picture); one that changed (a value the
@@ -464,10 +554,10 @@ def keep(cam, link, eyes, path, option, labels, look_: Look, b, w: Walk, place_,
          what: str) -> str:
     """Box b's value at `place_` (read as `r`) chosen with Enter, the screen after it read (proving.commit.after_ok), a
     download, its diff against the base and the proof line. A value the camera refuses is written "applied": false and
-    the box stays where it stood; the put-back ("round", "back") must change nothing."""
+    the box stays where it stood; the put-back ("round", "back") must change nothing, its line written at once. Any
+    other line waits for the next opening (w.pending, on_opening), which shows whether the camera kept the value."""
     name = f"{' > '.join(path)} > {option}"
-    opened = KEEP_OPENED.get(b, {})
-    values = other_values(cam, look_, b, opened)
+    values = other_values(cam, look_, b, KEEP_OPENED.get(b, {}))
     values[b] = r.text
     fields = look_.fields(values)
     field = next(f for f in fields if f["label"] == look_.labels[b])
@@ -485,12 +575,15 @@ def keep(cam, link, eyes, path, option, labels, look_: Look, b, w: Walk, place_,
            "box_vlm": r.vlm, "box_reader": r.reader, "chosen_frame": chosen, "row_frame": row_frame,
            "dat": dat.name, "base": base.name, **({"notice": got.notice} if got.notice else {}), "applied": got.applied,
            "final": final, **({"whole": not w.cut} if final else {}), "attempt": attempt, "changes": changes_of(ch)}
-    out.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    out.flush()
+    if final or not got.applied:
+        out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        out.flush()
+    else:
+        w.pending = rec
     print(f"   {look_.labels[b]} = {r.text!r} ({lab}): " + ("refused by the camera" if not got.applied else
           ", ".join(f"{c.key} {c.before!r}->{c.after!r}" for c in ch[:4]) or "no change"), flush=True)
     if got.applied:
-        w.pos = place_
+        w.pos, w.changes[place_] = place_, rec["changes"]
     if final and ch:
         raise Failed(f"{name}: box {b} back on {r.text!r}, {len(ch)} records still differ from the base")
     return what
@@ -501,8 +594,9 @@ KEEP_OPENED: dict = {}          # box -> the pictures of every box as its walk f
 
 def walk_box(cam, link, eyes, cycle, model, path, option, labels, look_: Look, b, base, out, run, most: int) -> None:
     """Box b walked (the module's): Up until it comes round or stops, then Down from the value held where it stopped,
-    `most` values each way at most, the value held put back last; one attempt, finished once that put-back changed
-    nothing."""
+    `most` values each way at most, the value held put back last; one attempt of its own, finished once that put-back
+    changed nothing, so a later box's stop never takes back a box that finished. A line still waiting for the next
+    opening when the walk stops is written saying what applied is not known ("applied": null)."""
     name = f"{' > '.join(path)} > {option}"
     attempt = f"{run.dir.name}-{time.time_ns():x}"
     open_row(cam, cycle, model, path)
@@ -517,19 +611,22 @@ def walk_box(cam, link, eyes, cycle, model, path, option, labels, look_: Look, b
     print(f"{name}: box {b} ({look_.labels[b]}) holds {held!r}; Up from it, then Down where it stops, {most} values "
           "each way at most", flush=True)
     phase, counts = "up", {"up": 0, "down": 0}
-    while True:
-        target = max(w.values) + 1 if phase == "up" else min(w.values) - 1 if phase == "down" else 0
-        got = visit(cam, link, eyes, cycle, model, path, option, labels, look_, b, w, target, base, out, attempt)
-        if got in ("round", "back"):
-            break
-        if got == "end":
-            phase = "down" if phase == "up" else "back"
-            continue
-        counts[phase] += 1
-        if counts[phase] >= most:
-            print(f"   box {b}: {most} values {phase} from the one held, the deadline (--most): its "
-                  f"{'top' if phase == 'up' else 'low'} end not reached", flush=True)
-            phase, w.cut = ("down" if phase == "up" else "back"), True
+    try:
+        while True:
+            target = max(w.values) + 1 if phase == "up" else min(w.values) - 1 if phase == "down" else 0
+            got = visit(cam, link, eyes, cycle, model, path, option, labels, look_, b, w, target, base, out, attempt)
+            if got in ("round", "back"):
+                break
+            if got == "end":
+                phase = "down" if phase == "up" else "back"
+                continue
+            counts[phase] += 1
+            if counts[phase] >= most:
+                print(f"   box {b}: {most} values {phase} from the one held, the deadline (--most): its "
+                      f"{'top' if phase == 'up' else 'low'} end not reached", flush=True)
+                phase, w.cut = ("down" if phase == "up" else "back"), True
+    finally:
+        flush(w, out, applied=None)          # never seen again: what applied is not known
     finish_attempt(run, attempt, name)
     ups = [w.values[p] for p in sorted(w.values) if p > 0]
     downs = [w.values[p] for p in sorted(w.values, reverse=True) if p < 0]

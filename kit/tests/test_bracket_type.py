@@ -921,15 +921,15 @@ def test_no_enter_on_a_box_whose_title_no_longer_names_the_option(own_runs, monk
 
 
 def test_a_box_opening_on_another_value_than_the_last_ok_chose_stops_the_walk(own_runs, monkeypatch, capsys):
-    """After the 0.5EV proof the camera holds 1.0EV (made up): the next visit stops on opening, before any key in the
-    box."""
+    """After the 0.5EV proof the camera holds 1.0EV (made up), and no record bears the box out: the next visit stops
+    on opening, before any key in the box, and the 0.5EV line says what applied is not known."""
     cam = FieldsCam()
     F, root, _ = fields_world(monkeypatch, own_runs, cam)
     cam.downloaded = lambda tag: tag == "Bracket-Type-0-1" and cam.at[0].__setitem__(0, 3)
     with pytest.raises(SystemExit):
         run_fields(F, root, "Cont. Bracket", "--box", "0")
     assert "box 0 opened on '1.0EV', not '0.5EV', which the last OK chose" in capsys.readouterr().out
-    assert cam.keys[-1] == "right"
+    assert cam.keys[-1] == "right" and [x.get("applied") for x in fields_lines()] == [None]
 
 
 def test_a_put_back_that_leaves_a_record_changed_stops_the_row(own_runs, monkeypatch, capsys):
@@ -979,3 +979,86 @@ def test_enter_judges_the_box_on_a_fresh_frame(own_runs, monkeypatch):
     cam.edit[0] = 1
     chosen = F.enter(cam, "Cont. Bracket", OPTIONS, 0, 2, "0.5EV", want)
     assert cam.keys == ["enter"] and chosen.endswith("_enter-check.png")
+
+
+# ------------------------------------------------------------------------------------- a value the camera does not keep
+
+SHOTS = [box("Step Width", ["3", "4(Standard)", "5"], "4(Standard)"),
+         box("Number of Shots", ["0", "1", "2"], "0", wraps=True), box("Number of Shots", list("0123456789"), "0", wraps=True),
+         box("Number of Shots", list("0123456789"), "3", wraps=True)]
+
+
+def lowest_two(opt, edit):
+    """Focus Bracket's number of shots below 2 is no number of shots: the camera keeps 2, its lowest (264148)."""
+    if opt != 2:
+        return edit
+    digits = int("".join(b["values"][i] for b, i in zip(SHOTS[1:], edit[1:], strict=True)))
+    return [edit[0], 0, 0, 2] if digits < 2 else edit
+
+
+def shots_cam() -> FieldsCam:
+    cam = FieldsCam()
+    cam.spec = {0: CONT_BOXES, 2: SHOTS}
+    cam.at[2] = [b["held"] for b in SHOTS]
+    cam.correct = lowest_two
+    return cam
+
+
+def test_a_value_the_camera_does_not_keep_is_a_finding_and_the_walk_goes_on(own_runs, monkeypatch, capsys):
+    """--option "Focus Bracket" --box 3 from the held 003: 4 to 9 proved; 0 asked, the camera keeps 2 (its record 2,
+    as the box then shows): that line says what was asked and what was kept, applied false; from 2 the box is stepped
+    back onto the 0 asked and on to 1, which the camera keeps as 2 too; then 2, kept as asked; then 3 comes round and is
+    put back. Every line has a download, the walk's one attempt finishes, and the report credits no code to an asked
+    value."""
+    import pass2_report as R
+    cam = shots_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Focus Bracket", "--box", "3")
+    lines = fields_lines()
+    assert [(x["index"], x["box"], x["applied"], x.get("asked"), x.get("kept"), x["final"]) for x in lines] == [
+        ([3, 1], "4", True, None, None, False), ([3, 2], "5", True, None, None, False),
+        ([3, 3], "6", True, None, None, False), ([3, 4], "7", True, None, None, False),
+        ([3, 5], "8", True, None, None, False), ([3, 6], "9", True, None, None, False),
+        ([3, 7], "0", False, "0", "2", False), ([3, 8], "1", False, "1", "2", False),
+        ([3, 9], "2", True, None, None, False), ([3, 0], "3", True, None, None, True)]
+    assert lines[6]["changes"] == [{"key": "global:0x9003", "before": 3, "after": 2}]
+    out = capsys.readouterr().out
+    assert "box 3: the camera kept '2', not '0'" in out
+    rows = counted_rows(root)
+    got = R.values_of(rows[f"Bracket Settings > Bracket Type > Focus Bracket [{CTX}]"])["global:0x9003"]
+    # Step Width never walked: the record holds both fields (the review's rule); no label of an asked value, 0 or 1
+    assert got == {f"4(Standard) | {n}": n for n in range(2, 10)}
+
+
+def test_a_value_the_camera_does_not_keep_where_no_record_bears_the_box_out_stops(own_runs, monkeypatch, capsys):
+    """The camera shows 2 after 0 was chosen, but its record holds 5 (made up): nothing says the camera kept 2, the walk
+    stops on opening as before."""
+    cam = shots_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.extra = {"global:0x9003": 0}
+    real = cam.records
+
+    def records():
+        got = real()
+        if got["global:0x9003"] == 2:
+            got["global:0x9003"] = 5
+        return got
+    cam.records = records
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Focus Bracket", "--box", "3")
+    assert "box 3 opened on '2', not '0', which the last OK chose" in capsys.readouterr().out
+
+
+def test_each_box_of_a_run_is_its_own_attempt(own_runs, monkeypatch, capsys):
+    """--box 1 --box 3, the walk of box 3 stopped: box 1's attempt finished and its lines count; box 3's are left out."""
+    import pass2_report as R
+    cam = shots_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.lost = ("up", 5)                       # box 1 takes three Ups (1, 2, round to 0); box 3's second Up is lost
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Focus Bracket", "--box", "1", "--box", "3")
+    lines = fields_lines()
+    assert {x["index"][0] for x in lines} == {1, 3} and len({x["attempt"] for x in lines}) == 2
+    run = root / "kit2_pass2"
+    counted = {x["index"][0] for i, x in enumerate(lines) if i not in R.unfinished(lines, R.attempts_done(run), {})}
+    assert counted == {1}
