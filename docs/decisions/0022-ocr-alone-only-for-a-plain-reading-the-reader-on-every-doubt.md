@@ -36,3 +36,7 @@ It comes in by stages, each measured first
 ([the playbook's section 5](../REMAPPING_PLAYBOOK.md#5-readers-accuracy-before-speed)); no run decides or presses by
 it yet, and meanwhile a plain OCR reading the reader contradicts stands. A run's start check already stops a run when
 no reader answers or an OCR engine is unknown.
+
+Since 2026-11-19 one model in two builds that read two things casts no vote, and a third reader of a model that has read
+the frame is not asked: a reading no longer stands on OCR and a third reader against the second reader's own other
+build, and a third role given only another build of the second's model adds no vote at all.

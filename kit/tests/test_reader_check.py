@@ -410,7 +410,7 @@ def test_one_of_several_third_readers_that_does_not_answer_is_skipped_and_the_ot
     assert "reader 'glm' does not answer: 'vllm' stands in as the third reader for this run" in capsys.readouterr().out
 
 
-def test_one_of_several_third_readers_failing_during_the_run_takes_no_stand_in(world, monkeypatch):
+def test_one_of_several_third_readers_failing_during_the_run_takes_no_stand_in(world, monkeypatch, capsys):
     """A third reader of several that will not connect during the run: its question fails to its caller as any reader's
     does, and no reader is brought in for it; a lone third reader's failure takes a stand-in as it always did."""
     write, _ = world
@@ -420,6 +420,10 @@ def test_one_of_several_third_readers_failing_during_the_run_takes_no_stand_in(w
     with pytest.raises(urllib.error.URLError):
         vlm.ask_role("third.2", b"a frame", "prompt", 5)
     assert brought == []
+    err = capsys.readouterr().err                          # words that promise it no stand-in
+    assert "reader 'glm' failed during the run" in err and "the other third readers vote without it" in err
+    assert "stand-in" not in err
+    vlm.forget()
     write([local("vllm", 8001), local("glm", 8003)], roles={"second": "vllm", "third": "glm"})
     with pytest.raises(urllib.error.URLError):
         vlm.ask_role("third", b"a frame", "prompt", 5)
@@ -443,8 +447,15 @@ def test_one_family_is_said_only_where_no_third_reader_is_of_another_model(world
                                        "qwen3.8-27b, in builds of their own: their answers are one vote")
     write(qwen, roles={"third": ["vllm"]})                 # the second reader itself: no third reader to speak of
     assert vlm.one_family() == ""
-    write(qwen)                                            # today's form, no "roles": as it always was
+    write([*qwen, {**local("gemma", 8005, "gemma-4-26b-a4b-it"), "url": "https://api.example.com/v1"}],
+          roles={"third": ["omlx", "gemma"]})
+    assert vlm.one_family() == ""
+    monkeypatch.setattr(vlm, "LOCAL_ONLY", True)           # a --network run: the hosted third reader is never asked
+    assert "the third reader 'omlx' are one model" in vlm.one_family()
+    monkeypatch.setattr(vlm, "LOCAL_ONLY", False)
+    write(qwen)                                            # today's form, no "roles": the third reader is not asked
     assert vlm.one_family().startswith("the second reader 'vllm' and the third reader 'omlx' are one model")
+    assert "the third is not asked, for it could add no independent vote" in vlm.one_family()
     assert reader_check.main([]) == 0
     assert "readers: the second reader 'vllm' and the third reader 'omlx' are one model" in capsys.readouterr().out
 

@@ -37,7 +37,8 @@ how two readings are compared, by the kind of thing read, is agree()'s docstring
        stands); the reading stands only when two of the votes name the same expected option and nothing else is named
        as often, else it is refused naming every reading.
      - A vote counts once per source: one OCR engine is one vote whatever name it goes by (engine_of), and two readers
-       of one model are one vote (tally). The reader does not win a disagreement by itself: measured on the first
+       of one model are one vote, none where they read two things (tally), so a third reader of a family that has read
+       the frame is not asked (family_voted). The reader does not win a disagreement by itself: measured on the first
        camera's proofs, where OCR's reading named no option the reader's option was sometimes another one, where OCR
        had read nothing it was not.
      - A plain OCR reading the reader contradicts is, for now, recorded and stands; it becomes a vote like any other
@@ -71,7 +72,8 @@ yet; and, for finding a row, an icon OCR read as letters in front of its label l
 
 The eyes go through one seam each, so that a test fakes them in one place (kit/tests/conftest.py, eyes):
   _ocr_lines(frame, eng)                       camkit.ocr.read on the frame's file (eng: the second engine)
-  _reader_answer(image, question, timeout, role)  camkit.vlm.ask_role(role, ...) for "second" or "third", a stand-in
+  _reader_answer(image, question, timeout, role)  camkit.vlm.ask_role(role, ...) for "second", "third" or a later
+                                               third reader's key ("third.2": camkit.vlm.voter_key), a stand-in
                                                taking the role when that reader will not connect; gives the answer
                                                and the reader's name and model
   _reader_model(role)                          the model a role's reader would answer with, or None (no such reader)
@@ -719,28 +721,58 @@ class Vote:
 
 def tally(votes, expect: str, choices=()) -> tuple:
     """(a Vote whose reading stands, the eyes behind it), or (None, ()): a reading stands when votes from two or more
-    independent sources name it and no reading that names something else has as many. A source votes once: two readers
-    of one model, or one reader asked twice, are one vote. Votes stand together only as a group whose every two members
-    agree (agree, with the same choices: the one predicate, so a reading tally keeps is one agree takes); agree is not
-    transitive for codes ("PPB" agrees with "PP8" and "PPb", which do not agree), so a reading two contradicting votes
-    each lean to stands for neither. With choices a vote that names none of them backs nothing."""
+    independent sources name it and no reading that names something else has as many (standing, which kit/pass1_map.py
+    counts by too). A source votes once: two readers of one model, or one reader asked twice, are one vote, and one
+    whose readings do not all agree casts none (one model reading two things is not a vote on each side). Votes stand
+    together only as a group whose every two members agree (agree, with the same choices: the one predicate, so a
+    reading tally keeps is one agree takes); agree is not transitive for codes ("PPB" agrees with "PP8" and "PPb", which
+    do not agree), so a reading two contradicting votes each lean to stands for neither. With choices a vote that names
+    none of them backs nothing."""
     choices = tuple(str(o) for o in choices or ())
     said = [v for v in votes if v.text and canonical(v.text)]
-    if choices:
-        said = [v for v in said if choice_of(v.text, expect, choices) is not None]
+    group = standing(said, lambda a, b: agree(a.text, b.text, expect, choices), lambda v: v.source,
+                     (lambda v: choice_of(v.text, expect, choices) is not None) if choices else None)
+    return (group[0], tuple(w.eye for w in group)) if group else (None, ())
+
+
+def family_voted(votes, model) -> bool:
+    """Whether a reader of `model`'s family (model_id) has read something among `votes` already (a vote of that source
+    with a reading). A third reader of such a family is not asked (camkit.reading.read): by tally's rule it could make no
+    reading stand, for agreeing adds no vote and disagreeing takes its family's away."""
+    src = f"reader:{model_id(model)}"
+    return any(v.source == src and v.text and canonical(v.text) for v in votes)
+
+
+def standing(said: list, same, source, backs=None) -> list | None:
+    """The votes behind the reading that stands, in said's order, or None: the one counting rule, camkit.reading.tally's
+    and kit/pass1_map.py's (decision 22). said: votes that each read something; same(a, b): whether two of them name
+    the same thing; source(v): what cast it (an OCR engine, a model family, a site's check); backs(v): whether it may
+    back a reading (with options: it names one), else every vote may.
+      - A source whose readings do not all agree with each other casts no vote at all: one model in two builds that
+        read two things is not one vote on each side (2026-11-19, the review of several third readers).
+      - Votes stand together only as a group whose every two members agree, and a source stands in a group with every
+        reading it gave or not at all.
+      - The group of the most sources stands, when they are two or more and no other group has as many."""
+    by = {}
+    for v in said:
+        by.setdefault(source(v), []).append(v)
+    torn = {s for s, vs in by.items() if any(not same(a, b) for a, b in itertools.combinations(vs, 2))}
+    said = [v for v in said if source(v) not in torn and (backs is None or backs(v))]
     groups = {}
     for i, v in enumerate(said):
-        # agree itself decides who stands together, so a reading tally keeps is one agree takes
-        members = [j for j, w in enumerate(said) if j == i or agree(v.text, w.text, expect, choices)]
-        if all(agree(said[a].text, said[b].text, expect, choices) for a, b in itertools.combinations(members, 2)):
+        # same itself decides who stands together, so a reading the rule keeps is one same takes
+        members = [j for j, w in enumerate(said) if j == i or same(v, w)]
+        whole = {source(said[j]) for j in members} - {source(w) for k, w in enumerate(said) if k not in members}
+        members = [j for j in members if source(said[j]) in whole]
+        if i in members and all(same(said[a], said[b]) for a, b in itertools.combinations(members, 2)):
             groups.setdefault(tuple(members), [said[j] for j in members])
-    ranked = sorted(groups.values(), key=lambda g: len({w.source for w in g}), reverse=True)
+    ranked = sorted(groups.values(), key=lambda g: len({source(w) for w in g}), reverse=True)
     if not ranked:
-        return None, ()
-    n = len({w.source for w in ranked[0]})
-    if n < 2 or (len(ranked) > 1 and len({w.source for w in ranked[1]}) == n):
-        return None, ()
-    return ranked[0][0], tuple(w.eye for w in ranked[0])
+        return None
+    n = len({source(w) for w in ranked[0]})
+    if n < 2 or (len(ranked) > 1 and len({source(w) for w in ranked[1]}) == n):
+        return None
+    return ranked[0]
 
 
 OUTCOMES = ("plain", "stands on both", "stands on one reader", "one reader, no options", "ocr names no option",
@@ -1168,12 +1200,12 @@ def _once(frame, where: Region, expect: str, stakes: str, choices: tuple, second
 
     def third_reader(key: str = vlm.THIRD):
         """One reader of the "third" role (key: "third", then "third.2"... in the order private/config.json gives them,
-        camkit.vlm.voter_key), when one is configured whose model is not, as configured, the second's (asked as before
-        2026-11-18; its vote is counted by family, model_id, so one of the second's family adds none). Its vote's eye
-        and its raw reading's key are the role key."""
+        camkit.vlm.voter_key), when one is configured whose model is not, as configured, the second's, and whose family
+        has read nothing on this frame yet (family_voted: the second reader's or an earlier third reader's). Its vote is
+        counted by family, model_id. Its vote's eye and its raw reading's key are the role key."""
         model = _reader_model(key)
         second = str(asked.model or asked.name or "unknown").strip().casefold() if asking else None
-        if model is None or str(model).strip().casefold() == second:
+        if model is None or str(model).strip().casefold() == second or family_voted(votes, model):
             return
         got = ask(frame, where.prompt, TIMEOUTS[stakes], role=key)
         raw[key] = _picked(where, got.answer)

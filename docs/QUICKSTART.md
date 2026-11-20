@@ -105,11 +105,12 @@ keys.
 - **`ocr`** (optional): `"apple"` (the Mac's default) or `"rapidocr"` (the default elsewhere).
 - **`readers`:** one entry per VLM ([Choosing a reader](#choosing-a-reader)).
 - **`roles`** (optional): `{"second": ..., "third": ...}`, the reader that gives the second reading and the one that
-  breaks ties; `"third"` may be a list, `["gemma", "glm"]`, asked in turn until two independent votes name one option,
-  and a third reader that does not answer is skipped for the run. Without it, the first reader in `readers` gives the
-  second reading and the next breaks ties, and a paid reader is asked in no role but its own. A third reader counts as
-  a vote of its own only when its `model` is another model than the second's, not another build of it
-  ([decision 22](decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md)).
+  breaks ties; `"third"` may be a list, `["gemma", "glm"]`, asked in turn until two independent votes name one option.
+  Where it names several, one that does not answer is skipped for the run; a lone third reader that does not answer
+  takes a local stand-in. Without `roles`, the first reader in `readers` gives the second reading and the next breaks
+  ties, and a paid reader is asked in no role but its own. One model is one vote, whatever its builds
+  ([decision 22](decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md)): a third reader of
+  the second's model is not asked, so give the third role another model.
 
 ### Choosing a reader
 

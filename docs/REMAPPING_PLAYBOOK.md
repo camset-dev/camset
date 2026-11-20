@@ -163,8 +163,9 @@ blank frames** and may read a button or a neighbouring row instead. The minimum 
 different families, so a third reader breaks ties without the agent's eye.
 
 **Rules:**
-- Never settle a disagreement by picking the likelier reading silently. Use a majority of three, else the eye with a
-  note naming the frame, else ask the owner.
+- Never settle a disagreement by picking the likelier reading silently. Use a majority of independent readers (one
+  vote per model family, none for one that read two things), else the eye with a note naming the frame, else ask the
+  owner.
 - Never ask a VLM about a black or near-black frame: read that row through the OSD.
 - **A second reading kept in a proof is a check only if it reads the option chosen.** Count how often it names the
   proof's label, and read the option before OK, or the screen that shows the value just chosen.

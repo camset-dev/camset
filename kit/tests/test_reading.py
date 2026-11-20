@@ -915,6 +915,58 @@ def test_the_third_roles_readers_vote_in_turn_until_a_reading_stands(eyes):
     assert r.refused.startswith(reading.DISAGREE) and eyes.asked == ["option"]
 
 
+def test_one_family_on_two_sides_casts_no_vote_and_is_never_asked_twice(eyes):
+    """Two readers of one model are one vote, never one on each side (decision 22; the review of 2026-11-19): a source
+    whose readings do not all agree casts no vote at all (tally), and a third reader of a family that has read the
+    frame, the second reader's included, is not asked (family_voted). The reviewer's case: the second reader (a Qwen
+    build) reads Hi, OCR Lo, the third readers gemma Mid and another Qwen build: no reading stands, and the Qwen build
+    is not asked; and a source stands in a group with every reading it gave or not at all."""
+    V = reading.Vote
+    labels = ["Lo", "Mid", "Hi"]
+    torn = [V("ocr", "ocr:apple", "Lo"), V("reader", "reader:qwen", "Hi"), V("third", "reader:gemma", "Mid"),
+            V("third.2", "reader:qwen", "Lo")]
+    assert reading.tally(torn, "label", labels) == (None, ())                    # before: Lo, by OCR and Qwen's own build
+    gemmas = [V("ocr", "ocr:apple", "Lo"), V("reader", "reader:qwen", "Hi"), V("third", "reader:gemma", "Mid"),
+              V("third.2", "reader:gemma", "Lo")]
+    assert reading.tally(gemmas, "label", labels) == (None, ())
+    alike = [V("ocr", "ocr:apple", "Lo"), V("reader", "reader:qwen", "Hi"), V("third", "reader:qwen", "Hi"),
+             V("third.2", "reader:gemma", "Hi")]
+    assert reading.tally(alike, "label", labels)[0].text == "Hi"                 # one family agreeing: one vote
+    # with OCR and another model on one side, the torn family's absence settles it: two independent sources
+    tie = [V("ocr", "ocr:apple", "Lo"), V("third", "reader:gemma", "Lo"), V("reader", "reader:qwen", "Hi"),
+           V("third.2", "reader:glm", "Hi")]
+    assert reading.tally(tie, "label", labels) == (None, ())
+    assert reading.tally([*tie, V("third.3", "reader:qwen", "Lo")], "label", labels)[1] == ("ocr", "third")
+    # codes: PPB agrees with PP8 and with PPb, which do not agree; a family reading PP8 and PPB backs no group with PPb
+    codes = [V("reader", "reader:qwen", "PP8"), V("third", "reader:qwen", "PPB"), V("ocr", "ocr:apple", "PPb")]
+    assert reading.tally(codes, "code") == (None, ())
+    assert reading.tally([V("third", "reader:qwen", "PPB"), V("ocr", "ocr:apple", "PPb")], "code")[0].text == "PPB"
+    eyes.models.update({"second": "RedHatAI/Qwen3.8-27B-INT4", "third": "gemma-4", "third.2": "Qwen3.8-27B-4bit"})
+    eyes.answer("option", {"selected": "Hi"})
+    eyes.answer("option", {"selected": "Mid"}, role="third")
+    eyes.answer("option", {"selected": "Lo"}, role="third.2")
+    f = eyes.frame("00090_down.png")
+    eyes.see(f, "Lo", box=CAROUSEL.box)
+    r = reading.read(f, CAROUSEL, "label", "proof", choices=labels)
+    assert r.refused.startswith(reading.DISAGREE) and eyes.asked == ["option", "third option"]
+    # a family has voted where one of its readers read something: a reader that gave no answer leaves its family free
+    asked_second = [V("ocr", "ocr:apple", "Lo"), V("reader", f"reader:{reading.model_id('RedHatAI/Qwen3.8-27B-INT4')}", None)]
+    assert not reading.family_voted(asked_second, "Qwen3.8-27B-4bit")
+    assert reading.family_voted([*asked_second[:1], V("reader", "reader:qwen3.8-27b", "Hi")], "Qwen3.8-27B-4bit")
+
+
+def test_a_guard_asks_no_further_third_reader_once_a_reading_stands(eyes):
+    """A guard's lone reading settled by the first third reader: the next is not asked (each only while no reading
+    stands)."""
+    eyes.models.update({"third": "gemma-4", "third.2": "glm-4.6v"})
+    eyes.answer("menu", {"rows": [{"label": "Movie", "highlighted": True}]})
+    eyes.answer("menu", {"rows": [{"label": "Movie", "highlighted": True}]}, role="third")
+    eyes.answer("menu", {"rows": [{"label": "Movie", "highlighted": True}]}, role="third.2")
+    f = eyes.frame("00082_down.png", bar=(140, 212, 560, 252))
+    r = reading.read(f, reading.LIT_ROW, "label", "guard")
+    assert (r.text, r.by, r.agreed) == ("Movie", "votes", ["reader", "third"]) and eyes.asked == ["menu", "third menu"]
+
+
 def test_a_guard_asks_the_third_roles_readers_in_turn_for_a_lone_readers_reading(eyes):
     """A guard where OCR read nothing: the reader's reading needs a second, independent vote, and each reader of the
     third role is asked in turn for it; every reading they gave is judged (texts), and two that differ refuse."""

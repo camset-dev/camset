@@ -921,9 +921,10 @@ def _passed(checks: list) -> None:
 def one_family(skipped=None) -> str:
     """Plain words for a second reader and third readers that are all one model in builds of their own
     (camkit.reading.model_id: their family), whose answers are one vote (decision 22), or "" where any third reader is
-    another model, or none is left to vote: the role has none, or each is the second reader itself or skipped for the
-    run (skipped: the readers' names, default those the start check skipped). Said at the start check, and by
-    kit/tools/reader_check.py; it changes no role."""
+    another model, or none is left to vote: the role has none, or each is the second reader itself, skipped for the run
+    (skipped: the readers' names, default those the start check skipped) or, in a --network run (LOCAL_ONLY), not a
+    local reader. Such a third reader is not asked where the second reader has read the frame (camkit.reading's
+    family_voted). Said at the start check, and by kit/tools/reader_check.py; it changes no role."""
     from . import reading
     skipped = _SKIPPED if skipped is None else set(skipped)
     try:
@@ -933,18 +934,20 @@ def one_family(skipped=None) -> str:
         return ""
     name = str(second.get("name"))
     family = reading.model_id(second.get("model") or second.get("name"))
-    voting = [v for v in voting if str(v.get("name")) not in {name, *skipped}]
+    voting = [v for v in voting if str(v.get("name")) not in {name, *skipped}
+              and not (LOCAL_ONLY and not local_reader(v))]       # a --network run asks local readers only
     if name in skipped or not voting or any(reading.model_id(v.get("model") or v.get("name")) != family for v in voting):
         return ""
     names = ", ".join(repr(str(v.get("name"))) for v in voting)
     if len(voting) == 1:
         return (f"the second reader {name!r} and the third reader {names} are one model, {family}, in two builds: "
                 "their answers are one vote, not two (docs/decisions/0022), so where OCR and the second reader disagree "
-                "the third adds no independent vote; a third reader of another model would (private/config.json "
-                "\"roles\")")
+                "the third is not asked, for it could add no independent vote; a third reader of another model would "
+                "(private/config.json \"roles\")")
     return (f"the second reader {name!r} and the third readers {names} are one model, {family}, in builds of their own: "
             "their answers are one vote (docs/decisions/0022), so where OCR and the second reader disagree no third "
-            "reader adds an independent vote; a third reader of another model would (private/config.json \"roles\")")
+            "reader is asked, for none could add an independent vote; a third reader of another model would "
+            "(private/config.json \"roles\")")
 
 
 # ------------------------------------------------------------------------------------------------ during a run
@@ -970,17 +973,20 @@ def log_to(run) -> None:
     _RUN = run
 
 
-def failing(cfg: dict, e: BaseException, timeout: float | None = None) -> None:
+def failing(cfg: dict, e: BaseException, timeout: float | None = None, role: str | None = None) -> None:
     """A reader that failed a run's question, said once per reader in the run, on standard error and in the run's
     events.jsonl ("reader_failing"), not once per question: the question itself is still taken as no answer by its
-    caller, as ever."""
+    caller, as ever. role: the role key it was asked under; one of several third readers gets no stand-in, and the
+    words say so."""
     name = str(cfg.get("name"))
     if name in _FAILING:
         return
     _FAILING.add(name)
     why = failure(e, timeout)
-    print(f"reader {name!r} failed during the run ({why}): each question to it is taken as no answer, the readings go "
-          f"on with OCR alone or a local stand-in, and this is said once", file=sys.stderr, flush=True)
+    goes_on = ("the other third readers vote without it" if voter_index(role) is not None and several_voters() else
+               "the readings go on with OCR alone or a local stand-in")
+    print(f"reader {name!r} failed during the run ({why}): each question to it is taken as no answer, {goes_on}, and "
+          f"this is said once", file=sys.stderr, flush=True)
     with contextlib.suppress(Exception):
         if _RUN is not None and hasattr(_RUN, "log"):
             _RUN.log("reader_failing", reader=name, why=why)
@@ -1373,7 +1379,7 @@ def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
         return answer
     except Exception as e:
         asked(name, cfg, t, False)
-        failing(cfg, e, timeout)
+        failing(cfg, e, timeout, name)
         # one of several third readers gets no stand-in: the one taking its place would be a reader already voting
         if (not isinstance(e, urllib.error.URLError) or standing_in(name) is not None
                 or (voter_index(name) is not None and several_voters()) or stand_in(name, role(name)) is None):
@@ -1389,7 +1395,7 @@ def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
         return answer
     except Exception as e:
         asked(name, cfg, t, False)
-        failing(cfg, e, max(timeout, 60))
+        failing(cfg, e, max(timeout, 60), name)
         raise
 
 
