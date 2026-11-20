@@ -288,6 +288,12 @@ def test_a_name_is_right_only_where_the_reading_spells_it_as_published():
     assert judge_name("axis", "Hi", "Zqx Mode: Hi", opts, dict.fromkeys(two, "Zqx Mode: Hi"), fixes)[1] == "all agree"
     assert judge_name("axis", "Hi", "Zqx Mode: Hi", opts, dict.fromkeys(two, "Zqx Mode: Hi+"), fixes) == \
         (["another option"] * 2, "none agree, all on another reading")
+    # a look's base is its code, drawn before its long name; the code is compared character by character
+    looks = ["PT", "NT", "P7"]
+    assert judge_name("look base", "PT", "PT", looks, dict.fromkeys(two, "PT(Portrait)"))[1] == "all agree"
+    assert judge_name("look base", "PT", "PT", looks, dict.fromkeys(two, "NT (Neutral)")) == \
+        (["another option"] * 2, "none agree, all on another reading")
+    assert judge_name("look base", "PT", "PT", looks, dict.fromkeys(two, "P7(Portrait)"))[0] == ["another option"] * 2
     held = {"Zqx 50M L: 50M": {("1", "L: 50M")}, "Zqx 21M M: 21M": {("2", "M: 21M")}}
     assert judge_name("table picker", "L: 50M", "Zqx 50M L: 50M", list(held), dict.fromkeys(two, "Zqx 50M L: 50M"),
                       held)[1] == "all agree"

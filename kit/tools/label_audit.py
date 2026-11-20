@@ -29,7 +29,8 @@ what backs it (kit/writer/proofs.py NAME_SOURCES). The audit takes:
   judging  the question is whether the name is spelled as drawn, not only whether a reader picks its option: a vote
            is right only where the reading spells the published name (pass2_report.same_label), or, where that name
            is a part of the line the camera draws, the part of the reading in its place (after or before the colon:
-           "DRO Bracket: Hi" for Hi), or the name alone of the options held in it as a whole word; a reading that
+           "DRO Bracket: Hi" for Hi), or the name alone of the options held in it as a whole word (a look's base: its
+           code, "PT" of "PT(Portrait)", character by character); a reading that
            picks the option by the census's rule (judge: a loose likeness, an icon left out, the closest option) but
            spells it otherwise is a vote of its own ("spelled otherwise"); a star count, a number and a box's state
            are judged exactly, as the census does. One vote per model family (camkit.reading.model_id: the first
@@ -477,9 +478,13 @@ def spelled(n: Name, text: str) -> bool:
     """Whether a reading spells n's published name as the definition does, strictly (pass2_report.same_label: case,
     spacing, stops and the readers' look-alikes aside, every letter, digit and sign kept): the whole reading, or the
     part of it that stands where the name stands in the recorded label (Name.part: after or before its colon), or, held,
-    the name as a whole word in it while no other option's name is held there at all."""
+    the name as a whole word in it while no other option's name is held there at all; a look's base, its code as the
+    census takes it from the line (its first word), character by character (camkit.reading.code_same)."""
     if p2.same_label(text, n.name):
         return True
+    if n.kind == "look base":         # the look's code, which the carousel line draws before its long name: "PT(Portrait)"
+        code = re.split(r"[\s(]", reading.canonical(text).strip(), maxsplit=1)[0]
+        return reading.agree(code, n.name, "code")
     head, colon, tail = text.partition(":")
     if n.part == "after":
         return bool(colon) and p2.same_label(tail, n.name)
