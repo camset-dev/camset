@@ -340,3 +340,25 @@ def test_a_menus_place_says_what_differs_and_gives_the_settings_own_tab_back():
     assert placement.place_differs(own, {**own, "row_at": [6]}, s) == {"row": ["Custom Key/Dial Set."], "row_at": [6]}
     assert placement.place_differs(own, {"row": ["Drive Mode"], "row_at": [2]}, s) == \
         {"row": ["Drive Mode"], "row_at": [2], "row_tab": "Shooting", "row_group": "Drive Mode"}
+
+
+@pytest.mark.parametrize("proofs, menus", [
+    # (a) Stills moved one record, Movie the other: each in its own mode's menu; S&Q, which no proof names, keeps both
+    ((["D-Range Optimizer"], ["D-Range Optimizer [Movie mode]"]), (["Still", "S&Q"], ["Movie", "S&Q"])),
+    # (b) both moved together in each mode: one row in every menu, as before
+    ((["D-Range Optimizer", "D-Range Optimizer [Movie mode]"], ["D-Range Optimizer", "D-Range Optimizer [Movie mode]"]),
+     (["Still", "Movie", "S&Q"], ["Still", "Movie", "S&Q"])),
+])
+def test_one_settings_records_proved_in_different_modes_are_each_kept_to_their_own(proofs, menus):
+    """D-Range Optimizer kept in two records on one row: where Stills moved one and Movie the other, each keeps its own
+    mode's menu (and the menus no proof names, which nothing tells apart); where both moved in each mode, both stay in
+    every menu."""
+    rows = [page("1/1", "Color/Tone", row("D-Range Optimizer"))]
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}],
+            "modes": [{"mode": m, "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}]} for m in ("Movie", "S&Q")]}
+    d = {"model": "TEST", "tabs": ["Shooting"], "menu": [{"tab": "Shooting", "group": "Color/Tone", "label": "D-Range Optimizer", "order": 0}],
+         "settings": [setting("global:0x0001", "D-Range Optimizer", "Color/Tone", *proofs[0]),
+                      setting("global:0x0002", "D-Range Optimizer", "Color/Tone", *proofs[1])]}
+    got = placement.by_menu(d, tree, MENUS)
+    assert (got["global:0x0001"]["row_menus"], got["global:0x0002"]["row_menus"]) == menus
+

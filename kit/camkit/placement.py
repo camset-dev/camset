@@ -975,6 +975,39 @@ def split_by_guide(doc, top: dict, out: dict, menus: list, guide: list, paths_of
     return n
 
 
+def split_by_proofs(doc, top: dict, out: dict, menus: list, paths_of, every) -> int:
+    """One setting kept in several records on one row (one name, one place, no copy among them: the editor's linked
+    records) whose proofs of that row were made in modes no two of them share (proof_modes: Stills moved one, Movie the
+    other): each record is kept in the menus of its own proofs' modes, and in every menu whose modes none of their
+    proofs name (nothing tells those apart: as before). Records that moved together in each mode, or whose proofs share a
+    mode, keep their menus. How many settings it cut."""
+    modes = {m["name"]: set(m.get("modes") or ()) for m in menus}
+    groups = collections.defaultdict(list)
+    for s in doc["settings"]:
+        k, place = s["key"], top.get(s["key"])
+        if place and k in out and not s.get("copy_of"):
+            groups[(s.get("name"), tuple(place["row"]), tuple(place["row_at"]), place.get("row_mode"))].append(s)
+    n = 0
+    for ss in groups.values():
+        if len(ss) < 2:
+            continue
+        sets = [proof_modes(paths_of(s), top[s["key"]], every) for s in ss]
+        if any(a & b for i, a in enumerate(sets) for b in sets[i + 1:]):
+            continue
+        named = set().union(*sets)
+        for s, mine in zip(ss, sets, strict=True):
+            keep = [m for m in out[s["key"]]["row_menus"] if modes[m] & mine or not modes[m] & named]
+            if keep and keep != out[s["key"]]["row_menus"]:
+                out[s["key"]]["row_menus"] = keep
+                for m in list(out[s["key"]].get("row_places") or {}):
+                    if m not in keep:
+                        del out[s["key"]]["row_places"][m]
+                if "row_places" in out[s["key"]] and not out[s["key"]]["row_places"]:
+                    del out[s["key"]]["row_places"]
+                n += 1
+    return n
+
+
 def place_differs(own: dict, got: dict, s) -> dict:
     """A menu's place written as what differs from the setting's own (`own`): row and row_at together where either
     differs; row_tab, row_group, under_option where they differ, the setting's own tab or group given where the menu's
@@ -1004,7 +1037,8 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None)
     where such a path names the row it lands on (settings() on that menu's tree alone, the rows it does not know grown
     from those paths only). A menu drawn from no menu of the tree holds nothing (menu_of). Nothing in a menu is taken
     from another menu's rows. Records that differ by mode but share one row are then kept to their own mode's menus by
-    the Help Guide's items (`guide`, split_by_guide). A menu's place is written as what differs from the setting's own
+    the Help Guide's items (`guide`, split_by_guide), and one setting's records proved in modes none of them shares by
+    their proofs (split_by_proofs). A menu's place is written as what differs from the setting's own
     (place_differs)."""
     hand = hand or {}
     paths_of = with_hand(hand)
@@ -1068,4 +1102,5 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None)
                 entry.setdefault("row_places", {})[menu["name"]] = differs
     if guide:
         split_by_guide(doc, top, out, menus, guide, paths_of, every)
+    split_by_proofs(doc, top, out, menus, paths_of, every)
     return out
