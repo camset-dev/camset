@@ -200,6 +200,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that
+  list names no blocker for Focus Mode Dial instead of the shorter one, and the test expects whichever its data gives.
 - **A stopped Recall Custom run (`customshoot_values.py`, `customshoot_run.py`) presses nothing more but MENU:** its
   start file goes back and is checked, it exits 8 (4 for a STOP file left before it, which it names, or a working copy
   only a hand can put back), it gives `customshoot_values.py --put-back --against <its start file>` only where opening
