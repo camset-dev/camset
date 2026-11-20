@@ -5716,6 +5716,7 @@ pub(crate) mod tests {
         // the window's detail panel does, so it is left out here)
         let same = ["value", "label", "original", "changed", "kind", "options", "editable", "locked", "put_back", "unnamed", "warn", "inactive", "proof", "help", "stored"];
         let mut rows = 0;
+        let mut retitled = None;
         for m in app.menus().iter().map(|m| m.name.clone()).collect::<Vec<_>>() {
             let s = ask(&mut app, "state", json!({ "target": 0, "menu": m }));
             for t in s["tabs"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()) {
@@ -5726,11 +5727,21 @@ pub(crate) mod tests {
                     for f in same {
                         assert_eq!(r.get(f), want.get(f), "{m} > {t}: {} {f}", r["key"]);
                     }
+                    // a row the menu titles otherwise than the setting's own name, that a change can be made on
+                    if retitled.is_none() && r["full_name"].is_string() && r["editable"] == true && r["kind"] == "choice" && r["options"].as_array().is_some_and(|o| o.len() >= 2) {
+                        retitled = Some((m.clone(), r.clone()));
+                    }
                     rows += 1;
                 }
             }
         }
         assert!(rows > 500, "{rows} rows");
+        // a change on such a row: the status names the setting by its own name, as the window's, not by the row's title
+        let (m, r) = retitled.expect("a row titled as the camera draws it, otherwise than its setting's name");
+        let v = r["options"].as_array().unwrap().iter().map(|o| o[0].as_i64().unwrap()).find(|v| Some(*v) != r["value"].as_i64()).unwrap();
+        ask(&mut app, "set", json!({ "target": 0, "menu": m, "key": r["key"], "value": v }));
+        let full = r["full_name"].as_str().unwrap();
+        assert!(app.status.starts_with(&format!("{full} set to ")), "{m}: {} ({} is the row's title)", app.status, r["name"]);
         done(&dir, &user);
     }
 
