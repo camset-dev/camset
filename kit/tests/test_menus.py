@@ -468,3 +468,22 @@ def test_with_no_menu_tree_the_definitions_menus_stay_as_they_are(tmp_path, monk
     assert got["camera"]["menus"] == menus
     assert {s["key"]: {f: s.get(f) for f in ("row_menus", "row_places")} for s in got["settings"]} == was
     assert check_public.menu_problems(got) == []
+
+
+def test_a_menus_place_always_carries_its_row_and_row_at():
+    """A menu's place that differs from the setting's own only in its group (a top row Movie draws on its TC/UB page)
+    still names its row and row_at, as the definition's schema and the editor's reader require: a written definition
+    the hooks would refuse is never made."""
+    from jsonschema import Draft202012Validator
+    s = {"tab": "Shooting", "group": "Drive Mode"}
+    own = {"row": ["Anti-flicker Set."], "row_at": [4]}
+    assert placement.place_differs(own, {**own, "row_group": "TC/UB"}, s) == {"row": ["Anti-flicker Set."], "row_at": [4], "row_group": "TC/UB"}
+    assert placement.place_differs(own, {**own, "under_option": "Var. Shutter"}, s) == \
+        {"row": ["Anti-flicker Set."], "row_at": [4], "under_option": "Var. Shutter"}
+    d = doc(setting("global:0x0009", "Anti-flicker Set.", "Drive Mode", "Anti-flicker Set."))
+    got = by_key(d)["global:0x0009"]
+    assert got["row_places"]["Movie"] == {"row": ["Anti-flicker Set."], "row_at": [4], "row_group": "TC/UB"}
+    schema = json.loads((definitions.ROOT / "schemas" / "definition.schema.json").read_text(encoding="utf-8"))
+    v = Draft202012Validator(schema["$defs"]["setting"]["properties"]["row_places"])
+    for m, p in got["row_places"].items():
+        assert not list(v.iter_errors({m: p})), (m, p)
