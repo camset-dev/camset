@@ -516,8 +516,9 @@ def test_a_sampled_record_every_value_of_which_a_line_chose_is_proved(capsys):
     proved = {}
     assert proofs.walked_whole(report, by_row, sampled, by_key, proved) == []
     assert set(sampled) == set(by_key), "4 written only by field 1's line, 0x0003's 4 not credited: still samples"
-    # no line of either field changed nothing: no unwritten value is a held option's (writer.proofs.still_rows)
-    assert proofs.walked_whole(report, by_row, sampled, by_key, proved, proofs.still_rows(lines, set(), report)) == []
+    # no line of either field changed nothing: no unwritten value is a held option's (writer.proofs.still_values)
+    still = proofs.still_values(lines, set(), report, value_of=lambda base, key: 4)
+    assert still == {} and proofs.walked_whole(report, by_row, sampled, by_key, proved, still) == []
     lines.append(line(0, 2, "global:0x0001", 4))              # a later run chose it too
     by_row = proofs.written_by_row(lines, set())
     assert proofs.walked_whole(report, by_row, sampled, by_key, proved) == ["global:0x0001"]
@@ -529,31 +530,40 @@ def test_a_walk_that_chose_the_held_option_too_is_proved_whole(capsys):
     """Playback's Aspect Marker Level (2026-11-19): every level 0 to 15 chosen, fifteen seen written from the
     sixteenth, the one the camera held, chosen last with nothing to show; filed as a sample (a range, numbers), it was
     never walked whole, and its public proof listed every value beside "sampled": {"linear": null}. The row's one
-    credited value no counted line wrote is chosen where a counted line of the row chose an option and changed nothing
-    at all (writer.proofs.still_rows): the record is proved, its names its readers', none "sampled". Two such values
-    (two sessions' starts), a row whose unwritten value only a refused line or a line that wrote another record left,
-    or a row sampled from the held option, stay unchosen. Made-up records and lines."""
+    credited value no counted line wrote is chosen where a counted line of the row chose that very value with nothing
+    to show (writer.proofs.still_values): the row credits the line's label with it, the line's base download holds it,
+    and nothing changed. The record is proved, its names its readers', none "sampled". Two such values (two sessions'
+    starts), a row whose unwritten value only a refused line or a line that wrote another record left, a still line
+    whose label is another value's or whose base holds another (a put-back, another session's first sight), a line
+    whose camera did not say it kept the choice (applied not true), one with no diff, or a row sampled from the held
+    option, stay unchosen. Made-up records and lines."""
     from writer import proofs
     k, row = "global:0x0001", "Level [ctx]"
     by_key = {k: {"key": k, "name": "Level", "values": [[v, str(v)] for v in range(4)]}}
+    held = {"start.DAT": 3, "other.DAT": 1}                    # each base download's value of the record
+
+    def value_of(base, key):
+        return held.get(base) if key == k else None
 
     def report(**more):
         return [{"row": row, "records": {k: {"proved": {str(v): v for v in range(4)},
                                              "names": {str(v): "two readers" for v in range(4)}, **more}}}]
 
-    def line(v, changed=True, applied=True, key=k):
-        return {"path": ["Level"], "kind": "list", "index": v, "label": str(v), "applied": applied, "context": "ctx",
-                "dat": f"{v}.DAT", "base": "start.DAT", "changes": [{"key": key, "before": 3, "after": v}] if changed else []}
+    def line(v, changed=True, applied=True, key=k, base="start.DAT", label=None):
+        return {"path": ["Level"], "kind": "list", "index": v, "label": label or str(v), "applied": applied,
+                "context": "ctx", "dat": f"{v}.DAT", "base": base,
+                "changes": [{"key": key, "before": 3, "after": v}] if changed else []}
 
     def walked(lines, rep, readers=None):
         sampled = {k: {"proofs": 4, "linear": None}}
         proved, by_row = {}, proofs.written_by_row(lines, set())
-        return proofs.walked_whole(rep, by_row, sampled, by_key, proved, proofs.still_rows(lines, set(), rep), readers), \
-            proved, sampled
+        return proofs.walked_whole(rep, by_row, sampled, by_key, proved,
+                                   proofs.still_values(lines, set(), rep, value_of), readers), proved, sampled
     lines = [line(0), line(1), line(2), line(3, changed=False)]                   # 3 held, chosen last
-    assert proofs.written_by_row(lines, set())[row][k] == {0, 1, 2} and proofs.still_rows(lines, set(), report()) == {row}
+    assert proofs.written_by_row(lines, set())[row][k] == {0, 1, 2}
+    assert proofs.still_values(lines, set(), report(), value_of) == {(row, k): {3}}
     assert proofs.walked_whole(report(), proofs.written_by_row(lines, set()), {k: {}}, by_key, {}) == [], \
-        "without the still rows, as before"
+        "without the still values, as before"
     readers = {k: {}}
     got, proved, sampled = walked(lines, report(), readers)
     assert got == [k] and proved == {k: {0, 1, 2, 3}} and not sampled
@@ -562,9 +572,20 @@ def test_a_walk_that_chose_the_held_option_too_is_proved_whole(capsys):
     proofs.with_names(s, {}, {}, {})          # an old "sampled" on a value a proof chose is not kept
     assert s["proved"]["names"] == {str(v): "one reader" for v in range(4)}
     assert definitions.lean_proof(s["proved"]) == {"values": [0, 1, 2, 3]}
+    no_say = {f: v for f, v in line(3, changed=False).items() if f != "applied"}
     for stays, rep in (([line(0), line(1), line(2, changed=False), line(3, changed=False)], report()),   # two unwritten
                        ([line(0), line(1), line(2), line(3, applied=False, changed=False)], report()),   # refused
                        ([line(0), line(1), line(2), line(3, key="global:0x0009")], report()),            # another's
+                       ([line(0), line(1), line(2), line(3, changed=False, base="other.DAT")], report()),  # base holds 1
+                       ([line(0), line(1), line(2), line(9, changed=False, label="(all back)")], report()),  # a put-back
+                       ([line(0), line(1), line(2), line(3, changed=False, applied=None)], report()),    # not said kept
+                       ([line(0), line(1), line(2), no_say], report()),                                   # applied missing
                        (lines, report(sampled_from_start=True))):
         got, proved, sampled = walked(stays, rep)
         assert got == [] and k in sampled, stays
+    # a line with no diff says nothing (a number field's line, which no list's carried-over check reads first)
+    fields = [{"row": "Level [field 0]", "records": {k: {"proved": {"3": 3}}}}]
+    typed = {"path": ["Level"], "kind": "fields", "index": [0, 3], "label": "3", "applied": True, "base": "start.DAT",
+             "dat": "f.DAT"}
+    assert proofs.still_values([typed], set(), fields, value_of) == {}
+    assert proofs.still_values([{**typed, "changes": []}], set(), fields, value_of) == {("Level [field 0]", k): {3}}

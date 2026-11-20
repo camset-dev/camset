@@ -244,17 +244,27 @@ def written_by_row(proofs: list, skip: set, reported=None) -> dict:
     return {row: dict(keys) for row, keys in out.items()}
 
 
-def still_rows(proofs: list, skip: set, report: list) -> frozenset:
-    """The report's rows one of whose counted lines (_counted) chose an option, the camera keeping it (applied true),
-    and changed nothing at all, no record and no slot: a walk's visit to the option the camera held as it began, whose
-    value nothing shows written (walked_whole). A line that changed another record (an option that wrote elsewhere) is
-    none, and a line with no diff ("changes" missing) says nothing."""
-    rows = {e["row"] for e in report}
-    out = set()
-    for r, changes, _ in _counted(proofs, skip, rows):
-        if row_name(r) in rows and r.get("applied") is True and isinstance(r.get("changes"), list) and not changes:
-            out.add(row_name(r))
-    return frozenset(out)
+def still_values(proofs: list, skip: set, report: list, value_of=None) -> dict:
+    """{(the report's row, a record's key): the values a walk chose there with nothing to show}: each value a counted
+    line of the row (_counted) chose, the camera keeping it (applied true), changing nothing at all, no record and no
+    slot, where the row credits the line's own label with that value and the line's base download holds that value
+    for the record (`value_of(base, key)`, pass2_report.base_value by default): the walk's visit to the option the
+    camera held as it began (walked_whole). A line whose label the row credits with another value, whose base holds
+    another (a put-back, another session's first sight), that changed another record, or with no diff ("changes"
+    missing) gives none."""
+    if value_of is None:
+        from pass2_report import base_value as value_of
+    rows = {e["row"]: e for e in report}
+    out = collections.defaultdict(set)
+    for r, changes, _ in _counted(proofs, skip, set(rows)):
+        e = rows.get(row_name(r))
+        if e is None or r.get("applied") is not True or not isinstance(r.get("changes"), list) or changes:
+            continue
+        for k, rec in e["records"].items():
+            v = (rec.get("proved") or {}).get(str(r.get("label") or ""))
+            if isinstance(v, (int, str)) and not isinstance(v, bool) and value_of(r.get("base"), k) == v:
+                out[(e["row"], k)].add(v)
+    return {key: frozenset(vs) for key, vs in out.items()}
 
 
 def written_values(proofs: list, skip: set, reported=None, by_row: dict = None) -> dict:
@@ -267,30 +277,31 @@ def written_values(proofs: list, skip: set, reported=None, by_row: dict = None) 
     return dict(out)
 
 
-def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved: dict, still=frozenset(),
+def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved: dict, still=None,
                  readers: dict | None = None) -> list:
     """The records a writer files as samples (`sampled`: a number field's, a box's, a grid's, a scale's, a list of
     numbers with a range) of which every value the setting lists some line chose: a value one of the report's rows
     naming the record credits (its "proved") that a counted line of that very row wrote to it (`by_row`,
     written_by_row), whatever a later sampled run of the row did; and the one value the row credits that none of its
-    counted lines wrote, where a counted line of the row chose an option and changed nothing at all (`still`,
-    still_rows): the option the camera held when the walk began, which a walk chooses as it chooses the others and no
-    change can show (Playback's Aspect Marker Level, 2026-11-19: fifteen levels written from the sixteenth, which the
-    camera held, chosen last). Two or more such values in a row (two sessions, two starts) stay unchosen. Such a record
+    counted lines wrote, where a counted line of the row chose that very value with nothing to show (`still`,
+    still_values: the line's label credited with it, its base holding it, nothing changed): the option the camera held
+    when the walk began, which a walk chooses as it chooses the others (Playback's Aspect Marker Level, 2026-11-19:
+    fifteen levels written from the sixteenth, which the camera held, chosen last). Two or more such values in a row
+    (two sessions, two starts) stay unchosen. Such a record
     is no sample: it is proved, each value listed (`proved`), and taken out of `sampled`; none of its values is left
     that no line chose, so the list says nothing of the camera's own setting (docs/decisions/0016). A record with a
     value no line chose stays a sample (review 2026-11-18: ISO Range Limit, walked whole in one run and sampled again in
     later ones). With `readers` (note_readers'), each such record's names take its rows' readings, as a list's do.
     Returns their keys, each printed."""
-    chose = collections.defaultdict(set)
+    chose, still = collections.defaultdict(set), still or {}
     for e in report:
         for k, r in e["records"].items():
             if k in sampled:
                 credited = {v for v in (r.get("proved") or {}).values() if isinstance(v, (int, str))}
                 wrote = set((by_row.get(e["row"]) or {}).get(k, ())) & credited
                 held = credited - wrote
-                chose[k] |= wrote | (held if len(held) == 1 and e["row"] in still and not r.get("sampled_from_start")
-                                     else set())
+                chose[k] |= wrote | (held if len(held) == 1 and held <= still.get((e["row"], k), frozenset())
+                                     and not r.get("sampled_from_start") else set())
     out = []
     for k in sorted(sampled):
         codes = {v for v, _ in (by_key.get(k) or {}).get("values") or []}

@@ -23,7 +23,7 @@ from .labels import clean
 from .offered import check_video_systems, with_video_systems
 from .proofs import (axis_value_rows, box_numbers, disputed_out, kept_proof, menu_row, mixed, note_readers, print_kept,
                      reworded, sampled_scale, with_allowances, with_drawn, with_in_sets_proved, with_menu_rows,
-                     still_rows, walked_whole, written_by_row, written_values, with_option_trees, with_scales,
+                     still_values, walked_whole, written_by_row, written_values, with_option_trees, with_scales,
                      without_observed, without_set_twins)
 
 
@@ -134,7 +134,7 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     # whole by some run (walked_whole)
     lines = report_proofs(run)[:2] if (run / "proofs.jsonl").exists() else None
     by_row = written_by_row(*lines, {e["row"] for e in report}) if lines else {}
-    still = still_rows(*lines, report) if lines else frozenset()     # rows whose walk chose the held option too
+    still = still_values(*lines, report) if lines else {}     # values a walk chose with nothing to show
     written = written_values([], set(), by_row=by_row)
     for e in report:
         row = menu_row(re.sub(r" \[field \d+\]$", "", e["row"]), axis_rows)
