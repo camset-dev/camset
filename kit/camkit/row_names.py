@@ -139,7 +139,13 @@ def table(camera: str | None = None) -> dict:
     half saved, stops it there and never in the middle of a run); {} for a camera with no file or no ROW_NAMES."""
     got = _TABLES.get(camera)
     if got is None:
-        got = _TABLES[camera] = _load(_camera(camera))
+        # kept under the camera asked (None: the one the kit works on) and under the camera that is, so one read serves
+        # both ways of asking
+        name = _camera(camera)
+        got = _TABLES.get(("camera", name))
+        if got is None:
+            got = _TABLES[("camera", name)] = _load(name)
+        _TABLES[camera] = got
     return got
 
 

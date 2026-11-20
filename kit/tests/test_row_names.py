@@ -423,3 +423,19 @@ def test_the_viewer_the_leads_the_reports_own_names_and_a_not_offered_mark_take_
              "menu": "Proxy Settings > Px Proxy Recording"}
     offered.not_offered_marks(doc, [entry], [], {}, tmp_path, [])
     assert [m["menu"] for m in doc["settings"][0]["not_offered"]] == ["Proxy Settings > Proxy Recording"]
+
+
+def test_a_table_is_read_once_a_run_and_a_bad_one_stops_it_before_its_link(own_runs, tmp_path, monkeypatch):
+    """A run reads the camera's ROW_NAMES as it starts (camkit.first_open.seen_record, before any link opens): a table
+    the kit refuses stops it there, and a file saved half way while it runs is never read again in the middle of it
+    (the review of 2026-11-20, finding 7)."""
+    from camkit import first_open
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    p = hand_tables(tmp_path / "data", ROW_NAMES={"Format": "File Format"})
+    with pytest.raises(ValueError, match="ROW_NAMES"):
+        first_open.seen_record(TEST_CAMERA)
+    hand_tables(tmp_path / "data", ROW_NAMES={"Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording"})
+    first_open.seen_record(TEST_CAMERA)
+    p.write_text('{"camera": "TEST-CAM_fw9.99", "ROW_NAMES": {"Proxy Settings > Px Pro', encoding="utf-8")   # half saved
+    assert first_open.key(("Proxy Settings", "Px Proxy Recording")) == ("proxy settings", "proxy recording")
+    row_names.forget()

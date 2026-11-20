@@ -318,6 +318,25 @@ def test_ocr_right_of_the_icons_is_one_batch_an_engine(monkeypatch):
     assert all(got[n] == {0: {"ocr": "Text", "ocr2": "Text"}} for n in range(5))
 
 
+def test_a_batch_the_helper_cannot_read_is_read_frame_by_frame(monkeypatch):
+    """The batch call raising (the helper cannot read one of the pictures): each frame is read alone, the one that
+    fails alone gives no reading (its label stays as read) and every other is read (the review of 2026-11-20)."""
+    rows = {0: (BAND, ((62, 85),), 92)}
+    calls = []
+
+    def read(paths, eng=None):
+        calls.append(len(paths))
+        if len(paths) > 1:
+            raise RuntimeError("the helper cannot read one of them")
+        if paths[0].name.startswith("00002"):
+            raise RuntimeError("this frame")
+        return {paths[0]: [ocr.Line("Text", 1.0, 88, BAND[0] + 10, 60, 30)]}
+    monkeypatch.setattr(pm.ocr, "read", read)
+    got = pm.covered_readings({n: (page(), rows) for n in range(4)}, pm.SUBMENU_LABEL, {"ocr": None})
+    assert calls == [4, 1, 1, 1, 1]
+    assert got[2] == {} and all(got[n] == {0: {"ocr": "Text"}} for n in (0, 1, 3))
+
+
 @pytest.mark.parametrize("run,name", [("kit2_plan3_crawl_shd120", "00008_down.png"),
                                       ("kit2_plan3_crawl_shd30", "00010_down.png")])
 @pytest.mark.parametrize("read", ["S&Q Record Setting", "Saa Record Setting", "Record Setting"])
