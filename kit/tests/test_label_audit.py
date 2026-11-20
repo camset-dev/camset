@@ -381,6 +381,42 @@ def test_a_name_published_as_part_of_the_line_drawn_is_named_by_a_reading_that_h
     assert la.within("Zqx Hi Lo", ["Lo", "Hi"]) is None and la.held("Hi", "Zqx Bracket: Hi") == 2
 
 
+def test_a_name_whose_proof_line_carries_the_rows_older_name_is_found(own_runs, tmp_path, monkeypatch, capsys):
+    """A row the camera's hand tables rename (ROW_NAMES, camkit.row_names: an icon's letters the records read into its
+    label): the report, made after the renaming, names it as the camera draws it, its proof lines keep the older name,
+    and the name is still found and asked about; with no table it is not."""
+    from camkit import datafiles, definitions, row_names
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    root = own_runs / CAMERA
+    main = root / runs.MAIN_RUN
+    old, new = ["Zqx Settings", "Zx Zqx Mode"], "Zqx Settings > Zqx Mode"
+    (main / "shots").mkdir(parents=True)
+    (main / "proofs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in (
+        line(old, 0, "Zqx Fast", "00001.png"), line(old, 1, "Zqx Slow", "00002.png"))), encoding="utf-8")
+    for n in (1, 2):
+        frame(main / "shots" / f"{n:05d}.png", 80 + n)
+    (main / "report.json").write_text(json.dumps([{"row": new, "kinds": ["list"], "options": 2, "records": {
+        "global:0x0001": record({"Zqx Fast": 1, "Zqx Slow": 0}, "one reader (map)")}}]), encoding="utf-8")
+    definition = tmp_path / f"{CAMERA}.json"
+    definition.write_text(json.dumps({"settings": [setting("global:0x0001", [[0, "Zqx Slow"], [1, "Zqx Fast"]],
+                                                           {"0": "one reader", "1": "one reader"})]}), encoding="utf-8")
+    readers(monkeypatch, root, [])
+    args = ["--json", "--dry-run", "--definition", str(definition), "--cache", str(tmp_path / "answers")]
+    _, got = run_audit(args, capsys)
+    assert got["left out"] == {"a report label with no proof line under it": 2}
+    tables = datafiles.hand_tables_file(CAMERA)
+    tables.parent.mkdir(parents=True, exist_ok=True)
+    tables.write_text(json.dumps({"$schema": "../../schemas/hand-tables.schema.json", "camera": CAMERA,
+                                  "ROW_NAMES": {" > ".join(old): new}}), encoding="utf-8")
+    row_names.forget()
+    try:
+        assert row_names.renamed(old) == tuple(new.split(" > "))
+        _, got = run_audit(args, capsys)
+        assert got["left out"] == {} and got["asked"]["qa"]["questions"] == 2
+    finally:
+        row_names.forget()
+
+
 def test_the_line_behind_a_name_and_the_options_by_their_names_in_every_row(tmp_path):
     """Of the lines the report credits with a value, one with its frame on disk that is no carousel's put-back visit
     comes first, whatever row; each recorded label takes the name the report credits it with on the record in any row;

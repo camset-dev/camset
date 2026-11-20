@@ -78,7 +78,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pass2_report as p2  # noqa: E402
 import reader_census as rc  # noqa: E402
-from camkit import definitions, paths, reading, runs, vlm  # noqa: E402
+from camkit import definitions, paths, reading, row_names, runs, vlm  # noqa: E402
 from writer.proofs import NAME_SOURCES, mixed, reader_source  # noqa: E402
 
 SOURCES = ("one reader", "vision model")                       # --sources' default
@@ -147,7 +147,10 @@ def option_lines(main: Path, camera: str) -> tuple:
     p2.ROW_NAMES.clear()
     p2.MENU_NAMES.clear()
     proofs, skip, _, _, _ = p2.report_proofs(main)
-    p2.ROW_NAMES.update(p2.norm(re.split(r" \[", p)[0]) for r in proofs for p in r.get("path") or [])
+    # each row by its older name and as the camera draws it (camkit.row_names), as pass2_report.main reads them; the
+    # report's rows and rows_of's keys both take the camera's name (pass2_report.row_name)
+    p2.ROW_NAMES.update(p2.norm(re.split(r" \[", p)[0]) for r in proofs
+                        for p in (*(r.get("path") or []), *row_names.renamed(r.get("path") or [])))
     tree = definitions.menu_tree_file(camera)
     p2.MENU_NAMES.update(p2.menu_names(tree if tree.is_file() else None))
     out = collections.defaultdict(lambda: collections.defaultdict(list))
