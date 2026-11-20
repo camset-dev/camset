@@ -83,9 +83,17 @@ camera may refuse a whole file that holds such a change. The checks before a sav
 record no setting names is "unmapped": the mapping found no menu row that changes it, so it does not know what the
 record holds, and a change to it is not proved on the camera and is at your own risk.
 
+**The camera's menu in each shooting mode.** Where a camera's definition lists the menus of its shooting modes (Still,
+Movie and S&Q, say), the Menu shows one at a time, picked under Camera menu: as the camera's switch picks it: its tabs,
+groups and rows in that menu's order, each row titled as the camera draws it there (its details give the setting's
+full name). It opens on the mode the file was saved in, and picking another changes nothing in the file. The Editing:
+row offers that mode's memories, the search looks in every menu, and a jump to a setting opens the menu that shows it.
+In the flat list (Settings), and for a definition that lists no menus, every setting is shown as before.
+
 **Settings the camera keeps twice.** The camera keeps some values more than once: on the a1 II, ISO, White Balance
-and each Picture Profile parameter have a copy for stills and one for movies. Each copy is a row of its own, with a
-note under it saying what changing it changes. Outside Expert mode the editor keeps them as the camera does: a copy
+and each Picture Profile parameter have a copy for stills and one for movies. In a camera menu (above) the row of
+such a setting shows and changes the value of that menu's mode; elsewhere, and in Expert mode, each copy is a row of
+its own. A copy has a note saying what changing it changes. Outside Expert mode the editor keeps them as the camera does: a copy
 that held its setting's value when the file was opened or read changes with it, and an edit that would leave a file
 no camera writes is refused, with why and what to do. Some cameras have a switch that keeps a setting apart for stills
 and movies (the a1 II's Different Set for Still/Mv). While it is on, the setting says what the switch did on the
@@ -144,6 +152,11 @@ Compare shows two files side by side, and a third, the base, when both started f
 File B and the base must be from file A's camera model, or they are refused; one from another firmware of that model
 is compared, with a line saying that a setting the other firmware keeps elsewhere can show a wrong value, and that
 only the settings in the same place in both files are copied into A.
+
+Compare has Edit's Menu on its left, with All settings first: a click shows that entry's rows, grouped as Edit groups
+them, and each entry counts the rows that differ. Where the definition lists the camera's menus, Compare follows the
+one picked: each row shows that menu's mode's value in every column, so two files saved in different modes are
+compared like for like, and each menu's button counts its differences.
 
 Only file A is ever changed. An arrow between two columns copies a value into file A, a right-click on a value copies
 it into any other column of file A, and a click on a value of file A changes it in place, as in Edit. With a base file
