@@ -905,10 +905,11 @@ class RestartEyes:
         return SimpleNamespace(kind=kind)
 
 
-def restart_world(monkeypatch, fails=(), opened_at=None):
+def restart_world(monkeypatch, fails=(), opened_at=None, try_s=1.0):
     """camkit.session on a fake clock from the upload's reply, its screen reading the fake frames' kinds; a link class
     whose tries fail as `fails` lists them in turn ("connect": LinkError before the link opened, "download": a failure
-    once open), or, with `opened_at`, fail to connect until that time; (session, now, clock, link_class, tries, run)."""
+    once open), or, with `opened_at`, fail to connect until that time, each try taking `try_s` s; (session, now, clock,
+    link_class, tries, run)."""
     from camkit import session
     from camkit.link import LinkError
     now = [0.0]
@@ -920,7 +921,7 @@ def restart_world(monkeypatch, fails=(), opened_at=None):
     class Tried:
         def __init__(self, run):
             tries.append(round(now[0], 2))
-            now[0] += 1.0                           # a try takes its time
+            now[0] += try_s                         # a try takes its time
             why = plan.pop(0) if plan else (None if opened_at is None or now[0] >= opened_at else "connect")
             if why == "connect":
                 raise LinkError("camera link did not connect: fingerprint: Connect_SSH_GetFingerprintFailed",
@@ -1010,18 +1011,52 @@ def test_without_hdmi_eyes_the_first_try_is_at_20_s_and_other_failures_wait_as_b
     assert ("restore_wait", "the next try after a failure") in [(k, f.get("waited_for")) for k, f in logged]
 
 
-def test_a_camera_that_never_answers_is_given_up_at_the_old_deadline(monkeypatch):
-    """A link that never connects: tried every 3 s from 20 s, no try starting past the fixed wait's deadline (40 s plus
-    six tries 15 s apart: 130 s from the call), then None, said and logged; never slower than the fixed wait."""
+def test_a_camera_that_never_answers_is_given_up_at_the_one_ceiling(monkeypatch):
+    """A link that never connects: tried every 3 s from 20 s, no try starting past the restore check's one ceiling
+    (session.RESTORE_CEILING, 300 s from the call), then None, said and logged."""
     session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch, opened_at=1e9)
+    assert session.RESTORE_CEILING == 300.0
     assert session.verify_restore(run, Path("start.DAT"), link_class=Tried, clock=clock, say=lambda m: None) is None
-    assert tries[0] == pytest.approx(20.0) and max(tries) <= 130.0 and len(tries) > 6
+    assert tries[0] == pytest.approx(20.0) and 296.0 <= max(tries) <= 300.0
     assert all(b - a == pytest.approx(4.0) for a, b in zip(tries, tries[1:], strict=False)), "a try 1 s, then 3 s"
-    assert logged[-1][0] == "restore_unreached" and now[0] <= 130.0 + 1.0
+    assert logged[-1][0] == "restore_unreached" and now[0] <= 300.0 + 1.0
     # a check given no settle (the tests' own) tries at once
     session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch)
     assert session.verify_restore(run, Path("start.DAT"), settle=0, ready=0, link_class=Tried, clock=clock,
                                   say=lambda m: None) == 0 and tries == [0.0]
+
+
+@pytest.mark.parametrize("opened_at, try_s, old_tries", [
+    (190.0, 4.0, 11),       # 2026-11-20 12:47, a chain's end file: Connect_ConnectIP tries (about 4 s each) until 132 s;
+                            # the camera took the next link 193 s after the upload
+    (154.0, 23.0, 5)])      # 2026-11-20 14:11, filter_run's item restore: fingerprint tries of about 23 s each, given up
+                            # after 5 at 142 s; the chain's end-file upload connected 154 s after it
+def test_a_camera_late_as_today_s_two_restarts_is_reached_where_the_old_deadline_gave_up(monkeypatch, opened_at, try_s,
+                                                                                       old_tries):
+    """The two restore checks of 2026-11-20 that gave up while the camera was only late (130 s from the call, the old
+    fixed wait's deadline): with the one ceiling (300 s), each reaches the camera once it takes a link, and its check
+    goes on as ever. With the old deadline they stopped at the tries the camera's events show."""
+    session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch, opened_at=opened_at, try_s=try_s)
+    assert session.verify_restore(run, Path("start.DAT"), link_class=Tried, clock=clock, say=lambda m: None) == 0
+    assert logged[-1][0] == "restore_reconnected" and logged[-1][1]["seconds"] >= opened_at
+    assert len([t for t in tries if t + try_s <= 130.0]) >= old_tries - 1, "the old deadline's tries, then more"
+    assert max(tries) <= session.RESTORE_CEILING
+
+
+def test_every_restore_check_stops_at_the_one_ceiling_whatever_its_caller_passes(monkeypatch):
+    """No caller gives up earlier than another: the first wait (settle) and the wait after a failure once open (pause)
+    are a caller's to say, the last try's time is not; and no caller in the kit passes either to the check
+    (camkit.session.verify_restore, check_restore, runner.restore_checked), so all wait alike."""
+    session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch, opened_at=1e9)
+    assert session.verify_restore(run, Path("start.DAT"), settle=5.0, pause=1.0, link_class=Tried, clock=clock,
+                                  say=lambda m: None) is None
+    assert 296.0 <= max(tries) <= 300.0 and tries[0] == pytest.approx(5.0)
+    import re
+    calls = re.compile(r"\b(?:verify_restore|check_restore|restore_checked)\((?:[^()]|\([^()]*\))*\)", re.S)
+    passing = [f"{p.relative_to(KIT)}: {m.group(0)[:80]}" for p in KIT.rglob("*.py") if "tests" not in p.parts
+               for m in calls.finditer(p.read_text(encoding="utf-8"))
+               if re.search(r"\b(?:settle|pause|tries)\s*=", m.group(0)) and not m.group(0).lstrip().startswith("def")]
+    assert passing == [], passing
 
 
 def test_the_runs_that_still_hold_their_hdmi_eyes_hand_them_to_the_check(monkeypatch):
