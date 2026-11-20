@@ -1,6 +1,6 @@
 """An option a list, a side list or a carousel draws grey (prove_run.prove_row, proving.sidelists.prove_side_row; the
-owner, 2026-11-19: "your selecting grey out items and assuming they are changing in PP"): it is never chosen, and why it
-is greyed is read once a row.
+owner, 2026-11-19: "your selecting grey out items and assuming they are changing in PP"): it is never entered to choose
+it, and why it is greyed is read once a row (the row's one Enter for that, which the camera may still apply: TRY).
 
     what = greyed.judge(cam, name, label, k, saved, back)
     ENTER   drawn white, or whether it is drawn grey cannot be told (said, option by option), or the value the row was

@@ -232,9 +232,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **A reader's Unsloth dynamic build ("UD") counts as the same model,** one vote with its other builds (decision 22).
 - **The readers say which option is drawn grey, and a list prover listens only to be more careful:** each question
   about a setting's options has a `.grey` version with a `"greyed"` field, which the list, side-list and carousel
-  provers ask beside their pixel test, either one saying grey keeping the option unchosen (`"greyed_by"` on its line).
-  `reader_census.py --questions --variants grey` measures each one's grey against lines the camera refused or applied
-  and the pixels, and its text against the question it was made from.
+  provers ask beside their pixel test where the answer can change what is pressed, an option either one calls grey
+  getting no Enter to choose it, only the camera's Help and at most its row's one Enter to read why, which the camera
+  may still apply (`"greyed_by"` on its line). `reader_census.py --questions --variants grey` measures each one's grey
+  against lines the camera refused or applied and the pixels, and its text against the question it was made from.
 - **The coverage ledger keeps every record a look saw change,** where a later look of the same row, action and option
   took that look's place: such a record was left "never seen to change". The row's status is still its latest look's.
 - **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from

@@ -852,7 +852,8 @@ class Region:
     """A place on the screen and the question the reader is asked about it. box: (x0, y0, x1, y1) in the 640 x 480
     frame, or None for the lit item, found on the frame (camkit.live.lit_found). prompt: a camkit.vlm.PROMPTS key: the
     questions the kit asks today for the Regions below (LIT, TITLE, CAROUSEL ...: their answers are cached already), a
-    kind of screen's own ".v2" question for one region() makes. pick: the reading in the answer, a text or None."""
+    kind of screen's own ".v2" question (or the title's ".v3") for one region() makes, never a ".grey" version
+    (Question.grey_prompt, proving.greyed's alone). pick: the reading in the answer, a text or None."""
     name: str
     box: tuple | None
     prompt: str

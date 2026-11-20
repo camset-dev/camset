@@ -253,7 +253,7 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         move_to(cam, cur, k, n, "sidelist")
         if side_index(cam, job) != k:
             raise Failed(f"{name}: the cursor is not on {vals[k]!r} ({side_text(cam)!r})")
-        # an option the side list draws grey is never chosen (proving.greyed: grey by its pixels or by the second
+        # an option the side list draws grey is never entered to choose it (proving.greyed: grey by its pixels or the
         # reader): the row's first one, the camera's Help on it, then, where Help names no reason, its one Enter to read
         # the notice; the others no key at all
         what = greyed.judge(cam, name, vals[k], k, c,
