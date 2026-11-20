@@ -528,6 +528,16 @@
      "type": "string",
      "description": "The name of the editor's Menu entry for the settings the camera's menus do not hold (\"Not in the menus\" without it)."
     },
+    "menus_label": {
+     "type": "string",
+     "minLength": 1,
+     "description": "The label before the editor's buttons for the camera's menus (camera.menus), in plain words (\"Camera menu:\" without it)."
+    },
+    "menus_hover": {
+     "type": "string",
+     "minLength": 1,
+     "description": "What the label of the editor's buttons for the camera's menus says on hover, in plain words (the editor's own words without it)."
+    },
     "save_load_path": {
      "type": "string",
      "description": "The camera's menu path that saves a settings file to the card."

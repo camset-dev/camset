@@ -384,3 +384,12 @@ def test_a_row_given_by_hand_finds_the_second_of_two_rows_of_one_label_and_a_row
     got = placement.by_menu(d, tree, MENUS, hand=hand)
     assert all(got[k] == {"row_menus": ["Still", "Movie", "S&Q"]} for k in ("global:0x0001", "global:0x0002", "global:0x0003"))
 
+
+def test_the_camera_file_may_word_the_menu_buttons_label():
+    """camera.text.menus_label and menus_hover, the words before the editor's buttons for the camera's menus: optional,
+    never empty."""
+    from jsonschema import Draft202012Validator
+    text = json.loads((definitions.ROOT / "schemas" / "camera.schema.json").read_text(encoding="utf-8"))["properties"]["text"]
+    v = Draft202012Validator(text)
+    assert not list(v.iter_errors({"menus_label": "Camera menu:", "menus_hover": "The camera's menu in each mode."}))
+    assert list(v.iter_errors({"menus_label": ""}))
