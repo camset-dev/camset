@@ -188,6 +188,13 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A definition can say which of the camera's menus hold each setting:** a camera's `MENUS` hand table (a menu per
+  position of its shooting-mode switch) becomes `camera.menus`, and each placed setting gets `row_menus`, the menus
+  whose own menu tree holds its row, and `row_places` where one places it otherwise. `HAND_PLACES` places a record no
+  proof path can (one a row's own function writes, or a row no walk reads, seen on the camera), and
+  `kit/tools/menu_tree.py --add` takes one group's pages from a page scan into a tree.
+- **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
+  counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.
