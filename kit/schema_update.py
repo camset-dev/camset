@@ -145,7 +145,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, option_tree, paths, placement  # noqa: E402,F401
+from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, option_tree, paths, placement, row_names  # noqa: E402,F401
 from camkit.match import LOOKALIKES  # noqa: E402   (Cyrillic letters OCR reads for Latin; the proof viewer imports it)
 from pass2_report import (close, latest_run, mirrored_values, num, registration_mirrors, report_proofs,  # noqa: E402,F401
                           row_name)
@@ -895,6 +895,22 @@ def attach_help(doc, report, proofs=(), frame_proofs=None) -> tuple:
     return sum(1 for s in doc["settings"] if s.get("help")), sum(1 for s in doc["settings"] if s.get("option_help"))
 
 
+def proof_shapes(proofs: list) -> tuple:
+    """(kinds, pickers, axes) of the proof lines the report read, each by its row as the report names it
+    (pass2_report.row_name: the path as the camera draws it, camkit.row_names): {row: kind}, {"row / option"} of each
+    picker cell, {(row, option)} of each carousel axis. A line written with an older name is the camera's row, so an
+    axis row named after the value the axis stood on keeps that value out of the definition (axis_tail_out)."""
+    kinds, pickers, axes = {}, set(), set()
+    for r in proofs:
+        row = " > ".join(row_names.renamed(r["path"]))
+        kinds[row] = r["kind"]
+        if r["kind"] == "axis" and r.get("option"):
+            axes.add((row, r["option"]))
+        if r.get("opens") == "picker":
+            pickers.add(row + f" / {r['option']}")                          # the report's row name
+    return kinds, pickers, axes
+
+
 def main():
     ap = argparse.ArgumentParser()
     # writing is asked for, never the default: a run meant as a look wrote the schema (2026-10-29)
@@ -975,18 +991,12 @@ def main():
     by_key = {s["key"]: s for s in doc["settings"]}
     report = read_json(RUN / "report.json")
     fa_names = focus_area_names(by_key)
-    kinds, pickers, axes = {}, set(), set()
     subs = [x for x in doc["settings"] if x.get("under_option") and x.get("row")]     # sub-choices (axis_tail_out)
     all_proofs, cut_short = [], set()
     # every proof the report read (pass2_report.report_proofs: this run's and every other proof run's of the camera)
     if (RUN / "proofs.jsonl").exists():
         all_proofs, cut_short = report_proofs(RUN)[:2]
-    for r in all_proofs:
-        kinds[" > ".join(r["path"])] = r["kind"]
-        if r["kind"] == "axis" and r.get("option"):
-            axes.add((" > ".join(r["path"]), r["option"]))
-        if r.get("opens") == "picker":
-            pickers.add(" > ".join(r["path"]) + f" / {r['option']}")      # the report's row name
+    kinds, pickers, axes = proof_shapes(all_proofs)
     menus = collections.defaultdict(set)
     proved = collections.defaultdict(set)
     came = collections.defaultdict(dict)    # the runs whose proofs proved each record, each its latest day ("runs")

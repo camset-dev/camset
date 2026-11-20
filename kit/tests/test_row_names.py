@@ -350,3 +350,26 @@ def test_the_report_the_walk_patterns_the_definitions_rows_and_the_ledger_take_e
     assert coverage.Ledger.find(led, ["Proxy Settings", "Px Proxy Recording"]) == [entry]
     old = SimpleNamespace(rows=[{**entry, "path": ["Proxy Settings", "Px Proxy Recording"]}])
     assert coverage.Ledger.find(old, ["Proxy Settings", "Proxy Recording"]) == old.rows
+
+
+def test_an_axis_row_named_after_its_value_loses_the_value_under_either_name(tmp_path, monkeypatch):
+    """Decision 16: an axis row the report names after the value the axis stood on ("ISO > ISO AUTO Min. SS / 1/250",
+    the camera's own setting when the row began) is named by its item alone in proved.menu, where its proof lines were
+    written with an older name ("MR ISO"): writer/proofs.axis_value_rows and schema_update.proof_shapes key the rows
+    as the camera draws them, as the report and menu_row name them (the review of 2026-11-20)."""
+    import schema_update
+    from writer import proofs
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    hand_tables(tmp_path / "data", ROW_NAMES={"MR ISO": "ISO"})
+    lines = [{"kind": "axis", "path": ["MR ISO", "ISO AUTO Min. SS"], "option": "1/250", "label": lab}
+             for lab in ("1/250", "1/125", "1/60")]
+    axis = proofs.axis_value_rows(lines)
+    assert axis == {("ISO > ISO AUTO Min. SS", "1/250")}
+    with proofs.reworded({}):
+        for row in ("ISO > ISO AUTO Min. SS / 1/250 [Stills mode]", "MR ISO > ISO AUTO Min. SS / 1/250 [Stills mode]"):
+            assert proofs.menu_row(row, axis) == "ISO > ISO AUTO Min. SS [Stills mode]", row
+    kinds, pickers, axes = schema_update.proof_shapes(lines + [
+        {"kind": "table", "path": ["MR ISO", "Picker Row"], "option": "Cell", "opens": "picker"}])
+    assert kinds["ISO > ISO AUTO Min. SS"] == "axis" and ("ISO > ISO AUTO Min. SS", "1/250") in axes
+    assert pickers == {"ISO > Picker Row / Cell"}
+    row_names.forget()

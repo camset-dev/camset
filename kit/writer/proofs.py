@@ -513,11 +513,13 @@ def axis_value_rows(proofs: list) -> frozenset:
     SS's speeds are one line of values, Slower to Faster, and its row took the name of the one it stood on; Focus
     Area's Custom 1-3 likewise. Spot's sizes ("Spot: <size>") are an axis Spot owns, and keep their row's name. The option
     and the labels are compared as the camera's words, OCR slips mended and case aside (clean), as the reader may
-    spell one and the bar the other. Returns {(item, option)}, the item its path joined by " > "."""
+    spell one and the bar the other. Returns {(item, option)}, the item its path as the camera draws it joined by " > "
+    (camkit.row_names, as menu_row names the row before it looks it up)."""
     labels = collections.defaultdict(set)
     for r in proofs:
         if r.get("kind") == "axis" and r.get("option"):
-            labels[(" > ".join(r.get("path") or []), r["option"])].add(clean(str(r.get("label"))).lower())
+            item = " > ".join(row_names.renamed(r.get("path") or []))
+            labels[(item, r["option"])].add(clean(str(r.get("label"))).lower())
     return frozenset(k for k, labs in labels.items() if clean(k[1]).lower() in labs)
 
 
