@@ -206,7 +206,8 @@ from prove_run import enter_any  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, LOOK_LAP,  # noqa: E402
                     add_info_ok_argument, add_network_argument, add_owner_argument, add_scan_argument,
                     cards_statement_refused, changes_kept, close_for_restore, close_menu_and_wait,
-                    confirm_phrase_or_exit, defined_values, definition, end_session, info_ok_or_exit, row_labels,
+                    confirm_phrase_or_exit, cut_names, defined_values, definition, end_session, info_ok_or_exit,
+                    row_labels,
                     known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
                     menu_from_shooting,
                     network_decided_or_exit, network_readings, network_values, owner_decided_or_exit,
@@ -745,7 +746,18 @@ def stepped_press(key: str, y, kind_before: str, kind_after: str, text_before: s
             and kind_after == kind_before and bool(norm(text_after)) and norm(text_after) != norm(text_before))
 
 
-def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, values=None, gone_to=None) -> tuple:
+def plain_values(values: dict) -> dict:
+    """{label: values} (runner.row_values) keyed by each label compared plain (safety.plain), the values of labels that so
+    compare alike kept together: "Face Priority in Mul..." and OCR's "Face Priority in Mul" are one label, whose values
+    are both's (a dict built by plain keys kept the last one's alone: kit2_page_scan_movie_1118 left that row "On")."""
+    out = {}
+    for k, v in (values or {}).items():
+        out.setdefault(safety.plain(k), set()).update(v or ())
+    return out
+
+
+def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, values=None, gone_to=None,
+                names=None) -> tuple:
     """(why the opening press may not open the lit row of the menu page shown, or "", the row's path) for a run that is
     no --owner one. One rule: the row is the longest label the lit text starts with, as a whole word, among those the
     kit knows (`known`: the definition's, the page model's, the --path's last row and the page's own labels read live,
@@ -761,8 +773,10 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
     "Exposure Comp.", so "Exposure Comp. +0.0" ran on with ". +0.0"), and the words past that reading are none or a
     value of the row as above; or, where the page model saw the row drawn with an icon, it is that row behind any icon
     read in front as a stray mark or a letter or two (icon_behind: camkit.match.ICON's rule), also where that rule took
-    the icon itself for a short row the kit knows ("R Peaking Color White" read as Color Depth's "R": in_icon); else
-    that rule's refusal stands. The --path's own last row (`depth` its labels above, the page enter_any walked to) is then judged by
+    the icon itself for a short row the kit knows ("R Peaking Color White" read as Color Depth's "R": in_icon); or that
+    row with its icon glued on or before a label the screen cut, which the lit row shows more of (glued_icon: "SRegist.
+    Face Priority On", "In Face Priority in Multi Mr On", tied by `names`, runner.cut_names's); else that rule's refusal
+    stands. The --path's own last row (`depth` its labels above, the page enter_any walked to) is then judged by
     first_open_or_exit; any other opens only where this camera has been seen to open it, so walking within a seen parent
     to a seen row stays plain. On a submenu page (no page model), where that rule takes the bar for no row, for the
     --path's own last row with words past it that are no value of it, or for a row named by a reading of the lit row
@@ -807,6 +821,11 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
             rest = safety.plain(stop_kept(behind(lit))[len(stop_kept(path[-1])):])
             if not rest or rest in own_values:
                 row, why = own, ""
+        elif glued_icon(lit, path[-1], gone_to[0], {*known, *gone_to[1]}, values,
+                        (names or {}).get(safety.plain(path[-1]))):
+            # the same row where the live OCR glued the icon's letters on ("SRegist. Face Priority On") or the screen
+            # cut the label with an ellipsis ("In Face Priority in Multi Mr On"): mg_3's two refused steps, 2026-11-20
+            row, why = own, ""
     bar = next((k for k in known if isinstance(k, SubmenuBar)), None)
     if not decided and bar is not None and len(path) > 1 and list(depth) == list(path[:-1]) \
             and (why or first_open.key(row) != first_open.key(own)) \
@@ -824,6 +843,92 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
     if not seen.seen(row):
         return f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}", None
     return "", row
+
+
+ICON_CUT = 4                # at most this many characters of the lit text taken for the icon in front (glued_icon)
+ELLIPSIS = re.compile(r"\s*(?:\.\.\.|…)$")      # the screen's cut of a label too long for its row ("Face Priority in Mul...")
+
+
+def icon_seen(row, want: str) -> bool:
+    """Whether the page model saw its row `row`, labelled `want` (compared plain), drawn with an icon: a reading of it is
+    that label behind such an icon read as a stray mark or a letter or two (behind: "in Regist. Face Priority")."""
+    return any(behind(r) != r.strip() and safety.plain(behind(r)) == want for r in row_readings(row))
+
+
+def glued_icon(lit: str, label: str, row, others=(), values=None, names=None) -> bool:
+    """Whether the lit bar's text `lit` is the page model row `row` (the one go_to reached for the --path's row `label`)
+    with its icon read in front where icon_behind cannot take it: glued on with no space ("SRegist. Face Priority On"),
+    or before a label the screen cut with an ellipsis ("In Face Priority in Multi Mr On": the lit row shows more of a long
+    label than the page scan read). Every condition of icon_behind's but its icon rule holds: the row's label is `label`
+    (compared plain) and the page model saw it drawn with an icon (icon_seen); at most ICON_CUT characters in front are
+    the icon, as page_model.same_text drops one before that label (a letter or two glued before a capital, a short word),
+    so "Regist. Face Priority On" is never the row "Face Priority"; behind them the text starts with the label, its
+    ellipsis left out, both with their last stop kept (stop_kept); and no name the kit knows another row by (`others`, as
+    icon_reading takes them) is what the text starts with, but for its spacing (spaced_end), past the icon, nor what the
+    text behind the icon starts with where it is longer than the label. What follows the label is none or a value of the
+    row (`values`: {plain label: values}, plain_values); behind a cut label, words of the name the camera's definition
+    gives the row (`names`: {plain name: values}, runner.cut_names's for this label), each as that name has it, but the
+    last, a word the screen cut on, which need only start as that name's word does ("Mr" for "Metering"), then none or a
+    value of the row."""
+    from page_model import same_text
+    want = safety.plain(label or "")
+    if not want or not isinstance(row, dict) or safety.plain(row.get("label") or "") != want or not icon_seen(row, want):
+        return False
+    text, core = str(lit or "").strip(), ELLIPSIS.sub("", str(label).strip())
+    cut, head = core != str(label).strip(), stop_kept(core)
+    fulls = {want: set((values or {}).get(want) or ())}
+    if cut:
+        core_plain = safety.plain(core)
+        for name, vals in (names or {}).items():
+            if name.startswith(core_plain):
+                fulls.setdefault(name, set()).update(vals or ())
+                fulls[want] |= set(vals or ())
+    for j in range(1, min(ICON_CUT, len(text)) + 1):
+        lead, tail = text[:j], text[j:]
+        seen = stop_kept(tail)
+        if not lead.strip() or not seen.startswith(head) \
+                or not same_text(f"{lead}{' ' if tail[:1].isspace() else ''}{core}", core):
+            continue
+        rest = seen[len(head):]
+        if not (cut_rest_ok(rest, safety.plain(core), fulls) if cut else not rest[:1].isalnum()
+                and (not safety.plain(rest) or safety.plain(rest) in {safety.plain(v) for v in fulls.get(want, ())})):
+            continue
+        icon = re.sub(r"\s+", "", safety.plain(lead))
+        for other in others:
+            p = safety.plain(other) if isinstance(other, str) else ""
+            if not p or p == want or p in fulls:
+                continue
+            if (spaced_end(text, other) is not None and len(re.sub(r"\s+", "", p)) > len(icon)) or \
+                    (len(p) > len(want) and seen.startswith(p) and not seen[len(p):len(p) + 1].isalnum()):
+                return False
+        return True
+    return False
+
+
+def cut_rest_ok(rest: str, core: str, fulls: dict) -> bool:
+    """glued_icon's judgement of what the lit text reads past a label the screen cut (`core`, plain, its ellipsis left
+    out; `rest` as stop_kept gives it): none; or, after the ellipsis or a space, a value of the row; or words of the full
+    label of a row the kit knows (`fulls`: {plain label starting `core`: values}), each as that label has it but the last,
+    which need only start with that word's first letter (a word the screen cut on), then none or a value of that row."""
+    if not rest.strip(" .…"):
+        return True
+    if rest[:1] in ".…" or rest[:1].isspace():
+        if safety.plain(rest.lstrip(".…")) in {safety.plain(x) for vals in fulls.values() for x in vals}:
+            return True
+        if rest[:1] in ".…":
+            return False
+    words = rest.split()
+    for full, vals in fulls.items():
+        left = full[len(core):]
+        if left[:1].isspace() != rest[:1].isspace():
+            continue                        # the cut fell within a word of the label, and the reading must say so too
+        label_words, allowed = left.split(), {safety.plain(x) for x in vals}
+        for n in range(1, min(len(words), len(label_words)) + 1):
+            read, value = words[:n], " ".join(words[n:])
+            if read[:-1] == label_words[:n - 1] and read[-1][:1] == label_words[n - 1][:1] \
+                    and (not value or value in allowed):
+                return True
+    return False
 
 
 def behind(lit) -> str:
@@ -857,7 +962,7 @@ def icon_behind(lit: str, label: str, row, others=()) -> bool:
     want = safety.plain(label or "")
     if not want or not isinstance(row, dict) or safety.plain(row.get("label") or "") != want:
         return False
-    if not any(behind(r) != r.strip() and safety.plain(behind(r)) == want for r in row_readings(row)):
+    if not icon_seen(row, want):
         return False                        # the page model never saw an icon in front of this row's label
     text, cut = str(lit or "").strip(), behind(lit)
     head, seen = stop_kept(label), stop_kept(cut)
@@ -1575,7 +1680,10 @@ def main():
     ledger = coverage.drive_gate(a)
     # the row labels the kit knows, against which a lit bar a press is about to open is read (lit_refused)
     known_rows = (known_labels(model) | row_labels(definition())) if seen is not None else set()
-    row_vals = ({safety.plain(k): v for k, v in row_values(model).items()} if seen is not None else {})
+    row_vals = plain_values(row_values(model)) if seen is not None else {}
+    # the definition's names of the rows the screen cuts with an ellipsis, by which a lit row that shows more of one is
+    # tied to it (glued_icon)
+    full_names = cut_names(definition()) if seen is not None else {}
     # the values the kit knows by row, which an opening check takes off a bar to judge the row alone (safety.row_judged:
     # every run but an --owner one, whose row is its decision's), a decided row's own as network_values gives them
     decided_values = network_values(cam_network, model) if a.network else {}
@@ -1835,7 +1943,7 @@ def main():
                                    if a.network and lit else None)
                         live_labels = shown_labels(cam, cycle, model)
                         why, opening_row = lit_refused(lit, depth, a.path, seen, known_rows | set(live_labels), decided,
-                                                       row_vals, gone_to if i == 0 else None)
+                                                       row_vals, gone_to if i == 0 else None, names=full_names)
                     else:
                         why = ""
                     if why:

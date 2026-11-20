@@ -1954,6 +1954,19 @@ def row_values(model=None) -> dict:
     return out
 
 
+def cut_names(doc) -> dict:
+    """{a row label the screen cuts with an ellipsis, compared plain: {the name the camera's definition gives each setting
+    whose row path ends in it, compared plain: its value and option names (value_names)}}: "Face Priority in Mul..." ->
+    {"face priority in multi metering": {"On", "Off"}}. drive.glued_icon ties a lit row that shows more of such a label
+    than the page scan read to it by these names."""
+    out = {}
+    for s in _settings(doc):
+        path = _path(s)
+        if path and isinstance(s.get("name"), str) and re.search(r"(?:\.\.\.|…)\s*$", path[-1]):
+            out.setdefault(safety.plain(path[-1]), {}).setdefault(safety.plain(s["name"]), set()).update(value_names(s))
+    return out
+
+
 def defined_values() -> dict:
     """{a row's label: the value and option names the camera's definition gives the settings whose row path ends in that
     label} (value_names), the definition's alone: never a value a page model shows, which is the value the owner's camera
