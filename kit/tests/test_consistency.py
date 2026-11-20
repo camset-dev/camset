@@ -181,20 +181,19 @@ def test_one_picker_family_names_each_code_alike_in_every_slot(fam):
 # A label named twice in one setting's values, by the picker family it is repeated in. A true twin is one function
 # the camera lists twice with a different icon; the others are listed so a new repeat fails, each with why it stands.
 TWINS = {
-    "AEL hold": "spot and normal metering: two codes, the spot icon apart (stills names the second Spot AEL hold)",
-    "AEL toggle": "spot and normal metering, as AEL hold",
-    "Fixed Speed STBY": "Custom Key zoom and Remote zoom: two codes, a remote icon apart (stills names them apart)",
+    "Fixed Speed STBY": "Custom Key zoom and Remote zoom: two codes, a remote icon apart (the Fn Menus name them apart)",
     "Fixed Speed REC": "Custom Key zoom and Remote zoom, as Fixed Speed STBY",
-    "Record Setting": "Movie and Time-lapse/S&Q Record Setting: an S&Q icon apart (the Fn Menu names them apart)",
-    "FTP Trans. (This Img.)": "two FTP transfer items an icon apart, both proved on the playback Fn menu and keys",
+    "Record Setting": "Movie and Time-lapse Record Setting: a time-lapse icon apart (the Fn Menu names them apart)",
 }
 # A label one code of which was proved on the Fn Menu screens and another on the Custom Key screens (Pre-Capture,
 # Subject Recog in AF, Regist. Face Priority, Protect, SteadyShot, Sbj Recog Frm Disp.) is no repeat any more: each
-# setting holds only the codes its own picker's walked list offers (PICKER_LISTS), so only one of the two.
+# setting holds only the codes its own picker's walked list offers (PICKER_LISTS), so only one of the two. Nor are the
+# movie Custom Keys' AEL hold and AEL toggle, whose spot-metering codes are "Spot AEL hold" and "Spot AEL toggle", nor
+# the Playback Fn Menu's FTP Trans. (This Img.), whose second code is "FTP (crown icon) Trans. (This Img.)": the local
+# readers settled them on their frames (2026-11-20).
 REPEATS = {
-    "Custom Key (Movie)": {"AEL hold", "AEL toggle", "Record Setting", "Fixed Speed STBY", "Fixed Speed REC"},
+    "Custom Key (Movie)": {"Record Setting", "Fixed Speed STBY", "Fixed Speed REC"},
     "Custom Key (Still)": {"Fixed Speed REC", "Fixed Speed STBY"},
-    "Fn Menu (Playback)": {"FTP Trans. (This Img.)"},
 }
 
 

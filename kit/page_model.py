@@ -156,8 +156,9 @@ def same_text(a, b) -> bool:
 
 def same_option(a, b) -> bool:
     """same_text for two options of one list, or two readings of one option: an icon read as a lone word of a capital
-    and a small letter in front of one of them is never left out ("Tv Auto/Manual Switch" and "Auto/Manual Switch" are
-    two options of one Fn Menu list), so no two options of one setting of the a1 II's definition are one
+    and a small letter in front of one of them is never left out ("Tv Auto/Manual Switch" and "Av Auto/Manual Switch" are
+    two options of one Fn Menu list, the second named "Auto/Manual Switch" until 2026-11-20), so no two options of one
+    setting of the a1 II's definition are one
     (kit/tests/test_review_pipeline.py); a reading with such an icon ("Px Proxy Settings") is a doubt, which the caller
     asks the third reader or the reader about. Rows keep same_text, where that icon is common ("Sc Power Save by
     Monitor") and keeps_lead guards a row's own short word."""
