@@ -1043,6 +1043,45 @@ def test_a_camera_late_as_today_s_two_restarts_is_reached_where_the_old_deadline
     assert max(tries) <= session.RESTORE_CEILING
 
 
+def test_the_restore_check_says_once_what_it_waits_for_before_its_first_try(monkeypatch):
+    """A person at the terminal is told, once and before the first try, what the wait is for and how long it can last
+    (the owner's plain-words rule): each failed try's line alone could read as a hang."""
+    session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch, fails=["connect", "connect"])
+    said = []
+    assert session.verify_restore(run, Path("start.DAT"), link_class=Tried, clock=clock,
+                                  say=lambda m: said.append((now[0], m))) == 0
+    line = "the camera restarts after the upload: checking that the file took, trying for up to 5 minutes"
+    assert said[0] == (0.0, line) and [m for _, m in said].count(line) == 1
+    assert tries and tries[0] > said[0][0]
+
+
+def test_a_first_ctrl_c_during_the_restore_check_says_the_check_goes_on(monkeypatch, capsys):
+    """A first Ctrl-C while the check waits for the camera says the check goes on, how long it can last, and why a second
+    one is not safe there; the run is still asked to stop (after the check), and outside the check the line is as
+    before."""
+    import signal
+    from camkit import link
+    session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch, fails=["connect"])
+    during = []
+
+    class Watched(Tried):
+        def __init__(self, r):
+            during.append(link.WAITING_ON)
+            super().__init__(r)
+    assert session.verify_restore(run, Path("start.DAT"), link_class=Watched, clock=clock, say=lambda m: None) == 0
+    assert during and all(during) and link.WAITING_ON is None
+    asked = []
+    monkeypatch.setattr(link, "_RUNS", [SimpleNamespace(stop_requested=lambda: False, request_stop=asked.append)])
+    monkeypatch.setattr(link, "WAITING_ON", during[0])
+    link._on_signal(signal.SIGINT, None)
+    err = capsys.readouterr().err
+    assert "the check that the uploaded file took goes on" in err and "up to 5 minutes" in err
+    assert "Ctrl-C again" in err and "leaves that check undone" in err and asked == ["signal SIGINT"]
+    monkeypatch.setattr(link, "WAITING_ON", None)
+    link._on_signal(signal.SIGINT, None)
+    assert "stopping cleanly" in capsys.readouterr().err
+
+
 def test_every_restore_check_stops_at_the_one_ceiling_whatever_its_caller_passes(monkeypatch):
     """No caller gives up earlier than another: the first wait (settle) and the wait after a failure once open (pause)
     are a caller's to say, the last try's time is not; and no caller in the kit passes either to the check

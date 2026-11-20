@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import camset, screen
+from . import link as links
 from .frames import link_connection, load
 from .link import Link, LinkError, StopRequested
 
@@ -463,7 +464,23 @@ def verify_restore(run, start: Path, settle: float = 40.0, pause: float = 15.0, 
     no try starts past RESTORE_CEILING s from the call, the one ceiling every caller's check goes by. The records
     `expected` names (ended) are said by key and not counted. Each wait is in the run's events.jsonl ("restore_wait":
     what it waited for and the seconds; "restore_reconnected" or "restore_unreached" with the tries and the seconds from
-    the call)."""
+    the call). A person at the terminal is told once, before the first try, what the wait is for and how long it can
+    last, and a first Ctrl-C meanwhile says the check goes on (camkit.link.WAITING_ON): each failed try's line alone
+    could read as a hang, and a second Ctrl-C there leaves the restore unchecked."""
+    minutes = f"{RESTORE_CEILING / 60:g} minutes"
+    say(f"the camera restarts after the upload: checking that the file took, trying for up to {minutes}")
+    before, links.WAITING_ON = links.WAITING_ON, (
+        f"the check that the uploaded file took goes on while the camera restarts (up to {minutes}), and the run stops "
+        "after it. Press Ctrl-C again only to stop at once, which leaves that check undone: whether the camera holds "
+        "the file is then not known.")
+    try:
+        return _check_restore_tries(run, start, settle, pause, link_class, ready, say, show, expected, keys, eyes, clock)
+    finally:
+        links.WAITING_ON = before
+
+
+def _check_restore_tries(run, start, settle, pause, link_class, ready, say, show, expected, keys, eyes, clock):
+    """verify_restore's wait and tries, its docstring's."""
     log = getattr(run, "log", None) or (lambda kind, **f: None)
     t0 = clock.monotonic()
     deadline = t0 + RESTORE_CEILING
