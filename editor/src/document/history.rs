@@ -437,6 +437,48 @@ mod tests {
         assert_eq!(places(&app.edit_lines(&doc.original, &doc.edited)).len(), 2, "Expert mode: a line per place");
     }
 
+    /// The reviewer's finding 1: a request built by hand cannot put back one page of My Menu alone outside Expert mode.
+    /// X added on page 1, taken out, put on page 2; History's put-back of the removal with page 1's record and no key
+    /// puts back all of My Menu as it was before that edit (X on page 1 alone), and a Revert of page 1's record puts
+    /// back all of My Menu as opened: X never stands twice, no gap. An edit that left My Menu alone has no such line.
+    #[test]
+    fn a_page_of_my_menu_never_goes_back_alone() {
+        use crate::web::tests::answer;
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        let mm = app.schema.camera.my_menu.clone().unwrap();
+        let opened = app.mymenu_pages().unwrap();
+        let x = app.mymenu_items().iter().map(|i| i.code).find(|&c| app.mymenu_find(c).is_none()).unwrap();
+        let step = |app: &mut App, acts: Vec<Action>| {
+            app.last_edit = None;
+            assert!(app.apply(acts).is_none());
+        };
+        let acts = app.mymenu_add(x).unwrap().0;
+        step(&mut app, acts);
+        let acts = app.mymenu_remove(x).unwrap().0;
+        step(&mut app, acts);
+        let acts = app.mymenu_set(1, 0, x).unwrap().0;
+        step(&mut app, acts);
+        let pages = app.mymenu_pages().unwrap();
+        assert!(pages[1][0] == x && !pages[0].contains(&x), "X on page 2 alone");
+        let page1 = mm.records[0];
+        let twice = |p: &[Vec<i64>]| p.iter().flatten().filter(|&&c| c == x).count() > 1;
+        let gap = |p: &[Vec<i64>]| p.iter().any(|q| q.windows(2).any(|w| w[0] == mm.empty && w[1] != mm.empty));
+        let r = answer(&mut app, "revert_history", serde_json::json!({ "step": 1, "section": 0, "id": page1 }));
+        assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+        let now = app.mymenu_pages().unwrap();
+        assert!(!twice(&now) && !gap(&now), "{now:?}");
+        assert!(now[0][0] == x && now[1][0] == mm.empty, "all of My Menu as before the removal: {now:?}");
+        app.undo();
+        assert_eq!(answer(&mut app, "revert_record", serde_json::json!({ "section": 0, "id": page1 })).status, 200);
+        assert_eq!(app.mymenu_pages().unwrap(), opened, "all of My Menu as opened");
+        app.undo();
+        // Expert mode: the record alone, as asked
+        app.prefs.expert = true;
+        assert_eq!(answer(&mut app, "revert_history", serde_json::json!({ "step": 1, "section": 0, "id": page1 })).status, 200);
+        assert!(twice(&app.mymenu_pages().unwrap()), "Expert mode puts back the bytes asked for");
+    }
+
     /// Two settings kept in one record (PP1's and PP3's Black Level, elements of 0x04e9, each with its stills and movie
     /// copies): every list of edits names each setting by its own name with its value in words, never the record by
     /// its first setting with its array, in the window and on the page; History's Revert of the first edit puts PP1's

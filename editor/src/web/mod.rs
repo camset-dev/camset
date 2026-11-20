@@ -278,10 +278,12 @@ impl App {
                 if si >= self.n_sections() {
                     return WebReply::error(400, "This file has no such set.");
                 }
-                if let Some(why) = self.apply(vec![Action::Revert(si, (id, None))]) {
+                // a page of My Menu goes back with the whole list, as the file was opened (`mymenu_record`)
+                let (words, acts) = if self.mymenu_record(si, id) { self.mymenu_revert_all() } else { (format!("Record 0x{id:04x} reverted"), vec![Action::Revert(si, (id, None))]) };
+                if let Some(why) = self.apply(acts) {
                     return WebReply::error(409, &why);
                 }
-                self.status = self.with_moved(format!("Record 0x{id:04x} reverted {from}"));
+                self.status = self.with_moved(format!("{words} {from}"));
                 WebReply::json(json!({ "ok": true }))
             }
             "revert_flagged" => {
@@ -2473,8 +2475,11 @@ impl App {
                 let key = body["key"].as_str();
                 let Some((name, acts)) = self.doc.as_ref().zip(self.undo.get(step)).and_then(|(d, before)| {
                     let rec = before.sections.get(si)?.get(id)?;
-                    let Some(key) = key else { return Some((format!("Record 0x{id:04x}"), vec![Action::SetRecord(si, rec.clone())])) };
                     let after = self.undo.get(step + 1).unwrap_or(&d.edited);
+                    // a page of My Menu goes back with the whole list, as History's My Menu line puts it back
+                    // (`mymenu_record`); none where this edit left My Menu as it was
+                    let key = if key.is_none() && self.mymenu_record(si, id) { Some(MYMENU_LINE) } else { key };
+                    let Some(key) = key else { return Some((format!("Record 0x{id:04x}"), vec![Action::SetRecord(si, rec.clone())])) };
                     let line = self.edit_lines(before, after).into_iter().find(|l| l.si == si && l.id == id && l.key.as_deref() == Some(key))?;
                     Some((self.placed_name(si, &line.name), line.put_back(before, &d.edited)))
                 }) else {

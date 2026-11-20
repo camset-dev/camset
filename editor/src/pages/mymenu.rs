@@ -116,6 +116,13 @@ impl App {
         (format!("Revert {name} (all its items, as the file was opened)"), acts)
     }
 
+    /// A record of My Menu's places in set `si` (one page of its list), outside Expert mode: it goes back only with the
+    /// whole list (`mymenu_revert_all`, History's My Menu line), never alone, whichever request asks: a page alone put
+    /// back can leave an item twice or a gap the camera never wrote.
+    pub(crate) fn mymenu_record(&self, si: usize, id: u16) -> bool {
+        !self.prefs.expert && self.schema.settings.iter().any(|s| s.id == id && self.is_mymenu_place(s) && crate::document::edits::kept_in(s, si))
+    }
+
     /// Edits to My Menu, as its Menu entry counts them: the places changed and the settings of its own tab changed, in
     /// the live settings.
     pub(crate) fn mymenu_edits(&self) -> usize {
