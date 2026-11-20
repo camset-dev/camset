@@ -38,6 +38,12 @@ pub(crate) const KEY_COLLAPSE_ALL: egui::KeyboardShortcut = egui::KeyboardShortc
 /// Expand all, in Edit and Compare (`App::fold_all`): Cmd/Ctrl+Shift+↓, the page's too.
 pub(crate) const KEY_EXPAND_ALL: egui::KeyboardShortcut = egui::KeyboardShortcut::new(egui::Modifiers::COMMAND.plus(egui::Modifiers::SHIFT), egui::Key::ArrowDown);
 
+/// A text field has the caret: the one focus that keeps the fold keys for itself. egui's `wants_keyboard_input` is true
+/// for any control with the focus, a button reached by Tab or by a screen reader too.
+pub(crate) fn typing(ctx: &egui::Context) -> bool {
+    ctx.memory(|m| m.focused()).is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some())
+}
+
 /// The search box's id (Edit and Compare have one each, never both on screen): Cmd/Ctrl+F focuses it.
 pub(crate) const SEARCH_ID: &str = "search_box";
 
@@ -58,6 +64,21 @@ impl App {
             i.key_pressed(egui::Key::ArrowLeft), i.key_pressed(egui::Key::ArrowRight),
             i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown),
         ));
+        // a row of the camera's menu chosen in the items column (`item_head`): Enter or Space folds or shows what it
+        // holds (unless a control has egui's focus, which takes them as a click), Left folds it and Right shows it
+        if let (Focus::Items, Some(tab), Some(path)) = (self.focus, tab.as_ref(), self.item_head.clone()) {
+            let group = self.group.clone().or_else(|| self.tab_groups(tab).first().map(|(g, _, _)| g.clone()));
+            if let Some(g) = group {
+                let key = Self::fold_key(tab, &g, &path);
+                let folded = self.folded.contains(&key);
+                let free = ctx.memory(|m| m.focused().is_none());
+                let toggle = free && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Space));
+                if toggle || (left && !folded) || (right && folded) {
+                    if folded { self.folded.remove(&key); } else { self.folded.insert(key); }
+                    return;
+                }
+            }
+        }
         if left {
             self.focus = match self.focus { Focus::Items if tab.is_some() => Focus::Groups, _ => Focus::Tabs };
         }
@@ -80,14 +101,19 @@ impl App {
     /// arrows move anything (`bar_nav`, `keyboard_nav`), only where something folds (Compare's table, a tab of Edit, the
     /// exposure page); a text field with the keyboard keeps them for its text, and an open menu or list for itself.
     pub(crate) fn fold_keys(&mut self, ctx: &egui::Context) {
+        if let Some(id) = self.refocus.take() {
+            ctx.memory_mut(|m| m.request_focus(id));
+        }
         let here = matches!(self.mode, Mode::Compare) && !self.compare_records || matches!((self.mode, &self.view), (Mode::Edit, View::Tab(_) | View::Exposure));
-        if self.doc.is_none() || !here || ctx.wants_keyboard_input() || ctx.memory(|m| m.any_popup_open()) {
+        if self.doc.is_none() || !here || typing(ctx) || ctx.memory(|m| m.any_popup_open()) {
             return;
         }
         let collapse = ctx.input_mut(|i| i.consume_shortcut(&KEY_COLLAPSE_ALL));
         let expand = ctx.input_mut(|i| i.consume_shortcut(&KEY_EXPAND_ALL));
         if collapse || expand {
             self.fold_all(collapse);
+            // egui moves the focus a control has with the arrow too: it comes back the next frame
+            self.refocus = ctx.memory(|m| m.focused());
         }
     }
 

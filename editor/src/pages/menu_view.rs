@@ -316,10 +316,17 @@ impl App {
             }
             match Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref()) {
                 None => {
-                    // the first row a fold leaves shown (none where every row is under a folded one: Collapse all)
                     let hidden = menu_rows::hidden(&lines, |p| self.folded.contains(&fold_key(p)));
-                    let first = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Row { index, .. } if !h => Some(&rows[*index][0]), _ => None });
-                    self.select(None, self.group.clone(), first.map(|s| (s.name.as_str(), s.key.as_str())));
+                    // a row of the camera's menu chosen by the keys stays the choice while it is shown
+                    let head_shown = self.item_head.as_ref().is_some_and(|p| lines.iter().zip(&hidden).any(|(l, h)| !h && matches!(l, Line::Heading { path, .. } if path == p)));
+                    if !head_shown {
+                        // the first row a fold leaves shown, or where every row is under a folded one, the first heading
+                        let first = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Row { index, .. } if !h => Some(&rows[*index][0]), _ => None });
+                        self.select(None, self.group.clone(), first.map(|s| (s.name.as_str(), s.key.as_str())));
+                        if first.is_none() {
+                            self.item_head = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Heading { path, .. } if !h => Some(path.clone()), _ => None });
+                        }
+                    }
                 }
                 // a jump to a row a folded row of the camera hides unfolds it
                 Some(i) => {
@@ -332,17 +339,31 @@ impl App {
             }
         }
         let hidden = menu_rows::hidden(&lines, |p| self.folded.contains(&fold_key(p)));
-        let shown: Vec<usize> = lines.iter().zip(&hidden).filter_map(|(l, h)| match l { Line::Row { index, .. } if !h => Some(*index), _ => None }).collect();
-        // Up/Down move through the items as drawn, like the camera's menu (Left/Right pick the column: see keyboard_nav)
+        // Up/Down move through the items as drawn, like the camera's menu, stopping on its rows that hold others too
+        // (Left/Right pick the column, or fold a row that holds others: see keyboard_nav)
         let mut moved = false;
         if !*family && self.focus == Focus::Items && !ui.ctx().wants_keyboard_input() {
+            let stops: Vec<usize> = (0..lines.len()).filter(|&a| !hidden[a] && matches!(lines[a], Line::Row { .. } | Line::Heading { .. })).collect();
             let cur = Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref());
-            let pos = shown.iter().position(|&i| Some(i) == cur).unwrap_or(0);
+            let at = lines.iter().position(|l| match l {
+                Line::Heading { path, .. } => self.item_head.as_ref() == Some(path),
+                Line::Row { index, .. } => self.item_head.is_none() && Some(*index) == cur,
+                _ => false,
+            });
+            let pos = at.and_then(|a| stops.iter().position(|&s| s == a)).unwrap_or(0);
             let (up, down) = ui.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown)));
-            let to = if down && pos + 1 < shown.len() { Some(shown[pos + 1]) } else if up && pos > 0 { Some(shown[pos - 1]) } else { None };
-            if let Some(i) = to {
-                self.select(None, self.group.clone(), Some((&rows[i][0].name, &rows[i][0].key)));
-                moved = true;
+            let to = if down && pos + 1 < stops.len() { Some(stops[pos + 1]) } else if up && pos > 0 { Some(stops[pos - 1]) } else { None };
+            match to.map(|a| &lines[a]) {
+                Some(Line::Row { index, .. }) => {
+                    self.select(None, self.group.clone(), Some((&rows[*index][0].name, &rows[*index][0].key)));
+                    moved = true;
+                }
+                Some(Line::Heading { path, .. }) => {
+                    self.select(None, self.group.clone(), None);
+                    self.item_head = Some(path.clone());
+                    moved = true;
+                }
+                _ => {}
             }
         }
         let current = if *family { None } else { Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref()) };
@@ -396,6 +417,9 @@ impl App {
                 egui::ScrollArea::vertical().id_salt("detail_scroll").auto_shrink([false, false]).show(ui, |ui| {
                     if let Some(row) = current.map(|i| &rows[i]) {
                         self.detail_panel(ui, tab, gname, row, editable, &mut actions);
+                    } else if let Some(label) = self.item_head.as_ref().and_then(|p| lines.iter().find_map(|l| match l { Line::Heading { label, path, .. } if path == p => Some(label.clone()), _ => None })) {
+                        ui.heading(label);
+                        ui.label("A row of the camera's menu that holds the settings under it. Enter or Space folds or shows them, Left folds them and Right shows them; Up and Down go on through the rows.");
                     }
                 });
             });
@@ -457,10 +481,16 @@ impl App {
                                     ui.horizontal(|ui| {
                                         ui.add_space(ROW_INDENT * *depth as f32);
                                         let head = RichText::new(format!("{} {label}", if closed { "⏵" } else { "⏷" })).strong();
+                                        // chosen by the keys (`item_head`): marked as a chosen row is
+                                        let chosen = self.item_head.as_ref() == Some(path);
+                                        let head = if chosen { head.background_color(ui.visuals().selection.bg_fill) } else { head };
                                         let r = ui.add(egui::Label::new(head).sense(egui::Sense::click()))
                                             .on_hover_text(if closed { "A row of the camera's menu: click to show the settings under it" } else { "A row of the camera's menu: click to fold the settings under it" });
                                         if r.clicked() {
                                             fold = Some(path.clone());
+                                        }
+                                        if chosen && moved {
+                                            r.scroll_to_me(None);
                                         }
                                         if closed && edited > 0 {
                                             Self::badge(ui, edited.to_string(), "settings edited under this row");
@@ -546,8 +576,13 @@ impl App {
                     let at = lines.iter().position(|l| matches!(l, Line::Row { index, .. } if Some(*index) == current));
                     if let Some(at) = at.filter(|&a| hidden[a]) {
                         let near = shown.iter().find(|(a, _)| *a > at).or(shown.iter().rev().find(|(a, _)| *a < at));
-                        if let Some(&(_, i)) = near {
-                            self.select(None, self.group.clone(), Some((&rows[i][0].name, &rows[i][0].key)));
+                        match near {
+                            Some(&(_, i)) => self.select(None, self.group.clone(), Some((&rows[i][0].name, &rows[i][0].key))),
+                            // none left shown: the row of the camera's menu just folded
+                            None => {
+                                self.select(None, self.group.clone(), None);
+                                self.item_head = Some(path.clone());
+                            }
                         }
                     }
                 }
@@ -604,6 +639,10 @@ impl App {
                     let near = (0..at).rev().find(shown).or_else(|| (at..lines.len()).find(shown));
                     let row = near.and_then(|a| match lines[a] { Line::Row { index, .. } => Some(rows[index][0].clone()), _ => None });
                     self.select(None, Some(gname.clone()), row.as_ref().map(|s| (s.name.as_str(), s.key.as_str())));
+                    // none left shown: the row of the camera's menu, still shown, that holds it, so the keys have somewhere to be
+                    if row.is_none() {
+                        self.item_head = (0..at).rev().find_map(|a| match &lines[a] { Line::Heading { path, .. } if !hidden[a] => Some(path.clone()), _ => None });
+                    }
                 }
             }
             (Mode::Edit, View::Exposure) => self.ex_fold = Some(collapse),
