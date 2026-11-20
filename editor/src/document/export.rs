@@ -73,7 +73,8 @@ impl App {
                 if only_diff && !differs {
                     continue;
                 }
-                let mut row = vec![quote(tab), quote(group), quote(&s.name)];
+                // the definition's full name of the record the row shows, whatever the menu titles it
+                let mut row = vec![quote(tab), quote(group), quote(&self.full_name(s))];
                 if expert {
                     row.push(format!("0x{:04x}", s.id));
                 }
@@ -190,6 +191,25 @@ mod tests {
         app.prefs.expert = false;
         let r = crate::web::tests::answer(&mut app, "csv", serde_json::json!({ "target": 0 }));
         assert_eq!(String::from_utf8(r.body).unwrap(), app.csv_text(None, 0, "", &BarKey::All, false).0);
+    }
+
+    /// Review finding 9: in a camera menu, Compare's CSV names each row by the definition's full name of the record it
+    /// shows ("ISO (movie)" for Movie's ISO row), so the file says which record a row is, outside Expert mode too.
+    #[test]
+    fn the_compare_csv_names_each_record_in_full_in_a_menu() {
+        let (app, dir, user) = crate::test_support::sample_app("csv_menus", Some(crate::test_support::stub_menus));
+        let iso = app.schema.settings.iter().find(|s| s.key == "global:0x0334").cloned().unwrap();
+        let copy = app.copy_for_menu(&iso, "Movie").cloned().unwrap();
+        let (text, _) = app.csv_text_in(Some("Movie"), Some((&[Col::a(0), Col::a(1)], false, false)), 0, "", &BarKey::All, false);
+        let lines: Vec<&str> = text.trim_start_matches('\u{feff}').lines().skip(1).collect();
+        let rows = app.compare_rows(Some("Movie"), &BarKey::All, "");
+        assert_eq!(lines.len(), rows.len());
+        for (line, (tab, group, linked)) in lines.iter().zip(rows.iter()) {
+            let want = format!("{},{},{},", csv_cell(tab), csv_cell(group), csv_cell(&app.full_name(&linked[0])));
+            assert!(line.starts_with(&want), "{line} / {want}");
+        }
+        assert!(lines.iter().any(|l| l.contains(&format!(",{},", csv_cell(&copy.name)))), "{}", copy.name);
+        crate::test_support::done(&dir, &user);
     }
 
     /// E-29: a CSV cell a spreadsheet would take for a formula stays text; numbers and plain words are as they were.
