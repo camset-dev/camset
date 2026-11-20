@@ -305,7 +305,7 @@ def test_the_a1_pass_keeps_0x0b8d_out_of_the_memory_sets(tmp_path, monkeypatch, 
     S, _target, _write = a1_run(tmp_path, monkeypatch, A1_REPORT, A1_PROOFS)
     got = []
     real = S.from_data
-    monkeypatch.setattr(S, "from_data", lambda doc: got.append(real(doc)) or got[-1])
+    monkeypatch.setattr(S, "from_data", lambda doc, *more: got.append(real(doc, *more)) or got[-1])
     monkeypatch.setattr(sys, "argv", ["schema_update.py"])
     S.main()
     assert ("global:0x0b8d" in capsys.readouterr().out) == bool(was_in)

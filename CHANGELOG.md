@@ -241,6 +241,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   their row stands in, the mapping's open work.
 - **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
   counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
+- **A write from a definition read without its evidence keeps every place, menu tree or not:** a pass that proved a
+  few rows no longer takes the row off every other setting. The writer's refusal of a Main tile on an Expert-only
+  setting now says why that setting is Expert-only, and what to do about it.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.

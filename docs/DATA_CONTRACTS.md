@@ -123,7 +123,9 @@ where the camera shows it. So two owners of a model get the same `row_menus` onl
 menus each lacks.
 
 A write with the menu tree on the computer writes these from `MENUS`, and none of them without it. With no menu tree
-there (a fresh clone, CI) it leaves the definition's as they are, as it does the places.
+there (a fresh clone, CI) it leaves the definition's as they are, as it does the places. A write from a definition read
+without its proof paths (its evidence file not on the computer) leaves every place and these fields as they are too,
+whatever paths the pass adds to a few settings, unless the definition held no place at all (a new camera's first pass).
 
 ### What the editor offers outside Expert mode
 
