@@ -15,6 +15,7 @@ if str(ROOT / "kit" / "provers") not in sys.path:
     sys.path.insert(1, str(ROOT / "kit" / "provers"))
 import customshoot_values as V  # noqa: E402
 from camkit import camset, definitions, session  # noqa: E402
+from camkit.link import StopRequested  # noqa: E402
 
 SAMPLE = ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.DAT"
 CAM = "TEST-CAM_fw9.99"                  # conftest's made-up camera
@@ -217,7 +218,11 @@ def world(tmp_path, monkeypatch):
              "end": made(dat / "src_end.DAT", live=1, held=[1, 1, 1, 1])}
     log["files"] = files
 
+    events = log["events"]
+
     class Link:
+        """The link: each download and press in the run's one list of events, in order. A press after a stop (the
+        run's STOP: log["stop"]) raises StopRequested unless it is a cleanup press, as camkit.link refuses it."""
         def __init__(self, r):
             pass
 
@@ -231,40 +236,74 @@ def world(tmp_path, monkeypatch):
             p = dat / f"{len(log['downloads']) + 1:05d}_{tag}.DAT"
             p.write_bytes(files[tag].read_bytes())
             log["downloads"].append(p.name)
+            events.append(f"download {tag}")
             return p
-    cam = SimpleNamespace(may_open=frozenset({"Reg. Custom Shoot Set"}))
+
+        def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, **kw):
+            if run.stop_requested() and not cleanup:
+                events.append(f"refused {key}")
+                raise StopRequested("STOP: the run's STOP file asks it to stop")
+            events.append(f"press {key}" + (" (cleanup)" if cleanup else ""))
+            return {"ok": True}
+
+    class Cam:
+        """The camera layer over a link: its presses go out through the link it was made with, as LiveCamera's do."""
+        def __init__(self, link, may_open=()):
+            self.link, self.may_open = link, frozenset(may_open)
+            self.frame = SimpleNamespace(path=Path("00041_down.png"))
+
+        def press(self, key, **kw):
+            self.link.press(key)
+            self.frame = SimpleNamespace(path=Path(f"00042_{key}.png"))
+
+        def read(self):
+            return SimpleNamespace(kind="submenu")         # after Enter on Register: the list again, as on disk
+
+    def step(name):
+        """A fake of one of the run's steps that records itself as an event, whatever arguments it gets."""
+        return lambda *a, **k: events.append(name(*a, **k) if callable(name) else name)
+
+    run.stop_requested = lambda: log["stop"]
+    log["stop"] = False
     monkeypatch.setattr(runner, "check_readers", lambda: None)
     monkeypatch.setattr(runner, "Link", Link)
-    monkeypatch.setattr(runner, "LiveCamera", lambda link, eyes, r, may_open=(): cam)
+    monkeypatch.setattr(runner, "LiveCamera", lambda link, eyes, r, may_open=(): Cam(link, may_open))
     monkeypatch.setattr(runner, "close", lambda c, link: log.__setitem__("closed", log["closed"] + 1))
-    monkeypatch.setattr(proving.nav, "to_shooting", lambda link, eyes, why: None)
+    monkeypatch.setattr(proving.nav, "to_shooting", step(lambda link, eyes, why: f"session reaches shooting: {why}"))
     monkeypatch.setattr(runner.time, "sleep", lambda s: None)
     monkeypatch.setattr(runner.session, "finish", lambda link, start, tag="after", **kw: log["finished"].append(start)
-                        or session.Ending(Path("after.DAT"), ["a change"], True))
+                        or events.append("restore") or session.Ending(Path("after.DAT"), ["a change"], True))
     monkeypatch.setattr(runner.session, "check_restore", lambda r, e, start, **kw: log["checked"].append(start) or 0)
     monkeypatch.setattr(V, "load_scan", lambda scan: ([], {}))
     monkeypatch.setattr(V, "Run", lambda name: run)
     monkeypatch.setattr(V, "check_readers", lambda: None)
     monkeypatch.setattr(V, "eyes_from_config", lambda r: FakeEyes())
     monkeypatch.setattr(V, "Link", Link)
-    monkeypatch.setattr(V, "LiveCamera", lambda link, eyes, r, may_open=(): cam)
-    monkeypatch.setattr(V, "to_shooting", lambda link, eyes, why: None)
-    monkeypatch.setattr(V, "wait_lock", lambda since, eyes, clock=None: None)
-    monkeypatch.setattr(V, "close_screen", lambda c, link: log["events"].append("close"))
-    monkeypatch.setattr(V, "cancel_hold", lambda c, link, cycle, model, h: log["events"].append(f"cancel hold {h}"))
-    monkeypatch.setattr(V, "open_menu", lambda c: log["events"].append("menu"))
+    monkeypatch.setattr(V, "LiveCamera", lambda link, eyes, r, may_open=(): Cam(link, may_open))
+    monkeypatch.setattr(V, "to_shooting", step(lambda link, eyes, why: f"to shooting: {why}"))
+    monkeypatch.setattr(V, "wait_lock", step("wait lock"))
+    monkeypatch.setattr(V, "close_screen", step("close"))
+    monkeypatch.setattr(V, "open_menu", step("menu"))
 
     def set_row(c, cycle, model, path, option, say, mode="Stills"):
         if log["fail_on"] == option:
             raise V.Failed(f"{option!r} did not come round in its list")
-        log["events"].append(f"set {' > '.join(path)} = {option}")
+        if log["stop_on"] == option:
+            log["stop"] = True                  # the STOP file there from this set on
+        c.press("right")                        # opening the row's list: refused once the STOP is there
+        events.append(f"set {' > '.join(path)} = {option}")
+    log["stop_on"] = None
     monkeypatch.setattr(V, "set_row", set_row)
-    monkeypatch.setattr(V, "open_hold", lambda c, cycle, model, h: log["events"].append(f"open hold {h}"))
+    monkeypatch.setattr(V, "open_hold", step(lambda c, cycle, model, h: f"open hold {h}"))
+    # register() itself runs: the cursor brought to Register, the screen's words (none that ask), Enter, the download
+    monkeypatch.setattr(V, "to_register", step("to Register"))
+    monkeypatch.setattr(V, "lines", lambda c: [])
+    monkeypatch.setattr(V.ocr, "text_in", lambda lines, box: "")
 
-    def register(c, link, hdmi, name):
-        log["events"].append("register")
-        return "00042_down.png", link.download(name), "Registered."
-    monkeypatch.setattr(V, "register", register)
+    def cancel_hold(c, link, cycle, model, h):
+        events.append(f"open hold {h} to cancel")
+        c.press("menu")                         # its first press, menu_from_shooting's MENU: no cleanup press of its own
+    monkeypatch.setattr(V, "cancel_hold", cancel_hold)
 
     def go(*extra):
         monkeypatch.setattr(sys, "argv", ["customshoot_values", "--allow", "Reg. Custom Shoot Set", "--hold", "1",
@@ -276,10 +315,24 @@ def world(tmp_path, monkeypatch):
     return log
 
 
+def registration(option: str, tag: str) -> list:
+    """One --follow registration, every press, wait and download in its order: the live row set and the menu closed,
+    the shooting screen before the download and the menu's lock after it, then the hold opened, Register and Enter,
+    the shooting screen, the download and the lock again."""
+    return ["menu", "press right", f"set {ROW} = {option}", "close",
+            "to shooting: the download after the live row", f"download hold1-{tag}-set", "wait lock",
+            "open hold 1", "to Register", "press enter",
+            "to shooting: the download after Register", f"download hold1-at-{tag}", "wait lock"]
+
+
 def test_a_whole_run_sets_the_row_and_registers_per_option_in_one_session_and_ends_restored(world, capsys):
     world["go"]()
-    assert world["events"] == ["menu", f"set {ROW} = 0.5EV", "close", "open hold 1", "register",
-                               "menu", f"set {ROW} = 0.3EV", "close", "open hold 1", "register", "cancel hold 3"]
+    assert world["events"] == [
+        "session reaches shooting: the start download", "download before",
+        *registration("0.5EV", "0-5EV"), *registration("0.3EV", "0-3EV"),
+        "session reaches shooting: the settings download after the hold", "restore",
+        "to shooting: before putting the working copy back", "wait lock", "open hold 3 to cancel", "press menu",
+        "to shooting: the last download", "download end"]
     assert world["downloads"] == ["00001_before.DAT", "00002_hold1-0-5EV-set.DAT", "00003_hold1-at-0-5EV.DAT",
                                   "00004_hold1-0-3EV-set.DAT", "00005_hold1-at-0-3EV.DAT", "00006_end.DAT"]
     lines = world["lines"]()
