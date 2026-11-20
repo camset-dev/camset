@@ -784,6 +784,16 @@ impl App {
         self.focus = Focus::Items;
     }
 
+    /// Each title the row of the definition's setting `s` takes: its own name (its full name) and its setting's (a
+    /// copy), and what each camera menu's row showing it is titled.
+    fn titles_of(&self, s: &Setting) -> Vec<String> {
+        let d = self.def_of(s);
+        let mut t = vec![s.name.clone(), d.name.clone()];
+        t.extend(self.main_of(d).map(|m| m.name.clone()));
+        t.extend(self.menus().iter().map(|m| self.listed_record(s, self.target, &m.name).name));
+        t
+    }
+
     /// Show the menu a jump to `s` opens (`jump_place`), where it is not the one shown.
     fn switch_menu_for(&mut self, s: &Setting) {
         let now = self.menu_shown();
@@ -820,6 +830,11 @@ impl App {
             return;
         }
         let Some(s) = chosen else { return };
+        // a row chosen without its key (a jump that set the row's name alone): that row stays, the key is stale
+        if !self.item.as_ref().is_some_and(|i| self.titles_of(&s).contains(i)) {
+            self.item_key = None;
+            return;
+        }
         let now = self.menu_shown();
         let menu = self.jump_place(&s, self.target, now.as_deref()).0;
         let shown = match &menu { Some(m) => self.listed_record(&s, self.target, m), None => return };
@@ -2002,6 +2017,100 @@ pub(crate) mod facts_tests {
         app.set_menu("S&Q");
         app.go_to(&audio);
         assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some("S&Q"), Some(audio.key.as_str())));
+        done(&dir, &user);
+    }
+
+    /// The window run frame by frame as a screen reader is told it, and clicked as one clicks.
+    struct Win {
+        ctx: egui::Context,
+        frame: eframe::Frame,
+    }
+
+    impl Win {
+        fn new() -> Self {
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            Win { ctx, frame: eframe::Frame::_new_kittest() }
+        }
+
+        /// One frame with `events`: each control and label a screen reader is told of (node, role, words).
+        fn run(&mut self, app: &mut App, events: Vec<egui::Event>) -> Vec<(egui::accesskit::NodeId, egui::accesskit::Role, String)> {
+            let frame = &mut self.frame;
+            let out = self.ctx.run(egui::RawInput { events, ..Default::default() }, |ctx| eframe::App::update(app, ctx, frame));
+            out.platform_output.accesskit_update.map(|t| t.nodes.iter().filter_map(|(id, n)| n.label().or(n.value()).map(|l| (*id, n.role(), l.to_string()))).collect()).unwrap_or_default()
+        }
+
+        /// The window settled (two frames), then a click on the one control of `role` whose words are `name`, then
+        /// settled again.
+        fn click(&mut self, app: &mut App, role: egui::accesskit::Role, name: &str) {
+            let _ = self.run(app, vec![]);
+            let said = self.run(app, vec![]);
+            let hit: Vec<egui::accesskit::NodeId> = said.iter().filter(|(_, r, l)| *r == role && l == name).map(|(id, ..)| *id).collect();
+            assert_eq!(hit.len(), 1, "{name}: {said:?}");
+            let click = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Click, target: hit[0], data: None };
+            let _ = self.run(app, vec![egui::Event::AccessKitActionRequest(click)]);
+            // a header opening takes a few frames to show what it holds
+            for _ in 0..6 {
+                let _ = self.run(app, vec![]);
+            }
+        }
+    }
+
+    /// Review finding 2: the record map's and the Exposure page's jumps land on the setting clicked and stay there, the
+    /// row chosen before (SteadyShot) not taking the selection back; one to a row only Movie's menu has opens Movie's;
+    /// and a jump made by hand with only `item` set (no `item_key`) is left alone by `follow_selection`.
+    #[test]
+    fn the_record_maps_and_the_exposure_pages_jumps_land() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("menus_jumps_land", Some(crate::test_support::stub_menus));
+        let (steady, lower, audio) = (setting(&app, "global:0x02f7"), setting(&app, "global:0x0b65"), setting(&app, "global:0x02e9"));
+        let choose_steady = |app: &mut App| {
+            app.set_menu("Still");
+            app.go_to(&steady);
+            assert_eq!(app.item_key.as_deref(), Some(steady.key.as_str()));
+        };
+        let landed = |app: &App, s: &Setting| {
+            let shown = app.listed_record(s, 0, &app.menu_shown().unwrap());
+            (app.view.clone(), app.group.clone(), app.item.clone(), app.item_key.clone()) == (app.view_of(s), Some(app.shown_group_of(s)), Some(shown.name.clone()), Some(shown.key.clone()))
+        };
+        let mut w = Win::new();
+        // the record map (Expert mode's), filtered to one record by its number
+        app.prefs.expert = true;
+        for (s, menu) in [(&lower, "Still"), (&audio, "Movie")] {
+            choose_steady(&mut app);
+            (app.view, app.search) = (View::Records, format!("0x{:04x}", s.id));
+            w.click(&mut app, Role::Label, &s.name);
+            assert_eq!(app.menu_shown().as_deref(), Some(menu), "{}", s.name);
+            assert!(landed(&app, s), "{}: {:?} {:?} {:?} {:?}", s.name, app.view, app.group, app.item, app.item_key);
+        }
+        app.prefs.expert = false;
+        app.search.clear();
+        // the Exposure page, with one setting under "What decides ISO" alone
+        {
+            let ex = app.schema.camera.exposure.as_mut().unwrap();
+            (ex.mode_key, ex.memory_mode_key) = (String::new(), String::new());
+            for side in [&mut ex.aperture, &mut ex.shutter, &mut ex.iso] {
+                (side.key, side.memory_key, side.memory_numerator_key, side.memory_denominator_key) = (String::new(), String::new(), String::new(), String::new());
+                side.limits.clear();
+            }
+        }
+        for (i, (s, menu)) in [(&lower, "Still"), (&audio, "Movie")].into_iter().enumerate() {
+            app.schema.camera.exposure.as_mut().unwrap().iso.key = s.key.clone();
+            choose_steady(&mut app);
+            app.view = View::Exposure;
+            if i == 0 {
+                // opened once, it stays open
+                w.click(&mut app, Role::Button, "What decides ISO");
+            }
+            w.click(&mut app, Role::Button, "Show in menu");
+            assert_eq!(app.menu_shown().as_deref(), Some(menu), "{}", s.name);
+            assert!(landed(&app, s), "{}: {:?} {:?} {:?} {:?}", s.name, app.view, app.group, app.item, app.item_key);
+        }
+        // a jump made by hand that sets `item` alone: the row chosen before does not take the selection back
+        choose_steady(&mut app);
+        (app.view, app.group, app.item) = (View::Tab("Exposure/Color".into()), Some("Exposure".into()), Some(lower.name.clone()));
+        let _ = w.run(&mut app, vec![]);
+        assert_eq!((app.group.as_deref(), app.item.as_deref()), (Some("Exposure"), Some(lower.name.as_str())), "left alone");
         done(&dir, &user);
     }
 
