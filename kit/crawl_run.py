@@ -112,16 +112,17 @@ from runner import add_info_ok_argument, definition, info_ok_for, info_ok_or_exi
 def summary(r) -> dict:
     w = r.walk
     opts = None
+    icon = {"icon": r.icon} if getattr(r, "icon", None) else {}     # an icon before the label (camkit.crawl.icon_entry)
     if w is not None and type(w).__name__ == "SubCrawl":    # a crawled submenu: its rows, nested
         return {"page": r.page, "slot": r.slot, "label": r.label, "outcome": r.outcome, "kind": r.kind,
-                "presses": r.presses, "submenu": [summary(x) for x in w.rows], "note": w.stopped}
+                "presses": r.presses, "submenu": [summary(x) for x in w.rows], "note": w.stopped, **icon}
     if w is not None:
         opts = ([len(x.options) for x in w.rows] if type(w).__name__ == "GridWalk" else
                 len(w.options) if hasattr(w, "options") else
                 [len(f.options) for f in w.fields] if hasattr(w, "fields") else
                 {k: len(v[0]) for k, v in w.axes.items()})
     out = {"page": r.page, "slot": r.slot, "label": r.label, "outcome": r.outcome, "kind": r.kind,
-           "options": opts, "presses": r.presses, "note": getattr(w, "note", "") if w else ""}
+           "options": opts, "presses": r.presses, "note": getattr(w, "note", "") if w else "", **icon}
     if getattr(r, "network", ""):
         out["network"] = r.network                          # opened under a network decision: safety.lift_class
     if getattr(r, "decided", ""):
@@ -728,6 +729,7 @@ def kept_row(row: dict, labels) -> dict:
     out = dict(row)
     kept = kept_label(row.get("label"), known)
     out["label"] = row["decided"] if kept == WITHHELD_LABEL and row.get("decided") else kept
+    out.pop("icon", None)                   # the texts read round an icon (camkit.crawl.icon_entry): none such a walk asks
     for k in ("outcome", "note"):
         if isinstance(out.get(k), str):
             out[k] = safety.quoted_withheld(out[k])

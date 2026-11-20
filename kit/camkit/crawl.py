@@ -37,7 +37,7 @@ its walk) is raised, and the lap is cancelled (kit/crawl_run.py).
 """
 from dataclasses import dataclass, field
 
-from . import safety
+from . import safety, screen
 from .screen import same_position, same_state
 from .walk import walk_axes, walk_cycle, walk_fields, walk_grid, walk_look
 
@@ -80,6 +80,9 @@ class RowResult:
     # the information notice taken with its OK before the row's screen (--info-ok): {"row": the row named, "frame": the
     # notice's frame}; None for every other row
     info_ok: dict | None = None
+    # a submenu row whose label the camera draws an icon before (icon_entry): page_model.icon_label's record, the label as
+    # read, OCR's reading right of the icon, and what was left out of the label, or "kept" with why; None for any other
+    icon: dict | None = None
 
 
 @dataclass
@@ -611,6 +614,8 @@ def crawl_submenu(cam, labels, path: tuple, parent: "Place", network=frozenset()
         entry = cache[key][slot] if slot < len(cache[key]) else {"label": ""}
         if isinstance(entry, str):
             entry = {"label": entry}
+        if not (network or look):
+            entry = icon_entry(cam, s, slot, entry, cache[key])
         page = {"page": " > ".join(path)}
         here = Place(s, parent, index)
         if not entry.get("label"):  # noqa: SIM108 (two long arms read apart)
@@ -618,6 +623,7 @@ def crawl_submenu(cam, labels, path: tuple, parent: "Place", network=frozenset()
         else:
             res = visit_row(cam, s, page, slot, entry, labels, path, parent, index=index, network=network,
                             notices=notices, info_ok=info_ok, first=first, look=look)
+        res.icon = entry.get("icon")
         out.rows.append(res)
         if res.outcome == "lost":
             out.stopped = f"lost at {entry.get('label')!r}"
@@ -630,6 +636,41 @@ def crawl_submenu(cam, labels, path: tuple, parent: "Place", network=frozenset()
             return out
     out.stopped = f"more than {SUBMENU_ROWS} rows: not a submenu the reader understood"
     return out
+
+
+def icon_entry(cam, s, slot: int, entry: dict, rows) -> dict:
+    """The submenu row `entry` (labels(cam)'s, the row lit at `slot` on the screen `s`) with its label read to the right
+    of the icon the camera draws before it (camkit.screen.label_icons): OCR reads the row again with the icon painted
+    over (page_model.covered_readings), and what the label as read has in front of that reading is left out where
+    page_model.icon_label can tell it is the icon ("S&Q Record Setting" is Record Setting, 2026-11-19), else the label
+    stays as read; either way "icon" says what was read, left out or kept, and why. The label as read stays among the
+    row's readings, which the never-open and look lap checks read (row_readings). The picture is the frame as the run
+    saved it (a frame the eyes withheld is black there, and gives nothing), never one in memory only; crawl_submenu asks
+    nothing of the kind on a --network run or a look lap, which keep no text read off the screen. The entry as it is
+    where the camera gives no saved frame (the menu twin), the row starts with no icon, or the reading fails. rows: the
+    page's labels (labels(cam)'s), none of which the label may become."""
+    label = entry.get("label") or ""
+    saved = getattr(getattr(cam, "frame", None), "path", None)
+    if not label or saved is None or slot >= len(getattr(s, "rows", None) or ()):
+        return entry
+    try:
+        from page_model import SUBMENU_LABEL, covered_readings, icon_label  # (kit/ on sys.path)
+
+        from .frames import load
+        image = load(saved).image
+        band = s.rows[slot]
+        boxes, text_x = screen.label_icons(image, band, SUBMENU_LABEL[0])
+        if not boxes:
+            return entry
+        got = covered_readings({0: (image, {slot: (band, boxes, text_x)})}, SUBMENU_LABEL, {"ocr": None})
+        others = [r.get("label") if isinstance(r, dict) else r for i, r in enumerate(rows) if i != slot]
+        new, record = icon_label(label, got[0].get(slot, {}).get("ocr", ""), boxes, others)
+    except Exception:                   # no icon read: the label as read
+        return entry
+    readings = entry.get("readings")
+    if not isinstance(readings, dict):                   # a live page read's list (camkit.live.submenu_labels)
+        readings = [*(readings or ()), *([label] if label not in (readings or ()) else [])]
+    return {**entry, "label": new, "icon": record, "readings": readings}
 
 
 @dataclass

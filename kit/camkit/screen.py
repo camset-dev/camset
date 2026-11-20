@@ -1919,6 +1919,92 @@ def box_stars(a: np.ndarray, s: Screen) -> int | None:
     return len(comps)
 
 
+# --- an icon before a row's label --------------------------------------------------------------------------------------
+# The a1 II draws an icon before some rows' labels: a light box with dark letters in it (S&Q, Px, LAN, MR, the S of with
+# Shutter Button, the stills mark) or a pictogram with a solid part (the movie mark). OCR reads one as letters now and then
+# ("Saa Record Setting", "RISO", "LAN IP Address Setting"), and the reader too ("S&Q Record Setting", 2026-11-19), so
+# label_icons finds it by its pixels and the label is read to the right of it (page_model.covered_readings). Text is
+# never drawn so: no letter of the menu font is a filled block, nor a light box at least 16 px wide with dark marks in it.
+# Measured on the a1 II's HDMI and OSD frames: an icon is 20-24 px wide and its label's text starts 5-7 px after it; the
+# letters of a word are 1-3 px apart. An icon these tests do not know (the time-lapse dial, SteadyShot's hand) ends the
+# icons found: the label's text is taken to start there, and the label stays as read wherever that is wrong.
+ICON_GAP = 4                  # empty columns that end an icon
+ICON_MAX_W = 34               # no icon is wider
+ICONS_MAX = 3                 # icons before one label (two seen: the movie mark, then the S box of with Shutter Button)
+
+
+def label_icons(a: np.ndarray, band, x0: int) -> tuple:
+    """(boxes, text_x): the icons drawn before the label of the row in `band` (its top and bottom) whose text starts
+    near x `x0` (a menu page's 140, a submenu's 55), each (x0, x1) left to right, and the x where the label's text starts
+    after them; ((), None) where the row starts with no icon. An icon is an object at the row's left (its columns of ink,
+    ICON_GAP empty ones ending it, no wider than ICON_MAX_W) holding a light box with dark marks enclosed in it (at least
+    16 px wide, 14 tall, 58% filled) or a solid part (9 px or more each way, 90% filled); the first object that is
+    neither is the label's text. Ink on the row's orange bar is what is light (grey over 130); elsewhere what is grey over
+    80 and unsaturated, so a greyed row's icon counts too."""
+    import cv2
+    t, b = int(band[0]) + 3, int(band[1]) - 3
+    left = max(0, x0 - 6)
+    if b - t < 10:
+        return (), None
+    lit = _orange(a)[t:b, x0:x0 + 200].mean() > 0.5
+    grey = _grey(a)[t:b, left:left + 200]
+    m = (grey > 130) if lit else ((grey > 80) & (_sat(a)[t:b, left:left + 200] < 60))
+    m = m.astype(np.uint8)
+    boxes = []
+    for ox0, ox1 in _ink_objects(m.sum(axis=0)):
+        if len(boxes) >= ICONS_MAX or ox1 - ox0 > ICON_MAX_W or not _icon_like(cv2, m[:, ox0:ox1]):
+            return (tuple(boxes), ox0 + left) if boxes else ((), None)
+        boxes.append((ox0 + left, ox1 + left))
+    return (), None                 # icons and nothing after them: no label to read
+
+
+def _ink_objects(cols) -> list:
+    """(x0, x1) of each run of columns holding ink, split where ICON_GAP empty columns or more come between."""
+    out, x, n = [], 0, len(cols)
+    while x < n:
+        while x < n and not cols[x]:
+            x += 1
+        if x >= n:
+            break
+        x0, empty = x, 0
+        while x < n and empty < ICON_GAP:
+            empty = empty + 1 if not cols[x] else 0
+            x += 1
+        out.append((x0, x - empty))
+    return out
+
+
+def _icon_like(cv2, part) -> bool:
+    """Whether an object's ink (label_icons) holds a light box with dark marks enclosed in it, or a solid part."""
+    n, lab, st, _ = cv2.connectedComponentsWithStats(part, connectivity=8)
+    for k in range(1, n):
+        x, y, w, h, area = (int(v) for v in st[k])
+        fill = area / (w * h)
+        if w >= 9 and h >= 9 and fill >= 0.9:
+            return True
+        if w >= 16 and h >= 14 and fill >= 0.58:
+            # the marks in the box: dark pixels its ink encloses, none of them reaching the box's edge
+            dark = (lab[y:y + h, x:x + w] != k).astype(np.uint8)
+            m, marks = cv2.connectedComponents(dark, connectivity=4)
+            edge = set(marks[0]) | set(marks[-1]) | set(marks[:, 0]) | set(marks[:, -1])
+            if sum(int((marks == j).sum()) for j in range(1, m) if j not in edge) >= 12:
+                return True
+    return False
+
+
+def cover_icons(a: np.ndarray, band, boxes) -> np.ndarray:
+    """A copy of the frame `a` with the icons `boxes` (label_icons) of the row in `band` painted over in the row's own
+    colour (the median of the columns just left of the first icon), so that OCR reads only the label's text."""
+    t, b = int(band[0]) + 2, int(band[1]) - 2
+    x = boxes[0][0]
+    strip = a[t + 1:b - 1, max(0, x - 5):max(1, x - 1)].reshape(-1, 3)
+    colour = np.median(strip, axis=0).astype(np.uint8) if len(strip) else np.zeros(3, np.uint8)
+    out = a.copy()
+    for x0, x1 in boxes:
+        out[t:b, max(0, x0 - 1):x1 + 1] = colour
+    return out
+
+
 def rows_key(a: np.ndarray) -> str:
     """The visible rows' text (white, at grey > 150, so the orange cursor bar hardly matters) plus the
     page key: a submenu that scrolls instead of paging keeps its breadcrumb while its rows change

@@ -11,7 +11,9 @@ for structure), OCR (and a second OCR engine as "ocr2" when one is installed), a
 used: this never calls a server). Labels the user confirmed (<run>/user_labels.json, keyed by page
 counter and row) count as a reading too, and so do labels read by eye off the frame where the readers
 disagreed (<run>/checked_labels.json, same keys, each naming its frame). A label or value is "confirmed" when two of those sources agree
-after icon noise is stripped; otherwise every source's reading is kept for review.
+after icon noise is stripped; otherwise every source's reading is kept for review. Where the camera draws an icon before
+a row's label, OCR reads the row again with the icon painted over and the label is voted on what lies right of it
+(icon_vote); the row's "icon" says what was read, left out or kept.
 
 Writes <run>/model.json and prints a summary with the disagreements. A runner takes a scan by default only while its
 model.json is built from its lap (runner.scan_unready: the lap's scan id, recorded in <run>/scan_mode.json as
@@ -233,6 +235,183 @@ def vote(readings: dict) -> tuple:
     return None, []
 
 
+# An icon the camera draws before a row's label (camkit.screen.label_icons): OCR reads the row again with every icon of
+# the frame painted over (covered_readings), and that reading, which starts where the label's text starts, says what any
+# other reading read in front of the label: the icon, left out (icon_lead). A page's label is then voted on as before
+# (icon_vote, page_labels), a crawl's submenu label cut so (icon_label); both keep the label as read wherever they cannot
+# tell, and say in the row's "icon" what they read, left out or kept, and why. The readings the row keeps are the raw
+# ones (2026-11-19: the reader read the S&Q box as "S&Q" on one crawl of S&Q Settings and not on another, and the row's
+# proof was refused under the name the map gave it).
+OCR_SOURCES = ("ocr", "ocr2")
+ICON_LEAD = 4               # characters (spaces aside) one icon is read as at most: "S&Q", "LAN", "Saa", "MR", "R"
+MENU_LABEL, SUBMENU_LABEL = (140, 470), (55, 470)       # the label's column on a menu page and on a submenu (x0, x1)
+LEAD_SLACK, TEXT_SLACK = 8, 4                           # how far OCR's first line may start before / after the text
+
+
+def page_icons(path: Path, n: int) -> tuple:
+    """(picture, {row: (band, boxes, text_x)}): the menu page frame at `path` and the icons drawn before its first `n`
+    rows' labels (camkit.screen.label_icons), each row where page_model reads its label (MENU_ROW_TOP, MENU_ROW_PITCH);
+    (None, {}) for a frame that cannot be loaded (its OCR readings say why)."""
+    from camkit import frames, screen
+    try:
+        image = frames.load(path).image
+    except Exception:
+        return None, {}
+    rows = {}
+    for i in range(n):
+        band = (MENU_ROW_TOP + MENU_ROW_PITCH * i, MENU_ROW_TOP + MENU_ROW_PITCH * i + 52)
+        boxes, text_x = screen.label_icons(image, band, MENU_LABEL[0])
+        if boxes:
+            rows[i] = (band, boxes, text_x)
+    return image, rows
+
+
+def covered_readings(frames: dict, column, engines: dict) -> dict:
+    """{frame: {row: {source: text}}}: OCR's reading of each row's label with every icon of its frame painted over
+    (camkit.screen.cover_icons). frames: {frame: (image, {row: (band, boxes, text_x)})}, the icons camkit.screen.
+    label_icons found; column: the label's (x0, x1), MENU_LABEL or SUBMENU_LABEL; engines: {source: OCR engine} ("ocr":
+    None for the configured one, "ocr2": the second). A reading is kept only where OCR's first line in the row starts
+    where the label's text starts (from LEAD_SLACK px before the last icon's end, which OCR's box of a word takes in, to
+    TEXT_SLACK px after text_x): never one that kept a piece of an icon, nor one that left the label's first word out. The
+    pictures are written to a folder of their own, gone after, and read once per engine; a frame or an engine that fails
+    gives no reading (the label stays as read)."""
+    import tempfile
+
+    from camkit import screen
+    from PIL import Image
+    out = {f: {} for f in frames}
+    with tempfile.TemporaryDirectory(prefix="camset-icons-") as tmp:
+        files = {}
+        for n, (f, (image, rows)) in enumerate(frames.items()):
+            if not rows:
+                continue
+            covered = image
+            for band, boxes, _ in rows.values():
+                covered = screen.cover_icons(covered, band, boxes)
+            files[f] = Path(tmp) / f"{n:05d}.png"
+            Image.fromarray(covered).save(files[f])
+        for source, eng in engines.items():
+            for f, p in files.items():
+                try:
+                    lines = ocr.read([p], eng)[p]
+                except Exception:           # a frame the helper cannot read, an engine that will not run: no reading
+                    continue
+                for row, (band, boxes, text_x) in frames[f][1].items():
+                    got = [ln for ln in lines if ln.inside((column[0], band[0], column[1], band[1]))]
+                    if got and boxes[-1][1] - LEAD_SLACK <= min(ln.x for ln in got) <= text_x + TEXT_SLACK:
+                        out[f].setdefault(row, {})[source] = " ".join(ln.text for ln in got).strip()
+    return out
+
+
+def icon_lead(reading, covered) -> tuple | None:
+    """(rest, lead, glued): the reading `reading` as far as OCR's reading right of the icon (`covered`) has it, compared
+    as key_text compares (case, spacing, stops, OCR's look-alikes), what it read in front of that (the icon), and whether
+    that is glued to the label's first letter ("RISO") rather than a word of its own ("Saa Record Setting"). None where
+    the reading does not end so or reads nothing in front."""
+    t, want = str(reading or "").strip(), _key(str(covered or ""))
+    if not want:
+        return None
+    for i in range(1, len(t)):
+        if _key(t[i:]) == want:
+            lead, rest = t[:i], t[i:]
+            if not lead.strip():
+                return None
+            return rest.strip(), lead.strip(), not (lead[-1].isspace() or rest[:1].isspace())
+    return None
+
+
+def _lead_ok(lead: str, icons: int) -> bool:
+    """Whether what a reading read in front of a label can be the reading of `icons` icons (ICON_LEAD characters each)."""
+    return 0 < len(re.sub(r"\s", "", lead)) <= ICON_LEAD * max(1, icons)
+
+
+def icon_vote(labels: dict, covered: dict, label, by: list, icons) -> tuple:
+    """(label, agreed_by, record) of a page row whose label starts after icons (`icons`, camkit.screen.label_icons'
+    boxes), from its readings (`labels`: {source: text}), OCR's readings right of the icons (`covered`: {source: text},
+    covered_readings) and the label voted before (`label`, `by`: vote's). Each OCR engine's reading is its reading right
+    of the icons; any other reader's, where it is that with a word of its own in front (icon_lead, ICON_LEAD characters
+    an icon), is the rest; then vote. The new label is taken only where a reader other than OCR agrees on it, and it is
+    the label voted before, or that with something in front left out, or there was none; else the label stays as voted
+    before. record: what OCR read right of the icons, what each reading had in front, left out, and "kept" with why
+    where the label stays (page_labels keeps it too where another row of the page has the new label)."""
+    cut, left_out = {}, {}
+    for name, text in labels.items():
+        if name in covered:
+            cut[name] = covered[name]
+            got = icon_lead(text, covered[name])
+            if got:
+                left_out[name] = got[1]
+            continue
+        got = next((g for g in (icon_lead(text, c) for c in covered.values()) if g), None)
+        if got and not got[2] and _lead_ok(got[1], len(icons)):
+            cut[name], left_out[name] = got[0], got[1]
+        else:
+            cut[name] = text
+    new, nby = vote(cut)
+    record = {"icons": [list(b) for b in icons], "covered": dict(covered), "left_out": left_out}
+    before = icon_lead(label, new) if label and new else None
+    if not new:
+        why = "no two readings agree on the label right of the icon"
+    elif all(n in OCR_SOURCES for n in nby):
+        why = f"only OCR reads {new!r} there"
+    elif label and _key(label) != _key(new) and not (before and _lead_ok(before[1], len(icons))):
+        why = f"{new!r} is not the label voted before ({label!r}) with something in front left out"
+    else:
+        return new, nby, record
+    return label, by, {**record, "kept": why}
+
+
+def page_labels(readings: list, icons: dict, covered: dict) -> list:
+    """[(label, agreed_by, icon)] of a page's rows, from each row's readings ({source: text}, in row order): vote's,
+    and on a row whose label starts after icons (`icons`: {row: (band, boxes, text_x)}, page_icons) icon_vote's, with
+    OCR's readings right of them (`covered`: {row: {source: text}}, covered_readings); icon is that row's record, else
+    None. A label icon_vote changed to one another row of the page has too goes back to the label voted before: there
+    the icon is what tells the two apart (the a1 II's Shoot Mode, and the Shoot Mode an S&Q box and a dial are drawn
+    before)."""
+    out, before = [], {}
+    for i, labels in enumerate(readings):
+        label, by = vote(labels)
+        icon = None
+        if i in icons:
+            before[i] = (label, by)
+            label, by, icon = icon_vote(labels, covered.get(i, {}), label, by, icons[i][1])
+        out.append((label, by, icon))
+    for i, (label, _, icon) in enumerate(out):
+        old = before.get(i)
+        if old is None or not label or _key(old[0] or "") == _key(label):
+            continue
+        twin = next((j for j, o in enumerate(out) if j != i and o[0] and _key(o[0]) == _key(label)), None)
+        if twin is not None:
+            out[i] = (*old, {**icon, "kept": f"{label!r} is also the label of row {twin}: the icon tells them apart"})
+    return out
+
+
+def icon_label(label, covered, icons, others=()) -> tuple:
+    """(label, record) of a crawl's submenu row whose label starts after icons (`icons`, camkit.screen.label_icons'
+    boxes): the label as read (`label`: the reader's, else OCR's) with what it read in front of OCR's reading right of
+    the icons (`covered`, covered_readings) left out, where that is a word of its own (icon_lead) of ICON_LEAD
+    characters an icon at most, and what is left is no other row's label of the page (`others`); else the label as
+    read. record: the label as read, OCR's reading right of the icons, what was left out, or "kept" with why."""
+    label = str(label or "")
+    record = {"icons": [list(b) for b in icons], "read": label, "covered": covered or ""}
+    if not covered:
+        return label, {**record, "kept": "OCR reads nothing right of the icon where the label starts"}
+    if _key(label) == _key(covered):
+        return label, record
+    got = icon_lead(label, covered)
+    if not got:
+        why = "the label does not end with OCR's reading right of the icon"
+    elif got[2]:
+        why = f"{got[1]!r} is glued to the label's first letter"
+    elif not _lead_ok(got[1], len(icons)):
+        why = f"{got[1]!r} is longer than the icon is read as"
+    elif any(_key(str(o or "")) == _key(got[0]) for o in others):
+        why = f"{got[0]!r} is also the label of another row of the page: the icon tells them apart"
+    else:
+        return got[0], {**record, "left_out": got[1]}
+    return label, {**record, "kept": why}
+
+
 def main():
     ap = argparse.ArgumentParser(description="Build the page model from a page scan")
     ap.add_argument("run", nargs="?", default=None, type=paths.run_arg,
@@ -291,6 +470,10 @@ def main():
     # labels read by eye off the scan's own frame where the readers disagreed (not the user's word;
     # each entry names its frame): a reading like any other
     eye = read_json(run / "checked_labels.json") if (run / "checked_labels.json").exists() else {}
+    # the icons drawn before rows' labels, and OCR's readings with them painted over (icon_vote)
+    icons = {shots / rs[0]["frame"]: page_icons(shots / rs[0]["frame"], max(r["rows"] or 0 for r in rs))
+             for rs in pages.values()}
+    covered = covered_readings(icons, MENU_LABEL, {"ocr": None, **({"ocr2": eng2} if eng2 else {})})
     model, confirmed, total, disagreements = [], 0, 0, []
     for key, rs in pages.items():
         first = rs[0]
@@ -332,19 +515,21 @@ def main():
                 labels["user"] = user[page_no][str(i)]["label"]
             if str(i) in eye.get(page_no, {}):
                 labels["eye"] = eye[page_no][str(i)]["label"]
-            label, by = vote(labels)
             value, vby = vote(values)
+            rows.append({"slot": i, "value": value, "value_by": vby,
+                         "greyed": states.get(i) == "greyed" if i in states else None,
+                         "vlm_greyed": vgrey, "readings": {"label": labels, "value": values}})
+        voted = page_labels([r["readings"]["label"] for r in rows], icons[path][1], covered[path])
+        for row, (label, by, icon) in zip(rows, voted, strict=True):
+            labels = row["readings"]["label"]
+            row.update({"label": label, "label_by": by, **({"icon": icon} if icon else {}),
+                        # never-open by the label, else by any reading (an unread OCR leaves the others to say it)
+                        "never_open": safety.never_open(label or "") or next(
+                            (w for w in (safety.never_open(x) for x in labels.values() if x) if w), None)})
             total += 1
             confirmed += bool(by)
-            row = {"slot": i, "label": label, "label_by": by, "value": value, "value_by": vby,
-                   "greyed": states.get(i) == "greyed" if i in states else None,
-                   "vlm_greyed": vgrey, "readings": {"label": labels, "value": values},
-                   # never-open by the label, else by any reading (an unread OCR leaves the others to say it)
-                   "never_open": safety.never_open(label or "") or next(
-                       (w for w in (safety.never_open(x) for x in labels.values() if x) if w), None)}
             if not by:
-                disagreements.append((first["frame"], i, labels))
-            rows.append(row)
+                disagreements.append((first["frame"], row["slot"], labels))
         vlm_rows = {name: len(a.get("rows") or []) for name, a in vlm.items()}
         model.append({"page": vote(counter)[0] or counter.get("ocr"), "breadcrumb": vote(crumb)[0] or crumb.get("ocr"),
                       "key": key, "frame": first["frame"], "down_from_start": first["n"], "rows": rows,
