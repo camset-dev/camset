@@ -98,9 +98,10 @@ Movie and S&Q), the definition carries them as `camera.menus`, and each placed s
 
 - **Where a menu's own tree holds the setting's row.** The top row is matched by the merged numbering of a tab's top
   rows, which serves every menu, and each row below by its label among the rows that menu read.
-- **Where proofs made in one of the menu's modes reach the row.** The mode is the one a proof's context names; for a
-  proof whose context names none, it is the one the camera's own files say it was made in. Rows the menu never read
-  are then taken from those proofs' paths, in the setting's own order.
+- **Where proofs made in one of the menu's modes reach the row.** A proof made in a mode is that mode's reading of
+  the row. The mode is the one a proof's context names; for a proof whose context names none, it is the one the
+  camera's own files say it was made in, which the writer keeps in the proof's evidence. Rows the menu never read are
+  then taken from those proofs' paths, in the setting's own order.
 - **Rows given by hand.** `HAND_PLACES` gives the row of a record no proof path places: one a row's own function
   writes, or a row the walk can never read, seen on the camera. Such a row is in every menu whose tree has its top
   row. Its public entry is the row alone; why it is the record's is in the private hand evidence.
@@ -109,8 +110,11 @@ Movie and S&Q), the definition carries them as `camera.menus`, and each placed s
 with `"under_option": null` where that menu has no option the setting's own place has. No place rests on My Menu's
 item pages, nor on where a list's reading began when the camera held one of its rows.
 
-**`row_menus` follows the mapping.** It follows how deep each mode's walk read and which modes proofs were made in, so
-two owners of a model get the same `row_menus` only once the mapping is complete.
+**`row_menus` follows the mapping.** It follows how deep each mode's walk read and in which modes the proofs were made.
+A setting proved only in Stills is not in the Movie menu until Movie's walk reads its row or a proof is made there, even
+where the camera shows it. So two owners of a model get the same `row_menus` only once the mapping is complete.
+`kit/schema_update.py` prints, at every pass, the settings listed in fewer menus than their top row stands in, and the
+menus each lacks.
 
 A write with the menu tree on the computer writes these from `MENUS`, and none of them without it. With no menu tree
 there (a fresh clone, CI) it leaves the definition's as they are, as it does the places.

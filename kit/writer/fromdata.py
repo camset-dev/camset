@@ -194,7 +194,26 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
     guide = definitions.data_dir(definitions.key(doc)) / f"help_guide_menu_{definitions.key(doc)}.jsonl"
     guide = jsonl.read(guide, bad="skip") if guide.exists() else []
     by = placement.by_menu(doc, tree, menus, boxes, hand, found, guide, modes)
-    return {k: {**v, **by.get(k, {})} for k, v in found.items()}
+    out = {k: {**v, **by.get(k, {})} for k, v in found.items()}
+    say_fewer_menus(placement.fewer_menus(doc, tree, menus, out), [m["name"] for m in menus])
+    return out
+
+
+def say_fewer_menus(short: list, order: list = ()) -> None:
+    """On the console only (the tree is the mapper's own): how many settings, below how many top rows, are listed in
+    fewer camera menus than their row stands in (camkit.placement.fewer_menus), and each row with the menus it lacks:
+    the open work, seen at every pass, never a stop."""
+    if not short:
+        return
+    rows = {}
+    for _, tab, row, lack in short:
+        n, missing = rows.get((tab, row), (0, []))
+        rows[(tab, row)] = (n + 1, missing + [m for m in lack if m not in missing])
+    print(f"menus: {len(short)} settings below {len(rows)} rows are listed in fewer menus than their row stands in: "
+          "prove or crawl them there")
+    for (tab, row), (n, missing) in sorted(rows.items()):
+        missing = sorted(missing, key=lambda m: list(order).index(m) if m in order else len(order))
+        print(f"  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, not in {', '.join(missing)}")
 
 
 def hand_unplaced(doc: dict, key: str, rows: list) -> str:

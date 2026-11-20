@@ -928,6 +928,49 @@ def menus_refusal(tree, menus: list) -> str | None:
     return None
 
 
+def fewer_menus(doc, tree, menus: list, placed: dict) -> list:
+    """[(key, tab, the top row's label, [the menus it lacks])] of every placed setting (`placed`: settings() with
+    by_menu's row_menus, as writer.fromdata.places gives them; no copy) listed in fewer camera menus than the menus
+    whose own tree holds its top row (the same top row by the merged numbering and its label), where that menu never
+    read the rows down to the setting's (a menu that read them and has no such row lacks it truly: Breathing Comp. in
+    the Still menu): the work a mapping has left, a row crawled or proved in those menus' modes (a mapping is not done
+    while there is any)."""
+
+    def unread(node, labels):
+        for label in labels[1:]:
+            if not node["kids"]:
+                return True                  # the rows under it never read
+            node = next((k for k in node["kids"] if norm(k["l"]) == norm(label)), None)
+            if node is None:
+                return False                 # read, and no such row
+        return False
+    t = Tree(doc, tree)
+    modes = mode_trees(doc, tree)
+    number = merge_tops(t, modes)
+    trees = {None: t, **dict(modes)}
+    tops = {}
+    for menu in menus:
+        key = menu_of(menu, tree)
+        if key is not False:
+            tops[menu["name"]] = _nodes_at(trees[key], key, number)
+    out = []
+    for s in doc["settings"]:
+        p = placed.get(s["key"]) or {}
+        if s.get("copy_of") or not p.get("row") or "row_menus" not in p:
+            continue
+        tab = p.get("row_tab") or s.get("tab") or "Other"
+        lack = []
+        for m in menus:
+            node = (tops.get(m["name"]) or {}).get((tab, p["row_at"][0]))
+            if m["name"] in p["row_menus"] or node is None or norm(node["l"]) != norm(p["row"][0]):
+                continue
+            if len(p["row"]) == 1 or unread(node, p["row"]):
+                lack.append(m["name"])
+        if lack:
+            out.append((s["key"], tab, p["row"][0], lack))
+    return out
+
+
 def menu_of(menu: dict, tree) -> object:
     """The key of the tree's menu a camera menu (camera.menus' entry) is drawn from: the first of its modes the tree holds
     a menu of (menu_modes); False when the tree holds none of its modes (the menu then holds no setting)."""

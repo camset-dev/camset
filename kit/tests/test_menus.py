@@ -910,3 +910,24 @@ def test_rows_read_turned_round_keep_the_own_place_one_unread_level_deeper():
     got = placement.by_menu(copy.deepcopy(d), tree, [MENUS[0], MENUS[2]])["global:0x0001"]
     assert got == {"row_menus": ["Still", "S&Q"]}, got
 
+
+def test_the_writer_says_which_settings_are_in_fewer_menus_than_their_row(tmp_path, monkeypatch, capsys):
+    """A mapping is not done while a setting is listed in fewer menus than the menus whose tree holds its top row:
+    fromdata.places says, on the console only, how many settings below how many rows, and each row with the menus it
+    lacks, so the open work is seen at every pass (never a stop)."""
+    d = doc(*copy.deepcopy(SETTINGS))
+    tree = tmp_path / "tree.json"
+    tree.write_text(json.dumps(TREE), encoding="utf-8")
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda key: tree)
+    monkeypatch.setattr(fromdata, "box_orders", lambda key: {})
+    got = fromdata.places(d, MENUS)
+    said = capsys.readouterr().out
+    short = placement.fewer_menus(d, TREE, MENUS, got)
+    assert ("global:0x0008", "Shooting", "Anti-flicker Set.", ["S&Q"]) in short          # Movie read the rows, none of it
+    assert ("global:0x0004", "Shooting", "Lens Compensation", ["S&Q"]) in short
+    assert not [x for x in short if x[0] == "global:0x0001"]                       # Drive Mode: the Still menu's alone
+    rows = {(tab, row) for _, tab, row, _ in short}
+    assert f"menus: {len(short)} settings below {len(rows)} rows are listed in fewer menus than their row stands in: " \
+           "prove or crawl them there" in said
+    assert ("global:0x0003", "Shooting", "Lens Compensation", ["S&Q"]) in short          # Still read the rows, none of it
+    assert "  Shooting > Anti-flicker Set.: 2 settings, not in S&Q" in said
