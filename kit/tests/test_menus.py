@@ -783,3 +783,34 @@ def test_a_hand_place_that_cannot_be_placed_says_what_is_wrong_with_it(tmp_path,
     assert "HAND_PLACES: global:0x9999 is no setting of the definition (a mistyped key" in said
     assert "HAND_PLACES: global:0x0040 (Black Level) is a setting of the family 'Picture Profile PP'" in said
     assert "HAND_PLACES: global:0x0041's row (Shooting > No Such Row) is not in the camera's menu tree" in said
+
+
+def test_where_an_option_list_began_shapes_no_place():
+    """An option list the walk read from the option the camera held (the tree's "options", turned round by where it
+    began: the owner's value) never shapes a public place. An option page's column, where the row's own setting lists
+    no values, comes from the tree's options turned to start at their first label in order, so two owners who held
+    different options get the same row_at; an option named by its place in the list ("White Balance / grid 2") is read
+    against the list turned to start at the row's own setting's first value, the camera's first option."""
+    settings = [s for s in copy.deepcopy(SETTINGS) if s["key"] in ("global:0x0020", "global:0x0021", "global:0x0022")]
+    for s in settings:
+        s.pop("values", None)
+    d = doc(*settings)
+
+    def tree_with(label, opts, kids=None):
+        t = copy.deepcopy(TREE)
+        for menu in [t] + t["modes"]:
+            for pg in menu["tabs"][0]["pages"]:
+                for r in pg["rows"]:
+                    if r["label"] == label:
+                        r["options"] = list(opts)
+        return t
+    a, b = tree_with("Picture Profile", ["PP1", "PP2", "PP3"]), tree_with("Picture Profile", ["PP3", "PP1", "PP2"])
+    for k in ("global:0x0021", "global:0x0022"):
+        assert placement.settings(copy.deepcopy(d), a).get(k) == placement.settings(copy.deepcopy(d), b).get(k), k
+        assert placement.by_menu(copy.deepcopy(d), a, MENUS).get(k) == placement.by_menu(copy.deepcopy(d), b, MENUS).get(k), k
+    wb = [[0, "Auto"], [1, "Daylight"], [2, "Shade"], [3, "Cloudy"]]
+    e = doc(setting("global:0x0050", "Exposure Comp.", "Exposure", "Exposure Comp.", values=wb),
+            setting("global:0x0051", "Fine-tune (Shade)", "Exposure", "Exposure Comp. / grid 2"))
+    got = [placement.settings(copy.deepcopy(e), tree_with("Exposure Comp.", o))["global:0x0051"].get("under_option")
+           for o in (["Auto", "Daylight", "Shade", "Cloudy"], ["Shade", "Cloudy", "Auto", "Daylight"])]
+    assert got == ["Shade", "Shade"]

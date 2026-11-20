@@ -531,6 +531,36 @@ def option_label(said: str, values) -> str | None:
 INDEXED = re.compile(r" / (?:grid|panel|base) (\d+)\b")
 
 
+def _common(a: list, b: list) -> int:
+    """How many labels `a` and `b` hold in one order (their longest common run, gaps allowed)."""
+    row = [0] * (len(b) + 1)
+    for x in a:
+        prev = 0
+        for j, y in enumerate(b):
+            prev, row[j + 1] = row[j + 1], prev + 1 if x == y else max(row[j + 1], row[j])
+    return row[-1]
+
+
+def from_first(opts: list, first=None, order=None) -> list:
+    """An option list as the walk read it (the tree's "options"), turned to start at `first` (the row's own setting's
+    first value, the camera's first option) where it holds it, else at its first label in order (norm()): a list read
+    from the option the camera held begins where the owner left it, and that must shape no place (decision 16). Where
+    `first` stands in it more than once (a Creative Look's custom looks shown by their base look), the start whose
+    order, each label once, keeps most of `order` (the setting's own values') is taken."""
+    labels = [str(o) for o in opts or []]
+    if not labels:
+        return labels
+    starts = [i for i, x in enumerate(labels) if first is not None and norm(x) == norm(first)]
+    if not starts:
+        at = min(range(len(labels)), key=lambda i: (norm(labels[i]), i))
+    elif len(starts) == 1 or not order:
+        at = starts[0]
+    else:
+        want = [norm(x) for x in order]
+        at = max(starts, key=lambda i: (_common(list(dict.fromkeys(norm(x) for x in labels[i:] + labels[:i])), want), -i))
+    return labels[at:] + labels[:at]
+
+
 def indexed_option(path: str, opts: list, values) -> str | None:
     """The option of the row's own setting (`values`, [[value, label]]) a path names by its place in the row's list
     (INDEXED), the list being the menu tree's options (`opts`) that name a label of the setting, each once, in the
@@ -540,11 +570,11 @@ def indexed_option(path: str, opts: list, values) -> str | None:
     m = INDEXED.search(path or "")
     if not m:
         return None
-    i, listed = int(m[1]), []
-    for o in opts or []:
-        lab = option_label(str(o), values)
-        if lab is not None and lab not in listed:
-            listed.append(lab)
+    i = int(m[1])
+    firsts = [str(v[1]) for v in values or [] if isinstance(v, (list, tuple)) and len(v) > 1]
+    named = [lab for lab in (option_label(str(o), values) for o in opts or []) if lab is not None]
+    # the list turned to the camera's first option, never from where the walk's reading began, then each label once
+    listed = list(dict.fromkeys(from_first(named, firsts[0] if firsts else None, firsts)))
     if i < len(listed):
         return listed[i]
     unnamed = [str(v[1]) for v in values or [] if isinstance(v, (list, tuple)) and len(v) > 1 and str(v[1]) not in listed]
@@ -787,7 +817,9 @@ def settings(doc, tree, boxes=None, paths_of=None) -> dict:
             continue               # none, or the tree's own rows already place it past the row (Recognition Target)
         m, rtab, (node, opt, rest) = hit
         vals = values_of(node) or []
-        names = [str(v[1]) for v in vals if isinstance(v, (list, tuple)) and len(v) > 1] or [str(o) for o in node["opts"]]
+        # the row's own setting's values in its order, else the tree's options turned to start at their first label,
+        # never from where the walk's reading began (from_first)
+        names = [str(v[1]) for v in vals if isinstance(v, (list, tuple)) and len(v) > 1] or from_first(node["opts"])
         shape = next((k for k in node["kids"] if norm(k["l"]) == norm(opt) and k["kids"]), None) or \
             page_shape(m, node, {norm(x) for x in names + [str(o) for o in node["opts"]]}, shapes, opt)
         for box in drawn.get((norm(node["l"].translate(LOOKALIKES)), norm(opt.translate(LOOKALIKES))), []):
