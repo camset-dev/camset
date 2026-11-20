@@ -17,6 +17,47 @@ pub(crate) fn sample_app(tag: &str, strip: Option<fn(&mut serde_json::Value)>) -
     (app, dir, user)
 }
 
+/// The camera's menus stubbed onto the shipped definition in memory, until its own carry them: `sample_app(tag,
+/// Some(stub_menus))`. Three menus as the camera's switch has them: "Still" (the Stills mode), "Movie", and "S&Q" (the
+/// S&Q and Time-lapse modes, with a hover), each with its Main tiles. Every setting placed on a row gets `row_menus`:
+/// the rows only Movie mode's menu has (`row_mode`) and the settings named for Movie ("(Movie)") Movie's and S&Q's;
+/// the ones named for stills ("(Still)"), and those on the same row as one named for Movie, Still's only; every other
+/// placed setting all three. A copy (`copy_of`) and a setting placed nowhere get none; no `row_places`.
+pub(crate) fn stub_menus(v: &mut serde_json::Value) {
+    v["camera"]["menus"] = serde_json::json!([
+        { "name": "Still", "modes": ["Stills"], "main_tiles": "Stills" },
+        { "name": "Movie", "modes": ["Movie"], "main_tiles": "Movie" },
+        { "name": "S&Q", "modes": ["S&Q", "Time-lapse"], "main_tiles": "S&Q", "hover": "Slow and quick motion, and time-lapse" },
+    ]);
+    let settings = v["settings"].as_array_mut().unwrap();
+    let place = |s: &serde_json::Value| (s["row"].clone(), s["row_at"].clone(), s["row_tab"].clone(), s["row_group"].clone());
+    let named = |s: &serde_json::Value, w: &str| s["name"].as_str().is_some_and(|n| n.contains(w));
+    let movie: Vec<_> = settings.iter().filter(|s| s["copy_of"].is_null() && named(s, "(Movie)")).map(place).collect();
+    for s in settings.iter_mut() {
+        let placed = s["row"].as_array().is_some_and(|r| !r.is_empty());
+        if !s["copy_of"].is_null() || !placed {
+            continue;
+        }
+        let menus: &[&str] = if !s["row_mode"].is_null() || named(s, "(Movie)") {
+            &["Movie", "S&Q"]
+        } else if named(s, "(Still)") || movie.contains(&place(s)) {
+            &["Still"]
+        } else {
+            &["Still", "Movie", "S&Q"]
+        };
+        s["row_menus"] = serde_json::json!(menus);
+    }
+}
+
+/// `stub_menus`, and one setting placed in one menu otherwise than its own place says (`row_places`): Audio Recording
+/// (global:0x02e9, a row of Movie mode's menu only, on its own row in Audio Recording) under a row "Audio Settings" in
+/// S&Q's menu, in S&Q's alone of the two it has.
+pub(crate) fn stub_menus_and_a_place(v: &mut serde_json::Value) {
+    stub_menus(v);
+    let s = v["settings"].as_array_mut().unwrap().iter_mut().find(|s| s["key"] == "global:0x02e9").unwrap();
+    s["row_places"] = serde_json::json!({ "S&Q": { "row": ["Audio Settings", "Audio Recording"], "row_at": [52, 0] } });
+}
+
 /// The sample shipped beside the ILCE-1M2 firmware 4.00 definition.
 pub(crate) const SAMPLE_BYTES: &[u8] = include_bytes!("../definitions/ILCE-1M2_fw4.00.DAT");
 

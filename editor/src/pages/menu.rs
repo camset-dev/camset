@@ -2,6 +2,81 @@
 //! and the sets of the file a page shows.
 
 use crate::*;
+use camset_editor::schema::MenuDef;
+
+/// The window's choice of one of the camera's menus (`App::set_menu`): the menu's name, and the set edited and the
+/// opening of the file it was made for, so that a file opened, or another set edited, opens on its own menu again
+/// (`App::menu_shown`).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct MenuChoice {
+    pub(crate) name: String,
+    pub(crate) target: usize,
+    pub(crate) opened: u64,
+}
+
+/// How a menu's rows pick the record they show for a setting the camera keeps a copy of per shooting mode (`copy_for`,
+/// `App::copy_for_menu`). `Set(mode)`: for a set saved in `mode` (None where it is not known), the setting itself where
+/// `mode` is one of the menu's modes, else its copy for the menu, as Edit shows the set edited. `Menu`: always its copy
+/// for the menu, as Compare shows every column, so that two files saved in different modes are compared like for like.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum Bind {
+    Set(Option<String>),
+    Menu,
+}
+
+/// The settings one menu lists (`App::listed`): each laid out as that menu has it (`Setting::place_in`), and where each
+/// of the definition's settings is among them, by its key: a copy hidden in its setting's row, and the setting whose
+/// row shows a copy, at that row.
+pub(crate) struct Listed {
+    pub(crate) rows: Vec<Setting>,
+    pub(crate) by_key: std::collections::HashMap<String, usize>,
+}
+
+/// What a menu's listing and order were worked out for: the definition (its generation), the menu, how rows pick their
+/// record (`Bind`) and Expert mode.
+type MenuKey = (u64, String, Bind, bool);
+
+/// What is worked out per menu (`App::listed`, `App::rank_in`), kept until what it was worked out for changes.
+#[derive(Default)]
+pub(crate) struct MenuCache {
+    listed: Vec<(MenuKey, std::rc::Rc<Listed>)>,
+    ranks: Vec<(MenuKey, MenuRank)>,
+    /// The groups each menu's rows hold (`App::menu_groups`), by definition generation and menu.
+    groups: Vec<((u64, String), std::rc::Rc<std::collections::HashSet<(String, String)>>)>,
+}
+
+/// How many listings of menus are kept (three menus, two ways of picking records, a little room).
+const MENUS_KEPT: usize = 12;
+
+/// An entry of the Menu, the left bar, the same in Edit and in Compare (`App::bar_keys`).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum BarKey {
+    /// Compare only, first: every setting.
+    All,
+    /// The camera's Main page (`camera.main_tiles`), by `text.main_title`.
+    Main,
+    /// My Menu (`camera.my_menu`), by `text.my_menu_name`.
+    MyMenu,
+    /// A tab, "Other", or the entry for what the camera's menus do not hold, by its name (`menu_tabs`).
+    Tab(String),
+}
+
+/// An entry of the Menu as the bar draws it (`App::edit_entries`, `App::compare_entries`): its key, its words without a
+/// count, its colour (None: Main's mark, the strong text colour, or no mark for All), its hover, how many it lists
+/// (None where the bar shows no count: Main, and My Menu, whose words say it) and its badge (Edit: the settings edited
+/// in it; Compare: the rows that differ).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BarEntry {
+    pub(crate) key: BarKey,
+    pub(crate) label: String,
+    pub(crate) color: Option<Color32>,
+    pub(crate) hover: Option<String>,
+    pub(crate) count: Option<usize>,
+    pub(crate) badge: usize,
+}
+
+/// The words of Compare's first entry, which lists every setting.
+pub(crate) const ALL_SETTINGS: &str = "All settings";
 
 /// A tab's colour from the camera definition (camera.tab_colors); grey when not listed.
 pub(crate) fn tab_color(cam: &Camera, tab: &str) -> Color32 {
@@ -81,15 +156,26 @@ pub(crate) type MenuRank = std::rc::Rc<std::collections::HashMap<String, i64>>;
 pub(crate) type PlacedGroups = std::rc::Rc<std::collections::HashMap<String, std::collections::HashSet<String>>>;
 
 impl App {
-    /// Edited settings, for the settings of one Menu entry (or all: `in_entry`). File B shows only in Compare mode.
+    /// Edited settings, for the settings of one Menu entry (or all: `in_entry`), in the set and menu the window shows
+    /// (`counts_in`).
     pub(crate) fn counts(&self, tab: Option<&str>) -> usize {
+        self.counts_in(self.target, self.menu_shown().as_deref(), tab)
+    }
+
+    /// Edited settings of set `target`, for the settings one Menu entry lists in menu `menu` (or all: `in_entry`; None:
+    /// no menu shown, every setting as before menus), as the bar's badge counts them; My Menu's places count on its own
+    /// entry (`mymenu_edits`), not on a tab's.
+    pub(crate) fn counts_in(&self, target: usize, menu: Option<&str>, tab: Option<&str>) -> usize {
         let Some(d) = &self.doc else { return 0 };
-        let in_set = self.target != 0;
+        let edited = |s: &Setting| d.value(target, s.slot()) != d.original_value(target, s.slot());
+        if let Some(m) = menu.filter(|m| self.menu_named(m).is_some()) {
+            return self.settings_in_menu(target, m, tab).iter().filter(|s| tab.is_none() || !self.is_mymenu_place(s)).filter(|s| edited(s)).count();
+        }
+        let in_set = target != 0;
         let in_entry = self.in_entry(tab);
-        // My Menu's places count on its own entry (`mymenu_edits`), not on a tab's
         self.schema.settings.iter().filter(|s| in_entry(s)).filter(|s| if in_set { s.in_sets } else { s.area == "global" })
             .filter(|s| tab.is_none() || !self.is_mymenu_place(s))
-            .filter(|s| d.value(self.target, s.slot()) != d.original_value(self.target, s.slot()))
+            .filter(|s| edited(s))
             .count()
     }
 
@@ -104,9 +190,19 @@ impl App {
         self.schema.camera.dial().iter().copied().filter(|s| *s >= 1 && *s < n).collect()
     }
 
-    /// Sections offered as columns: the live settings and the dial memories, every set in expert mode.
+    /// Sections offered as columns and as sets to edit: the live settings and the dial memories, and where the Menu
+    /// shows the camera's menus the memory sets of each menu's modes (`menu_sets`); every set in expert mode.
     pub(crate) fn shown_sections(&self) -> Vec<usize> {
-        if self.prefs.expert { (0..self.n_sections()).collect() } else { std::iter::once(0).chain(self.dial_sets()).collect() }
+        if self.prefs.expert {
+            return (0..self.n_sections()).collect();
+        }
+        let mut v: Vec<usize> = std::iter::once(0).chain(self.dial_sets()).collect();
+        for m in self.menus() {
+            v.extend(self.menu_sets(Some(&m.name)));
+        }
+        v.sort_unstable();
+        v.dedup();
+        v
     }
 
     /// Derived working copies, flags and alternate numberings, as the definition marks them: shown only in expert
@@ -185,20 +281,47 @@ impl App {
     }
 
     /// The Menu entry that shows `s` in the layout in use: the entry for what the camera's menus do not hold
-    /// (`off_menu`), else the entry of the tab that shows it (`layout_tab`, `menu_entry_of`).
+    /// (`off_menu`), else the entry of the tab that shows it (`layout_tab`, `menu_entry_of`); where the Menu shows the
+    /// camera's menus, in the menu a jump to `s` opens (`jump_place`).
     pub(crate) fn entry_of(&self, s: &Setting) -> String {
+        let s = self.shown_as(s);
+        self.entry_here(&s)
+    }
+
+    /// `s` as the menu a jump to it opens lays it out, for set edited (`jump_place`, `listed_record`); `s` itself
+    /// without menus.
+    fn shown_as<'a>(&self, s: &'a Setting) -> std::borrow::Cow<'a, Setting> {
+        match self.menu_for(s, self.target, self.menu_shown().as_deref()) {
+            Some(m) => std::borrow::Cow::Owned(self.listed_record(s, self.target, &m)),
+            None => std::borrow::Cow::Borrowed(s),
+        }
+    }
+
+    /// `entry_of` for a setting as the menu it is listed in lays it out.
+    fn entry_here(&self, s: &Setting) -> String {
         if self.off_menu(s) { self.schema.camera.text.off_menu_name().to_string() } else { self.menu_entry_of(self.layout_tab(s)).to_string() }
     }
 
     /// The page a jump to `s` opens, in the layout in use: the page of the Menu entry that shows it (`entry_of`,
-    /// `shown_view`). Every jump to a setting goes by it, with `shown_group_of` for its group.
+    /// `shown_view`). Every jump to a setting goes by it, with `shown_group_of` for its group (`go_to` does both, and
+    /// picks the menu first).
     pub(crate) fn view_of(&self, s: &Setting) -> View {
         self.shown_view(View::Tab(self.entry_of(s)))
     }
 
-    /// Where `s` is shown, in words: its tab, or the entry for what the menus do not hold, and the group that shows it.
+    /// Where `s` is shown, in words: its tab, or the entry for what the menus do not hold, and the group that shows it;
+    /// where the Menu shows the camera's menus, the menu first ("Movie > Shooting > Audio Recording": `where_in`).
     pub(crate) fn where_shown(&self, s: &Setting) -> String {
-        if self.off_menu(s) { format!("{} > {}", self.schema.camera.text.off_menu_name(), self.shown_group_of(s)) } else { format!("{} > {}", self.layout_tab(s), self.shown_group_of(s)) }
+        self.where_in(s, self.target, self.menu_shown().as_deref())
+    }
+
+    /// Where `s` is shown for set `target`, the Menu showing menu `now` (None: no menu shown), in words: the menu a jump
+    /// to it opens and then, as `where_shown` has it, its entry and group.
+    pub(crate) fn where_in(&self, s: &Setting, target: usize, now: Option<&str>) -> String {
+        let (menu, _, _) = self.jump_place(s, target, now);
+        let shown = match &menu { Some(m) => self.listed_record(s, target, m), None => s.clone() };
+        let here = if self.off_menu(&shown) { format!("{} > {}", self.schema.camera.text.off_menu_name(), self.group_here(&shown)) } else { format!("{} > {}", self.layout_tab(&shown), self.group_here(&shown)) };
+        match menu { Some(m) => format!("{m} > {here}"), None => here }
     }
 
     /// One of My Menu's places (a live setting of a record `camera.my_menu` names) while My Menu has its page: the page
@@ -222,10 +345,19 @@ impl App {
 
     /// How many settings `visible_settings` lists, without copying them.
     pub(crate) fn visible_count(&self, tab: Option<&str>) -> usize {
+        if let Some(m) = self.menu_shown() {
+            return self.visible_in(self.target, Some(&m), tab, &self.search, self.only_changed).len();
+        }
         self.settings_in(self.target, tab)
             .filter(|s| self.matches_search(s))
             .filter(|s| !self.only_changed || self.shown_edited(s))
             .count()
+    }
+
+    /// How many settings one Menu entry lists for set `target` in menu `menu`, with the search `q` and Only edited
+    /// (`visible_in`): the count the bar shows beside a tab.
+    pub(crate) fn visible_count_in(&self, target: usize, menu: Option<&str>, tab: Option<&str>, q: &str, only_changed: bool) -> usize {
+        self.visible_in(target, menu, tab, q, only_changed).len()
     }
 
     /// Whether Only edited shows `s`: edited (or no file open), or, as on the camera, the row's own setting of an
@@ -234,12 +366,35 @@ impl App {
         self.doc.is_none() || self.changed(s) || (self.camera_layout() && self.beside(s).iter().any(|(x, _)| self.changed(x)))
     }
 
+    /// `shown_edited` for set `target` in menu `menu`.
+    fn shown_edited_in(&self, target: usize, menu: Option<&str>, s: &Setting) -> bool {
+        let Some(d) = &self.doc else { return true };
+        let changed = |x: &Setting| d.value(target, x.slot()) != d.original_value(target, x.slot());
+        changed(s) || (self.camera_layout() && self.beside_in(target, menu, s).iter().any(|(x, _)| changed(x)))
+    }
+
     pub(crate) fn visible_settings(&self, tab: Option<&str>) -> Vec<Setting> {
-        self.settings_in(self.target, tab)
-            .filter(|s| self.matches_search(s))
-            .filter(|s| !self.only_changed || self.shown_edited(s))
-            .cloned()
-            .collect()
+        self.visible_in(self.target, self.menu_shown().as_deref(), tab, &self.search, self.only_changed)
+    }
+
+    /// The settings one Menu entry lists (`tab`; None: every entry) for set `target` in menu `menu` (None: no menu
+    /// shown, every setting as before menus), with the search `q` (as the search box takes it) and Only edited, each as
+    /// that menu lays it out (`listed`): what the bar counts and the entry's groups hold. The window and the page alike.
+    pub(crate) fn visible_in(&self, target: usize, menu: Option<&str>, tab: Option<&str>, q: &str, only_changed: bool) -> Vec<Setting> {
+        let q = q.to_lowercase();
+        // by the setting's own name too, where a menu titles its row as the camera draws it
+        let matches = |s: &Setting| q.is_empty() || Self::matches_query(s, &q) || Self::matches_query(self.def_of(s), &q);
+        match menu.filter(|m| self.menu_named(m).is_some()) {
+            Some(m) => self.settings_in_menu(target, m, tab).into_iter()
+                .filter(|s| matches(s))
+                .filter(|s| !only_changed || self.shown_edited_in(target, Some(m), s))
+                .collect(),
+            None => self.settings_in(target, tab)
+                .filter(|s| matches(s))
+                .filter(|s| !only_changed || self.shown_edited_in(target, None, s))
+                .cloned()
+                .collect(),
+        }
     }
 
     /// The group a setting's group is opened by: a group shown as one table (Picture Profiles…) by its title.
@@ -250,7 +405,14 @@ impl App {
     /// The group that shows `s` now, in the layout in use: as on the camera, the camera group whose page holds its row
     /// (`menu_rows::camera_group`: Recall Custom hold 1's settings in Shooting Mode); in the flat list, its own; a group
     /// shown as one table by its title (`shown_group`). Every jump to a setting and every count by group goes by it.
+    /// Where the Menu shows the camera's menus: in the menu a jump to `s` opens (`jump_place`), as it lays `s` out.
     pub(crate) fn shown_group_of(&self, s: &Setting) -> String {
+        let s = self.shown_as(s);
+        self.group_here(&s)
+    }
+
+    /// `shown_group_of` for a setting as the menu it is listed in lays it out.
+    fn group_here(&self, s: &Setting) -> String {
         if self.off_menu(s) { return Self::off_group(s); }
         // a setting on the page an option opens (a profile's parameter), as on the camera: that page, not the table
         if self.camera_layout() && s.on_page() { return self.layout_group(s).to_string(); }
@@ -313,7 +475,17 @@ impl App {
     /// entry for what the camera's menus do not hold only while they show a setting. The golden Menu's test reads the
     /// entries by it too, so the kit's copy (kit/camkit/menu_rows.py) follows a change here.
     pub(crate) fn side_bar_lists(&self, tab: &str) -> bool {
-        (tab != OTHER_TAB && tab != self.schema.camera.text.off_menu_name()) || self.visible_count(Some(tab)) > 0
+        self.side_bar_lists_in(self.target, self.menu_shown().as_deref(), tab, &self.search, self.only_changed)
+    }
+
+    /// `side_bar_lists` for set `target` in menu `menu`, with the search `q` and Only edited: where a menu is shown, a
+    /// tab only while that menu holds one of its settings (whatever the search), as the camera lists none it has not.
+    pub(crate) fn side_bar_lists_in(&self, target: usize, menu: Option<&str>, tab: &str, q: &str, only_changed: bool) -> bool {
+        let regular = tab != OTHER_TAB && tab != self.schema.camera.text.off_menu_name();
+        match menu.filter(|m| self.menu_named(m).is_some()) {
+            Some(m) if regular => !self.settings_in_menu(target, m, Some(tab)).is_empty(),
+            _ => regular || self.visible_count_in(target, menu, Some(tab), q, only_changed) > 0,
+        }
     }
 
     /// What the entry for the settings the camera's menus do not hold says on hover, window and page alike.
@@ -327,9 +499,22 @@ impl App {
     /// family's group that is the page an option opens (`Setting::on_page`: Picture Profile's PP1) is a group of its
     /// own too, after its owner's row's group, laid out as that page (`menu_rows::lay_out`); the table keeps them all.
     pub(crate) fn tab_groups(&self, tab: &str) -> Vec<(String, bool, Vec<Vec<Setting>>)> {
+        self.groups_of(self.visible_settings(Some(tab)), tab)
+    }
+
+    /// `tab_groups` for set `target` in menu `menu` (None: no menu shown), with the search `q` and Only edited: the
+    /// groups and rows one Menu entry shows, the window's and the page's alike. In a menu, each setting as that menu
+    /// lays it out (`listed`): its rows in that menu's order, titled as the camera draws them, and a row of a setting
+    /// the camera keeps a copy of per shooting mode showing the record for that menu (`row_record`).
+    pub(crate) fn tab_groups_in(&self, target: usize, menu: Option<&str>, tab: &str, q: &str, only_changed: bool) -> Vec<(String, bool, Vec<Vec<Setting>>)> {
+        self.groups_of(self.visible_in(target, menu, Some(tab), q, only_changed), tab)
+    }
+
+    /// The groups of Menu entry `tab` that `list` (its settings, as the layout in use has them) makes: `tab_groups`.
+    fn groups_of(&self, list: Vec<Setting>, tab: &str) -> Vec<(String, bool, Vec<Vec<Setting>>)> {
         let mut groups: BTreeMap<(i64, String), Vec<Setting>> = BTreeMap::new();
         let off = self.camera_layout() && tab == self.schema.camera.text.off_menu_name();
-        for s in self.visible_settings(Some(tab)) {
+        for s in list {
             // the group that shows it in the layout in use (`layout_group`); under the entry for what the menus do not
             // hold, by its tab and name (`off_group`)
             let g = if off { Self::off_group(&s) } else { self.layout_group(&s).to_string() };
@@ -412,10 +597,17 @@ impl App {
                 return rank.clone();
             }
         }
+        let rank = std::rc::Rc::new(self.rank_over(&self.schema.settings));
+        *self.rank_cache.borrow_mut() = Some((self.schema_gen, rank.clone()));
+        rank
+    }
+
+    /// `menu_rank` of the settings `list` (the definition's, or one menu's as it lays them out), by key.
+    fn rank_over(&self, list: &[Setting]) -> std::collections::HashMap<String, i64> {
         let tab_idx = |t: &str| self.schema.tabs.iter().position(|x| x == t).unwrap_or(usize::MAX);
         let mut groups: BTreeMap<(usize, String, i64, String), Vec<Setting>> = BTreeMap::new();
         let mut first: std::collections::HashMap<(String, String), i64> = Default::default();
-        for s in &self.schema.settings {
+        for s in list {
             // as on the camera: in the tab and the camera group that hold its row (`menu_rows::camera_tab`, `camera_group`)
             let (t, g) = (menu_rows::camera_tab(s).to_string(), menu_rows::camera_group(s).to_string());
             let at = *first.entry((t.clone(), g.clone())).or_insert(s.order);
@@ -451,16 +643,40 @@ impl App {
                 }
             }
         }
-        let rank = std::rc::Rc::new(rank);
-        *self.rank_cache.borrow_mut() = Some((self.schema_gen, rank.clone()));
         rank
     }
 
     /// Where a setting comes in its tab, to sort by beside the tab's position: its place in the camera's order when
-    /// the rows are laid out as on the camera (`menu_rank`), else its `order`, as the flat list has it.
+    /// the rows are laid out as on the camera (`menu_rank`; in the menu the window shows, that menu's: `rank_in`),
+    /// else its `order`, as the flat list has it.
     pub(crate) fn menu_at(&self) -> impl Fn(&Setting) -> i64 + use<> {
-        let rank = self.camera_layout().then(|| self.menu_rank());
+        let rank = match self.menu_shown() {
+            Some(m) => Some(self.rank_in(&m, &self.bind_for(self.target))),
+            None => self.camera_layout().then(|| self.menu_rank()),
+        };
         move |s: &Setting| rank.as_ref().and_then(|r| r.get(&s.key).copied()).unwrap_or(s.order)
+    }
+
+    /// The camera's order in menu `menu` (`menu_rank` over the settings it lists, `listed`), by the key of each of the
+    /// definition's settings it shows: a setting whose row shows a copy, and a copy shown in its setting's row, at
+    /// that row's place. A setting the menu does not list has none.
+    pub(crate) fn rank_in(&self, menu: &str, bind: &Bind) -> MenuRank {
+        let key: MenuKey = (self.schema_gen, menu.to_string(), bind.clone(), self.prefs.expert);
+        if let Some((_, r)) = self.menus_cache.borrow().ranks.iter().find(|(k, _)| *k == key) {
+            return r.clone();
+        }
+        let listed = self.listed(menu, bind);
+        let mut rank = self.rank_over(&listed.rows);
+        for (k, &i) in &listed.by_key {
+            if let Some(&r) = rank.get(&listed.rows[i].key) {
+                rank.entry(k.clone()).or_insert(r);
+            }
+        }
+        let rank = std::rc::Rc::new(rank);
+        let mut cache = self.menus_cache.borrow_mut();
+        if cache.ranks.len() >= MENUS_KEPT { cache.ranks.remove(0); }
+        cache.ranks.push((key, rank.clone()));
+        rank
     }
 
     /// Lay a group's rows out as on the camera or as a flat list (Settings' "As on the camera" / "Flat list"),
@@ -480,27 +696,54 @@ impl App {
         }
     }
 
-    /// Settings matching the search box, across every tab (live settings only).
+    /// Settings matching the search box, across every tab and every menu (live settings only), as `search_hits_in`
+    /// orders them for the window.
     pub(crate) fn search_hits(&self) -> Vec<Setting> {
-        if self.search.trim().is_empty() { return Vec::new(); }
-        let mut seen = std::collections::HashSet::new();
-        let tab_idx = |t: &str| self.schema.tabs.iter().position(|x| x == t).unwrap_or(99);
-        let mut list: Vec<Setting> = self.schema.settings.iter()
-            .filter(|s| s.area == "global" && self.matches_search(s) && (self.prefs.expert || !Self::expert_only(s)))
-            .filter(|s| seen.insert((s.tab.clone(), s.name.clone())))
-            .cloned().collect();
-        let at = self.menu_at();
-        list.sort_by_key(|s| (tab_idx(self.layout_tab(s)), at(s)));
-        list
+        self.search_hits_in(self.target, self.menu_shown().as_deref(), &self.search).into_iter().map(|(s, _)| s).collect()
     }
 
-    /// Open a setting in its menu, as a click on an item of the My Menu page does: the page that shows its tab
-    /// (`shown_view`), its group (a family's by its title: `shown_group`) and the setting.
+    /// The live settings matching the search `q` (name, group or a value label), across every tab and every menu, the
+    /// definition's settings themselves (one per tab and name), each with the menu a click on it opens for set `target`
+    /// while the Menu shows menu `now` (`jump_place`; None without menus): in the menus' order, then the Menu's order of
+    /// tabs and the camera's order in that menu. The window's and the page's search alike.
+    pub(crate) fn search_hits_in(&self, target: usize, now: Option<&str>, q: &str) -> Vec<(Setting, Option<String>)> {
+        let q = q.trim().to_lowercase();
+        if q.is_empty() { return Vec::new(); }
+        let mut seen = std::collections::HashSet::new();
+        let tab_idx = |t: &str| self.schema.tabs.iter().position(|x| x == t).unwrap_or(99);
+        let list: Vec<Setting> = self.schema.settings.iter()
+            .filter(|s| s.area == "global" && Self::matches_query(s, &q) && (self.prefs.expert || !Self::expert_only(s)))
+            .filter(|s| seen.insert((s.tab.clone(), s.name.clone())))
+            .cloned().collect();
+        if self.menus().is_empty() {
+            let at = self.menu_at();
+            let mut list = list;
+            list.sort_by_key(|s| (tab_idx(self.layout_tab(s)), at(s)));
+            return list.into_iter().map(|s| (s, None)).collect();
+        }
+        let menu_idx = |m: &Option<String>| m.as_ref().and_then(|m| self.menus().iter().position(|x| &x.name == m)).unwrap_or(usize::MAX);
+        let mut hits: Vec<((usize, usize, i64), (Setting, Option<String>))> = list.into_iter().map(|s| {
+            let menu = self.jump_place(&s, target, now).0;
+            let (tab, at) = match &menu {
+                Some(m) => {
+                    let shown = self.listed_record(&s, target, m);
+                    let rank = self.rank_in(m, &self.bind_for(target));
+                    (tab_idx(self.layout_tab(&shown)), rank.get(&s.key).copied().unwrap_or(s.order))
+                }
+                None => (tab_idx(self.layout_tab(&s)), s.order),
+            };
+            ((menu_idx(&menu), tab, at), (s, menu))
+        }).collect();
+        hits.sort_by_key(|(k, _)| *k);
+        hits.into_iter().map(|(_, h)| h).collect()
+    }
+
     /// Open the page an option opens on the camera, by a setting on it (`menu_rows::Page::key`): its tab and the group
-    /// that shows it (`shown_group_of`: the page as on the camera), its first row chosen.
+    /// that shows it (`shown_group_of`: the page as on the camera), its first row chosen; in the menu that shows it.
     pub(crate) fn open_page_of(&mut self, key: &str) {
         let Some(s) = self.schema.settings.iter().find(|s| s.key == key).cloned() else { return };
         self.mode = Mode::Edit;
+        self.switch_menu_for(&s);
         self.view = self.view_of(&s);
         self.group = Some(self.shown_group_of(&s));
         self.item = None;
@@ -509,20 +752,565 @@ impl App {
         self.focus = Focus::Items;
     }
 
-    /// The pages `s`'s options open on the camera (`menu_rows::pages`: Picture Profile's PP1…), in the set edited.
+    /// The pages `s`'s options open on the camera (`menu_rows::pages`: Picture Profile's PP1…), in the set edited; of a
+    /// setting laid out for a menu, in that menu.
     pub(crate) fn option_pages(&self, s: &Setting) -> Vec<menu_rows::Page> {
         if !menu_rows::is_own(s) {
             return Vec::new();
         }
-        menu_rows::pages(s, self.settings_in(self.target, None))
+        match s.shown_in.as_deref().filter(|m| self.menu_named(m).is_some()) {
+            Some(m) => menu_rows::pages(s, &self.settings_in_menu(self.target, m, None)),
+            None => menu_rows::pages(s, self.settings_in(self.target, None)),
+        }
     }
 
+    /// Open a setting in its menu, as a click on an item of the My Menu page does: `go_to`.
     pub(crate) fn open_in_menu(&mut self, s: &Setting) {
-        self.view = self.view_of(s);
-        self.group = Some(self.shown_group_of(s));
-        self.item = Some(s.name.clone());
-        self.item_key = Some(s.key.clone());          // of two rows of one name, this one (`pick_row`)
+        self.go_to(s);
+    }
+
+    /// A jump to setting `s` in the window, the way every jump goes: the menu that shows it (`jump_place`, where the
+    /// Menu shows the camera's menus), the page that shows its tab (`shown_view`), its group (a family's by its title:
+    /// `shown_group`) and its row chosen, as that menu lays it out (`listed_record`: of a setting the camera keeps a copy
+    /// of per shooting mode, the row that shows it). Changes no record.
+    pub(crate) fn go_to(&mut self, s: &Setting) {
+        self.switch_menu_for(s);
+        let shown = match self.menu_shown() { Some(m) => self.listed_record(s, self.target, &m), None => s.clone() };
+        self.view = self.shown_view(View::Tab(self.entry_here(&shown)));
+        self.group = Some(self.group_here(&shown));
+        self.item = Some(shown.name.clone());
+        self.item_key = Some(shown.key.clone());          // of two rows of one name, this one (`pick_row`)
         self.focus = Focus::Items;
+    }
+
+    /// Show the menu a jump to `s` opens (`jump_place`), where it is not the one shown.
+    fn switch_menu_for(&mut self, s: &Setting) {
+        let now = self.menu_shown();
+        if let Some(m) = self.menu_for(s, self.target, now.as_deref()) {
+            if Some(&m) != now.as_ref() {
+                self.menu = Some(MenuChoice { name: m, target: self.target, opened: self.doc.as_ref().map_or(0, |d| d.opened) });
+            }
+        }
+    }
+
+    /// Keep the window's chosen row where a jump set it by the definition's setting (`item_key`, as every jump does):
+    /// the menu that shows that setting, and its row there as that menu titles it and picks its record. Called once
+    /// a frame, before the pages are drawn; nothing without menus, or with a row of the menu shown chosen.
+    pub(crate) fn follow_selection(&mut self) {
+        if self.menus().is_empty() || self.mode != Mode::Edit {
+            return;
+        }
+        let chosen = self.item_key.as_ref().and_then(|k| self.index_of_key(k)).map(|i| self.schema.settings[i].clone());
+        // another set edited, or a file opened: its own menu, and the row chosen only where that menu shows it
+        let opened = self.doc.as_ref().map_or(0, |d| d.opened);
+        if self.menu.as_ref().is_none_or(|c| c.target != self.target || c.opened != opened) {
+            let Some(m) = self.opening_menu(self.target) else { return };
+            self.menu = Some(MenuChoice { name: m.clone(), target: self.target, opened });
+            match chosen.filter(|s| self.jump_place(s, self.target, Some(&m)).0.as_deref() == Some(m.as_str())) {
+                Some(s) => {
+                    let shown = self.listed_record(&s, self.target, &m);
+                    (self.item, self.item_key) = (Some(shown.name.clone()), Some(shown.key.clone()));
+                }
+                None => (self.item, self.item_key, self.sub_focus) = (None, None, None),
+            }
+            return;
+        }
+        if !matches!(self.view, View::Tab(_)) {
+            return;
+        }
+        let Some(s) = chosen else { return };
+        let now = self.menu_shown();
+        let menu = self.jump_place(&s, self.target, now.as_deref()).0;
+        let shown = match &menu { Some(m) => self.listed_record(&s, self.target, m), None => return };
+        if menu == now && self.item.as_ref() == Some(&shown.name) && self.item_key.as_ref() == Some(&shown.key) {
+            return;
+        }
+        self.switch_menu_for(&s);
+        self.item = Some(shown.name.clone());
+        self.item_key = Some(shown.key.clone());
+        if matches!(self.view, View::Tab(_)) {
+            self.view = self.shown_view(View::Tab(self.entry_here(&shown)));
+            self.group = Some(self.group_here(&shown));
+        }
+    }
+
+    // --- the camera's menus (`camera.menus`): the one the Menu shows, what it lists, which record a row shows ---
+
+    /// The camera's menus the Menu offers to pick one of (`Camera::menu_list`), in the definition's order, in the "As on
+    /// the camera" layout only. Empty: no choice of menu (none or one in the definition, or the flat list), the rows as
+    /// before menus.
+    pub(crate) fn menus(&self) -> &[MenuDef] {
+        if self.camera_layout() { self.schema.camera.menu_list() } else { &[] }
+    }
+
+    /// The menu of `menus` named `name`.
+    pub(crate) fn menu_named(&self, name: &str) -> Option<&MenuDef> {
+        self.menus().iter().find(|m| m.name == name)
+    }
+
+    /// The shooting mode set `target` of the open file is in (`section_mode`: the live settings by `camera.live_mode`,
+    /// a memory set by `memory_sets.modes`), as the definition names it; None where it is not known or no file is open.
+    pub(crate) fn set_mode(&self, target: usize) -> Option<String> {
+        self.doc.as_ref().and_then(|d| self.section_mode(&d.edited, target))
+    }
+
+    /// The menu set `target` opens on: the menu whose modes hold the set's shooting mode (`set_mode`), else the first;
+    /// None without menus (`menus`).
+    pub(crate) fn opening_menu(&self, target: usize) -> Option<String> {
+        let first = self.menus().first()?;
+        let mode = self.set_mode(target);
+        Some(mode.and_then(|m| self.menus().iter().find(|x| x.modes.contains(&m))).unwrap_or(first).name.clone())
+    }
+
+    /// The menu the window shows: the one picked for the set edited in this opening of the file (`set_menu`, a jump),
+    /// else the one that set opens on (`opening_menu`). So it follows the set edited and a file opened, and otherwise
+    /// keeps the choice. None without menus.
+    pub(crate) fn menu_shown(&self) -> Option<String> {
+        let opened = self.doc.as_ref().map_or(0, |d| d.opened);
+        match &self.menu {
+            Some(c) if c.opened == opened && c.target == self.target && self.menu_named(&c.name).is_some() => Some(c.name.clone()),
+            _ => self.opening_menu(self.target),
+        }
+    }
+
+    /// Show menu `name` in the window (one of `menus`; any other name changes nothing). Changes no record. The row
+    /// chosen stays chosen where the menu shows its setting; else none is, on the page shown where the menu lists it,
+    /// else on the first tab it lists.
+    pub(crate) fn set_menu(&mut self, name: &str) {
+        if self.menu_named(name).is_none() {
+            return;
+        }
+        let chosen = self.item_key.as_ref().and_then(|k| self.index_of_key(k)).map(|i| self.schema.settings[i].clone());
+        self.menu = Some(MenuChoice { name: name.to_string(), target: self.target, opened: self.doc.as_ref().map_or(0, |d| d.opened) });
+        let shown = chosen.filter(|s| self.jump_place(s, self.target, Some(name)).0.as_deref() == Some(name)).map(|s| self.listed_record(&s, self.target, name));
+        match shown {
+            Some(e) => {
+                self.item = Some(e.name.clone());
+                self.item_key = Some(e.key.clone());
+                if matches!(self.view, View::Tab(_)) {
+                    self.view = self.shown_view(View::Tab(self.entry_here(&e)));
+                    self.group = Some(self.group_here(&e));
+                }
+            }
+            None => {
+                self.item = None;
+                self.item_key = None;
+                self.sub_focus = None;
+                if let View::Tab(t) = &self.view {
+                    if !self.side_bar_lists_in(self.target, Some(name), t, "", false) {
+                        let first = self.menu_tabs().into_iter().find(|t| self.side_bar_lists_in(self.target, Some(name), t, "", false));
+                        self.view = View::Tab(first.unwrap_or_default());
+                        self.group = None;
+                    }
+                }
+            }
+        }
+    }
+
+    /// A menu button's hover, window and page alike: the definition's words for it (`MenuDef::hover`), and on the menu
+    /// of the mode the open file's live settings were saved in, "This file was saved in Movie mode." Empty with neither.
+    pub(crate) fn menu_hover(&self, name: &str) -> String {
+        let Some(m) = self.menu_named(name) else { return String::new() };
+        let mut words: Vec<String> = m.hover.iter().filter(|h| !h.is_empty()).cloned().collect();
+        if let Some(mode) = self.set_mode(0).filter(|x| m.modes.contains(x)) {
+            words.push(format!("This file was saved in {mode} mode."));
+        }
+        words.join(" ")
+    }
+
+    /// The index in `camera.main_tiles` of the tile set the Main page shows in menu `menu` (`MenuDef::main_tiles`);
+    /// None without menus or where the menu names none there.
+    pub(crate) fn menu_tile_set(&self, menu: &str) -> Option<usize> {
+        let name = self.menu_named(menu)?.main_tiles.as_deref()?;
+        self.schema.camera.main_tiles.as_ref()?.0.iter().position(|t| t.name == name)
+    }
+
+    /// The sets the "Editing:" row offers in menu `menu`: the live settings and, outside Expert mode, the memory sets
+    /// whose shooting mode is one of the menu's (`memory_sets.modes`); every set in Expert mode; without a menu (None,
+    /// or a name `menus` does not hold) the live settings and the dial's memories, as before menus.
+    pub(crate) fn menu_sets(&self, menu: Option<&str>) -> Vec<usize> {
+        if self.prefs.expert {
+            return (0..self.n_sections()).collect();
+        }
+        match menu.and_then(|m| self.menu_named(m)) {
+            Some(m) => std::iter::once(0).chain((1..self.n_sections()).filter(|&s| self.schema.camera.memory_mode(s).is_some_and(|x| m.modes.iter().any(|y| y == x)))).collect(),
+            None => std::iter::once(0).chain(self.dial_sets()).collect(),
+        }
+    }
+
+    /// How set `target`'s rows pick the record they show (`Bind::Set`, by the set's shooting mode).
+    pub(crate) fn bind_for(&self, target: usize) -> Bind {
+        Bind::Set(self.set_mode(target))
+    }
+
+    /// The definition's own setting a row shows (`s` itself, or the setting a menu laid `s` out from, by key).
+    pub(crate) fn def_of<'a>(&'a self, s: &'a Setting) -> &'a Setting {
+        if s.shown_in.is_none() {
+            return s;
+        }
+        self.index_of_key(&s.key).map_or(s, |i| &self.schema.settings[i])
+    }
+
+    /// The full name of the setting a row shows, as the definition names it: for the detail panel, where a menu titles
+    /// the row as the camera draws it (`listed`: "SteadyShot" for "SteadyShot (Movie)", "ISO" for "ISO (movie)").
+    pub(crate) fn full_name(&self, s: &Setting) -> String {
+        self.def_of(s).name.clone()
+    }
+
+    /// The copy of setting `s` that holds menu `menu`'s value: its one copy whose `copy_for` meets the menu's modes;
+    /// None when none does, or more than one (then its rows are as before menus).
+    pub(crate) fn copy_for_menu(&self, s: &Setting, menu: &str) -> Option<&Setting> {
+        let m = self.schema.camera.menu_named(menu)?;
+        let s = self.def_of(s);
+        let mut hits = s.copies.iter().filter_map(|k| self.index_of_key(k)).map(|i| &self.schema.settings[i])
+            .filter(|c| c.copy_for.iter().any(|x| m.modes.contains(x)));
+        let first = hits.next()?;
+        hits.next().is_none().then_some(first)
+    }
+
+    /// The record setting `s`'s row shows and edits in menu `menu` (point 4 of the design), as `bind` picks: `Set(mode)`,
+    /// the setting itself where `mode` is one of the menu's modes or not known, else its copy for the menu
+    /// (`copy_for_menu`); `Menu`, its copy for the menu. The setting itself where it has no such copy, and for a copy.
+    pub(crate) fn row_record<'a>(&'a self, s: &'a Setting, menu: &str, bind: &Bind) -> &'a Setting {
+        let s = self.def_of(s);
+        let (Some(m), Some(c)) = (self.schema.camera.menu_named(menu), self.copy_for_menu(s, menu)) else { return s };
+        match bind {
+            Bind::Menu => c,
+            Bind::Set(Some(mode)) if !m.modes.contains(mode) => c,
+            Bind::Set(_) => s,
+        }
+    }
+
+    /// The menus whose rows list the definition's setting `s` (in their order): a setting placed on a row, the menus
+    /// that place it (`Camera::menus_of`); a copy, its setting's; a setting placed nowhere, the menus whose rows hold
+    /// a setting of its group (it is under "More settings in this group" there), else every menu (under the entry for
+    /// what the camera's menus do not hold, a family's table, My Menu). Empty without menus.
+    pub(crate) fn menus_of(&self, s: &Setting) -> Vec<String> {
+        if self.menus().is_empty() {
+            return Vec::new();
+        }
+        let s = self.def_of(s);
+        let s = self.main_of(s).unwrap_or(s);
+        if s.placed_anywhere() {
+            return self.schema.camera.menus_of(s).into_iter().map(str::to_string).collect();
+        }
+        let holding: Vec<String> = self.menus().iter().filter(|m| self.menu_groups(&m.name).contains(&(s.tab.clone(), s.group.clone()))).map(|m| m.name.clone()).collect();
+        if holding.is_empty() { self.menus().iter().map(|m| m.name.clone()).collect() } else { holding }
+    }
+
+    /// The (tab, group) of every row menu `menu` places a setting on, as the camera's layout has them
+    /// (`menu_rows::camera_tab`, `camera_group`), and of each such setting's own: where a setting placed nowhere joins it.
+    fn menu_groups(&self, menu: &str) -> std::rc::Rc<std::collections::HashSet<(String, String)>> {
+        let key = (self.schema_gen, menu.to_string());
+        if let Some((_, g)) = self.menus_cache.borrow().groups.iter().find(|(k, _)| *k == key) {
+            return g.clone();
+        }
+        let mut out = std::collections::HashSet::new();
+        for s in self.schema.settings.iter().filter(|s| s.copy_of.is_none() && s.placed_anywhere()) {
+            if self.schema.camera.menus_of(s).contains(&menu) {
+                let p = s.place_in(menu);
+                if p.placed() {
+                    out.insert((menu_rows::camera_tab(&p).to_string(), menu_rows::camera_group(&p).to_string()));
+                    out.insert((s.tab.clone(), s.group.clone()));
+                }
+            }
+        }
+        let out = std::rc::Rc::new(out);
+        let mut cache = self.menus_cache.borrow_mut();
+        if cache.groups.len() >= MENUS_KEPT { cache.groups.remove(0); }
+        cache.groups.push((key, out.clone()));
+        out
+    }
+
+    /// Where a jump to setting `s` (the definition's, or as a menu lays it out) lands for set `target`, the Menu showing
+    /// menu `now`: the menu (`now` where it lists `s`, else the menu of the set's mode where it lists it, else the first
+    /// that does; a copy shown in its setting's row, first the menus where its row shows it: `row_record`; None without
+    /// menus), the Menu entry and the group that show it there. The page's links carry the three (`open_menu`, …).
+    pub(crate) fn jump_place(&self, s: &Setting, target: usize, now: Option<&str>) -> (Option<String>, String, String) {
+        let menu = self.menu_for(s, target, now);
+        let shown = match &menu { Some(m) => self.listed_record(s, target, m), None => s.clone() };
+        (menu, self.entry_here(&shown), self.group_here(&shown))
+    }
+
+    /// The menu of `jump_place`.
+    fn menu_for(&self, s: &Setting, target: usize, now: Option<&str>) -> Option<String> {
+        if self.menus().is_empty() {
+            return None;
+        }
+        let d = self.def_of(s);
+        let mut fit = self.menus_of(d);
+        // a copy shown in its setting's row: the menus where that row shows it first
+        if let Some(main) = self.main_of(d) {
+            let bind = self.bind_for(target);
+            let showing: Vec<String> = fit.iter().filter(|m| self.row_record(main, m, &bind).key == d.key).cloned().collect();
+            if !showing.is_empty() {
+                fit = showing;
+            }
+        }
+        let own = self.opening_menu(target);
+        now.filter(|n| fit.iter().any(|m| m == n)).map(str::to_string)
+            .or_else(|| own.filter(|o| fit.contains(o)))
+            .or_else(|| fit.first().cloned())
+            .or_else(|| now.map(str::to_string))
+    }
+
+    /// The setting the rows of menu `menu` show for the definition's setting `s` in set `target` (`listed`): `s` as that
+    /// menu lays it out, or the row that shows it there (a copy in its setting's row, a setting whose row shows its
+    /// copy); `s` as the menu would lay it out where the menu does not list it.
+    pub(crate) fn listed_record(&self, s: &Setting, target: usize, menu: &str) -> Setting {
+        let listed = self.listed(menu, &self.bind_for(target));
+        match listed.by_key.get(&s.key) {
+            Some(&i) => listed.rows[i].clone(),
+            None => self.def_of(s).place_in(menu),
+        }
+    }
+
+    /// The settings of set `target` one Menu entry lists in menu `menu` (`tab`; None: every entry), before the search
+    /// and filters, as that menu lays them out (`listed`).
+    pub(crate) fn settings_in_menu(&self, target: usize, menu: &str, tab: Option<&str>) -> Vec<Setting> {
+        self.listed_in(target, menu, &self.bind_for(target), tab)
+    }
+
+    /// `settings_in_menu`, the rows picking their records as `bind` says.
+    fn listed_in(&self, target: usize, menu: &str, bind: &Bind, tab: Option<&str>) -> Vec<Setting> {
+        let in_set = target != 0;
+        let in_entry = self.in_entry(tab);
+        self.listed(menu, bind).rows.iter()
+            .filter(|s| in_entry(s))
+            .filter(|s| if in_set { s.in_sets } else { s.area == "global" })
+            .filter(|s| self.prefs.expert || !Self::expert_only(s))
+            .cloned().collect()
+    }
+
+    /// Every setting menu `menu` lists, as it lays each out (`Setting::place_in`, design points 3 and 4): those its rows
+    /// hold (`menus_of`), a setting the camera keeps a copy of per shooting mode as the record `bind` picks
+    /// (`row_record`) at the setting's place under its name, and outside Expert mode none of those copies as rows of
+    /// their own; a setting placed nowhere where `menus_of` lists it. Outside Expert mode a row alone on its place in
+    /// the camera's menu (no other setting there but the choices of its options) is titled by its place's last label, as
+    /// the camera draws it; the setting's full name is `full_name`. The definition's order. Worked out once per
+    /// definition, menu, `bind` and Expert mode.
+    pub(crate) fn listed(&self, menu: &str, bind: &Bind) -> std::rc::Rc<Listed> {
+        let key: MenuKey = (self.schema_gen, menu.to_string(), bind.clone(), self.prefs.expert);
+        if let Some((_, l)) = self.menus_cache.borrow().listed.iter().find(|(k, _)| *k == key) {
+            return l.clone();
+        }
+        let expert = self.prefs.expert;
+        let mut rows: Vec<Setting> = Vec::new();
+        let mut by_key: std::collections::HashMap<String, usize> = Default::default();
+        let mut row_of: std::collections::HashMap<String, usize> = Default::default();          // a setting's row, by its key
+        let mut hidden: Vec<(String, String)> = Vec::new();          // a copy shown in its setting's row: (copy, setting)
+        let in_menu = |s: &Setting| self.menus_of(s).iter().any(|m| m == menu);
+        for s in &self.schema.settings {
+            if !in_menu(s) {
+                continue;
+            }
+            if let Some(main) = self.main_of(s) {
+                if !expert && self.copy_for_menu(main, menu).is_some() {
+                    hidden.push((s.key.clone(), main.key.clone()));
+                    continue;
+                }
+            }
+            let p = s.place_in(menu);
+            let rec = if expert { s } else { self.row_record(s, menu, bind) };
+            let row = if rec.key == s.key {
+                p
+            } else {
+                // the copy's record at the setting's place, under its name
+                let mut b = rec.place_in(menu);
+                (b.name, b.row, b.row_at, b.row_tab, b.row_group, b.under_option) = (p.name, p.row, p.row_at, p.row_tab, p.row_group, p.under_option);
+                b
+            };
+            row_of.insert(s.key.clone(), rows.len());
+            by_key.insert(s.key.clone(), rows.len());
+            by_key.insert(row.key.clone(), rows.len());
+            rows.push(row);
+        }
+        for (copy, main) in hidden {
+            if let Some(&i) = row_of.get(&main) {
+                by_key.entry(copy).or_insert(i);
+            }
+        }
+        if !expert {
+            // a row alone on its place in the camera's menu, titled as the camera draws it
+            let place = |s: &Setting| (s.row.clone(), s.row_at.clone(), menu_rows::camera_tab(s).to_string(), menu_rows::camera_group(s).to_string());
+            let mut on: std::collections::HashMap<(Vec<String>, Vec<i64>, String, String), usize> = Default::default();
+            for s in rows.iter().filter(|s| s.placed() && s.under_option.is_none()) {
+                *on.entry(place(s)).or_default() += 1;
+            }
+            for s in rows.iter_mut().filter(|s| s.placed() && s.under_option.is_none() && !s.on_page()) {
+                if on.get(&place(s)) == Some(&1) {
+                    if let Some(label) = s.row.last().filter(|l| !l.is_empty()) {
+                        s.name = label.clone();
+                    }
+                }
+            }
+        }
+        let listed = std::rc::Rc::new(Listed { rows, by_key });
+        let mut cache = self.menus_cache.borrow_mut();
+        if cache.listed.len() >= MENUS_KEPT { cache.listed.remove(0); }
+        cache.listed.push((key, listed.clone()));
+        listed
+    }
+
+    /// `beside` for set `target` in menu `menu` (None: as before menus): the settings shown beside `s`'s options in the
+    /// detail panel, each with its option, from its camera group as that menu lays it out.
+    pub(crate) fn beside_in(&self, target: usize, menu: Option<&str>, s: &Setting) -> Vec<(Setting, String)> {
+        if !menu_rows::is_own(s) {
+            return Vec::new();
+        }
+        let tab = self.layout_tab(s).to_string();
+        let group = menu_rows::camera_group(s).to_string();
+        let among: Vec<Setting> = match menu.filter(|m| self.menu_named(m).is_some()) {
+            Some(m) => self.settings_in_menu(target, m, Some(&tab)),
+            None => self.settings_in(target, Some(&tab)).cloned().collect(),
+        };
+        menu_rows::sub_choices(s, among.iter().filter(|o| menu_rows::camera_group(o) == group)).into_iter().map(|(x, o)| (x.clone(), o)).collect()
+    }
+
+    /// The Menu's entries a section shows (`compare`: Compare's, else Edit's) for set `target` in menu `menu`, the one
+    /// function both build their bar from: Compare's "All settings" first; Main, where the definition has its tiles; My
+    /// Menu, where it has My Menu; then the tabs, Other and the entry for what the camera's menus do not hold as
+    /// `side_bar_lists_in` lists them (the search `q` and Only edited count for Other and that entry, as in the window).
+    pub(crate) fn bar_keys(&self, compare: bool, target: usize, menu: Option<&str>, q: &str, only_changed: bool) -> Vec<BarKey> {
+        let mut out = Vec::new();
+        if compare {
+            out.push(BarKey::All);
+        }
+        if self.schema.camera.main_tiles.as_ref().is_some_and(|t| !t.0.is_empty()) {
+            out.push(BarKey::Main);
+        }
+        if self.has_mymenu_page() {
+            out.push(BarKey::MyMenu);
+        }
+        out.extend(self.menu_tabs().into_iter().filter(|t| self.side_bar_lists_in(target, menu, t, q, only_changed)).map(BarKey::Tab));
+        out
+    }
+
+    /// Edit's entries of the Menu (`bar_keys`) for set `target` in menu `menu`, with the search `q` and Only edited:
+    /// Main by `text.main_title`; My Menu by its words and hover (`mymenu_entry_words`) and its edits; each tab by name
+    /// with its colour, how many settings it lists (`visible_count_in`) and how many are edited (`counts_in`), the entry
+    /// for what the menus do not hold with its hover. The window's and the page's bar alike.
+    pub(crate) fn edit_entries(&self, target: usize, menu: Option<&str>, q: &str, only_changed: bool) -> Vec<BarEntry> {
+        let off = self.schema.camera.text.off_menu_name();
+        self.bar_keys(false, target, menu, q, only_changed).into_iter().map(|key| match &key {
+            BarKey::Main => BarEntry { label: self.schema.camera.text.main_title().to_string(), color: None, hover: None, count: None, badge: 0, key },
+            BarKey::MyMenu => {
+                let (label, hover) = self.mymenu_entry_words();
+                let name = self.schema.camera.text.my_menu_name();
+                BarEntry { label, color: Some(tab_color(&self.schema.camera, name)), hover: Some(hover), count: None, badge: self.mymenu_edits(), key }
+            }
+            BarKey::Tab(t) => BarEntry {
+                label: t.clone(), color: Some(tab_color(&self.schema.camera, t)), hover: (t == off).then(|| Self::off_menu_hover().to_string()),
+                count: Some(self.visible_count_in(target, menu, Some(t), q, only_changed)), badge: self.counts_in(target, menu, Some(t)), key: key.clone(),
+            },
+            BarKey::All => BarEntry { label: ALL_SETTINGS.to_string(), color: None, hover: None, count: None, badge: 0, key },
+        }).collect()
+    }
+
+    /// Compare's entries of the Menu (`bar_keys`) in menu `menu`, with the search `q`: "All settings", Main, My Menu and
+    /// the tabs as Edit has them, each with how many rows it lists (`entry_rows`) and as its badge how many of them
+    /// differ (`differs`, given the row's leading setting).
+    pub(crate) fn compare_entries(&self, menu: Option<&str>, q: &str, differs: &dyn Fn(&Setting) -> bool) -> Vec<BarEntry> {
+        let off = self.schema.camera.text.off_menu_name();
+        self.bar_keys(true, 0, menu, q, false).into_iter().map(|key| {
+            let rows = self.entry_rows(menu, &key, q);
+            let (count, badge) = (Some(rows.len()), rows.iter().filter(|r| differs(&r.2[0])).count());
+            let (label, color, hover) = match &key {
+                BarKey::All => (ALL_SETTINGS.to_string(), None, None),
+                BarKey::Main => (self.schema.camera.text.main_title().to_string(), None, None),
+                BarKey::MyMenu => {
+                    let name = self.schema.camera.text.my_menu_name();
+                    (name.to_string(), Some(tab_color(&self.schema.camera, name)), None)
+                }
+                BarKey::Tab(t) => (t.clone(), Some(tab_color(&self.schema.camera, t)), (t == off).then(|| Self::off_menu_hover().to_string())),
+            };
+            BarEntry { key, label, color, hover, count, badge }
+        }).collect()
+    }
+
+    /// Compare's rows of Menu entry `entry` in menu `menu` (None: as before menus), with the search `q`: (the entry's
+    /// name, the group, the row's linked records), the live settings, in the camera's layout as Edit shows the entry
+    /// (its groups in their order, a group's rows as `group_lines` lays them out, the choices beside an option right
+    /// after its row, a family's settings each a row under its own group), every row bound to the record for that menu
+    /// (`Bind::Menu`, so files saved in different modes compare like for like). All: every tab's; Main: the settings of
+    /// the menu's tiles (`menu_tile_set`, else the first set), under each tile's caption; My Menu: its places.
+    pub(crate) fn entry_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> Vec<(String, String, Vec<Setting>)> {
+        let q = q.trim().to_lowercase();
+        let menu = menu.filter(|m| self.menu_named(m).is_some());
+        let matches = |s: &Setting| q.is_empty() || Self::matches_query(s, &q) || Self::matches_query(self.def_of(s), &q);
+        let link = |list: Vec<Setting>| -> Vec<Vec<Setting>> {
+            let mut rows: Vec<Vec<Setting>> = Vec::new();
+            for s in list {
+                match rows.iter_mut().find(|r| r[0].links_with(&s)) {
+                    Some(r) => r.push(s),
+                    None => rows.push(vec![s]),
+                }
+            }
+            rows
+        };
+        match entry {
+            BarKey::All => self.bar_keys(true, 0, menu, "", false).iter().filter(|k| matches!(k, BarKey::Tab(_))).flat_map(|k| self.entry_rows(menu, k, &q)).collect(),
+            BarKey::Main => {
+                let Some(sets) = self.schema.camera.main_tiles.as_ref() else { return Vec::new() };
+                let at = menu.and_then(|m| self.menu_tile_set(m)).unwrap_or(0);
+                let Some(set) = sets.0.get(at) else { return Vec::new() };
+                let mut out = Vec::new();
+                for tile in &set.tiles {
+                    let keys: Vec<&String> = tile.keys.iter().chain(&tile.memory_keys).collect();
+                    let list: Vec<Setting> = keys.iter().filter_map(|k| self.index_of_key(k)).map(|i| &self.schema.settings[i])
+                        .filter(|s| s.area == "global").map(|s| match menu { Some(m) => self.row_record(s, m, &Bind::Menu).clone(), None => s.clone() })
+                        .filter(|s| matches(s)).collect();
+                    out.extend(link(list).into_iter().map(|r| (self.schema.camera.text.main_title().to_string(), tile.caption.clone(), r)));
+                }
+                out
+            }
+            BarKey::MyMenu => {
+                let name = self.schema.camera.text.my_menu_name().to_string();
+                let list: Vec<Setting> = self.schema.settings.iter().filter(|s| self.is_mymenu_place(s) && matches(s)).cloned().collect();
+                link(list).into_iter().map(|r| (name.clone(), r[0].group.clone(), r)).collect()
+            }
+            BarKey::Tab(t) => {
+                let list: Vec<Setting> = match menu {
+                    Some(m) => self.listed_in(0, m, &Bind::Menu, Some(t)),
+                    None => self.settings_in(0, Some(t)).cloned().collect(),
+                }.into_iter().filter(|s| matches(s)).collect();
+                let mut out = Vec::new();
+                for (group, family, rows) in self.groups_of(list, t) {
+                    if family {
+                        // each setting of a family's table a row of its own, under its own group (a profile's)
+                        let mut by_group: Vec<(String, Vec<Setting>)> = Vec::new();
+                        for s in rows.into_iter().flatten() {
+                            match by_group.iter_mut().find(|(g, _)| *g == s.group) {
+                                Some((_, v)) => v.push(s),
+                                None => by_group.push((s.group.clone(), vec![s])),
+                            }
+                        }
+                        for (g, list) in by_group {
+                            out.extend(link(list).into_iter().map(|r| (t.clone(), g.clone(), r)));
+                        }
+                        continue;
+                    }
+                    let lines = self.group_lines(&rows);
+                    let firsts: Vec<&Setting> = rows.iter().map(|r| &r[0]).collect();
+                    let mut done = vec![false; rows.len()];
+                    for i in menu_rows::order(&lines) {
+                        if !std::mem::replace(&mut done[i], true) {
+                            out.push((t.clone(), group.clone(), rows[i].clone()));
+                        }
+                        // the choices beside its options, right after it, as its detail panel lists them
+                        for (sub, _) in menu_rows::sub_choices(&rows[i][0], firsts.iter().copied()) {
+                            if let Some(j) = rows.iter().position(|r| r[0].key == sub.key) {
+                                if !std::mem::replace(&mut done[j], true) {
+                                    out.push((t.clone(), group.clone(), rows[j].clone()));
+                                }
+                            }
+                        }
+                    }
+                    out.extend((0..rows.len()).filter(|&i| !done[i]).map(|i| (t.clone(), group.clone(), rows[i].clone())));
+                }
+                out
+            }
+        }
     }
 }
 
@@ -1027,6 +1815,56 @@ pub(crate) mod facts_tests {
             }
         }
         app.set_flat_list(false);
+        done(&dir, &user);
+    }
+
+    /// The interface the window's and the page's views build on, with the camera's menus stubbed onto the sample's
+    /// definition (`stub_menus`): the menus in the definition's order, the one shown, the entries and groups of a
+    /// menu, the record a row shows, a jump that changes menus, the search across menus; a menu picked changes no
+    /// byte of the file. Without menus: none, and the bar as before.
+    #[test]
+    fn the_menus_interface() {
+        use crate::test_support::stub_menus;
+        let (mut app, dir, user) = sample_app("menus_iface", Some(stub_menus));
+        let names: Vec<&str> = app.menus().iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["Still", "Movie", "S&Q"]);
+        let first = app.opening_menu(0).unwrap();
+        assert_eq!(app.menu_shown(), Some(first.clone()));
+        let tabs = |app: &App, m: &str| app.edit_entries(0, Some(m), "", false).into_iter().map(|e| (e.key, e.count)).collect::<Vec<_>>();
+        assert!(tabs(&app, "Movie").iter().any(|(k, n)| *k == BarKey::Tab("Shooting".into()) && n.is_some_and(|n| n > 0)));
+        assert_ne!(tabs(&app, "Movie"), tabs(&app, "Still"));
+        let groups = |app: &App, m: &str| app.tab_groups_in(0, Some(m), "Shooting", "", false).into_iter().map(|(g, _, _)| g).collect::<Vec<_>>();
+        assert!(groups(&app, "Movie").contains(&"TC/UB".to_string()) && !groups(&app, "Still").contains(&"TC/UB".to_string()));
+        // the ISO row: in the menu of the file's mode the setting itself, in the other its copy for that menu, under its name
+        let iso = app.schema.settings.iter().find(|s| s.key == "global:0x0334").unwrap().clone();
+        let other = app.menus().iter().map(|m| m.name.clone()).find(|m| *m != first && app.copy_for_menu(&iso, m).is_some()).unwrap();
+        let shown = app.listed_record(&iso, 0, &other);
+        assert_eq!((shown.name.as_str(), shown.key.as_str()), ("ISO", app.copy_for_menu(&iso, &other).unwrap().key.as_str()));
+        assert_eq!(app.listed_record(&iso, 0, &first).key, iso.key);
+        assert_eq!(app.full_name(&shown), app.copy_for_menu(&iso, &other).unwrap().name);
+        // a menu picked changes no byte of the file
+        let before = app.doc.as_ref().unwrap().edited.to_bytes();
+        app.set_menu("S&Q");
+        assert_eq!(app.menu_shown().as_deref(), Some("S&Q"));
+        app.set_menu("Movie");
+        assert_eq!(app.doc.as_ref().unwrap().edited.to_bytes(), before);
+        // a jump to a row only Movie's menu has, from Still's
+        app.set_menu("Still");
+        let tc = app.schema.settings.iter().find(|s| s.group == "TC/UB" && s.placed() && s.area == "global" && !s.expert).unwrap().clone();
+        app.go_to(&tc);
+        assert_eq!(app.menu_shown().as_deref(), Some("Movie"));
+        assert_eq!((app.view.clone(), app.group.as_deref()), (View::Tab("Shooting".into()), Some("TC/UB")));
+        // the search across menus names the menu a hit opens
+        let hits = app.search_hits_in(0, Some("Still"), &tc.name);
+        assert!(hits.iter().any(|(s, m)| s.key == tc.key && m.as_deref() == Some("Movie")), "{hits:?}");
+        assert!(app.where_in(&tc, 0, Some("Still")).starts_with("Movie > Shooting > TC/UB"));
+        done(&dir, &user);
+        // without menus: none, and Edit's bar as before
+        let (app, dir, user) = sample_app("menus_none", None);
+        assert!(app.menus().is_empty() && app.menu_shown().is_none());
+        let keys: Vec<BarKey> = app.edit_entries(0, None, "", false).into_iter().map(|e| e.key).collect();
+        let tabs: Vec<BarKey> = app.menu_tabs().into_iter().filter(|t| app.side_bar_lists(t)).map(BarKey::Tab).collect();
+        assert_eq!(keys, [vec![BarKey::Main, BarKey::MyMenu], tabs].concat());
         done(&dir, &user);
     }
 

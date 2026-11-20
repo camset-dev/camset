@@ -193,6 +193,11 @@ struct App {
     view: View,
     /// Compare mode: show only this tab (None = all tabs).
     compare_tab: Option<String>,
+    /// The camera's menu the window shows, as last picked (`set_menu`, a jump) for a set and an opening of the file;
+    /// None, or picked for another, the one the set edited opens on (`menu_shown`).
+    menu: Option<MenuChoice>,
+    /// What is worked out per camera menu (`listed`, `rank_in`), kept until what it was worked out for changes.
+    menus_cache: std::cell::RefCell<MenuCache>,
     /// Main page: movie tiles instead of stills, and the tile last clicked.
     main_set: usize,
     main_focus: Option<String>,
@@ -361,6 +366,8 @@ impl App {
             mode: Mode::Edit,
             view: View::Tab(first_tab),
             compare_tab: None,
+            menu: None,
+            menus_cache: Default::default(),
             main_set: 0,
             main_focus: None,
             group: None,
@@ -671,6 +678,8 @@ impl eframe::App for App {
         // a jump to a setting names its tab: the page that shows that tab's settings is the one shown (`shown_view`)
         let view = std::mem::replace(&mut self.view, View::Main);
         self.view = self.shown_view(view);
+        // the row a jump chose, in the camera's menu that shows it; another set or file, its own menu (`follow_selection`)
+        self.follow_selection();
         let session = (self.mode == Mode::Compare, self.target, self.view.clone());
         if closing || (self.prefs.compare_mode, self.prefs.target) != (session.0, session.1)
             || self.prefs.view.as_deref() != Some(session.2.key())
