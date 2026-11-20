@@ -342,6 +342,36 @@ def test_a_row_no_longer_lit_or_grey_after_help_gets_no_right(monkeypatch):
     assert (line["outcome"], line["right"], cam.keys, tried) == (greyrow.MOVED, False, ["c4"], set())
 
 
+def test_a_lit_bar_that_is_another_row_gets_no_help(monkeypatch):
+    """The cursor on another row than the one named, a harmless one (the scan's position or find_row's guess wrong):
+    the row fails before any key, so C4 never goes on whatever row is lit."""
+    cam = GreyCam()
+    world(monkeypatch, cam)
+    cam.lit = "Focal Length"
+    with pytest.raises(greyrow.RowFailed) as e:
+        ask(cam)
+    assert cam.keys == [] and e.value.line["right"] is False and "not 'Framing Stabilizer'" in str(e.value)
+
+
+def test_a_guide_that_does_not_leave_the_cursor_on_the_row_fails_it_with_no_right(monkeypatch):
+    """After the guide's OK the cursor must be back where it was before Help (proving.screens.place): elsewhere, the
+    row fails and no Right goes, wherever the cursor now is."""
+    cam = GreyCam()
+    world(monkeypatch, cam)
+    import help_run
+    guide = help_run.guide
+
+    def moved(c, name):
+        got = guide(c, name)
+        c.where = "elsewhere"
+        return got
+    monkeypatch.setattr(help_run, "guide", moved)
+    monkeypatch.setitem(GreyCam.KINDS, "elsewhere", "menu")
+    with pytest.raises(greyrow.RowFailed) as e:
+        ask(cam)
+    assert cam.keys == ["c4"] and e.value.line["right"] is False and "not back on the row" in str(e.value)
+
+
 def test_the_screen_must_be_the_rows_menu_page(monkeypatch):
     cam = GreyCam()
     world(monkeypatch, cam)
