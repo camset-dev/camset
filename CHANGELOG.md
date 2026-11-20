@@ -212,6 +212,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 - **`crawl_run.py --leave PATH` leaves a named row unopened, and every row under it:** its outcome says so, so the
   menu tree takes it as left on purpose, and a path the kit does not know is refused before anything connects.
+- **`crawl_run.py --no-first-open` opens no row this body has not been seen to open,** whatever the cards statement,
+  so a row `--leave` missed opens at most where it was opened before, never what lies under it.
 - **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that
   list names no blocker for Focus Mode Dial instead of the shorter one, and the test expects whichever its data gives.
 - **A picker slot listed for review keeps its name's source on a pass over the writer's own output:** its readers'
