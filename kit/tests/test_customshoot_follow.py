@@ -288,8 +288,15 @@ def wire(tmp_path, monkeypatch, files: dict, log: dict):
     monkeypatch.setattr(proving.nav, "to_shooting", step(lambda link, eyes, why: f"session reaches shooting: {why}"))
     monkeypatch.setattr(runner.time, "sleep", lambda s: None)
     monkeypatch.setattr(runner.session, "finish", finish)
-    monkeypatch.setattr(runner.session, "check_restore",
-                        lambda r, e, start, **kw: log["checked"].append(start) or log["check"])
+    def check_restore(r, e, start, **kw):
+        """The restore's check: log["check"], plus, where files["restored"] stands for the camera after the upload, the
+        records still differing from the start file there that the run did not name as ones no settings file sets back
+        (prover_session's expected), as camkit.session.check_restore counts them."""
+        log["checked"].append(start)
+        after = files.get("restored")
+        left = {c.key for c in camset.diff(camset.read(start), camset.read(after))} if after is not None else set()
+        return log["check"] + len(left - set(kw.get("expected") or ()))
+    monkeypatch.setattr(runner.session, "check_restore", check_restore)
     fakes = {"load_scan": lambda scan: ([], {}), "Run": lambda name: run, "check_readers": lambda: None,
              "eyes_from_config": lambda r: FakeEyes(), "Link": Link,
              "LiveCamera": lambda link, eyes, r, may_open=(): Cam(link, may_open),
@@ -822,6 +829,9 @@ def ticks(tmp_path, monkeypatch):
         log["visits"] += 1
         if log.get("stop_on_visit") == log["visits"]:
             log["stop"] = True
+        if log.get("fail_on_visit") == log["visits"]:
+            CR.OPENED["hold"] = h
+            raise CR.Failed("cannot tell which item the cursor is on (00123_left.png)")
         cam.press("left")                       # the visit's first press after the hold opens: refused once stopped
         CR.OPENED["hold"] = h
         log["events"].append(f"visit {cells}")
@@ -860,3 +870,26 @@ def test_the_ticks_run_with_a_stop_file_there_before_it_exits_4_naming_it(ticks,
     assert exits(ticks["go"]) == 4
     assert ticks["events"][-len(NO_PUT_BACK):] == NO_PUT_BACK
     assert "was there before this run started (an earlier stop)" in capsys.readouterr().out
+
+
+def test_the_ticks_run_that_fails_part_way_exits_8_where_it_exited_0(ticks, capsys):
+    """A hold whose visit failed part way (kit2_pass2/customshoot_ticks.log, 2026-10-30: "cannot tell which item the
+    cursor is on") is incomplete: the start file back and checked, the copy put back (no stop), exit 8, so a chain
+    stops; it exited 0 before 2026-11-20 and the next hold ran."""
+    from exit_status import EXIT_INCOMPLETE
+    ticks["fail_on_visit"] = 2
+    assert exits(ticks["go"]) == EXIT_INCOMPLETE
+    assert ticks["events"][-len(PUT_BACK):] == PUT_BACK
+    out = capsys.readouterr().out
+    assert "stopped: Failed: cannot tell which item the cursor is on" in out and "back and checked" in out
+
+
+def test_a_copy_that_differed_after_the_restore_and_was_put_back_ends_0_where_it_ended_4(ticks, monkeypatch):
+    """The camera after the session's upload still holding another value in the working copy's fourth slot (no settings
+    file sets it back), the put-back then bringing it back: the session's check leaves that record out (expected) and
+    the last download finds it as the start file has it, exit 0. Without the record left out (as before 2026-11-20) the
+    check counted it and the run exited 4."""
+    ticks["files"]["restored"] = made(ticks["files"]["end"].parent / "restored.DAT", copy=[0, 0, 0, 2])
+    assert exits(ticks["go"]) == 0
+    monkeypatch.setattr(CR, "working_copy_keys", lambda run: frozenset())
+    assert exits(ticks["go"]) == 4
