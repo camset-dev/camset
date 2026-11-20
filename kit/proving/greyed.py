@@ -51,9 +51,10 @@ FOLLOWS = re.compile(r"not available as follows\b", re.I)
 EYES = ("pixels", "reader")
 # the kind of screen whose lit option the reader is asked about, and the kind whose question (camkit.reading.QUESTIONS'
 # grey_prompt) asks, beside its text, whether it is drawn grey: a carousel alone. On a list and a side list (PIXELS_ALONE)
-# the readers asked so saw no grey: Qwen3.8-27B and GLM-4.6V-Flash called none of 60 side-list options the camera drew
-# grey grey, by lit.v2.grey or option.grey, and the pixels told every one (reader census, 2026-11-19); a question about
-# the whole list (camkit.vlm's entries.v2) is measured before any prover asks it
+# the readers asked about the lit item alone called none of 60 grey side-list entries grey (2026-11-19, Qwen3.8-27B and
+# GLM-4.6V-Flash, by lit.v2.grey or option.grey; the pixels told every one), while the menu question's per-row flag
+# matched the pixels on 99% of rows: a question about the whole list (camkit.vlm's entries.v2) is measured before any
+# prover asks it
 ASKED = {"dialog": "carousel"}
 PIXELS_ALONE = {"list", "sidelist"}
 NOT_ON_A_LIST = ("on a list the pixels alone tell it: asked about the lit option alone the readers saw no grey "
