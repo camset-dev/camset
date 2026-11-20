@@ -316,6 +316,10 @@ impl App {
                     let l = &mut out[i];
                     l.slots.extend(o.slots);
                     (l.name, l.before, l.after) = (format!("{} and {}", l.name, o.name), format!("{} / {}", l.before, o.before), format!("{} / {}", l.after, o.after));
+                } else if !out[i].slots.contains(&other) {
+                    // the other part unchanged here: still put back with it, so a pair changed over two steps goes back
+                    // as one state held it
+                    out[i].slots.push(other);
                 }
             }
             i += 1;
@@ -346,6 +350,14 @@ impl App {
     /// (`MYMENU_LINE`) puts back all of My Menu, as the file was opened (All edits) or as it was before that edit
     /// (`history`: its later changes too). None for any other line.
     pub(crate) fn edit_line_revert_words(&self, l: &EditLine, history: bool) -> Option<String> {
+        // a fraction tile's line: both its parts (`fraction_of`)
+        if let Some((n, d, caption)) = l.key.as_deref().and_then(|k| self.index_of_key(k)).and_then(|at| self.fraction_of(&self.schema.settings[at])) {
+            return Some(if history {
+                format!("Put {caption} back as it was before this edit: {} and {} together, so its value is one the file held", n.name, d.name)
+            } else {
+                format!("Revert {caption} ({} and {} together, as the file was opened)", n.name, d.name)
+            });
+        }
         if l.key.as_deref() != Some(MYMENU_LINE) {
             return None;
         }

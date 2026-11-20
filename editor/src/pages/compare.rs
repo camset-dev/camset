@@ -1707,6 +1707,42 @@ pub(crate) mod copy_tests {
         done(&dir, &user);
     }
 
+    /// Follow-up 3: a fraction's two parts changed in two steps (two Expert-mode edits, one part each) never come apart in
+    /// History: the first step's line holds both parts, and its Revert puts the pair back as it was before that step
+    /// (the second step's part too), a pair a file held, never one part from one state and one from another; its words
+    /// say so; All edits' line puts both back as the file was opened.
+    #[test]
+    fn a_fractions_parts_changed_in_two_steps_go_back_together() {
+        use crate::test_support::{done, sample_app, strip_menus};
+        let (mut app, dir, user) = sample_app("cmp_fraction_steps", Some(strip_menus));
+        let tile = app.schema.camera.main_tiles.clone().unwrap().0[0].tiles.iter().find(|t| t.kind == TileKind::Fraction).cloned().unwrap();
+        let find = |app: &App, k: &Option<String>| app.schema.settings.iter().find(|s| Some(&s.key) == k.as_ref()).cloned().unwrap();
+        let (num, den) = (find(&app, &tile.numerator_key), find(&app, &tile.denominator_key));
+        let m = app.dial_sets()[0];
+        let speed = |app: &App| (app.col_value(Col::a(m), &num), app.col_value(Col::a(m), &den));
+        let opened = speed(&app);
+        app.prefs.expert = true;
+        app.apply(vec![Action::Set(m, num.slot(), opened.0.unwrap() + 1)]);
+        app.last_edit = None;
+        app.apply(vec![Action::Set(m, den.slot(), opened.1.unwrap() + 3)]);
+        assert_eq!(app.undo.len(), 2);
+        for expert in [false, true] {
+            app.prefs.expert = expert;
+            let doc = app.doc.as_ref().unwrap();
+            let line = app.history_lines(0, &doc.edited).iter().find(|l| l.slots.contains(&num.slot())).cloned().unwrap();
+            assert!(line.slots.contains(&den.slot()), "expert {expert}: the first step's line holds both parts");
+            assert!(app.edit_line_revert_words(&line, true).is_some_and(|w| w.contains(&tile.caption)), "expert {expert}: its words");
+            let acts = line.put_back(&app.undo[0], &doc.edited);
+            app.history_revert(acts);
+            assert_eq!(speed(&app), opened, "expert {expert}: the pair as before that step");
+            app.undo();
+            let doc = app.doc.as_ref().unwrap();
+            let lines: Vec<EditLine> = app.edit_lines(&doc.original, &doc.edited).into_iter().filter(|l| l.slots.contains(&num.slot()) || l.slots.contains(&den.slot())).collect();
+            assert!(lines.len() == 1 && app.edit_line_revert_words(&lines[0], false).is_some_and(|w| w.contains("together")), "expert {expert}: All edits' one line");
+        }
+        done(&dir, &user);
+    }
+
     /// Second integration review, MUST 3: Edit's Main shows the Shutter Speed tile but changes it nowhere (a tile of two
     /// settings is not edited in place), so outside Expert mode Compare writes neither of its parts: no arrow, picker
     /// or copy target, a copy leaves them and says so, the reason is where one presses, in the window and on the page.
