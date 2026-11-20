@@ -1424,7 +1424,9 @@ function welcome() {
 
 /** The Main page: its pages (Stills, Movie, …), the tiles, then every setting they show as rows. */
 function drawMain(j) {
-  view.set = j.set;
+  // the tile set picked with Main's own buttons; a camera menu's own tiles (no buttons: `sets` empty) leave that choice
+  // for a menu without tiles of its own, as the window keeps its `main_set`
+  if (j.sets.length) view.set = j.set;
   // its pages' buttons say which is shown (`aria-pressed`); none in a camera's menu that names its tiles (`sets` empty)
   const head = el("div", { class: "head" }, el("h1", {}, "Main"),
     ...j.sets.map((n, i) => el("button", { class: "sel" + (i === j.set ? " on" : ""), "aria-pressed": String(i === j.set), onclick: () => { view.set = i; maybeDraw(); } }, n)));

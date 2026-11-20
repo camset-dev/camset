@@ -5641,6 +5641,26 @@ pub(crate) mod tests {
         (set, app.opening_menu(set).expect("its menu"))
     }
 
+    /// Picking a camera menu that does not hold the memory set edited keeps that set on the Editing row, as the window's
+    /// row keeps it (`editing_sets`, in the same state), so the page's `keepViewValid` keeps editing it.
+    #[test]
+    fn picking_another_camera_menu_keeps_the_set_edited_as_the_window() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let (mut app, dir, user) = sample_app("web_menus_sets", Some(stub_menus));
+        let (set, movie) = a_set_of(&app, "Movie");
+        let other = app.menus().iter().map(|m| m.name.clone()).find(|n| *n != movie && !app.menu_sets(Some(n.as_str())).contains(&set)).unwrap();
+        // the window editing that set, the other menu shown
+        app.target = set;
+        app.set_menu(&other);
+        assert_eq!(app.menu_shown().as_deref(), Some(other.as_str()));
+        let window = app.editing_sets();
+        assert!(window.contains(&set), "the window keeps the set edited: {window:?}");
+        let s = ask(&mut app, "state", json!({ "target": set, "menu": other }));
+        let page: Vec<usize> = s["targets"].as_array().unwrap().iter().map(|t| t[0].as_u64().unwrap() as usize).collect();
+        assert_eq!((page, s["target"].as_u64()), (window, Some(set as u64)), "the page's Editing row in {other}, as the window's");
+        done(&dir, &user);
+    }
+
     /// A change made in a camera menu says what it left, and the status names the setting, as in the flat list: the
     /// definition's own setting is what the warnings are worked out for (`twins_left`), not the row as the menu laid it
     /// out (the review's case: Drive Mode set to Continuous Shooting, the camera keeping it in two places). And every
@@ -5683,6 +5703,58 @@ pub(crate) mod tests {
             }
         }
         assert!(rows > 500, "{rows} rows");
+        done(&dir, &user);
+    }
+
+    /// The stub's menus, the last of them naming no tiles of its own: a definition that mixes menus with and without.
+    fn stub_menus_some_tiles(v: &mut Value) {
+        crate::test_support::stub_menus(v);
+        v["camera"]["menus"][2].as_object_mut().unwrap().remove("main_tiles");
+    }
+
+    /// Main in a definition that mixes camera menus with tiles of their own and one without: in a menu that names its
+    /// tiles, those and no buttons; in one that names none, the Main page's own buttons and the tile set last picked
+    /// with them, as the window shows it there (`main_tile_set`, in the same state).
+    #[test]
+    fn main_in_menus_with_and_without_tiles_of_their_own_as_the_window() {
+        use crate::test_support::{done, sample_app};
+        let (mut app, dir, user) = sample_app("web_menus_tiles", Some(stub_menus_some_tiles));
+        app.main_set = 1;
+        for m in app.menus().iter().map(|m| m.name.clone()).collect::<Vec<_>>() {
+            app.set_menu(&m);
+            let (at, buttons) = app.main_tile_set();
+            let set = app.main_set;
+            let j = ask(&mut app, "main", json!({ "target": 0, "menu": m, "set": set }));
+            assert_eq!((j["set"].as_u64(), !j["sets"].as_array().unwrap().is_empty()), (Some(at as u64), buttons), "{m}");
+        }
+        assert!(app.menus().iter().any(|m| app.menu_tile_set(&m.name).is_none()) && app.menus().iter().any(|m| app.menu_tile_set(&m.name).is_some()));
+        done(&dir, &user);
+    }
+
+    /// Each entry of Compare's Menu column counts the rows the page lists under it, each once: without menus and in
+    /// each of the camera's menus, the count beside an entry is the number of rows its page shows, none listed twice.
+    #[test]
+    fn compares_entry_counts_are_the_rows_it_lists_once_each() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let check = |app: &mut App, menu: Option<&str>| {
+            let mut body = json!({ "cols": [["a", 0], ["a", 1]], "only_diff": false });
+            if let Some(m) = menu { body["menu"] = json!(m); }
+            let all = ask(app, "compare", body.clone());
+            for e in all["entries"].as_array().unwrap() {
+                body["entry"] = e["key"].clone();
+                let j = ask(app, "compare", body.clone());
+                let keys: Vec<&str> = j["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap()).collect();
+                let unique: std::collections::HashSet<&&str> = keys.iter().collect();
+                assert_eq!((e["count"].as_u64(), unique.len()), (Some(keys.len() as u64), keys.len()), "{menu:?} > {}: counted as listed, each once", e["key"]);
+            }
+        };
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample();
+        check(&mut app, None);
+        let (mut app, dir, user) = sample_app("web_menus_counts", Some(stub_menus));
+        for m in app.menus().iter().map(|m| m.name.clone()).collect::<Vec<_>>() {
+            check(&mut app, Some(&m));
+        }
         done(&dir, &user);
     }
 

@@ -2005,7 +2005,9 @@ def test_the_compare_bar_has_no_tab_list_and_the_toggles_say_so():
 @needs_node
 def test_main_pages_and_the_layout_switch_say_which_is_shown(tmp_path):
     """Main's buttons for its tile pages and the layout switch's two buttons each say whether they are the one shown
-    (`aria-pressed`); in a camera's menu that names its tiles the editor sends no pages, and Main has no buttons."""
+    (`aria-pressed`); in a camera's menu that names its tiles the editor sends no pages, Main has no buttons, and the
+    tile set last picked with them stays the page's choice for a menu without tiles of its own (the window's
+    `main_set`): the menu's own set does not take its place."""
     got = run(tmp_path, """
 const main = drawMain({ sets: ["Stills", "Movie"], set: 1, tiles: [], rows: [] })[0].querySelectorAll("button").map((b) => [b.textContent, b.getAttribute("aria-pressed")]);
 const tied = drawMain({ sets: [], set: 2, tiles: [], rows: [] })[0].querySelectorAll("button").length;
@@ -2014,7 +2016,7 @@ const flat = layoutSwitch(true).querySelectorAll("button").map((b) => b.getAttri
 console.log(JSON.stringify({ main, tied, layout, flat, set: view.set }));
 """)
     assert got["main"] == [["Stills", "false"], ["Movie", "true"]]
-    assert got["tied"] == 0 and got["set"] == 2
+    assert got["tied"] == 0 and got["set"] == 1, "a menu's own tiles leave the set picked with Main's buttons"
     assert got["layout"] == [["As on the camera", "true"], ["Flat list", "false"]] and got["flat"] == ["false", "true"]
 
 
@@ -2136,3 +2138,25 @@ const base = { ...state };
     assert got["reset"] is None and got["asks"] == [None, "S&Q", "S&Q", None], "another file: asked again without the pick"
     assert got["cur"] == "Still" and got["gone"] is None
     assert got["flat"] is None, "a file opened while no menu is shown lets go of the pick too"
+
+
+@needs_node
+def test_picking_another_menu_keeps_the_set_edited(tmp_path):
+    """A camera menu picked while a memory set of another menu is edited keeps that set: the editor lists it on the
+    Editing row (as the window's, `editing_sets`), the page keeps editing it (`keepViewValid`), and the next requests
+    name the menu picked and that set."""
+    got = run(tmp_path, MENUS + """
+view.target = 4; view.menu = null; $("app").hidden = false;
+state.targets = [[0, "Live", true], [4, "Memory 4", true]];
+replies.state = () => ({ ...state, tabs: ["Shoot"], menu: "Still", targets: [[0, "Live", true], [1, "Memory 1", true], [4, "Memory 4", true]] });
+(async () => {
+  pickMenu("Still");
+  await poll();
+  keepViewValid(state);
+  await pages.tab.load();
+  console.log(JSON.stringify({ target: view.target, menu: curMenu(), state: sentTo("state").pop(), tab: sentTo("tab").pop() }));
+})();
+""")
+    assert (got["target"], got["menu"]) == (4, "Still")
+    assert got["state"] == {"target": 4, "menu": "Still"}
+    assert (got["tab"]["target"], got["tab"]["menu"]) == (4, "Still")
