@@ -272,6 +272,27 @@
        "$ref": "#/$defs/after"
       }
      }
+    },
+    "HAND_PLACES": {
+     "type": "object",
+     "description": "Why each row given by hand (the hand tables' HAND_PLACES) is its record's, by the record's key: what kind of fact it is, in a few words (\"seen on the camera by its owner\", \"written by the row's own registration\"); the public table holds the record and its row only.",
+     "propertyNames": {
+      "$ref": "#/$defs/key"
+     },
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "why"
+      ],
+      "properties": {
+       "why": {
+        "type": "string",
+        "minLength": 1,
+        "description": "What kind of fact the row is."
+       }
+      }
+     }
     }
    }
   }

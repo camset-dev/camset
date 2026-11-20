@@ -183,7 +183,7 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
     modes = silent_modes(definitions.key(doc))
     found = placement.settings(doc, tree, boxes, placement.with_modes(placement.with_hand(hand), modes))
     for k in sorted(set(hand) - set(found)):
-        print(f"HAND_PLACES: {k}'s row ({' | '.join(hand[k])}) is not in the camera's menu tree: not placed")
+        print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
     if not menus:
         return found
     why = placement.menus_refusal(tree, menus)
@@ -195,6 +195,22 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
     guide = jsonl.read(guide, bad="skip") if guide.exists() else []
     by = placement.by_menu(doc, tree, menus, boxes, hand, found, guide, modes)
     return {k: {**v, **by.get(k, {})} for k, v in found.items()}
+
+
+def hand_unplaced(doc: dict, key: str, rows: list) -> str:
+    """Why a HAND_PLACES entry placed nothing, in plain words: a key the definition does not hold (mistyped), a
+    family's setting (camera.families: its column follows its record's copies, never a row given by hand), or a row
+    the camera's menu tree lacks."""
+    s = next((x for x in doc["settings"] if x["key"] == key), None)
+    if s is None:
+        return f"{key} is no setting of the definition (a mistyped key, or a record it does not hold): not placed"
+    fams = [f["prefix"] for f in (doc.get("camera") or {}).get("families", []) if f.get("prefix")]
+    fam = next((p for p in fams if (s.get("group") or "").startswith(p)), None)
+    if fam:
+        return (f"{key} ({s['name']}) is a setting of the family {fam!r} (camera.families), whose column follows its "
+                "record's copies, never a row given by hand: not placed; take it out of HAND_PLACES")
+    return (f"{key}'s row ({' | '.join(rows)}) is not in the camera's menu tree: not placed (its labels as the camera "
+            "draws them, its tab first)")
 
 
 def camera_menus(doc: dict, table: list) -> list | None:

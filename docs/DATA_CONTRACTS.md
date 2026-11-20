@@ -93,13 +93,27 @@ rows, and a record the plain pass adds takes the number after the definition's h
 none of the six fields, and the editor lists it after the camera's rows, under "More settings in this group".
 
 Where the camera's hand tables hold `MENUS` (a menu for each position of its shooting-mode switch: the a1 II's Still,
-Movie and S&Q), the definition carries them as `camera.menus`, and each placed setting the menus whose own menu tree
-holds its row (`row_menus`), with its place in a menu only where it differs from its own (`row_places`; the merged
-numbering of a tab's top rows serves every menu). Nothing in one menu is taken from another menu's rows
-(`kit/camkit/placement.py`, `by_menu`). `HAND_PLACES` gives the row of a record no proof path places: one a row's own
-function writes, or a row the walk can never read, seen on the camera. A write with the menu tree on the computer
-writes these from `MENUS`, and none of them without it; with no menu tree there (a fresh clone, CI) it leaves the
-definition's as they are, as it does the places.
+Movie and S&Q), the definition carries them as `camera.menus`, and each placed setting the menus that hold it
+(`row_menus`; `kit/camkit/placement.py`, `by_menu`):
+
+- **Where a menu's own tree holds the setting's row.** The top row is matched by the merged numbering of a tab's top
+  rows, which serves every menu, and each row below by its label among the rows that menu read.
+- **Where proofs made in one of the menu's modes reach the row.** The mode is the one a proof's context names; for a
+  proof whose context names none, it is the one the camera's own files say it was made in. Rows the menu never read
+  are then taken from those proofs' paths, in the setting's own order.
+- **Rows given by hand.** `HAND_PLACES` gives the row of a record no proof path places: one a row's own function
+  writes, or a row the walk can never read, seen on the camera. Such a row is in every menu whose tree has its top
+  row. Its public entry is the row alone; why it is the record's is in the private hand evidence.
+
+`row_places` gives a menu's place where it differs from the setting's own: always with its `row` and `row_at`, and
+with `"under_option": null` where that menu has no option the setting's own place has. No place rests on My Menu's
+item pages, nor on where a list's reading began when the camera held one of its rows.
+
+**`row_menus` follows the mapping.** It follows how deep each mode's walk read and which modes proofs were made in, so
+two owners of a model get the same `row_menus` only once the mapping is complete.
+
+A write with the menu tree on the computer writes these from `MENUS`, and none of them without it. With no menu tree
+there (a fresh clone, CI) it leaves the definition's as they are, as it does the places.
 
 ### What the editor offers outside Expert mode
 

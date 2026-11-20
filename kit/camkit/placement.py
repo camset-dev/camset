@@ -20,8 +20,10 @@ the rows of a tab are numbered over the Stills menu's top rows with each mode's 
 menu has them (merge_tops), so one number orders them all.
 
 Where the camera has menus of its own by shooting mode (camera.menus, its MENUS hand table), by_menu says which of them
-hold each setting's row, each from its own menu tree and nothing from another's, and the place where one differs
-(row_menus, row_places); with_hand places a record by a row given by hand (HAND_PLACES) instead of its proof paths.
+hold each setting's row and the place where one differs (row_menus, row_places): a menu whose own tree holds the row,
+or whose own mode's proofs reach it (the rows it never read taken from those paths, in the setting's own order);
+with_hand places a record by a row given by hand (HAND_PLACES) instead of its proof paths, in every menu whose tree has
+its top row; with_modes gives a proof whose context names no mode the mode the camera's own files say it was made in.
 """
 import collections
 import difflib
@@ -459,7 +461,9 @@ def grown(t: "Tree", modes: list, leaves: dict, paths: list, tab: str, near, nam
     """(the menu, the row) a setting hangs on (reach()), the row grown from its paths where the tree does not know
     the rows under the row they reach (`leaves`, leaf_rows(); a row made so grows on): the rest of the first such
     path's submenu steps are the rows (Tree.grow), in the order the settings come here. The definition's places
-    (settings()) and the proof viewer's rows hang by it, so the two show the same rows."""
+    (settings()) and the proof viewer's rows hang by it, so the two show the same rows for what the proof paths place;
+    a row given by hand (with_hand) and the mode the camera's files give a silent proof (with_modes) are the
+    definition's alone, which the viewer, drawing the proofs, does not take."""
     m, node = reach(t, modes, paths, tab, near, name)
     if not node:
         return None, None
@@ -925,7 +929,7 @@ def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", o
     read under it (of rows bearing one label, the one at the same place, else the one written alike), the page an
     option opens as `m` holds it (its row named as that option, or as another option settings sit under there, with
     rows under it). None where `m` lacks the top row, read the rows under one and the label is not among them, or never
-    read them (the row's own menu is not this one: nothing is taken from another menu's rows). `own`: the top row in
+    read them (by_menu then places it by that menu's own proofs, or not at all). `own`: the top row in
     the setting's own menu; where `m`'s rows under a row are its own menu's rows turned round (turned: read from the row
     the camera held), the setting keeps its own place among them, so no place rests on where the camera stood."""
     labels, at, opt = place["row"], place["row_at"], place.get("under_option")
@@ -1120,8 +1124,8 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None,
     the paths proved in one of its modes (a context naming it; for the top-level menu a path with no context too) and
     those of the setting's copies for its modes (copy_for), or its rows given by hand (`hand`, every menu that has the row),
     where such a path names the row it lands on (settings() on that menu's tree alone, the rows it does not know grown
-    from those paths only). A menu drawn from no menu of the tree holds nothing (menu_of). Nothing in a menu is taken
-    from another menu's rows. Records that differ by mode but share one row are then kept to their own mode's menus by
+    from those paths only, their order below what that menu read the setting's own). A menu drawn from no menu of the
+    tree holds nothing (menu_of). Records that differ by mode but share one row are then kept to their own mode's menus by
     the Help Guide's items (`guide`, split_by_guide), and one setting's records proved in modes none of them shares by
     their proofs (split_by_proofs). A menu's place is written as what differs from the setting's own
     (place_differs). `modes`: the modes the camera's own files give the proofs whose context names none (with_modes),

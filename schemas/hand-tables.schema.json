@@ -493,15 +493,14 @@
   },
   "HAND_PLACES": {
    "type": "object",
-   "description": "A setting's row on the camera's menus given by hand, by the setting's key, where no proof path can give it: a record a row's own function writes without being a choice on it (what a registration stores), or a row the walk can never read, seen on the camera by its owner. Each is the row as the camera draws it (its tab, then the labels from the top row down, \" > \" between) and why in a few words that say what kind of fact it is, never when or in which run. kit/camkit/placement.py hangs the setting there, in every camera menu (MENUS) whose menu tree holds the row, the rows under one the walk never read taken from it.",
+   "description": "A setting's row on the camera's menus given by hand, by the setting's key, where no proof path can give it: a record a row's own function writes without being a choice on it (what a registration stores), or a row the walk can never read, seen on the camera by its owner. Each is the row as the camera draws it (its tab, then the labels from the top row down, \" > \" between) and nothing else: why the row is the record's is evidence, kept in the private hand evidence (private/evidence/<model>_fw<firmware>.hand.json, its tables' HAND_PLACES). kit/camkit/placement.py hangs the setting there, in every camera menu (MENUS) whose menu tree holds the row's top row, the rows under it the walk never read taken from it; a row given by hand never changes whether the record is shown outside Expert mode.",
    "propertyNames": {
     "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$"
    },
    "additionalProperties": {
     "type": "object",
     "required": [
-     "row",
-     "why"
+     "row"
     ],
     "additionalProperties": false,
     "properties": {
@@ -509,11 +508,6 @@
       "type": "string",
       "pattern": "^\\S(.*\\S)? > \\S(.*\\S)?$",
       "description": "The tab, then the row's labels from its top row down, \" > \" between, as the camera draws them (\"Setup > Anti-dust Function > Shutter When Pwr OFF\")."
-     },
-     "why": {
-      "type": "string",
-      "minLength": 1,
-      "description": "What kind of fact it is, in a few words (\"seen on the camera by its owner\", \"written by the row's own registration\"); never a day or a run."
      }
     }
    }

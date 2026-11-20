@@ -189,10 +189,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 ### The mapping kit
 
 - **A definition can say which of the camera's menus hold each setting:** a camera's `MENUS` hand table (a menu per
-  position of its shooting-mode switch) becomes `camera.menus`, and each placed setting gets `row_menus`, the menus
-  whose own menu tree holds its row, and `row_places` where one places it otherwise. `HAND_PLACES` places a record no
-  proof path can (one a row's own function writes, or a row no walk reads, seen on the camera), and
-  `kit/tools/menu_tree.py --add` takes one group's pages from a page scan into a tree.
+  position of its shooting-mode switch) becomes `camera.menus`, and each placed setting gets `row_menus` and
+  `row_places` (a menu's tree holds its row, or that menu's own proofs reach it). `HAND_PLACES` places a record no
+  proof path can, and `kit/tools/menu_tree.py --add` takes one group's pages from a page scan into a tree.
 - **The camera's menus tell more records apart:** one setting kept in two records that Stills and Movie each move
   alone keeps each in its own mode's menu, and a row given by hand reaches the second of two rows of one label (`#1`)
   or a row named as its group. The camera file may word the menu buttons' label and hover (`camera.text.menus_label`,

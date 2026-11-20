@@ -100,8 +100,8 @@ def by_key(d, tree=TREE, menus=MENUS, hand=None):
 def test_each_menu_holds_the_rows_its_own_tree_holds():
     """A row only one menu has is in that menu alone (Drive Mode in Still, Time Code Format in Movie and S&Q, whose
     page scan read it, Breathing Comp. in Movie, whose walk read it), and a row the menus share is in each that read it;
-    a menu whose tree never read the rows under a row (S&Q here) holds none of them: nothing is taken from another
-    menu's rows."""
+    a menu whose tree never read the rows under a row (S&Q here) holds none of them unless its own mode's proofs reach
+    them: another menu's rows place nothing in it."""
     got = by_key(doc(*copy.deepcopy(SETTINGS)))
     assert got["global:0x0001"] == {"row_menus": ["Still"]}
     assert got["global:0x0002"] == {"row_menus": ["Movie", "S&Q"]}
@@ -232,15 +232,38 @@ def test_the_menus_table_and_hand_places_are_held_to_their_shape(tmp_path):
         with pytest.raises(hand_tables.Refused) as e:
             read(MENUS=bad)
         assert words in str(e.value.code), words
-    ok = {"global:0x04a2": {"row": "Setup > Anti-dust Function > Shutter When Pwr OFF", "why": "seen on the camera by its owner"}}
+    ok = {"global:0x04a2": {"row": "Setup > Anti-dust Function > Shutter When Pwr OFF"}}
     assert read(HAND_PLACES=ok)["HAND_PLACES"] == ok
     for bad, words in (({"0x04a2": ok["global:0x04a2"]}, "not a setting's key"),
-                       ({"global:0x04a2": {"row": "Shutter When Pwr OFF", "why": "x"}}, "not its tab then"),
-                       ({"global:0x04a2": {"row": "Setup > A", "why": " "}}, "says no why"),
-                       ({"global:0x04a2": {"row": "Setup > A", "why": "x", "run": "kit2_x"}}, "'run'")):
+                       ({"global:0x04a2": {"row": "Shutter When Pwr OFF"}}, "not its tab then"),
+                       ({"global:0x04a2": {"row": "Setup > A", "why": "seen on the camera"}}, "private hand evidence"),
+                       ({"global:0x04a2": {"row": "Setup > A", "run": "kit2_x"}}, "'run'")):
         with pytest.raises(hand_tables.Refused) as e:
             read(HAND_PLACES=bad)
         assert words in str(e.value.code), words
+
+
+def test_a_hand_places_reason_is_the_private_hand_evidences(tmp_path, monkeypatch):
+    """HAND_PLACES' public table holds the record and its row only; why a row is the record's (written by the row's own
+    registration, seen on the camera) is evidence, kept in private/evidence/<model>_fw<fw>.hand.json under HAND_PLACES:
+    the ILCE-1M2's pass puts it back beside the row, the plain pass takes it as its schema allows (a why, nothing else)."""
+    from writer import hand_evidence
+    key = "TEST_fw1.00"
+    data, ev = tmp_path / "data", tmp_path / "evidence"
+    (data / key).mkdir(parents=True)
+    ev.mkdir()
+    monkeypatch.setattr(definitions, "DATA", data)
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", ev)
+    row = "Setup > Anti-dust Function > Shutter When Pwr OFF"
+    (data / key / f"hand_tables_{key}.json").write_text(json.dumps({"camera": key, "HAND_PLACES": {"global:0x04a2": {"row": row}}}), encoding="utf-8")
+    said = {"hand_format": 2, "camera": key, "tables": {"HAND_PLACES": {"global:0x04a2": {"why": "seen on the camera by its owner"}}}}
+    (ev / f"{key}.hand.json").write_text(json.dumps(said), encoding="utf-8")
+    whole, public = hand_tables.load(key), hand_tables.load(key, evidence=False)
+    assert whole.HAND_PLACES["global:0x04a2"] == {"row": row, "why": "seen on the camera by its owner"}
+    assert public.HAND_PLACES["global:0x04a2"] == {"row": row}
+    assert hand_evidence.plain_problems(said, key, vars(public)) == []
+    wrong = {**said, "tables": {"HAND_PLACES": {"global:0x04a2": {"why": "x", "row": "Setup > B"}}}}
+    assert any("'row'" in x for x in hand_evidence.plain_problems(wrong, key, vars(public)))
 
 
 CAMERA = {"memory_sets": {"modes": {"Stills": [1], "Movie": [2], "S&Q": [3], "Time-lapse": [4]}},
@@ -726,7 +749,7 @@ def test_from_data_writes_the_menus_from_the_tables_and_the_tree(tmp_path, monke
     monkeypatch.setattr(S.help_files, "OWN", data)
     monkeypatch.setattr(definitions, "menu_tree_file", lambda k: tree)
     monkeypatch.setattr(fromdata, "box_orders", lambda k: {})
-    hand = {"global:0x0031": {"row": "Shooting > Anti-dust Function > Shutter When Pwr OFF", "why": "seen on the camera"}}
+    hand = {"global:0x0031": {"row": "Shooting > Anti-dust Function > Shutter When Pwr OFF"}}
 
     def written(**tables):
         (data / key / f"hand_tables_{key}.json").write_text(json.dumps({"camera": key, **tables}), encoding="utf-8")
@@ -742,3 +765,21 @@ def test_from_data_writes_the_menus_from_the_tables_and_the_tree(tmp_path, monke
     assert "menus" not in plain["camera"] and not any("row_menus" in s or "row_places" in s for s in plain["settings"])
     assert {s["key"]: s.get("row") for s in plain["settings"]} == {s["key"]: s.get("row") for s in got["settings"]}
     assert "row" not in {s["key"]: s for s in written()["settings"]}["global:0x0031"]          # no hand row, no row
+
+
+def test_a_hand_place_that_cannot_be_placed_says_what_is_wrong_with_it(tmp_path, monkeypatch, capsys):
+    """fromdata.places says why a HAND_PLACES entry placed nothing: a key the definition does not hold (mistyped), a
+    family's setting (its column follows its record's copies, never a row given by hand), or a row the menu tree lacks."""
+    d = doc(*copy.deepcopy(SETTINGS), setting("global:0x0040", "Black Level", "Picture Profile PP2"),
+            setting("global:0x0041", "Unrowed", "Other settings"))
+    d["camera"] = {"families": [{"prefix": "Picture Profile PP"}]}
+    tree = tmp_path / "tree.json"
+    tree.write_text(json.dumps(TREE), encoding="utf-8")
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda key: tree)
+    monkeypatch.setattr(fromdata, "box_orders", lambda key: {})
+    fromdata.places(d, None, {"global:0x9999": ["Shooting > Drive Mode"], "global:0x0040": ["Shooting > Drive Mode"],
+                              "global:0x0041": ["Shooting > No Such Row"]})
+    said = capsys.readouterr().out
+    assert "HAND_PLACES: global:0x9999 is no setting of the definition (a mistyped key" in said
+    assert "HAND_PLACES: global:0x0040 (Black Level) is a setting of the family 'Picture Profile PP'" in said
+    assert "HAND_PLACES: global:0x0041's row (Shooting > No Such Row) is not in the camera's menu tree" in said

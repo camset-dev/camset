@@ -595,18 +595,19 @@ def _shaped(name: str, kind: str, raw):
         _unique(raw, lambda e: e["name"])
         return raw
     if kind == "hand_places":
-        # a record's row given by hand, by key: {row: its tab, then the labels from the top row down, " > " between;
-        # why: what kind of fact it is, in a few words}
+        # a record's row given by hand, by key: {row: its tab, then the labels from the top row down, " > " between};
+        # why the row is the record's is evidence, kept in the private hand evidence (writer/hand_evidence.py)
         for k, e in _need(raw, dict, "the table").items():
             if not PLACED_KEY.fullmatch(k):
                 raise _Shape(f"{k!r} is not a setting's key (\"global:0x....\", \"set:0x....\", with [n] or @n)")
-            _fields(e, ("row", "why"), repr(k))
+            _fields(e, ("row",), repr(k))
             labels = [x.strip() for x in _need(e["row"], str, f"{k!r}'s row").split(" > ")]
             if len(labels) < 2 or not all(labels):
                 raise _Shape(f"{k!r}'s row, {e['row']!r}, is not its tab then its row's labels, \" > \" between")
-            if not _need(e["why"], str, f"{k!r}'s why").strip():
-                raise _Shape(f"{k!r} says no why")
-            extra = sorted(set(e) - {"row", "why"})
+            if "why" in e:
+                raise _Shape(f"{k!r} holds 'why': why a row is its record's goes into the private hand evidence "
+                             "(private/evidence/<model>_fw<fw>.hand.json, its tables' HAND_PLACES), never the public table")
+            extra = sorted(set(e) - {"row"})
             if extra:
                 raise _Shape(f"{k!r} holds {', '.join(map(repr, extra))}, which a hand place does not have")
         return raw

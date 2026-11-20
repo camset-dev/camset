@@ -597,6 +597,8 @@ After the owner's Initialize, before the next run (after Reset Network Set., the
   changed; `kit/tools/check_public.py --all` exits 0, and its evidence stays in `private/`.
 - The camera holds the owner's own file again: an upload, then a download that differs only in the records a file
   cannot set.
+- Every mode's menu is crawled, Playback included, and its rows proved in that mode: until then a camera menu's
+  `row_menus` lack what its walk never read (DATA_CONTRACTS, the camera's menus).
 - The tests pass (`kit/tests`, `cargo test` in `editor/`), and the notes and the memory map are current.
 
 ## 16. New model: first day

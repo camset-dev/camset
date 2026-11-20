@@ -263,7 +263,7 @@
       "type": "string",
       "minLength": 1
      },
-     "description": "The camera's menus (camera.menus, by name, in its order) whose own rows hold \"row\": the menu tree of each mode the menu covers holds the row, or the setting's own proofs in that mode, or its row given by hand, place it there (kit/camkit/placement.py by_menu); nothing in one menu is taken from another menu's rows. On every setting \"row\" places when the definition has camera.menus, never on a copy (copy_of: it follows its setting); absent otherwise."
+     "description": "The camera's menus (camera.menus, by name, in its order) whose own rows hold \"row\": the menu tree of each mode the menu covers holds the row, or the setting's own proofs in that mode (the mode a proof's context names, else the one the camera's own files give) reach it, the rows that menu never read then taken from those proofs' paths, or its row given by hand places it where that menu's tree has the top row (kit/camkit/placement.py by_menu). It follows how deep each mode's walk read and which modes proofs were made in: two owners of the model get the same only once the mapping is complete. On every setting \"row\" places when the definition has camera.menus, never on a copy (copy_of: it follows its setting); absent otherwise."
     },
     "row_places": {
      "type": "object",
