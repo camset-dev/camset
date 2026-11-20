@@ -250,6 +250,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **A `NEW_RECORDS` entry can say `"live_only": true`:** the record is laid out of the memory sets while it says so and
   back in once it no longer does (the a1 II's 0x023c, which follows the video system), never against a copy a
   registration proved.
+- **`kit/tools/label_audit.py` has every reader read again, with each kind's new question, the proof frames behind the
+  names one reader or the vision model alone backs, and the checklists', star ratings' and table pickers',** one vote
+  per model family. It prints counts only and lists the names not every family confirmed in a private file under the
+  camera's runs, changing nothing.
 - **A reader's Unsloth dynamic build ("UD") counts as the same model,** one vote with its other builds (decision 22).
 - **A side list's options are told grey by the second reader's whole-list flag beside the pixels, a carousel's by its
   lit icon:** asked the whole list (`entries.v2`, once a screenful in the background) Qwen3.8-27B called 90.8% of grey
