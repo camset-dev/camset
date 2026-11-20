@@ -2168,6 +2168,39 @@ pub(crate) mod facts_tests {
         done(&d2, &u2);
     }
 
+    /// Integration review finding 4: in a camera menu the page's compare CSV, its column picker and its Editing row are
+    /// the window's for that menu: the CSV the window exports for the menu and entry (`csv_text_in`), the picker the
+    /// window's (`picker_sets` with the columns shown), and, editing a Movie memory with Still's menu picked, the
+    /// Editing row the window draws (`editing_sets`), which keeps that memory.
+    #[test]
+    fn the_pages_csv_picker_and_editing_row_follow_its_menu() {
+        let (mut app, dir, user) = sample_app("menus_page_parity", Some(crate::test_support::stub_menus));
+        let movie_set = app.menu_sets(Some("Movie")).into_iter().find(|&s| s != 0).unwrap();
+        let still_set = app.menu_sets(Some("Still")).into_iter().find(|&s| s != 0).unwrap();
+        let cols = [Col::a(0), Col::a(still_set)];
+        for menu in ["Still", "Movie"] {
+            let body = serde_json::json!({ "compare": true, "cols": [["a", 0], ["a", still_set]], "only_diff": false, "menu": menu, "entry": "tab:Shooting" });
+            let r = crate::web::tests::answer(&mut app, "csv", body);
+            let want = app.csv_text_in(Some(menu), Some((&cols, false, app.show_raw)), 0, "", &BarKey::Tab("Shooting".into()), false).0;
+            assert_eq!(String::from_utf8(r.body).unwrap(), want, "{menu}: the CSV the window exports");
+            let a = crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["a", still_set]], "menu": menu, "only_diff": false }));
+            let j: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+            let page: Vec<u64> = j["sections"].as_array().unwrap().iter().map(|s| s[0].as_u64().unwrap()).collect();
+            assert_eq!(page, app.picker_sets(Some(menu), &cols).into_iter().map(|s| s as u64).collect::<Vec<_>>(), "{menu}: the window's column picker");
+        }
+        assert_ne!(app.picker_sets(Some("Still"), &cols), app.picker_sets(Some("Movie"), &cols), "the case: the menus' pickers differ");
+        // the Editing row: a Movie memory edited, Still's menu picked
+        app.target = movie_set;
+        app.set_menu("Still");
+        let window = app.editing_sets();
+        assert!(window.contains(&movie_set));
+        let s = crate::web::tests::answer(&mut app, "state", serde_json::json!({ "target": movie_set, "menu": "Still" }));
+        let s: serde_json::Value = serde_json::from_slice(&s.body).unwrap();
+        let page: Vec<usize> = s["targets"].as_array().unwrap().iter().map(|t| t[0].as_u64().unwrap() as usize).collect();
+        assert_eq!(page, window, "the Editing row the window draws");
+        done(&dir, &user);
+    }
+
     /// Integration review finding 5: Up/Down in the Menu column move from the first entry where the page shown is not
     /// one of the bar's (Only edited with no edit there): Down opens the bar's first entry.
     #[test]
