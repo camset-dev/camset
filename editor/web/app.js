@@ -1499,12 +1499,8 @@ function onlyEdited(groups) {
  *  groups as the window's collapsing headers in the tab's colour. */
 function drawTab(groups, j = {}) {
   const t = (state.tab_info || []).find((x) => x.name === view.tab);
-  // its groups and the camera's rows that hold others, all folded or all open (`foldAll`), with their keys
-  const folds = el("span", { class: "fold-all" },
-    el("button", { class: "small", title: `Fold every group of this tab and every row of the camera's menu that holds others (${FOLD_KEYS[0]})`, "aria-keyshortcuts": FOLD_ARIA[0], onclick: () => foldAll(true) }, "Collapse all"),
-    el("button", { class: "small", title: `Open every group of this tab and every row of the camera's menu (${FOLD_KEYS[1]})`, "aria-keyshortcuts": FOLD_ARIA[1], onclick: () => foldAll(false) }, "Expand all"));
   groups = onlyEdited(groups);
-  const head = el("div", { class: "head" }, cmpBackButton(), el("h1", { style: { color: t && t.color } }, view.tab), groups.length ? folds : null, j.places ? layoutSwitch(j.flat) : null);
+  const head = el("div", { class: "head" }, cmpBackButton(), el("h1", { style: { color: t && t.color } }, view.tab), groups.length ? foldButtons("of this tab") : null, j.places ? layoutSwitch(j.flat) : null);
   if (!groups.length) return [head, el("p", {}, "No settings match.")];
   return [head, ...drawGroups(groups, view.tab, view.only)];
 }
@@ -1515,6 +1511,7 @@ function drawSearch(groups) {
   if (!hits) return [head, el("p", {}, "Nothing matches. The search looks at setting names, groups and value labels.")];
   groups = onlyEdited(groups);
   if (!groups.length) return [head, el("p", {}, `No edited settings match: none of the ${hits} setting(s) that match is edited.`)];
+  head.append(foldButtons("of the results"));
   return [head, el("p", { class: "small weak" }, `${hits} setting(s)${view.only ? ", the edited ones shown" : ""}`),
     ...drawGroups(groups, "?", true)];
 }
@@ -1537,11 +1534,12 @@ function drawGroups(groups, where, allOpen) {
   if (!openGroups.has(where)) openGroups.set(where, new Set(groups.length ? [groups[0].name] : []));
   const open = openGroups.get(where);
   return groups.map((g) => {
-    if (g.family) return drawFamily(g, open, allOpen);
+    if (g.family) return Object.assign(drawFamily(g, open, allOpen), { _where: where });
     const body = el("div", { class: "grid" });
     const d = el("details", { class: "grp", open: allOpen || open.has(g.name), "data-group": g.name },
       el("summary", { style: { "--c": g.color } }, ...groupHead(g)), body);
-    d._group = g;
+    // what Collapse all and Expand all need (`foldAll`): the view the group is in, its rows' box
+    Object.assign(d, { _group: g, _where: where, _body: body });
     const fill = () => { if (!body.childElementCount) { body.append(...groupRows(d._group, where)); foldRows(body); } };
     if (d.open) fill();
     d.addEventListener("toggle", () => {
@@ -2302,7 +2300,7 @@ function myMenuItems(r, done = () => {}) {
  *  that opens the setting it opens (with that setting's value), Remove and Move up / Move down; then the settings of
  *  My Menu's own tab by group, as rows. Always the live settings, which a note says while a memory is edited. */
 function drawMyMenu(j) {
-  const out = [el("div", { class: "head" }, el("h1", {}, j.name))];
+  const out = [el("div", { class: "head" }, el("h1", {}, j.name), j.groups.length ? foldButtons("below") : null)];
   if (j.memory) out.push(el("p", {}, j.memory));
   if (!j.pages) out.push(el("p", {}, j.missing));
   else {
@@ -4277,11 +4275,20 @@ const ON_MAC = /Mac|iPhone|iPad/.test(navigator.platform || "");
 const FOLD_KEYS = ON_MAC ? ["⌘⇧↑", "⌘⇧↓"] : ["Ctrl+Shift+↑", "Ctrl+Shift+↓"];
 const FOLD_ARIA = ON_MAC ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"] : ["Control+Shift+ArrowUp", "Control+Shift+ArrowDown"];
 
+/** Collapse all and Expand all over the groups of the view in front (`foldAll`), with their keys in words and as
+ *  `aria-keyshortcuts`: every group `where` says ("of this tab", "of the results", "below"). */
+function foldButtons(where) {
+  return el("span", { class: "fold-all" },
+    el("button", { class: "small", title: `Fold every group ${where} and every row of the camera's menu that holds others (${FOLD_KEYS[0]})`, "aria-keyshortcuts": FOLD_ARIA[0], onclick: () => foldAll(true) }, "Collapse all"),
+    el("button", { class: "small", title: `Open every group ${where} and every row of the camera's menu (${FOLD_KEYS[1]})`, "aria-keyshortcuts": FOLD_ARIA[1], onclick: () => foldAll(false) }, "Expand all"));
+}
+
 /** Collapse all (`collapse`) or expand all, by the buttons or the keys, as the window's (`fold_all`): in Compare its
- *  tabs and groups (`cmp.folded`, as its Collapse all and Expand all have always done); in a tab of Edit its groups
- *  (`openGroups`) and the camera's rows that hold others drawn there (`xp.rowFolds`). The page keeps them as it keeps
- *  any fold, while it is open. A control with the keyboard in a group a fold closes gives it to that group's head.
- *  False where nothing folds. */
+ *  tabs and groups (`cmp.folded`, as its Collapse all and Expand all have always done); in Edit every group of the view
+ *  in front, whichever it is (a tab, the search results, My Menu's tab: `openGroups`), and the camera's rows that hold
+ *  others in them (`xp.rowFolds`); the window draws the search results and My Menu as lists, with nothing to fold. The
+ *  page keeps them as it keeps any fold, while it is open. A control with the keyboard in a group a fold closes gives
+ *  it to that group's head. False where nothing folds, so the browser keeps the keys there. */
 function foldAll(collapse) {
   if (view.mode === "compare") {
     if (cmp.records || !cmp.last || !cmp.last.rows) return false;
@@ -4290,21 +4297,22 @@ function foldAll(collapse) {
     redrawCompare();
     return true;
   }
-  if (pageName() !== "tab") return false;
-  if (!openGroups.has(view.tab)) openGroups.set(view.tab, new Set());
-  const open = openGroups.get(view.tab);
-  for (const d of $("content").querySelectorAll("details.grp")) {
+  const groups = [...$("content").querySelectorAll("details.grp")].filter((d) => d._where !== undefined);
+  if (!groups.length) return false;
+  for (const d of groups) {
+    if (!openGroups.has(d._where)) openGroups.set(d._where, new Set());
+    const open = openGroups.get(d._where);
     if (collapse) open.delete(d.dataset.group); else open.add(d.dataset.group);
     d.open = !collapse;
     // every heading of its layout, its rows made or not yet (a group's rows are made when it is first opened)
     for (const l of (d._group && d._group.layout) || []) {
       if (!("head" in l)) continue;
-      const k = JSON.stringify([view.tab, d._group.name, l.path]);
+      const k = JSON.stringify([d._where, d._group.name, l.path]);
       if (collapse) xp.rowFolds.add(k); else xp.rowFolds.delete(k);
     }
   }
   for (const h of $("content").querySelectorAll(".rowhead[data-fold]")) if (h._show) h._show();
-  for (const g of $("content").querySelectorAll("details.grp > .grid")) foldRows(g);
+  for (const d of groups) if (d._body) foldRows(d._body);
   // the keyboard where it can still be seen: a group closed over it gives it to that group's head
   const a = document.activeElement;
   const shut = a && a.closest && a.closest("details.grp");

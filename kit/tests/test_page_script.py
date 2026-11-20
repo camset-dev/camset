@@ -204,6 +204,45 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_the_keys_fold_the_search_results_and_my_menu_too(tmp_path):
+    """The keys fold every group of the view in front, whichever it is: the search results and My Menu's tab as a tab,
+    each with its own Collapse all and Expand all (the keys in words and as aria-keyshortcuts); where nothing folds the
+    keys are left to the browser."""
+    got = run(tmp_path, LAYOUT + """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+const groups = () => $("content").querySelectorAll("details.grp").map((d) => d.open);
+const look = (where, drawn) => {
+  $("content").replaceChildren(...drawn);
+  const o = { start: groups(), taken: shortcut(key("ArrowUp")) };
+  o.collapsed = groups(); o.kept = [...openGroups.get(where)];
+  shortcut(key("ArrowDown"));
+  o.expanded = groups(); o.open = [...openGroups.get(where)].sort();
+  const bs = drawn[0].querySelectorAll(".fold-all button");
+  o.buttons = bs.map((b) => [b.textContent, b.getAttribute("aria-keyshortcuts"), b.title.includes(FOLD_KEYS[bs.indexOf(b)])]);
+  bs[0].click(); o.button_collapsed = groups();
+  return o;
+};
+view.mode = "edit"; view.page = "tab"; view.q = "a";
+const search = look("?", drawSearch([drive, other]));
+view.q = ""; view.page = "mymenu";
+const mymenu = look("mymenu", drawMyMenu({ name: "My Menu", missing: "No My Menu here", groups: [drive, other] }));
+$("content").replaceChildren(el("p", {}, "nothing folds here"));
+const nothing = shortcut(key("ArrowUp"));
+const none = drawMyMenu({ name: "My Menu", missing: "No My Menu here", groups: [] })[0].querySelectorAll(".fold-all button").length;
+console.log(JSON.stringify({ search, mymenu, nothing, none }));
+""")
+    buttons = [["Collapse all", "Control+Shift+ArrowUp", True], ["Expand all", "Control+Shift+ArrowDown", True]]
+    assert got["search"] == {"start": [True, True], "taken": True, "collapsed": [False, False], "kept": [],
+                             "expanded": [True, True], "open": ["Drive", "Other"], "buttons": buttons,
+                             "button_collapsed": [False, False]}
+    assert got["mymenu"] == {"start": [True, False], "taken": True, "collapsed": [False, False], "kept": [],
+                             "expanded": [True, True], "open": ["Drive", "Other"], "buttons": buttons,
+                             "button_collapsed": [False, False]}
+    assert got["nothing"] is False and got["none"] == 0
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an
