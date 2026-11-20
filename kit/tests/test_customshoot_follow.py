@@ -616,3 +616,86 @@ def test_open_hold_marks_the_hold_opened_once_its_right_went_out(monkeypatch):
     pressed_refused.clear()
     CR.open_hold(Cam(), [], {}, 2)
     assert CR.OPENED["hold"] == 2 and pressed == ["right"]
+
+
+# ---------------------------------------------------------------- customshoot_run.py: the same notice, end and exits
+
+def test_the_ticks_visit_takes_a_notice_after_register_only_as_the_cameras_word_alone(monkeypatch):
+    """customshoot_run.visit: "Not registered." after Enter on Register stops it before any download, as
+    customshoot_values.register does (registered_said, shared)."""
+    downloads, said = [], {}
+
+    class Cam:
+        frame = SimpleNamespace(path=Path("00041_down.png"))
+
+        def press(self, key):
+            self.frame = SimpleNamespace(path=Path(f"00042_{key}.png"))
+
+        def read(self):
+            return SimpleNamespace(kind=said["kind"])
+    link = SimpleNamespace(download=lambda tag: downloads.append(tag) or Path(f"00043_{tag}.DAT"))
+    for name, fake in (("open_hold", lambda *a: None), ("on_ticks", lambda c: True), ("to_register", lambda c: None),
+                       ("lines", lambda c: c.frame.path.name), ("later", lambda fn, c: None),
+                       ("to_shooting", lambda *a: None), ("wait_lock", lambda *a, **k: None)):
+        monkeypatch.setattr(CR, name, fake)
+    monkeypatch.setattr(CR.ocr, "text_in", lambda lines, box: said["text"] if lines == "00042_enter.png" else "")
+    said.update(kind="notice", text="Not registered.")
+    with pytest.raises(CR.Failed, match="after Register: 'Not registered.'"):
+        CR.visit(Cam(), link, None, None, None, 1, [])
+    assert downloads == []
+    said.update(kind="notice", text="Registered.")
+    assert CR.visit(Cam(), link, None, None, None, 1, [])["dat"].name == "00043_hold1-ticks.DAT"
+
+
+@pytest.fixture
+def ticks(tmp_path, monkeypatch):
+    """customshoot_run.main over the made-up session (wire), its visits faked: each opens the hold (OPENED) and
+    downloads; log["stop_on_visit"] names the visit whose start finds the STOP there."""
+    log = {"events": [], "downloads": [], "finished": [], "checked": [], "closed": 0, "visits": 0}
+    src = tmp_path / "src"
+    files = {"before": made(src / "before.DAT"), "after": made(src / "after.DAT"), "end": made(src / "end.DAT"),
+             "visit": made(src / "visit.DAT")}
+    log["files"] = files
+    wire(tmp_path, monkeypatch, files, log)
+
+    def visit(cam, link, hdmi, cycle, model, h, cells):
+        log["visits"] += 1
+        if log.get("stop_on_visit") == log["visits"]:
+            log["stop"] = True
+        cam.press("left")                       # the visit's first press after the hold opens: refused once stopped
+        CR.OPENED["hold"] = h
+        log["events"].append(f"visit {cells}")
+        return {"boxes": [], "refused": [], "chosen_frame": "f.png", "row_frame": "r.png", "vlm": None,
+                "dat": link.download("visit"), "said": ""}
+    monkeypatch.setattr(CR, "visit", visit)
+    monkeypatch.setattr(CR, "settled", lambda v: v)
+
+    def go():
+        monkeypatch.setattr(sys, "argv", ["customshoot_run", "--allow", "Reg. Custom Shoot Set", "--hold", "1",
+                                          "--count", "1"])
+        CR.main()
+    log["go"] = go
+    return log
+
+
+def test_the_ticks_run_puts_the_copy_back_and_hands_its_check_the_copy_as_expected(ticks):
+    assert exits(ticks["go"]) == 0
+    assert ticks["events"][-len(PUT_BACK):] == PUT_BACK and ticks["expected"] == [frozenset({COPY_KEY})]
+
+
+def test_the_ticks_run_stopped_presses_nothing_more_and_says_how_to_put_the_copy_back(ticks, capsys):
+    from exit_status import EXIT_INCOMPLETE
+    ticks["stop_on_visit"] = 2
+    assert exits(ticks["go"]) == EXIT_INCOMPLETE
+    assert ticks["events"][-len(NO_PUT_BACK):] == NO_PUT_BACK
+    out = capsys.readouterr().out
+    assert "the start file is back and checked" in out and "was not put back, because the run was told to stop" in out
+    assert "customshoot_values.py --allow 'Reg. Custom Shoot Set' --put-back --scan kit2_page_scan" in out
+
+
+def test_the_ticks_run_with_a_stop_file_there_before_it_exits_4_naming_it(ticks, capsys):
+    ticks["run"]._left = [Path("runs/ILCE-1M2_fw4.00/kit2_pass2/STOP")]
+    ticks["stop"] = True
+    assert exits(ticks["go"]) == 4
+    assert ticks["events"][-len(NO_PUT_BACK):] == NO_PUT_BACK
+    assert "was there before this run started (an earlier stop)" in capsys.readouterr().out

@@ -17,8 +17,18 @@ Register, a settings download, a diff with the start; a last visit puts the last
 greyed by the hold's own values (Shutter Speed when its Shoot Mode is A) does not flip and is
 recorded as refused. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as kind "checklist", path
 ["Reg. Custom Shoot Set", "Recall Custom hold N"]. At the end the start file goes back on, and hold 3
-is opened and cancelled: a file does not set the registration working copy (0x18cb's fourth slot),
-which follows the hold opened last (hold 3 in the owner's file).
+is opened and cancelled (put_back): a file does not set the registration working copy (0x18cb's fourth slot,
+WORKING_COPY), which follows the hold opened last (hold 3 in the owner's file); the session's restore check leaves that
+record out (prover_session's expected) and the last download checks it.
+
+A STOP means no press but cleanup MENU (camkit.link), here and in customshoot_values.py, which shares put_back and
+run_end: after a STOP file made before the run or during it, a chain's limit or a first Ctrl-C, the put-back presses
+nothing; the restore and the last download still happen. A STOP file there before the run: nothing pressed but MENU,
+exit EXIT_UNRESTORED, the file named (a chain stops). A stop during the run: the start file back and checked, exit
+EXIT_INCOMPLETE, and where the run had opened a hold's screen, that the working copy was not put back because the run
+was told to stop, with the command that puts it back (customshoot_values.py --put-back). A failure or a refusal that
+ends the run: the copy put back, exit EXIT_INCOMPLETE or EXIT_REFUSED. A restore that does not check out:
+EXIT_UNRESTORED, as ever. A notice after Register counts only as the camera's "Registered." alone (registered_said).
 """
 import argparse
 import contextlib
@@ -190,7 +200,7 @@ def visit(cam, link, hdmi, cycle, model, h: int, cells: list) -> dict:
     chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
     cam.press("enter")
     said = ocr.text_in(lines(cam), (0, 0, 640, 480))
-    if cam.read().kind == "notice" and "registered" not in said.lower():
+    if cam.read().kind == "notice" and not registered_said(said):
         raise Failed(f"after Register: {said[:90]!r} ({cam.frame.path.name})")
     row_frame = cam.frame.path.name
     to_shooting(link, hdmi, "the download after Register")
@@ -337,12 +347,15 @@ def main():
     run = Run("kit2_pass2")
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
+    stopped = []                    # what ended the session's body, if anything (noted): run_end's words and exit
+    keys = working_copy_keys(run)   # the working copy's record: the session's restore check leaves it out
+    OPENED["hold"] = None
     try:
         with proofs_file(run, a.context, {"allowance": allowance}) as out, \
                 prover_session(run, hdmi, may_open=set(a.allow), say_start=False,    # may_open: the owner's word
                                close_eyes=False, exit_unrestored=False,         # carried to the end (below)
-                               end_why="the settings download after the hold",
-                               note="the start file left records apart (see above)") as s:
+                               end_why="the settings download after the hold", expected=keys,
+                               note="the start file left records apart (see above)") as s, noted(stopped):
             cam, link, start = s.cam, s.link, s.start
             base = camset.read(start)
             print(f"start file: {start.name}; hold {h}, {n} items", flush=True)
@@ -369,30 +382,15 @@ def main():
                 if i == n and ch:
                     print(f"   every tick back; {len(ch)} records still differ: {[c.key for c in ch][:8]}", flush=True)
         ended = time.monotonic()        # the session's last download (its end's, or its restore check's) came before
-        # the hold's working copy put back, which the start file does not cover: a STOP at cancel_hold's first press
-        # (not a cleanup press) or an error leaves it where it is, which exits EXIT_UNRESTORED (runner.restoring)
-        with restoring("putting the hold's working copy back"), Link(run) as link:
-            hdmi.attach(link)
-            to_shooting(link, hdmi, "before putting the working copy back")
-            # the menu's lock after that download, from when the session ended (camkit.session.wait_lock; the link's
-            # open alone mostly outlasts it): it stood for 4 s before the link and 5 s after
-            wait_lock(ended, hdmi, clock=time)
-            cam = LiveCamera(link, hdmi, run, may_open=set(a.allow))     # the owner's word, as above
-            try:
-                cancel_hold(cam, link, cycle, model, LAST_OPENED)
-            except Exception:
-                close_for_restore(cam, link, start)        # cleanup presses before the link closes over an open dialog
-                raise
-            to_shooting(link, hdmi, "the last download")      # camlink waits for the camera to allow the download
-            last = camset.diff(camset.read(start), camset.read(link.download("end")))
-            print(f"at the end: {len(last)} records differ from the start file "
-                  f"{[c.key for c in last][:8]}", flush=True)
+        opened = OPENED["hold"]         # whether this run opened a hold's screen: only then did the working copy move
+        # the hold's working copy put back (put_back), which the start file does not cover; after a stop it presses
+        # nothing, and run_end says what is owed
+        last, done = put_back(run, hdmi, cycle, model, a.allow, start, ended, stopped)
     finally:
         hdmi.close()
-    if not s.restored or last:
-        # the first session's start file did not take, or the camera still differs after the working copy went
-        # back: not as its start file, which the exit status says (runner.EXIT_UNRESTORED)
-        sys.exit(EXIT_UNRESTORED)
+    code = run_end(run, s.restored, last, stopped, opened, done, keys, a.scan)
+    if code:
+        sys.exit(code)
 
 
 if __name__ == "__main__":
