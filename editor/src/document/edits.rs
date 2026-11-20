@@ -332,9 +332,17 @@ impl App {
     /// `section`, and its hover: what the copies rule says (`copies_note`), then, while a switch of the camera's own
     /// keeps the family apart there (`keeps_apart`), what the camera does then and that the editor does not follow it
     /// (`apart_note`); and beside a limit of two the camera keeps in order (`at_most`, `at_least`), what a value past
-    /// the other does, or that the file holds them out of order (`limit_note`). None for any other setting.
+    /// the other does, or that the file holds them out of order (`limit_note`). None for any other setting. A row of a
+    /// camera's menu (`Setting::shown_in`) is told of by the definition's own setting (`def_of`), and outside Expert
+    /// mode the copies rule's part is said in that menu's terms (`menu_copies_note`).
     pub(crate) fn copy_note(&self, s: &Setting, section: usize) -> Option<(String, String)> {
-        let note = match (self.copies_note(s, section), self.apart_note(s, section)) {
+        let menu = s.shown_in.clone().filter(|_| !self.prefs.expert);
+        let s = self.def_of(s);
+        let copies = match menu {
+            Some(menu) => self.menu_copies_note(s, &menu, section),
+            None => self.copies_note(s, section),
+        };
+        let note = match (copies, self.apart_note(s, section)) {
             (Some((words, hover)), Some(apart)) => Some((format!("{words} {apart}"), hover)),
             (None, Some(apart)) => Some((apart, "The camera keeps this value in more than one record, and a setting of its own decides whether each shooting mode has its own; what that setting did when it was tried on the camera is said here.".into())),
             (note, None) => note,
@@ -363,12 +371,7 @@ impl App {
         let mode = self.section_mode(&d.edited, section);
         let own = rule.for_mode(mode.as_deref(), section);
         let name = |o: &Setting| if o.name == s.name && o.key != s.key { format!("the other {} row", o.name) } else { o.name.clone() };
-        // the hover names the records from the definition's own settings, never a camera's
-        let copies: Vec<String> = rule.copies.iter().filter(|p| p.kept_in(section)).map(|p| self.schema.settings[p.setting].name.clone()).collect();
-        let mut hover = format!("The camera keeps the value of {} in {} too, and every file it writes holds it in at least one of them. The ones that held its value when this file was opened or read change with it here; the others change alone.", main.name, and_list(&copies));
-        if let (Some(p), Some(m)) = (own, &mode) {
-            hover.push_str(&format!(" In {m} mode the camera always holds {} at the value of {}.", main.name, self.schema.settings[p.setting].name));
-        }
+        let hover = self.copies_hover(&rule, section);
         if rule.keeps(&d.edited, section, mode.as_deref()) == Some(false) {
             let as_opened = rule.keeps(&d.baseline, section, self.section_mode(&d.baseline, section).as_deref()) == Some(false);
             let words = match (own, &mode) {
@@ -405,6 +408,65 @@ impl App {
             .filter(|p| self.schema.settings[p.setting].key != s.key && p.value(&d.edited, section).is_some())
             .map(|p| name(&self.schema.settings[p.setting]))).collect();
         Some((format!("Changing this changes {} too, and reverting it reverts them: they held the same value when this file was opened or read, so the editor keeps them together. Expert mode (⚙ Settings > Editing & Compare) changes this one alone.", and_list(&along)), hover))
+    }
+
+    /// The hover of the copies rule's note on setting `rule`'s rows in set `section`, naming the records from the
+    /// definition's own settings, never a camera's.
+    fn copies_hover(&self, rule: &CopyRule, section: usize) -> String {
+        let main = &self.schema.settings[rule.setting];
+        let mode = self.doc.as_ref().and_then(|d| self.section_mode(&d.edited, section));
+        let copies: Vec<String> = rule.copies.iter().filter(|p| p.kept_in(section)).map(|p| self.schema.settings[p.setting].name.clone()).collect();
+        let mut hover = format!("The camera keeps the value of {} in {} too, and every file it writes holds it in at least one of them. The ones that held its value when this file was opened or read change with it here; the others change alone.", main.name, and_list(&copies));
+        if let (Some(p), Some(m)) = (rule.for_mode(mode.as_deref(), section), &mode) {
+            hover.push_str(&format!(" In {m} mode the camera always holds {} at the value of {}.", main.name, self.schema.settings[p.setting].name));
+        }
+        hover
+    }
+
+    /// The copies rule's part of `copy_note` on a row of camera menu `menu` (`s` the definition's setting it shows),
+    /// in that menu's terms: which other camera menus' rows show a record an edit of it changes (`apply`: the setting
+    /// and the copies in step with it, or a copy apart alone), so that their value changes with this one, and why;
+    /// and how this menu's alone is changed (on the camera the switch `keeps_apart` names, where one does; here Expert
+    /// mode). That this menu's changes alone where other menus show the setting and none of them changes with it.
+    /// Where the set does not keep what the camera keeps, the words of `copies_note`. None where no other menu shows it.
+    fn menu_copies_note(&self, s: &Setting, menu: &str, section: usize) -> Option<(String, String)> {
+        let d = self.doc.as_ref()?;
+        let rule = self.rule_of(s)?;
+        if !rule.main.kept_in(section) {
+            return None;
+        }
+        if rule.keeps(&d.edited, section, self.section_mode(&d.edited, section).as_deref()) == Some(false) {
+            return self.copies_note(s, section);
+        }
+        let main = &self.schema.settings[rule.setting];
+        let changes: Vec<&str> = if s.copy_of.is_some() && !self.follows(s, main, section) {
+            vec![s.key.as_str()]
+        } else {
+            std::iter::once(main.key.as_str()).chain(rule.in_step(&d.baseline, section).filter(|p| p.value(&d.edited, section).is_some()).map(|p| self.schema.settings[p.setting].key.as_str())).collect()
+        };
+        // the record each other menu's row of the setting shows in this set
+        let bind = self.bind_for(section);
+        let shows: Vec<(String, String)> = self.menus().iter().filter(|m| m.name != menu).filter_map(|m| {
+            let listed = self.listed(&m.name, &bind);
+            listed.by_key.get(&main.key).map(|&i| &listed.rows[i]).filter(|r| kept_in(r, section)).map(|r| (m.name.clone(), r.key.clone()))
+        }).collect();
+        if shows.is_empty() {
+            return None;
+        }
+        let hover = self.copies_hover(&rule, section);
+        let others: Vec<String> = shows.into_iter().filter(|(_, k)| changes.contains(&k.as_str())).map(|(m, _)| m).collect();
+        if others.is_empty() {
+            return Some((format!("Changing this changes it in the {menu} menu alone: the other menus held other values when this file was opened or read."), hover));
+        }
+        let how = "Expert mode (⚙ Settings > Editing & Compare) lists each shooting mode's copy as a row of its own, and a copy changed there changes alone.";
+        let how = match self.switch_of(s) {
+            Some((sw, k, ..)) => {
+                let at: Vec<String> = k.apart.iter().map(|&v| Self::describe(sw, Some(v)).trim().to_string()).collect();
+                format!("on the camera, {} set to {} keeps each shooting mode's value apart; here, {how}", sw.name, or_list(&at))
+            }
+            None => how.to_string(),
+        };
+        Some((format!("Changing this changes it in the {} {} too, and reverting it reverts it there: the menus held the same value when this file was opened or read, which is how the camera keeps a setting it shares between shooting modes, so the editor keeps them together. To change it in the {menu} menu alone: {how}", and_list(&others), if others.len() == 1 { "menu" } else { "menus" }), hover))
     }
 
     /// Every setting the camera keeps in other records too (`copies`) that file A holds, in a set, other than the camera

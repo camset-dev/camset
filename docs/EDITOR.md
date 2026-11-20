@@ -92,7 +92,9 @@ In the flat list (Settings), and for a definition that lists no menus, every set
 
 **Settings the camera keeps twice.** The camera keeps some values more than once: on the a1 II, ISO, White Balance
 and each Picture Profile parameter have a copy for stills and one for movies. In a camera menu (above) the row of
-such a setting shows and changes the value of that menu's mode; elsewhere, and in Expert mode, each copy is a row of
+such a setting shows the value of that menu's mode, and changing it changes the other menus that held the same value
+when the file was opened or read, as the camera keeps a value it shares between modes. The row's note names those
+menus before you change it, and says how to change one mode's alone; elsewhere, and in Expert mode, each copy is a row of
 its own. A copy has a note saying what changing it changes. Outside Expert mode the editor keeps them as the camera does: a copy
 that held its setting's value when the file was opened or read changes with it, and an edit that would leave a file
 no camera writes is refused, with why and what to do. Some cameras have a switch that keeps a setting apart for stills

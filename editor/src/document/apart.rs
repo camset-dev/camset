@@ -85,7 +85,7 @@ impl App {
 
     /// The switch that keeps setting `s`'s family apart (`keeps_apart`; `s` the family's setting or one of its copies),
     /// with its entry, the family's setting and the copies: the first the definition names.
-    fn switch_of(&self, s: &Setting) -> Option<(&Setting, &camset_editor::schema::KeepsApart, &Setting, Vec<&Setting>)> {
+    pub(crate) fn switch_of(&self, s: &Setting) -> Option<(&Setting, &camset_editor::schema::KeepsApart, &Setting, Vec<&Setting>)> {
         let fam = if s.copies.is_empty() { self.main_of(s)? } else { s };
         self.schema.settings.iter().find_map(|sw| sw.keeps_apart.iter().find(|k| k.setting == fam.key).map(|k| (sw, k)))
             .and_then(|(sw, k)| {

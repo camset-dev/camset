@@ -2020,6 +2020,48 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// Review finding 3: in a camera menu, outside Expert mode, a row's note says in the menu's terms which other
+    /// camera menus' value an edit of it changes (exactly those `apply` then changes), why, and how to change this
+    /// menu's alone (the switch the definition names in `keeps_apart`, where it names one, and Expert mode); it names
+    /// no record the menus do not show, and the page sends the window's words.
+    #[test]
+    fn a_rows_note_in_a_menu_says_which_other_menus_change_with_it() {
+        let (mut app, dir, user) = sample_app("menus_copies_note", Some(crate::test_support::stub_menus));
+        let menus = ["Still", "Movie", "S&Q"];
+        for (key, switch) in [("global:0x0334", None), ("global:0x0367", Some(("global:0x0187", "Ticked")))] {
+            let main = setting(&app, key);
+            for menu in menus {
+                let row = app.listed_record(&main, 0, menu);
+                let (note, _) = app.copy_note(&row, 0).unwrap_or_else(|| panic!("{} in {menu}", main.name));
+                // what an edit changes: the other menus whose row shows another value after it
+                let shown = |app: &App| menus.map(|m| app.doc.as_ref().unwrap().value(0, app.listed_record(&main, 0, m).slot()));
+                let keep = app.doc.as_ref().map(|d| d.edited.clone());
+                let before = shown(&app);
+                let v = app.offered_values(&row, 0).into_iter().map(|(v, _)| v).find(|v| Some(*v) != before[0]).unwrap();
+                app.apply(vec![Action::Set(0, row.slot(), v)]);
+                let after = shown(&app);
+                if let (Some(d), Some(edited)) = (app.doc.as_mut(), keep) {
+                    d.edited = edited;
+                }
+                let changed: Vec<String> = menus.iter().zip(before.iter().zip(&after)).filter(|(m, (b, a))| **m != menu && b != a).map(|(m, _)| m.to_string()).collect();
+                assert_eq!(changed.len(), 2, "{} in {menu}: the sample holds each menu's record at one value", main.name);
+                assert!(note.starts_with(&format!("Changing this changes it in the {} menus too", and_list(&changed))), "{} in {menu}: {note}", main.name);
+                assert!(note.contains("held the same value when this file was opened or read") && note.contains("shares between shooting modes"), "{note}");
+                assert!(note.contains(&format!("To change it in the {menu} menu alone")) && note.contains("Expert mode"), "{note}");
+                if let Some((sw, label)) = switch {
+                    assert!(note.contains(&format!("{} set to {label}", setting(&app, sw).name)), "the switch: {note}");
+                }
+                for c in &main.copies {
+                    assert!(!note.contains(&setting(&app, c).name), "no record the menus do not show: {note}");
+                }
+                // the page: the same words for the same row
+                let linked = app.web_linked_in(0, Some(menu), &main.key).unwrap();
+                assert_eq!(app.web_row_in(0, Some(menu), &linked)["copy_note"].as_str(), Some(note.as_str()), "{} in {menu}", main.name);
+            }
+        }
+        done(&dir, &user);
+    }
+
     /// The window run frame by frame as a screen reader is told it, and clicked as one clicks.
     struct Win {
         ctx: egui::Context,
