@@ -17,11 +17,25 @@ on; a camera with no definition, or none with that setting on its Focus Area row
 touched, saying what to prove first.
 
 Every Register also rewrites a hidden per-hold record (0x0c09), so the run registers the hold once
-unchanged first, and each item's proofs are diffed with a download made just before them; the start file (downloaded before that) goes back on at the end,
-and hold 3 is opened and cancelled as in kit/provers/customshoot_run.py: the working copy put back, part of the restore,
-so its presses go as cleanup presses (CleanupLink) and a STOP or a first Ctrl-C that stopped the run does not refuse
-them. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as kind "list", path ["Reg. Custom Shoot Set", "Recall
-Custom hold N", item].
+unchanged first, and each item's proofs are diffed with a download made just before them; the start file (downloaded
+before that) goes back on at the end, and the holds' working copy is put back (customshoot_run.put_back): hold 3's
+screen opened and left with MENU, since no settings file sets back 0x18cb's fourth slot, which follows the hold whose
+screen was opened last (customshoot_run.WORKING_COPY); the session's restore check leaves that record out, the last
+download checks it. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as kind "list", path ["Reg. Custom Shoot
+Set", "Recall Custom hold N", item].
+
+A STOP means no press but cleanup MENU (camkit.link): after a STOP file made before the run or during it, a chain's
+limit or a first Ctrl-C, the put-back presses nothing; the session's restore (the start file uploaded where a record
+differs, checked) and the last download still happen, and customshoot_run.run_end says how it ended: a STOP file there
+before the run, nothing pressed but MENU, exit EXIT_UNRESTORED (a chain stops); a stop during the run, the start file
+back and checked, exit EXIT_INCOMPLETE, and where the run had opened a hold's screen, that the working copy was not put
+back and the command that puts it back:
+
+    .venv/bin/python -u kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --put-back --scan <the run's scan>
+
+--put-back, alone: that put-back as a run of its own (its start download, hold 3's screen opened and left with MENU,
+its end download compared with its start file, the working copy's record checked to hold hold 3's), a STOP stopping it
+like any run. A restore that does not check out exits EXIT_UNRESTORED, as ever.
 
     .venv/bin/python -u kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --hold 1 --follow "Exposure step=0.5EV,0.3EV" --record global:0x0c39
 
@@ -35,9 +49,9 @@ pass 2's report keeps it out of its rows and hands it to kit/schema_update.py as
 "record" the --record key, "element" the hold's (hold 1's is 0), "index" the option's code in the camera's definition
 (the one setting at ROW), "label" the option; applied only when the live record holds that code in the
 download after it was set and the element changed to it at Register from the download before (one that held the code
-already may hold what the camera had). Nothing else of the item proofs runs: no unchanged Register first. A run stopped
-part way ends on its start file, checked, with the working copy back, and exits EXIT_INCOMPLETE after a failure,
-EXIT_REFUSED after a refusal (a chain stops on either), 0 after a STOP or a first Ctrl-C (a chain's limit: it goes on).
+already may hold what the camera had). Nothing else of the item proofs runs: no unchanged Register first. A run that
+a failure or a refusal stopped part way ends on its start file, checked, with the working copy put back, and exits
+EXIT_INCOMPLETE or EXIT_REFUSED (a chain stops on either); a stop, as above.
 """
 import argparse
 import json
@@ -51,17 +65,16 @@ from camkit import camset, definitions, ocr, paths, safety, screen  # noqa: E402
 # option matching: one set of rules for every prover (camkit/match.py has the slips it guards against)
 from camkit.match import clean as clean_option, index_of, norm, same  # noqa: E402,F401
 from camkit.frames import eyes_from_config  # noqa: E402
-from camkit.link import Link, StopRequested  # noqa: E402
-from camkit.live import LiveCamera  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
-from customshoot_run import ITEMS, LAST_OPENED, ROW, allowed, cancel_hold, lines, open_hold, row_box, to_item, to_register  # noqa: E402
+from customshoot_run import (ITEMS, LAST_OPENED, OPENED, ROW, allowed, cancel_hold, lines, noted, open_hold,  # noqa: E402
+                             put_back, registered_said, row_box, run_end, to_item, to_register, working_copy_keys)
 from mode_switch import open_menu, set_row  # noqa: E402   (--follow's live row: an import failure shows before a session)
 from prove_run import Failed, to_shooting, vlm_option  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
 from proving.screens import later  # noqa: E402
-from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_UNRESTORED, add_allow_argument, add_scan_argument,  # noqa: E402
-                    changes_of, close_for_restore, close_screen, load_scan, proofs_file, prover_session, restoring)
+from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, changes_of, close_screen,  # noqa: E402
+                    load_scan, proofs_file, prover_session)
 
 POP_Y0, POP_DY = 118, 50                 # the popup's first option centre and pitch
 # the live setting whose values, by code, are the camera's Focus Area options in the order a hold's list offers them
@@ -103,23 +116,6 @@ def follow_plan(follow: str, record: str | None, hold: int, where=None) -> dict:
                      f"({', '.join(n for _, n in values)}); nothing was sent to the camera")
         out.append((values[j][1], values[j][0]))
     return {"row": path, "live": at[0]["key"], "options": out, "record": record, "element": hold - 1}
-
-
-class CleanupLink:
-    """The link the session that puts the hold's working copy back hands its camera layer: every press goes out as a
-    cleanup press, which the run's STOP file and a first Ctrl-C do not refuse (camkit.link: the STOP check is the one
-    guard a cleanup press skips; the camera layer's own judging of each press, and the link's every other guard, stay as
-    they are). The put-back is part of the restore, as the session's own restore presses are (proving.nav.to_shooting):
-    a stopped run still ends on its start file with the working copy back, checked. A second Ctrl-C still stops it at
-    once (not safe, as everywhere)."""
-    def __init__(self, link):
-        self._link = link
-
-    def press(self, *args, **kw):
-        return self._link.press(*args, **{**kw, "cleanup": True})
-
-    def __getattr__(self, name):
-        return getattr(self._link, name)
 
 
 def element_of(cs, key: str, i: int):
@@ -451,17 +447,6 @@ def to_option(cam, opts: list, j: int, wraps: bool):
     raise Failed(f"option {opts[j]!r} never took the cursor ({cam.frame.path.name})")
 
 
-REGISTERED = "registered"       # the camera's word on its notice after Register, and the whole of it (registered_said)
-
-
-def registered_said(said: str) -> bool:
-    """A notice after Register says the hold was written only when it is the camera's own word alone, "Registered."
-    read by its letters (case, marks and spaces aside): "Not registered." or any other words are no registration. The
-    frames on disk show none on this screen: every one read after Enter on Register (kit2_pass2) is the Reg. Custom
-    Shoot Set list again; "Registered." is the camera's notice after Camera Set. Memory's registration."""
-    return re.sub(r"[^a-z]+", " ", said.lower()).split() == [REGISTERED]
-
-
 def register(cam, link, hdmi, name: str):
     to_register(cam)
     full = ocr.text_in(lines(cam), (0, 0, 640, 480))
@@ -545,7 +530,10 @@ def prove_item(cam, link, hdmi, cycle, model, h, k, opts, s0, wraps, base, base_
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--hold", type=int, required=True, choices=(1, 2, 3))
+    ap.add_argument("--hold", type=int, default=None, choices=(1, 2, 3), help="the hold (with --items or --follow)")
+    ap.add_argument("--put-back", action="store_true",
+                    help="alone: put the holds' working copy back as a run of its own (hold 3's screen opened and left "
+                         "with MENU), as a run stopped after it opened a hold's screen says to")
     ap.add_argument("--items", default=None, help="item names, comma-separated (as on the hold's screen)")
     ap.add_argument("--follow", default=None, metavar="ROW=OPTION,OPTION",
                     help="instead of --items: register the hold as it stands with the live list row ROW on each OPTION "
@@ -570,6 +558,17 @@ def main():
                          f"Focus Area options in the menu's order (default {ORDER_KEY}, the ILCE-1M2's)")
     add_allow_argument(ap)
     a = ap.parse_args()
+    if a.put_back:
+        if a.hold or a.items is not None or a.follow is not None or a.record or a.prepare or a.counted or a.labels \
+                or a.sample or a.order_from:
+            sys.exit("--put-back is a run of its own: it opens hold 3's screen and leaves it, no --hold, --items, "
+                     "--follow, --record, --prepare, --counted, --labels, --sample or --order-from with it; nothing "
+                     "was sent to the camera")
+        put_back_alone(a)
+        return
+    if a.hold is None:
+        sys.exit("--hold names the hold (1, 2 or 3) whose items --items proves, or that --follow registers; nothing was "
+                 "sent to the camera")
     if a.order_from and not a.counted:
         sys.exit("--order-from names the record --counted reads the Focus Area order from, and without --counted "
                  "nothing reads it: add --counted (Focus Area's list), or leave --order-from out")
@@ -600,24 +599,22 @@ def main():
     run = Run("kit2_pass2")
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
-    stopped = []                    # what stopped --follow's registrations part way, if anything
+    stopped = []                    # what ended the session's body, if anything (noted): run_end's words and exit
+    keys = working_copy_keys(run)   # the working copy's record: the session's restore check leaves it out
+    OPENED["hold"] = None
     try:
         with proofs_file(run, a.context, {"allowance": allowance}) as out, \
                 prover_session(run, hdmi, may_open=set(a.allow), say_start=False,    # may_open: the owner's word
                                close_eyes=False, exit_unrestored=False,         # carried to the end (below)
-                               end_why="the settings download after the hold",
-                               note="the start file left records apart (see above)") as s:
+                               end_why="the settings download after the hold", expected=keys,
+                               note="the start file left records apart (see above)") as s, noted(stopped):
             cam, link, start = s.cam, s.link, s.start
             if plan is not None:
                 print(f"start file: {start.name}; hold {h} registered as it stands with "
                       f"{' > '.join(plan['row'])} on {', '.join(lab for lab, _ in plan['options'])} in turn, "
                       f"{plan['record']}[{plan['element']}] watched", flush=True)
                 # no item proofs after it (want is empty): the session ends restoring the start file
-                try:
-                    follow(cam, link, hdmi, cycle, model, h, plan, start, out)
-                except Exception as e:
-                    stopped.append(e)          # prover_session says it, closes and restores; the exit status says it
-                    raise
+                follow(cam, link, hdmi, cycle, model, h, plan, start, out)
             else:
                 open_hold(cam, cycle, model, h)
                 _, base_path, _ = register(cam, link, hdmi, f"hold{h}-unchanged")
@@ -686,35 +683,50 @@ def main():
                     print(f"{name} stopped: {e}", flush=True)
                     close_screen(cam, link)
         ended = time.monotonic()        # the session's last download (its end's, or its restore check's) came before
-        # the hold's working copy put back, which the start file does not cover. It is part of the restore: its presses
-        # go as cleanup presses (CleanupLink), so a STOP or a first Ctrl-C that stopped the session does not refuse
-        # them; an error leaves the copy where it is, which exits EXIT_UNRESTORED (runner.restoring)
-        with restoring("putting the hold's working copy back"), Link(run) as link:
-            hdmi.attach(link)
-            to_shooting(link, hdmi, "before putting the working copy back")
-            # the menu's lock after that download, from when the session ended (camkit.session.wait_lock; the link's
-            # open alone mostly outlasts it): it stood for 4 s before the link and 5 s after
-            wait_lock(ended, hdmi, clock=time)
-            cam = LiveCamera(CleanupLink(link), hdmi, run, may_open=set(a.allow))     # the owner's word, as above
-            try:
-                cancel_hold(cam, link, cycle, model, LAST_OPENED)
-            except Exception:
-                close_for_restore(cam, link, start)        # cleanup presses before the link closes over an open dialog
-                raise
-            to_shooting(link, hdmi, "the last download")      # camlink waits for the camera to allow the download
-            last = camset.diff(camset.read(start), camset.read(link.download("end")))
-            print(f"at the end: {len(last)} records differ from the start file "
-                  f"{[c.key for c in last][:8]}", flush=True)
+        opened = OPENED["hold"]         # whether this run opened a hold's screen: only then did the working copy move
+        # the hold's working copy put back (customshoot_run.put_back), which the start file does not cover; after a
+        # stop it presses nothing, and run_end says what is owed
+        last, done = put_back(run, hdmi, cycle, model, a.allow, start, ended, stopped)
     finally:
         hdmi.close()
-    if not s.restored or last:
-        # the first session's start file did not take, or the camera still differs after the working copy went
-        # back: not as its start file, which the exit status says (runner.EXIT_UNRESTORED)
-        sys.exit(EXIT_UNRESTORED)
-    if stopped and not isinstance(stopped[0], StopRequested):
-        # --follow stopped part way, its start file back and checked and the working copy back: a refusal or anything
-        # else, as boxes_run exits; a STOP (or a first Ctrl-C) exits 0, as there
-        sys.exit(EXIT_REFUSED if isinstance(stopped[0], safety.Refused) else EXIT_INCOMPLETE)
+    code = run_end(run, s.restored, last, stopped, opened, done, keys, a.scan)
+    if code:
+        sys.exit(code)
+
+
+def put_back_alone(a):
+    """--put-back: the holds' working copy put back as a run of its own, under --allow "Reg. Custom Shoot Set" like
+    the rest: its start download, hold LAST_OPENED's screen opened and left with MENU (cancel_hold, as a run's own
+    put-back does), its end download compared with its start file, the working copy's record left out of that count
+    (it is what this run moves, and no settings file sets it back) and checked instead: its fourth slot must hold what
+    hold LAST_OPENED's slot holds. A STOP stops it like any run (run_end)."""
+    allowed(a.allow, "customshoot_values")
+    cycle, model = load_scan(a.scan)
+    run = Run("kit2_pass2")
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
+    hdmi = eyes_from_config(run)
+    stopped, keys = [], working_copy_keys(run)
+    done = False
+    OPENED["hold"] = None
+    try:
+        with prover_session(run, hdmi, may_open=set(a.allow), say_start=False, exit_unrestored=False,
+                            end_why="the settings download after the put-back", expected=keys,
+                            note="the start file left records apart (see above)") as s, noted(stopped):
+            cancel_hold(s.cam, s.link, cycle, model, LAST_OPENED)
+            done = True
+    finally:
+        hdmi.close()
+    code = run_end(run, s.restored, [], stopped, LAST_OPENED, done, keys, a.scan)
+    if code:
+        sys.exit(code)
+    after = getattr(s.ending, "after", None)
+    for key in sorted(keys):
+        held = camset.read(after) if after is not None else None
+        slots = [element_of(held, key, i) for i in (LAST_OPENED - 1, 3)] if held is not None else [None, None]
+        if slots[0] is None or slots[0] != slots[1]:
+            print(f"the working copy ({key}'s fourth slot) does not hold what hold {LAST_OPENED}'s slot holds", flush=True)
+            sys.exit(EXIT_UNRESTORED)
+        print(f"the working copy ({key}'s fourth slot) holds what hold {LAST_OPENED}'s slot holds", flush=True)
 
 
 if __name__ == "__main__":

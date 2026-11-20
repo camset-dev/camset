@@ -2285,8 +2285,12 @@ def test_the_waits_between_sessions_and_fills_are_the_lock_rule_or_gone():
     any length or name."""
     for name in ("customshoot_run.py", "customshoot_values.py"):
         text = (KIT / "provers" / name).read_text(encoding="utf-8")
-        between = text.split("ended = time.monotonic()", 1)[1].split("cancel_hold(", 1)[0]
-        assert "sleep(" not in between and "wait_lock(ended, hdmi, clock=time)" in between, name
+        between = text.split("ended = time.monotonic()", 1)[1].split("put_back(", 1)[0]
+        assert "sleep(" not in between, name
+    # the put-back both share (customshoot_run.put_back, since 2026-11-20): the lock from `ended`, then its first press
+    text = (KIT / "provers" / "customshoot_run.py").read_text(encoding="utf-8")
+    between = text.split("def put_back(", 1)[1].split("cancel_hold(", 1)[0]
+    assert "sleep(" not in between and "wait_lock(ended, hdmi, clock=time)" in between
     text = (KIT / "provers" / "mymenu_run.py").read_text(encoding="utf-8")
     between = text.split("if lap_only or items is None", 1)[1].split('say(f"finished:', 1)[0]
     assert "sleep(" not in between and "My Menu emptied by the start file" in between

@@ -21,16 +21,19 @@ is opened and cancelled: a file does not set the registration working copy (0x18
 which follows the hold opened last (hold 3 in the owner's file).
 """
 import argparse
+import contextlib
 import difflib
 import json
+import os
+import re
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, ocr, safety, screen  # noqa: E402
+from camkit import camset, ocr, paths, safety, screen  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
-from camkit.link import Link  # noqa: E402
+from camkit.link import Link, StopRequested  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
@@ -38,9 +41,9 @@ from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, enter_path, option_key, to_shooting, vlm_option  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, allowed_or_exit, changes_of,  # noqa: E402
-                    close_for_restore, close_screen, load_scan, menu_from_shooting, proofs_file, prover_session,
-                    restoring, scan_position)
+from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_UNRESTORED, add_allow_argument, add_scan_argument,  # noqa: E402
+                    allowed_or_exit, changes_of, close_for_restore, close_screen, load_scan, menu_from_shooting,
+                    proofs_file, prover_session, restoring, scan_position)
 
 ROW = "Reg. Custom Shoot Set"
 ITEMS = ["Shoot Mode", "Aperture", "Shutter Speed", "Drive Mode", "Cnt Shoot Speed Boost", "Exposure Comp.", "ISO",
@@ -49,6 +52,16 @@ ROW_Y0, ROW_DY = 97, 50                  # the first visible item's centre, the 
 REGISTER_BOX = (425, 360, 610, 405)
 IMPORT_BOX = (30, 360, 395, 405)
 LAST_OPENED = 3                          # the hold whose screen the owner's file shows was opened last
+# the record whose fourth slot, the registration working copy, follows the hold whose screen was opened last and no
+# settings file sets back, by model: opening hold 2's screen moved it to hold 2's value (kit2_pass2 93341 -> 93435),
+# the upload after that put every other hold record's fourth slot back but not this one (93435 -> 93436), and hold 3's
+# screen opened and left put it back (93436 -> 93437, kit2_drive 00011 -> 00022). A run's restore check leaves it out
+# (prover_session's expected) and its put-back's last download checks it. Its other three slots are the holds', a value
+# each (2, 2 and 0 in the owner's file of 2026-10-31, 0 in all three after a reset) that no proof has named yet
+WORKING_COPY = {"ILCE-1M2": "global:0x18cb"}
+OPENED = {"hold": None}                  # the hold whose screen this run opened (open_hold), None until one is
+REGISTERED = "registered"                # the camera's word on its notice after Register, and the whole of it
+PROVER = "kit/provers/customshoot_values.py"     # its --put-back puts the working copy back as a run of its own
 
 
 def allowed(allow, prover: str) -> str:
@@ -135,6 +148,7 @@ def open_hold(cam, cycle, model, h: int):
         raise Failed(f"could not reach {ROW!r} by the scan")
     enter_path(cam, [ROW, f"Recall Custom hold {h}"], 0)
     cam.press("right")
+    OPENED["hold"] = h                   # the press went out: the working copy may follow this hold from here (run_end)
     title = ocr.text_in(lines(cam), (0, 0, 640, 52))
     if cam.read().kind != "checklist" or option_key(f"Recall Custom hold {h}") not in option_key(title):
         raise Failed(f"Right on hold {h} opened {cam.read().kind} ({title!r}), not its items")
@@ -190,6 +204,121 @@ def cancel_hold(cam, link, cycle, model, h: int):
     """Open hold h's screen and leave it with MENU: the working copy follows it."""
     open_hold(cam, cycle, model, h)
     close_screen(cam, link)
+
+
+def registered_said(said: str) -> bool:
+    """A notice after Register says the hold was written only when it is the camera's own word alone, "Registered."
+    read by its letters (case, marks and spaces aside): "Not registered." or any other words are no registration. The
+    frames on disk show none on this screen: every one read after Enter on Register (kit2_pass2) is the Reg. Custom
+    Shoot Set list again; "Registered." is the camera's notice after Camera Set. Memory's registration."""
+    return re.sub(r"[^a-z]+", " ", said.lower()).split() == [REGISTERED]
+
+
+def working_copy_keys(run) -> frozenset:
+    """The working copy's record (WORKING_COPY) of the camera whose runs `run` is in, as prover_session's expected;
+    empty for a camera none is named for."""
+    key = WORKING_COPY.get(Path(run.dir).parent.name.split("_fw")[0])
+    return frozenset({key}) if key else frozenset()
+
+
+@contextlib.contextmanager
+def noted(stopped: list):
+    """Inside a prover session: what ended its body (a stop, a refusal, a failure) kept in `stopped` for the run's end
+    (run_end), then handed on to the session, which says it, closes and restores."""
+    try:
+        yield
+    except Exception as e:
+        stopped.append(e)
+        raise
+
+
+def told_to_stop(run, stopped: list) -> bool:
+    """Whether the run was told to stop: a StopRequested ended its body, or its STOP is there now (a STOP file, made
+    before the run or during it, a chain's limit, a first Ctrl-C)."""
+    return any(isinstance(e, StopRequested) for e in stopped) or run.stop_requested()
+
+
+def put_back_command(scan) -> str:
+    """The command that puts the hold's working copy back as a run of its own (customshoot_values.py --put-back), with
+    the eyes and the page scan this run used: the scan by its folder's name where it is in the camera's runs, as
+    runner.load_scan names it, else by its path."""
+    eyes = os.environ.get("CAMSET_EYES")
+    scan, root = Path(scan), paths.run_root(required=False)
+    named = scan.name if root is not None and scan.resolve().parent == root.resolve() else paths.shown(scan)
+    return (f"{f'CAMSET_EYES={eyes} ' if eyes else ''}.venv/bin/python -u {PROVER} --allow {ROW!r} --put-back "
+            f"--scan {named}")
+
+
+def put_back(run, hdmi, cycle, model, allow, start: Path, ended: float, stopped: list) -> tuple:
+    """The hold's working copy put back in a session of its own, after the run's session restored its start file: hold
+    LAST_OPENED's screen opened and left with MENU (cancel_hold), then the last download compared with the start file,
+    every record, the working copy's among them. Once the run was told to stop (told_to_stop) it presses nothing here:
+    only the cleanup MENU that brings the shooting screen goes out, then the last download. A stop that comes while it
+    presses (a press refused) is closed with cleanup MENU and kept in `stopped`. Returns (the records that differ from
+    the start file at the end, whether the copy was put back). An error but a stop exits EXIT_UNRESTORED
+    (runner.restoring)."""
+    with restoring("putting the hold's working copy back"), Link(run) as link:
+        hdmi.attach(link)
+        to_shooting(link, hdmi, "before putting the working copy back")
+        # the menu's lock after the session's last download, from when the session ended (camkit.session.wait_lock; the
+        # link's open alone mostly outlasts it): it stood for 4 s before the link and 5 s after
+        wait_lock(ended, hdmi, clock=time)
+        done = False
+        if told_to_stop(run, stopped):
+            print("the run was told to stop: no press goes out to put the working copy back", flush=True)
+        else:
+            cam = LiveCamera(link, hdmi, run, may_open=set(allow))     # the owner's word for Reg. Custom Shoot Set
+            try:
+                cancel_hold(cam, link, cycle, model, LAST_OPENED)
+                done = True
+            except StopRequested as e:
+                stopped.append(e)
+                close_for_restore(cam, link, start)        # cleanup MENU out of whatever the put-back had opened
+            except Exception:
+                close_for_restore(cam, link, start)        # cleanup presses before the link closes over an open dialog
+                raise
+        to_shooting(link, hdmi, "the last download")      # camlink waits for the camera to allow the download
+        last = camset.diff(camset.read(start), camset.read(link.download("end")))
+        print(f"at the end: {len(last)} records differ from the start file {[c.key for c in last][:8]}", flush=True)
+    return last, done
+
+
+def run_end(run, restored: bool, last: list, stopped: list, opened, done: bool, keys: frozenset, scan) -> int:
+    """The exit status of a Recall Custom run once its put-back is over, said in true words:
+    - a STOP file there before the run started (Run._left): the run pressed nothing but MENU; EXIT_UNRESTORED, as it
+      always exited, so a chain stops;
+    - a restore that did not check out, or records other than the working copy's that differ at the end:
+      EXIT_UNRESTORED, as ever;
+    - a stop during the run (in its session or in the put-back): EXIT_INCOMPLETE, the start file back and checked;
+      where this run opened a hold's screen (`opened`: OPENED as the session left it, or the hold --put-back opens)
+      and the copy was not put back, that it was not, why, and the command that puts it back (put_back_command); where
+      it opened none, that nothing else is owed. A refusal that ended the run EXIT_REFUSED, any other failure
+      EXIT_INCOMPLETE, the copy put back;
+    - else 0, or EXIT_UNRESTORED when the working copy's record differs after it was put back."""
+    stop = next((e for e in stopped if isinstance(e, StopRequested)), None)
+    left = getattr(run, "_left", None) or []
+    if stop is not None and left:
+        print(f"{left[0]} was there before this run started (an earlier stop): the run pressed nothing but MENU and "
+              "registered nothing. Remove it to run.", flush=True)
+        return EXIT_UNRESTORED
+    others = [c.key for c in last if c.key not in keys]
+    if not restored or others:
+        return EXIT_UNRESTORED
+    copy = [c.key for c in last if c.key in keys]
+    if stopped:
+        print("the start file is back and checked", flush=True)
+        if not done and opened is not None:
+            # (a stop alone leaves the copy where it is: put_back raises on any other error before this)
+            print(f"the hold's working copy ({' '.join(sorted(keys)) or 'its record'}'s fourth slot, which no settings "
+                  f"file sets back) was not put back, because the run was told to stop"
+                  f"{'; it still differs from the start file' if copy else ''}. Put it back with:\n"
+                  f"  {put_back_command(scan)}", flush=True)
+        elif not done:
+            print("no hold's screen was opened, so nothing else is owed", flush=True)
+        if stop is None and isinstance(stopped[0], safety.Refused):
+            return EXIT_REFUSED
+        return EXIT_INCOMPLETE
+    return EXIT_UNRESTORED if copy else 0
 
 
 def main():
