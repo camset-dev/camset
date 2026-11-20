@@ -153,16 +153,87 @@ def table(camera: str | None = None) -> dict:
 
 
 def _load(camera) -> dict:
-    """The camera's table read from its hand tables file (read), {} where it has none."""
+    """The camera's table read from its hand tables file (read), {} where it has none, and refused (ValueError) where an
+    entry's two sides stand as two rows in one of the camera's own records (standing)."""
     if not camera:
         return {}
-    from . import datafiles
+    from . import datafiles, paths
     p = datafiles.hand_tables_file(camera)
     try:
         raw = p.read_text(encoding="utf-8-sig")
     except OSError:
         return {}
-    return read(json.loads(raw).get(TABLE) or {}, p)
+    got = read(json.loads(raw).get(TABLE) or {}, p)
+    for old, new, where in standing(got, paths.runs_top() / camera, datafiles.menu_tree_file(camera))[:1]:
+        raise ValueError(f"{p}: {TABLE}'s {SEP.join(old)!r}: it and {SEP.join(new)!r} are two rows of one listing in "
+                         f"{where}, two of the camera's own rows, never one renamed")
+    return got
+
+
+def standing(entries: dict, runs, tree=None) -> list:
+    """[(older path, camera path, where)] of each entry of `entries` (read()'s) whose two sides stand as two different
+    rows in one listing of the camera's own records: one page of a page model (`runs`/*/model.json), the rows one crawl
+    listed under one row (`runs`/*/rows.jsonl), the rows under one row of the menu tree (`tree`, its Stills menu and
+    each mode's). Such a pair is two real rows ("S&Q Shoot Mode" and "Shoot Mode", side by side on the a1 II's Shooting
+    Mode page), never one row read two ways; the same row read two ways in two records ("S&Q Record Setting" in one
+    crawl, "Record Setting" in another) is no pair, and the "#n" form never stands as a row. Labels compared plain.
+
+    What the loader does without the records (no runs/<model>_fw<fw>/ and no menu tree: a fresh clone, CI, the public
+    pass on a machine that never ran the camera): it finds no pair and takes the table as read() does. That is safe: the
+    entry was checked against the records where the table was written and run (every kit run on the camera reads the
+    table, and its records, before its link opens), and where the records are not there no seen record, crawl, map or
+    proof of that camera is there for an entry to fold either."""
+    want = {}
+    for old, new in entries.values():
+        if not _NTH.fullmatch(new[-1]):
+            want.setdefault(_key(old[:-1]), []).append((old, new))
+    out = []
+
+    def listing(where, parent, labels):
+        pairs = want.get(_key(parent))
+        if pairs:
+            have = {safety.plain(x) for x in labels if isinstance(x, str) and x.strip()}
+            out.extend((o, n, where) for o, n in pairs if safety.plain(o[-1]) in have and safety.plain(n[-1]) in have)
+
+    def crawled(rows, parent, where):
+        for r in rows:
+            if isinstance(r, dict) and isinstance(r.get("submenu"), list):
+                here = (*parent, str(r.get("label") or ""))
+                listing(where, here, [x.get("label") for x in r["submenu"] if isinstance(x, dict)])
+                crawled(r["submenu"], here, where)
+
+    def tree_rows(rows, parent, where):
+        listing(where, parent, [r.get("label") for r in rows if isinstance(r, dict)])
+        for r in rows:
+            if isinstance(r, dict) and r.get("children"):
+                tree_rows(r["children"], (*parent, str(r.get("label") or "")), where)
+
+    if not want:
+        return out
+    from pathlib import Path
+
+    from . import jsonl
+    runs = Path(runs)
+    for run in sorted(p for p in runs.iterdir() if p.is_dir()) if runs.is_dir() else ():
+        if () in want and (run / "model.json").is_file():
+            try:
+                pages = json.loads((run / "model.json").read_text(encoding="utf-8"))
+            except ValueError:
+                pages = []
+            for pg in pages if isinstance(pages, list) else []:
+                if isinstance(pg, dict):
+                    listing(f"{run.name}'s page model, page {pg.get('page')}", (),
+                            [r.get("label") for r in pg.get("rows") or [] if isinstance(r, dict)])
+        if (run / "rows.jsonl").is_file():
+            crawled(jsonl.read(run / "rows.jsonl", bad="skip"), (), f"{run.name}'s crawl")
+    if tree is not None and Path(tree).is_file():
+        doc = json.loads(Path(tree).read_text(encoding="utf-8"))
+        for mode, tabs in [("Stills", doc.get("tabs") or [])] + [(m.get("mode"), m.get("tabs") or [])
+                                                              for m in doc.get("modes") or [] if isinstance(m, dict)]:
+            for tb in tabs:
+                for pg in tb.get("pages") or []:
+                    tree_rows(pg.get("rows") or [], (), f"the menu tree ({mode} {tb.get('tab')} {pg.get('page')})")
+    return out
 
 
 def renamed(path, camera: str | None = None) -> tuple:

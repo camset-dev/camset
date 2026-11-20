@@ -460,3 +460,83 @@ def test_the_definitions_menu_list_takes_a_top_rows_camera_name(tmp_path, monkey
     doc = {"layouts": [{"model": "TEST-CAM", "firmware": "9.99"}], "tabs": ["Setup"], "menu": []}
     assert [m["label"] for m in fromdata.menu_list(doc)] == ["REC w/ Shutter", "with Shutter Button"]
     row_names.forget()
+
+
+# ---------------------------------------------------------------- two real rows are never one renamed
+
+SIX = {o: n for o, n in A1II_ROWS.items() if o not in SAFETY_LISTED}
+
+
+def records(own_runs, tmp_path, monkeypatch, page=(), submenu=(), tree=()):
+    """The made-up camera's own records: a page model page holding `page`, a crawl's Proxy Settings submenu holding
+    `submenu`, the menu tree's Shooting Mode page holding `tree` (each a list of labels)."""
+    root = own_runs / TEST_CAMERA
+    (root / "kit2_page_scan_x").mkdir(parents=True)
+    (root / "kit2_page_scan_x" / "model.json").write_text(json.dumps([
+        {"page": "8/59", "rows": [{"slot": i, "label": lab} for i, lab in enumerate(page)]}]), encoding="utf-8")
+    (root / "kit2_crawl_x").mkdir()
+    (root / "kit2_crawl_x" / "rows.jsonl").write_text(json.dumps(
+        {"label": "Proxy Settings", "outcome": "submenu crawled",
+         "submenu": [{"label": lab, "outcome": "walked"} for lab in submenu]}) + "\n", encoding="utf-8")
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", tmp_path / "evidence")
+    datafiles.write_menu_tree(datafiles.menu_tree_file(TEST_CAMERA), {
+        "model": "TEST-CAM", "firmware": "9.99", "source": "made up", "tabs": [{"tab": "Shooting", "pages": [
+            {"page": "8/59", "group": "Shooting Mode", "rows": [{"label": lab, "state": "seen"} for lab in tree]}]}]})
+
+
+@pytest.mark.parametrize("entry, where", [
+    ({"S&Q Shoot Mode": "Shoot Mode"}, "page"),
+    ({"Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording"}, "submenu"),
+    ({"S&Q Shoot Mode": "Shoot Mode"}, "tree"),
+])
+def test_an_entry_whose_two_sides_stand_as_two_rows_in_one_record_is_refused(own_runs, tmp_path, monkeypatch, entry,
+                                                                             where):
+    """{"S&Q Shoot Mode": "Shoot Mode"} is of the one kind, but the a1 II draws both rows side by side: where one of the
+    camera's own records lists both sides as two rows (one page of a page model, one crawl's submenu, one row's rows in
+    the menu tree), the loader refuses the entry (the review of 2026-11-20, R1)."""
+    old, new = next(iter(entry.items()))
+    both = [old.split(" > ")[-1], new.split(" > ")[-1]]
+    records(own_runs, tmp_path, monkeypatch, **{where: both})
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    hand_tables(tmp_path / "data", ROW_NAMES=entry)
+    with pytest.raises(ValueError, match="two rows of one listing"):
+        row_names.table()
+    row_names.forget()
+
+
+def test_one_row_read_two_ways_in_two_records_still_fits(own_runs, tmp_path, monkeypatch):
+    """The same row read with its icon in one crawl and without it in another is one row (S&Q Record Setting against
+    Record Setting): the entry is taken; so is a "#n" form, which never stands as a row."""
+    records(own_runs, tmp_path, monkeypatch, submenu=["Px Proxy Recording"], tree=["Shoot Mode", "Recording Media"])
+    other = own_runs / TEST_CAMERA / "kit2_crawl_y"
+    other.mkdir()
+    (other / "rows.jsonl").write_text(json.dumps(
+        {"label": "Proxy Settings", "outcome": "submenu crawled",
+         "submenu": [{"label": "Proxy Recording", "outcome": "walked"}]}) + "\n", encoding="utf-8")
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    entries = {"Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording",
+               "Rec. Media Settings > Recording Media (Movie)": "Rec. Media Settings > Recording Media#1"}
+    hand_tables(tmp_path / "data", ROW_NAMES=entries)
+    assert len(row_names.table()) == 2
+    row_names.forget()
+
+
+def test_without_the_cameras_records_the_loader_finds_no_pair(tmp_path, monkeypatch):
+    """No runs folder and no menu tree (a fresh clone, CI, the public pass): standing finds no pair, so the table is
+    taken as read() takes it, as the hand tables' reader does."""
+    entries = row_names.read({"S&Q Shoot Mode": "Shoot Mode"})
+    assert row_names.standing(entries, tmp_path / "no_runs", tmp_path / "no_tree.json") == []
+
+
+def test_the_a1_iis_six_rows_fit_against_its_records_and_its_shoot_mode_pair_does_not():
+    """Against the a1 II's own records (its runs; its menu tree too where this clone holds it): the six rows of the one
+    kind stand nowhere as two rows, while S&Q Shoot Mode and Shoot Mode do (kit2_diffset_movie_scan's page 8/59 and
+    others). Skipped without the runs."""
+    from camkit import paths
+    runs = paths.a1ii_root()
+    if not runs.exists():
+        pytest.skip(f"{runs} not present")
+    tree = datafiles.menu_tree_file(paths.A1II)
+    assert row_names.standing(row_names.read(SIX), runs, tree) == []
+    pair = row_names.standing(row_names.read({"S&Q Shoot Mode": "Shoot Mode"}), runs, tree)
+    assert pair and any(where == "kit2_diffset_movie_scan's page model, page 8/59" for _, _, where in pair)
