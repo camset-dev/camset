@@ -18,8 +18,10 @@ touched, saying what to prove first.
 
 Every Register also rewrites a hidden per-hold record (0x0c09), so the run registers the hold once
 unchanged first, and each item's proofs are diffed with a download made just before them; the start file (downloaded before that) goes back on at the end,
-and hold 3 is opened and cancelled as in kit/provers/customshoot_run.py. Proofs go to
-runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as kind "list", path ["Reg. Custom Shoot Set", "Recall Custom hold N", item].
+and hold 3 is opened and cancelled as in kit/provers/customshoot_run.py: the working copy put back, part of the restore,
+so its presses go as cleanup presses (CleanupLink) and a STOP or a first Ctrl-C that stopped the run does not refuse
+them. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as kind "list", path ["Reg. Custom Shoot Set", "Recall
+Custom hold N", item].
 
     .venv/bin/python -u kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --hold 1 --follow "Exposure step=0.5EV,0.3EV" --record global:0x0c39
 
@@ -33,8 +35,9 @@ pass 2's report keeps it out of its rows and hands it to kit/schema_update.py as
 "record" the --record key, "element" the hold's (hold 1's is 0), "index" the option's code in the camera's definition
 (the one setting at ROW), "label" the option; applied only when the live record holds that code in the
 download after it was set and the element changed to it at Register from the download before (one that held the code
-already may hold what the camera had). Nothing else of the item proofs runs: no unchanged Register first. A run that
-stopped part way exits EXIT_INCOMPLETE (a refusal EXIT_REFUSED) once its start file is back and checked, so a chain stops.
+already may hold what the camera had). Nothing else of the item proofs runs: no unchanged Register first. A run stopped
+part way ends on its start file, checked, with the working copy back, and exits EXIT_INCOMPLETE after a failure,
+EXIT_REFUSED after a refusal (a chain stops on either), 0 after a STOP or a first Ctrl-C (a chain's limit: it goes on).
 """
 import argparse
 import json
@@ -100,6 +103,23 @@ def follow_plan(follow: str, record: str | None, hold: int, where=None) -> dict:
                      f"({', '.join(n for _, n in values)}); nothing was sent to the camera")
         out.append((values[j][1], values[j][0]))
     return {"row": path, "live": at[0]["key"], "options": out, "record": record, "element": hold - 1}
+
+
+class CleanupLink:
+    """The link the session that puts the hold's working copy back hands its camera layer: every press goes out as a
+    cleanup press, which the run's STOP file and a first Ctrl-C do not refuse (camkit.link: the STOP check is the one
+    guard a cleanup press skips; the camera layer's own judging of each press, and the link's every other guard, stay as
+    they are). The put-back is part of the restore, as the session's own restore presses are (proving.nav.to_shooting):
+    a stopped run still ends on its start file with the working copy back, checked. A second Ctrl-C still stops it at
+    once (not safe, as everywhere)."""
+    def __init__(self, link):
+        self._link = link
+
+    def press(self, *args, **kw):
+        return self._link.press(*args, **{**kw, "cleanup": True})
+
+    def __getattr__(self, name):
+        return getattr(self._link, name)
 
 
 def element_of(cs, key: str, i: int):
@@ -666,15 +686,16 @@ def main():
                     print(f"{name} stopped: {e}", flush=True)
                     close_screen(cam, link)
         ended = time.monotonic()        # the session's last download (its end's, or its restore check's) came before
-        # the hold's working copy put back, which the start file does not cover: a STOP at cancel_hold's first press
-        # (not a cleanup press) or an error leaves it where it is, which exits EXIT_UNRESTORED (runner.restoring)
+        # the hold's working copy put back, which the start file does not cover. It is part of the restore: its presses
+        # go as cleanup presses (CleanupLink), so a STOP or a first Ctrl-C that stopped the session does not refuse
+        # them; an error leaves the copy where it is, which exits EXIT_UNRESTORED (runner.restoring)
         with restoring("putting the hold's working copy back"), Link(run) as link:
             hdmi.attach(link)
             to_shooting(link, hdmi, "before putting the working copy back")
             # the menu's lock after that download, from when the session ended (camkit.session.wait_lock; the link's
             # open alone mostly outlasts it): it stood for 4 s before the link and 5 s after
             wait_lock(ended, hdmi, clock=time)
-            cam = LiveCamera(link, hdmi, run, may_open=set(a.allow))     # the owner's word, as above
+            cam = LiveCamera(CleanupLink(link), hdmi, run, may_open=set(a.allow))     # the owner's word, as above
             try:
                 cancel_hold(cam, link, cycle, model, LAST_OPENED)
             except Exception:
@@ -691,7 +712,8 @@ def main():
         # back: not as its start file, which the exit status says (runner.EXIT_UNRESTORED)
         sys.exit(EXIT_UNRESTORED)
     if stopped and not isinstance(stopped[0], StopRequested):
-        # --follow stopped part way, its start file back and checked: a refusal or anything else, as boxes_run exits
+        # --follow stopped part way, its start file back and checked and the working copy back: a refusal or anything
+        # else, as boxes_run exits; a STOP (or a first Ctrl-C) exits 0, as there
         sys.exit(EXIT_REFUSED if isinstance(stopped[0], safety.Refused) else EXIT_INCOMPLETE)
 
 

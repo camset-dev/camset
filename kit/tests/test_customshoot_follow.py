@@ -184,6 +184,30 @@ def test_register_stops_on_a_notice_that_is_not_the_cameras_word_and_downloads_n
     assert V.register(Cam(), link, None, "hold1-at-0-3EV")[2] == "Registered." and len(downloads) == 2
 
 
+def test_the_put_backs_link_skips_the_stop_check_alone(tmp_path, monkeypatch):
+    """CleanupLink over the real link (the stand-in camlink, kit/tests/fake_camlink.py), its run's STOP file there: a
+    plain press is refused by the STOP, the same press through CleanupLink goes out; every other guard of the link
+    still holds (no key but MENU on the shooting screen, no C4 there), and what it does not change it hands through."""
+    from camkit import link as L
+    from camkit import safety
+    from camkit.runs import Run
+    monkeypatch.delenv("CAMSET_USB", raising=False)
+    run = Run("kit2_pass2", root=tmp_path)
+    fake = Path(__file__).resolve().parent / "fake_camlink.py"
+    menu, shooting = SimpleNamespace(kind="menu"), SimpleNamespace(kind="shooting")
+    with L.Link(run, ip="192.0.2.10", binary=[sys.executable, "-X", "utf8", str(fake)], catch_signals=False) as lk:
+        (run.dir / "STOP").write_text("", encoding="utf-8")
+        with pytest.raises(StopRequested):
+            lk.press("down", screen=menu)
+        up = V.CleanupLink(lk)
+        assert up.press("down", screen=menu)["args"][0] == "down"
+        with pytest.raises(safety.Refused, match="shooting screen"):
+            up.press("down", screen=shooting)
+        with pytest.raises(safety.Refused, match="C4 refused"):
+            up.press("c4", allow={"c4"}, screen=shooting)
+        assert up.moves == lk.moves and up.run is lk.run
+
+
 class FakeEyes:
     closed = 0
 
@@ -331,8 +355,8 @@ def test_a_whole_run_sets_the_row_and_registers_per_option_in_one_session_and_en
         "session reaches shooting: the start download", "download before",
         *registration("0.5EV", "0-5EV"), *registration("0.3EV", "0-3EV"),
         "session reaches shooting: the settings download after the hold", "restore",
-        "to shooting: before putting the working copy back", "wait lock", "open hold 3 to cancel", "press menu",
-        "to shooting: the last download", "download end"]
+        "to shooting: before putting the working copy back", "wait lock", "open hold 3 to cancel",
+        "press menu (cleanup)", "to shooting: the last download", "download end"]
     assert world["downloads"] == ["00001_before.DAT", "00002_hold1-0-5EV-set.DAT", "00003_hold1-at-0-5EV.DAT",
                                   "00004_hold1-0-3EV-set.DAT", "00005_hold1-at-0-3EV.DAT", "00006_end.DAT"]
     lines = world["lines"]()
@@ -361,7 +385,7 @@ def test_pass_2s_report_reads_the_lines_as_values_a_registration_wrote_and_no_ro
     assert pass2_report.report_proofs(run)[0] == []
 
 
-def test_a_stop_part_way_restores_and_exits_incomplete(world, capsys):
+def test_a_failure_part_way_restores_puts_the_working_copy_back_and_exits_incomplete(world, capsys):
     from exit_status import EXIT_INCOMPLETE
     world["fail_on"] = "0.3EV"
     with pytest.raises(SystemExit) as stop:
@@ -369,4 +393,27 @@ def test_a_stop_part_way_restores_and_exits_incomplete(world, capsys):
     assert stop.value.code == EXIT_INCOMPLETE
     assert [r["label"] for r in world["lines"]()] == ["0.5EV"]          # the first registration's line stands
     assert world["closed"] == 1 and world["finished"] and world["checked"] == world["finished"]
+    assert world["events"][-4:] == ["open hold 3 to cancel", "press menu (cleanup)", "to shooting: the last download",
+                                    "download end"]
     assert "stopped: Failed" in capsys.readouterr().out
+
+
+def test_a_stop_part_way_restores_puts_the_working_copy_back_as_cleanup_and_exits_0(world, capsys):
+    """A STOP (the run's STOP file, there from the second set on: a chain's limit, or a first Ctrl-C, which asks the run
+    to stop the same way) refuses the next press, the open of the live row's list; the session closes and puts its
+    start file back; then the hold's working copy is put back all the same, every press of it a cleanup press, which
+    the STOP does not refuse, and the last download is compared with the start file. The run exits 0, as the module's
+    stopped runs do (a failure 8, a refusal 7); before, the put-back's first press was refused and the run exited 4,
+    saying the camera might not be on its start file."""
+    world["stop_on"] = "0.3EV"
+    world["go"]()                                                      # no SystemExit: status 0
+    ev = world["events"]
+    assert ev[ev.index("refused right") + 1:] == [
+        "session reaches shooting: the settings download after the hold", "restore",
+        "to shooting: before putting the working copy back", "wait lock", "open hold 3 to cancel",
+        "press menu (cleanup)", "to shooting: the last download", "download end"]
+    assert [r["label"] for r in world["lines"]()] == ["0.5EV"]
+    assert world["finished"] and world["checked"] == world["finished"]
+    out = capsys.readouterr().out
+    assert "stopped: StopRequested" in out and "at the end: 0 records differ from the start file" in out
+    assert "did not finish" not in out
