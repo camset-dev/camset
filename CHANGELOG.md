@@ -194,6 +194,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The definition viewer
 
+- **Where the camera has several menus, the viewer's Menu is the first (the a1 II's Still menu), named over the
+  column,** as the editor lays it out for the settings saved in that mode; Expert still lists every setting, the other
+  menus' rows among them. The proof viewer hangs every record on the row the definition places it on, rows given by
+  hand included.
 - A file the viewer refuses shows its size and first bytes as a hex dump, to paste into a problem report: the file was
   read in your browser and never left it, but check that the dump holds nothing of yours before pasting it anywhere
   public.

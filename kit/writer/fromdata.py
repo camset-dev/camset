@@ -210,8 +210,8 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = Tru
         return None
     tree, boxes, hand = datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)), hand or {}
     modes = placement.menu_modes_of(doc)          # from the proofs' evidence, never the runs
-    every = set(placement.menu_modes(tree)) | {m for menu in menus or [] for m in menu.get("modes") or []}
-    found = placement.settings(doc, tree, boxes, placement.with_modes(placement.with_hand(hand), modes, every))
+    # the proof viewer places by the same paths (placement.placing_paths): one placement for both
+    found = placement.settings(doc, tree, boxes, placement.placing_paths(doc, tree, hand, menus))
     for k in sorted(set(hand) - set(found)):
         print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
     if not menus:
@@ -294,6 +294,24 @@ def camera_menus(doc: dict, table: list) -> list | None:
         raise hand_tables._refused(where, f"MENUS leaves the camera's mode {live[0]!r} without a menu (camera.live_mode "
                                           "names it): give it to the menu the camera shows in it")
     return [{f: menu[f] for f in MENU_FIELDS if f in menu} for menu in table]
+
+
+def menus_named(doc: dict, menus: list | None) -> list | None:
+    """The camera's menus for a definition whose places stay as they are and whose camera section came without its
+    menus (rebuilt from the camera file, which never holds them): the MENUS table's (`menus`, camera_menus), public,
+    where its settings name menus (row_menus, row_places), so no setting names a menu the definition lists none of;
+    None where they name none. Refused in plain words where they name a menu the table does not."""
+    named = {m for s in doc["settings"] for m in list(s.get("row_menus") or []) + list(s.get("row_places") or {})}
+    if not named:
+        return None
+    lacking = sorted(named - {m["name"] for m in menus or []})
+    if lacking:
+        raise hand_tables.Refused(
+            f"{definitions.key(doc)}: its settings name the camera menus {', '.join(map(repr, lacking))} (row_menus, "
+            f"row_places), which {paths.shown(datafiles.hand_tables_file(definitions.key(doc)))}'s MENUS does not, and "
+            "its camera section holds no menus. Nothing was written: name those menus in MENUS, or write where the "
+            "menu tree is, then run the command again.")
+    return menus
 
 
 def with_menus(camera: dict, menus: list | None) -> dict:
@@ -454,6 +472,8 @@ def from_data(doc: dict, rebuild: bool = None) -> dict:
     own_help(doc)
     doc["layouts"] = [with_evidence_apart(with_tidy_note(lay)) for lay in doc["layouts"]]
     found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}, rebuild)
+    if found is None and kept is None:
+        kept = menus_named(doc, menus)
     if "camera" in doc:
         doc["camera"] = with_menus(doc["camera"], menus if found is not None else kept)
     slots, mirror = mymenu_slots(doc), mirror_of(doc)

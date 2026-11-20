@@ -489,6 +489,8 @@ def test_with_no_menu_tree_the_definitions_menus_stay_as_they_are(tmp_path, monk
     doc = json.loads((definitions.ROOT / "editor" / "definitions" / f"{key}.json").read_text(encoding="utf-8"))
     menus = [{"name": "Still", "modes": ["Stills"]}, {"name": "Movie", "modes": ["Movie"]}, {"name": "S&Q", "modes": ["S&Q", "Time-lapse"]}]
     doc["camera"]["menus"] = menus
+    for s in doc["settings"]:          # the definition's own menus out, with menus or without: the made-up ones below
+        s.pop("row_menus", None), s.pop("row_places", None)
     placed = [s for s in doc["settings"] if s.get("row") and not s.get("copy_of")]
     rows = {}                                  # one row in the editor (one name, one place): one set of menus
     for s in placed:
@@ -662,7 +664,8 @@ def test_the_writer_stops_on_a_main_tile_that_shows_an_expert_only_setting(tmp_p
         S.from_data(pub)
     said = str(e.value.code)
     assert f"camera_{key}.json" in said and "tile 'Numerator' shows set:0x0180@290" in said and "take the key off the tile" in said
-    assert "it stands on no camera row, and its name holds 'numerator'" in said and "RECORD_FIXES" in said
+    # on no row, or on Camera Set. Memory's row given by hand (HAND_PLACES), which counts as none
+    assert "it stands on no camera row" in said and "its name holds 'numerator'" in said and "RECORD_FIXES" in said
 
 
 def _test_camera(tmp_path, monkeypatch, tiles=()):
@@ -731,6 +734,24 @@ def test_a_main_tile_whose_setting_lost_its_row_in_this_write_says_so_not_to_tak
     rec["proved"] = {"menu": ["Rec. Media Settings"]}
     got = {s["key"]: s for s in S.from_data(doc(*copy.deepcopy(SETTINGS), rec))["settings"]}
     assert got["global:0x0030"]["row"] == ["Rec. Media Settings"] and not got["global:0x0030"].get("expert")
+
+
+def test_a_camera_section_without_its_menus_takes_them_from_menus_while_the_places_stay(tmp_path, monkeypatch):
+    """Where the places stay as they are (read without the proof paths, or no menu tree here) and the camera section
+    comes without its menus (rebuilt from the camera file: an old definition brought up to date) while the settings
+    keep their row_menus, the menus come from the MENUS table, which is public: never settings naming menus the
+    definition lists none of. A menu the settings name and MENUS does not stops the write, in plain words."""
+    S = _test_camera(tmp_path, monkeypatch)
+    whole = S.from_data(doc(*copy.deepcopy(SETTINGS)))
+    public = copy.deepcopy(definitions.split(whole)[0])          # split shares the camera section with the whole
+    public["camera"].pop("menus")
+    got = S.from_data(copy.deepcopy(public))
+    assert got["camera"]["menus"] == whole["camera"]["menus"] and places_of(got) == places_of(whole)
+    public["settings"][0]["row_menus"] = ["Photo"]
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(public)
+    said = str(e.value.code)
+    assert said.startswith("TEST_fw1.00: ") and "'Photo'" in said and "MENUS" in said
 
 
 def test_a_row_the_walk_found_a_notice_on_takes_no_options_from_its_twins_walk(tmp_path):
