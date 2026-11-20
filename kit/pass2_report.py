@@ -88,7 +88,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ROOT, camset, datafiles, definitions, jsonl, match, models, paths, runs  # noqa: E402
+from camkit import ROOT, camset, datafiles, definitions, jsonl, match, models, paths, row_names, runs  # noqa: E402
 from runner import read_json, write_json  # noqa: E402
 
 
@@ -453,8 +453,9 @@ def row_name(r: dict) -> str:
     """The report's row for a proof. Each number field is its own row ("... [field 1]"). A checklist box unticked on
     its own (kit/provers/filter_run.py --untick: "untick", label "Not ticked") is its item's row in the state it needs,
     the box ticked ("Playback Filter Condition > Protect [box ticked]"): in the chooser's row it would take the place of
-    the chooser's first option (both index 0) and be credited with what the item's other records held."""
-    name = " > ".join(r["path"])
+    the chooser's first option (both index 0) and be credited with what the item's other records held. The path is the
+    row's as the camera draws it (camkit.row_names), so a line written with an older name is the same row."""
+    name = " > ".join(row_names.renamed(r["path"]))
     if r["kind"] == "fields":
         name += f" [field {r['index'][0]}]"
     if r["kind"] in ("axis", "wbgrid", "look", "lookbase", "table"):
@@ -469,7 +470,7 @@ def row_name(r: dict) -> str:
 
 def fail_key(r: dict) -> str:
     """The row a failures.jsonl line names, as still_failing keys it (a proof gives the same key)."""
-    k = " > ".join(r["path"])
+    k = " > ".join(row_names.renamed(r["path"]))         # as the camera draws it (camkit.row_names)
     return k + f" / {r['option']}" if r.get("kind") in ("axis", "look", "lookbase", "wbgrid", "table") and r.get("option") else k
 
 
@@ -2442,7 +2443,8 @@ def still_failing(run: Path) -> tuple:
     last_proof = collections.defaultdict(int)
     for r in jsonl.read(run / "proofs.jsonl"):
         last_proof[key(r)] = max(last_proof[key(r)], frame_no(r.get("chosen_frame")), frame_no(r.get("dat")))
-        last_proof[" > ".join(r["path"])] = max(last_proof[" > ".join(r["path"])], last_proof[key(r)])
+        here = " > ".join(row_names.renamed(r["path"]))
+        last_proof[here] = max(last_proof[here], last_proof[key(r)])
         if r.get("part_of"):                  # a row proved by its parts, each a row of its own (Playback Filter
             last_proof[r["part_of"]] = max(last_proof[r["part_of"]], last_proof[key(r)])   # Condition, 2026-11-07)
     blocked, failed = {}, {}

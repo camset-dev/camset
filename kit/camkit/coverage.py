@@ -66,7 +66,7 @@ import sys
 import threading
 from pathlib import Path
 
-from . import ROOT, budget, definitions, jsonl, match, paths, placement, safety
+from . import ROOT, budget, definitions, jsonl, match, paths, placement, row_names, safety
 
 FORMAT = 1
 # the mode the definition's menu was walked in (pass 1 runs in Stills: runner.SCAN_MODES' first); a setting's
@@ -842,20 +842,23 @@ class Ledger:
     def find(self, path, mode=None, tab=None, group=None) -> list:
         """The row entries a path names: by its labels (same_label), in that mode, tab and group where given. A label's
         "#n" (camkit.placement.nth) is read as placement reads it: the label alone, and on a top row the n-th of the
-        tab's rows bearing it (an entry's "nth"); the rows below a top row are entries by their labels."""
+        tab's rows bearing it (an entry's "nth"); the rows below a top row are entries by their labels. A path, and an
+        entry's, is the row's as the camera draws it where an older name names it (camkit.row_names)."""
+        path = list(row_names.renamed([str(x) for x in path or []]))
         which = placement.nth(str((path or [""])[0]))[1] if path else None
         path = [placement.nth(str(x))[0] for x in path or []]
         if getattr(self, "_by_path", None) is None or self._indexed != len(self.rows):
             self._by_path, self._indexed = {}, len(self.rows)
             for e in self.rows:
-                self._by_path.setdefault(tuple(plain(p) for p in e["path"]), []).append(e)
+                self._by_path.setdefault(tuple(plain(p) for p in row_names.renamed(e["path"])), []).append(e)
         key = tuple(plain(p) for p in path)
         cands = self._by_path.get(key)
         if cands is None:               # a slip or a label cut short ("Face Priority in Mul..."): judged one by one, once
             memo = self.__dict__.setdefault("_judged", {})
             if (key, self._indexed) not in memo:
-                memo[(key, self._indexed)] = [e for e in self.rows if len(e["path"]) == len(path)
-                                              and all(same_label(a, b) for a, b in zip(e["path"], path, strict=True))]
+                named = [(e, row_names.renamed(e["path"])) for e in self.rows]
+                memo[(key, self._indexed)] = [e for e, n in named if len(n) == len(path)
+                                              and all(same_label(a, b) for a, b in zip(n, path, strict=True))]
             cands = memo[(key, self._indexed)]
         out = []
         for e in cands:

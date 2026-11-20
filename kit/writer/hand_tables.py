@@ -8,8 +8,9 @@ write, found by hand (NEW_RECORDS, FILTER_FLAGS, NEW_LIKE, FRAME_PROOFS), value 
 VALUE_FIXES, KEEP_LABELS, ...), the pickers whose lists were walked whole (PICKER_LISTS), the values the menus never
 offer (NOT_OFFERED), the copies the camera keeps (COPIES) and the switches that keep a family's copies apart
 (KEEPS_APART), the limits it keeps in order (LIMIT_PAIRS), how far each focus frame travels (FRAME_TRAVEL), why a
-record cannot be proved (UNPROVED), and the label
-fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
+record cannot be proved (UNPROVED), the rows the records name otherwise than the camera draws them (ROW_NAMES,
+which camkit.row_names reads for every comparison of a row's name), and the label fixes and proof-row rules the
+writer applies. The file holds what the camera is, the same for every owner of that model
 and firmware, and is written and edited by hand. How, when and in which run each hand fact was proved is the mapping's
 evidence, kept in the private overlay (private/evidence/<model>_fw<fw>.hand.json) and put back into the tables by
 load() (writer/hand_evidence.py). A camera with no file has every table empty.
@@ -39,7 +40,7 @@ import re
 import types
 from pathlib import Path
 
-from camkit import datafiles, paths
+from camkit import datafiles, paths, row_names
 
 from . import hand_evidence
 
@@ -55,14 +56,14 @@ TABLES = {
     "MY_MENU_EMPTY": "my_menu_empty", "SHOOT_MODE_RECORDS": "lists", "PICKER_LISTS": "picker_lists",
     "NOT_OFFERED": "not_offered", "VIDEO_SYSTEM_VALUES": "entries", "COPIES": "lists", "COPY_MODES": "tuple", "COPY_MODES_UNKNOWN": "frozenset",
     "KEEPS_APART": "keeps_apart", "LIMIT_PAIRS": "limit_pairs",
-    "UNPROVED": "unproved", "CONTEXT_WORDS": "context_words", "ORIENTED": "pattern",
+    "UNPROVED": "unproved", "CONTEXT_WORDS": "context_words", "ORIENTED": "pattern", "ROW_NAMES": "row_names",
 }
 OWN_KEYS = ("$schema", "_comment", "camera")
 EMPTY = {"entries": dict, "new_records": dict, "new_like": dict, "words": dict, "lists": dict, "context_words": dict,
          "my_menu_empty": dict, "set": set, "frozenset": frozenset, "record_ids": dict, "values": list, "steps": dict,
          "rows": dict, "text": lambda: None, "not_offered": list, "tuple": tuple, "unproved": dict,
          "pattern": lambda: None, "picker_lists": dict, "keeps_apart": dict, "limit_pairs": dict,
-         "frame_travel": dict}
+         "frame_travel": dict, "row_names": dict}
 REF = "#/FILTER_FLAGS/"         # the one $ref a file may hold: a NEW_RECORDS entry that is FILTER_FLAGS' own
 # the fields of an entry the writer reads, by table, each with the JSON type it must have ("values": [code, name] pairs)
 NEW_RECORD = {"like": str, "name": str, "values": "values", "note": str}
@@ -373,6 +374,14 @@ def _shaped(name: str, kind: str, raw):
     if kind == "words":
         for k, v in _need(raw, dict, "the table").items():
             _need(v, str, repr(k))
+        return raw
+    if kind == "row_names":             # an older row path and the camera's (camkit.row_names, which reads it)
+        for k, v in _need(raw, dict, "the table").items():
+            _need(v, str, repr(k))
+        try:
+            row_names.read(raw)
+        except ValueError as e:
+            raise _Shape(str(e).split(": ", 1)[1]) from None
         return raw
     if kind == "lists":
         for k, v in _need(raw, dict, "the table").items():

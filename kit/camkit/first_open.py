@@ -32,7 +32,7 @@ check could not clear).
 import time
 from pathlib import Path
 
-from . import budget, coverage, jsonl, paths, safety
+from . import budget, coverage, jsonl, paths, row_names, safety
 from .link import StopRequested
 from .runs import clear_restore_by_hand, mark_restore_by_hand
 
@@ -48,7 +48,9 @@ SKIPPED = f"skipped: {UNSEEN}"
 
 
 def key(path) -> tuple:
-    return tuple(safety.plain(str(x)) for x in path or ())
+    """A row's path as the seen records compare it: its labels as the camera draws them (camkit.row_names: a row the
+    records hold by an older name is the same row), compared plain."""
+    return tuple(safety.plain(str(x)) for x in row_names.renamed(tuple(path or ())))
 
 
 def _with_parents(k: tuple) -> set:
@@ -111,7 +113,7 @@ def _crawl_rows(row: dict, parent: tuple, opened: set, greyed: set) -> None:
     label = row.get("decided") or row.get("label") or ""
     if not isinstance(label, str) or not label.strip() or label.startswith("("):
         return
-    k = (*parent, safety.plain(label))
+    k = key((*parent, label))
     out = str(row.get("outcome") or "")
     if out.startswith(OPENED):
         opened |= _with_parents(k)

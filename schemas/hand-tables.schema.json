@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "title": "Hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json)",
- "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps and the switches that keep a family's copies apart, the limits it keeps in order, how far each focus frame can travel, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, LIMIT_PAIRS, FRAME_TRAVEL, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py) and refuses, in plain words, a file that fills a table it does not read, each marked so below.",
+ "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps and the switches that keep a family's copies apart, the limits it keeps in order, how far each focus frame can travel, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, LIMIT_PAIRS, FRAME_TRAVEL, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py), every comparison of a row's name reads ROW_NAMES on every camera (kit/camkit/row_names.py), and the plain pass refuses, in plain words, a file that fills a table it does not read, each marked so below.",
  "type": "object",
  "required": [
   "camera"
@@ -431,6 +431,17 @@
   "ORIENTED": {
    "type": "string",
    "description": "A pattern (Python's) for the report's rows proved holding the camera one way; its group names the way. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it."
+  },
+  "ROW_NAMES": {
+   "type": "object",
+   "description": "Rows the records name otherwise than the camera draws them, each older row path and the camera's, labels from the top-level row with \" > \" between (an icon the kit read into a label before 2026-11-20: \"Proxy Settings > Px Proxy Recording\" is \"Proxy Settings > Proxy Recording\"). An entry renames the row and everything under it, wherever a row's name is compared: the rows seen opened, a run's rows asked by name, the maps, the menu tree, each setting's place, the walk patterns here and the definition's proof rows. The runs' lines keep the names they were written with. A camera name that is itself an older name, or a row renamed to itself, is refused.",
+   "additionalProperties": {
+    "type": "string",
+    "pattern": "^\\S(.*\\S)?$"
+   },
+   "propertyNames": {
+    "pattern": "^\\S(.*\\S)?$"
+   }
   }
  },
  "$defs": {

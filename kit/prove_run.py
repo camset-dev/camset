@@ -96,7 +96,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import camset, definitions, jsonl, models, paths, reading, safety, screen  # noqa: E402
+from camkit import camset, definitions, jsonl, models, paths, reading, row_names, safety, screen  # noqa: E402
 from camkit import ocr  # noqa: E402,F401   (the tests reach the OCR seam as prove_run.ocr)
 from camkit import coverage  # noqa: E402
 from camkit.vlm import PROMPTS  # noqa: E402,F401   (reread_proofs imports it from here)
@@ -968,7 +968,9 @@ def info_ok_jobs_or_exit(todo: list, named: dict) -> None:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--rows", action="append", default=None, help="prove only these rows (path with ' > ')")
+    ap.add_argument("--rows", action="append", default=None,
+                    help="prove only these rows (path with ' > '); a row's older name and the camera's are one "
+                         "(camkit.row_names)")
     add_allow_argument(ap)
     add_network_argument(ap)
     add_info_ok_argument(ap)
@@ -1076,6 +1078,10 @@ def main():
         LABELS.clear()
         ICON_ROWS.clear()
         DISP_MODES.clear()
+    if a.rows and Path(proving.base.MAP).exists():
+        # a row asked by an older name, or by the camera's where the map holds the older one, is the map's own name
+        # (camkit.row_names: ROW_NAMES in the camera's hand tables)
+        a.rows = row_names.as_in(a.rows, [" > ".join(r["path"]) for r in read_json(proving.base.MAP).get("rows") or []])
     # the second axes the axis walk read on this run's map (proving.jobs.axis_jobs: pass 1's, or a --map's own walk)
     todo = jobs(set(a.rows) if a.rows else None) + axis_jobs(set(a.rows) if a.rows else None)
     if a.every:

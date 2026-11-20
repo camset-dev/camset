@@ -23,6 +23,7 @@ import collections
 import difflib
 import re
 
+from . import row_names
 from .match import LOOKALIKES
 
 
@@ -46,14 +47,17 @@ def nth(label: str) -> tuple:
 
 
 def split(path: str) -> list:
-    """A proof's menu path as its labels, the context in brackets left out."""
-    path = re.sub(r"\s*\[[^\]]*\]", "", path)
+    """A proof's menu path as its labels, the context in brackets left out, the row as the camera draws it where the
+    records name it otherwise (camkit.row_names)."""
+    path = re.sub(r"\s*\[[^\]]*\]", "", row_names.renamed_name(path))
     return [x.strip() for x in re.split(r" > | / | › ", path) if x.strip()]
 
 
 def steps(path: str) -> list:
     """A proof's menu path as (how it is reached, label) pairs, as split() reads its labels: "" for the first, ">"
-    for a step into a submenu (" > ", " › "), "/" for an option of the row before (" / ")."""
+    for a step into a submenu (" > ", " › "), "/" for an option of the row before (" / "). The row as the camera draws
+    it, as split() reads it."""
+    path = row_names.renamed_name(path)
     path = re.sub(r"\s*\[[^\]]*\]", "", path)
     out, how = [], ""
     for x in re.split(r"( > | / | › )", path):
@@ -169,17 +173,21 @@ class Tree:
                         g["name"] = c if c in lead else c[1:] if icon else (c if len(c) >= len(pg["group"]) else pg["group"])
                 for r in pg["rows"]:
                     g["rows"].append(self._node(r, [], [tops], (tb["tab"], g, pg["group"]), walks, n))
-                    self.tops[tb["tab"]].append((r["label"], g["name"]))
+                    self.tops[tb["tab"]].append((g["rows"][-1]["l"], g["name"]))
                     tops += 1
             self.tabs.append({"tab": tb["tab"], "groups": groups})
         self.by_tab = {t["tab"]: t for t in self.tabs}
 
-    def _node(self, r, path, at, group, walks, n):
+    def _node(self, r, path, at, group, walks, n, written=()):
+        """A row of the tree as a node, its label as the camera draws it where the tree was written with an older one
+        (camkit.row_names, each label renamed under the path the tree wrote: `written`)."""
         n[0] += 1
-        path = path + [r["label"]]
-        out = {"id": f"{self.mode}:n{n[0]}" if self.mode else f"n{n[0]}", "l": r["label"], "st": r.get("state") or "", "why": r.get("why") or "",
-               "opts": r.get("options") or [], "walk": walks.get(tuple(norm(x) for x in path), []),
-               "kids": [self._node(c, path, at + [i], group, walks, n) for i, c in enumerate(r.get("children") or [])],
+        written = (*written, r["label"])
+        path = path + [row_names.renamed(written)[-1] if r["label"] else r["label"]]
+        walk = walks.get(tuple(norm(x) for x in path)) or walks.get(tuple(norm(x) for x in written), [])
+        out = {"id": f"{self.mode}:n{n[0]}" if self.mode else f"n{n[0]}", "l": path[-1], "st": r.get("state") or "", "why": r.get("why") or "",
+               "opts": r.get("options") or [], "walk": walk,
+               "kids": [self._node(c, path, at + [i], group, walks, n, written) for i, c in enumerate(r.get("children") or [])],
                "recs": [], "subs": []}
         self.where[out["id"]] = (group, path, at)
         return out

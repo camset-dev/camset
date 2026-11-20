@@ -41,6 +41,9 @@ walk reads alike), its rows are folded only when the crawl and the tree hold the
 and never take options from the crawl's map, which keeps one row per path (the last one walked); a row the tree lacks
 is added only after the tree's last row, at its own slot; anything else is left as it is. Each row it changes or
 leaves is said (folded_rows).
+
+Every label, the scan's, a crawl's and the tree's own on --fold, is the one the camera draws where the records name the
+row otherwise (camkit.row_names: ROW_NAMES in the camera's hand tables), so an older name and the camera's are one row.
 """
 import argparse
 import collections
@@ -50,7 +53,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, datafiles, definitions, jsonl, paths, placement, safety  # noqa: E402
+from camkit import ROOT, datafiles, definitions, jsonl, paths, placement, row_names, safety  # noqa: E402
 
 SCHEMA = ROOT / "schemas" / "menu-tree.schema.json"
 
@@ -63,16 +66,38 @@ def counter(page: str) -> tuple:
 
 def crawl_rows(crawl: Path) -> dict:
     """{(page counter, slot): the crawl's summary of that top-level row}: the last line of each wins (a crawl
-    resumed walks a row again)."""
-    return {(r.get("page"), r.get("slot")): r for r in jsonl.read(crawl / "rows.jsonl")}
+    resumed walks a row again). Each row's label as the camera draws it (camed)."""
+    return {(r.get("page"), r.get("slot")): camed(r) for r in jsonl.read(crawl / "rows.jsonl")}
 
 
 def crawl_map(crawl: Path) -> dict:
-    """{path tuple: the map's row} from the crawl's map.json (kit/pass1_map.py), when there is one."""
+    """{path tuple: the map's row} from the crawl's map.json (kit/pass1_map.py), when there is one, each path as the
+    camera draws it (camkit.row_names)."""
     f = crawl / "map.json"
     if not f.exists():
         return {}
-    return {tuple(r["path"]): r for r in json.loads(f.read_text(encoding="utf-8"))["rows"]}
+    return {row_names.renamed(r["path"]): r for r in json.loads(f.read_text(encoding="utf-8"))["rows"]}
+
+
+def camed(row: dict, parent: tuple = ()) -> dict:
+    """A crawl's row summary with its label, and its rows' under it, as the camera draws them where the crawl wrote an
+    older name (camkit.row_names: ROW_NAMES in the camera's hand tables), each renamed under the path the crawl wrote."""
+    label = row.get("label")
+    here = (*parent, label or "")
+    out = {**row, "label": row_names.renamed(here)[-1]} if label else dict(row)
+    if isinstance(row.get("submenu"), list):
+        out["submenu"] = [camed(s, here) if isinstance(s, dict) else s for s in row["submenu"]]
+    return out
+
+
+def camed_rows(rows: list, parent: tuple = ()) -> None:
+    """A tree's rows (in place), each label as the camera draws it where the tree was written with an older one
+    (camed's rule)."""
+    for r in rows:
+        here = (*parent, r.get("label") or "")
+        if r.get("label"):
+            r["label"] = row_names.renamed(here)[-1]
+        camed_rows(r.get("children") or [], here)
 
 
 def carousel_names(options: list) -> list:
@@ -233,6 +258,7 @@ def tree(scan: Path, crawls: list, key: str, mode: str = None) -> dict:
             label = (r.get("label") or "").strip()
             if not label:
                 continue
+            label = row_names.renamed((label,))[-1]          # as the camera draws it (camkit.row_names)
             seen = visited.get((page.get("page"), r.get("slot")))
             rows.append(row_of(label, seen, (label,), maps, greyed=bool(r.get("greyed")),
                                never=r.get("never_open") or safety.never_open(label)))
@@ -360,6 +386,9 @@ def fold(menu: dict, crawl: Path) -> list:
     its page, never by the crawl's page counter, and folded there (folded). What it did, one line each: a row changed
     or added, and a top row the menu holds none or several of, left out."""
     maps, said = crawl_map(crawl), []
+    for t in menu.get("tabs") or []:                # the tree's older names as the camera draws them (camkit.row_names)
+        for pg in t.get("pages") or []:
+            camed_rows(pg.get("rows") or [])
     tops = [(pg, i) for t in menu.get("tabs") or [] for pg in t.get("pages") or [] for i in range(len(pg.get("rows") or []))]
     for summary in crawl_rows(crawl).values():
         label = (summary.get("label") or "").strip()

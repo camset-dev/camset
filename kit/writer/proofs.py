@@ -13,7 +13,7 @@ import json
 import re
 from pathlib import Path
 
-from camkit import option_tree
+from camkit import option_tree, row_names
 from pass2_report import (box_number, carried_over, element_changes, linear, num, row_name, rows_of,
                           sampled_from_start, scale_number, stood_on)
 
@@ -552,7 +552,9 @@ def menu_row(row: str, axis_values: frozenset) -> str:
     """A proof row's name as the definition says it (proved.menu): an axis row named after the value the axis stood on
     (axis_value_rows) is named by its item alone, its context kept ("ISO AUTO Min. SS / <value> [ctx]" is "ISO AUTO
     Min. SS [ctx]"), for that value was the camera's own setting when the row began (docs/decisions/0016); a context
-    the runs reworded (CONTEXT_WORDS) in its new words; and no context saying its state was found (AS_FOUND)."""
+    the runs reworded (CONTEXT_WORDS) in its new words; and no context saying its state was found (AS_FOUND). Its path
+    first as the camera draws it, where the records hold the row by an older name (camkit.row_names: ROW_NAMES)."""
+    row = row_names.renamed_name(row)
     m = AXIS_ROW.fullmatch(row)
     row = m[1] + (m[3] or "") if m and (m[1], m[2]) in axis_values else row
     for pattern, words in CONTEXT_WORDS.items():

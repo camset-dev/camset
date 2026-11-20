@@ -9,6 +9,7 @@ kit/prove_run.py, kit/axis_walk.py, kit/schema_update.py and the proof viewer re
 it writes owner-only (camkit.runs.private_if_marked). A crawl run with --skip-settled (kit/crawl_run.py) left out the
 rows the coverage ledger had settled, so its map has holes: it is refused for kit2_pass1's map, and --own says so. A row
 a crawl only skipped as not seen opened on this body (camkit.first_open.SKIPPED) keeps the mapping made before of it.
+Each row's path is the one the camera draws where the crawl wrote an older name (camkit.row_names).
 
 Inputs: <run>/options.jsonl (kit/pass1_labels.py: OCR under the cursor + the second reader) and, if present,
 <run>/tiebreak.jsonl (kit/tiebreak.py: the third role's readers where those two disagreed) and
@@ -37,7 +38,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import coverage, first_open, jsonl, paths  # noqa: E402
+from camkit import coverage, first_open, jsonl, paths, row_names  # noqa: E402
 from camkit.reading import model_id, standing  # noqa: E402
 from camkit.runs import private_if_marked  # noqa: E402
 from page_model import same_option  # noqa: E402
@@ -126,7 +127,7 @@ def build(run: Path) -> dict:
     rows = collections.OrderedDict()
     review = []
     for o in opts:
-        key = tuple(o["path"])
+        key = row_names.renamed(o["path"])          # each row as the camera draws it (camkit.row_names)
         vsel = str((o.get("vlm") or {}).get("selected") or "")
         ocr = o.get("ocr") or ""
         label, source = None, None
@@ -159,6 +160,7 @@ def build(run: Path) -> dict:
     fixed, unseen = {}, unseen_only(run)
     if (run / "map.json").exists():
         for r in read_json(run / "map.json").get("rows") or []:
+            r = {**r, "path": list(row_names.renamed(r["path"]))}
             if tuple(r["path"]) not in rows and under(r["path"], unseen):
                 rows[tuple(r["path"])] = r
             for op in r.get("options") or []:
@@ -185,7 +187,7 @@ def unseen_only(run: Path) -> set:
             (skipped if str(r.get("outcome") or "").startswith(first_open.SKIPPED) else other).add(k)
             walk(r.get("submenu") or [], k)
     walk(jsonl.read(run / "rows.jsonl", bad="skip") if (run / "rows.jsonl").exists() else [], ())
-    return skipped - other
+    return {row_names.renamed(k) for k in skipped - other}
 
 
 def under(path, rows: set) -> bool:
@@ -288,8 +290,8 @@ def main(argv=None):
     old = read_json(target) if target.exists() else None
     unseen = set().union(*(unseen_only(run) for run in runs))
     have = {tuple(r["path"]) for r in everything["rows"]}
-    everything["rows"] += [r for r in (old or {}).get("rows") or []
-                           if tuple(r["path"]) not in have and under(r["path"], unseen)]
+    kept = [{**r, "path": list(row_names.renamed(r["path"]))} for r in (old or {}).get("rows") or []]
+    everything["rows"] += [r for r in kept if tuple(r["path"]) not in have and under(r["path"], unseen)]
     changed = differences(old, everything) if old is not None else None
     print(f"{MAP_ALL}: {summary(everything)}, from {', '.join(n for n, _ in maps)}")
     if old is not None and not changed:

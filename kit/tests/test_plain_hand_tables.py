@@ -158,9 +158,11 @@ EVIDENCE = {
 
 
 def test_every_table_the_kit_knows_is_read_by_the_plain_pass_or_refused_there():
-    """Each table writer/hand_tables.py knows is one the plain pass reads, a prover's, or one it refuses (only the
-    ILCE-1M2's pass reads it, or no pass does): none is left for a mapper to fill in and believe it took effect."""
-    groups = [set(hand_facts.PLAIN), set(hand_facts.PROVERS), set(hand_facts.A1_PASS_ONLY), set(hand_facts.NO_READER)]
+    """Each table writer/hand_tables.py knows is one the plain pass reads, a prover's, one every comparison of a row's
+    name reads (ROW_NAMES: camkit.row_names), or one it refuses (only the ILCE-1M2's pass reads it, or no pass does):
+    none is left for a mapper to fill in and believe it took effect."""
+    groups = [set(hand_facts.PLAIN), set(hand_facts.PROVERS), set(hand_facts.EVERYWHERE), set(hand_facts.A1_PASS_ONLY),
+              set(hand_facts.NO_READER)]
     assert sum(map(len, groups)) == len(set().union(*groups)) and set().union(*groups) == set(hand_tables.TABLES)
 
 

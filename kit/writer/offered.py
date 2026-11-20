@@ -12,13 +12,20 @@ import re
 import sys
 from pathlib import Path
 
-from camkit import match
+from camkit import match, row_names
 from pass2_report import alike, element_changes, row_name, strip_icon
 
 # a report row's context, after its menu path and cell ("... / Still Upper / 1 [Movie mode]")
 CONTEXT = re.compile(r" \[[^\]]*\]$")
 # a setting key the sample is read by: a live record, whole or one element of it
 LIVE_KEY = re.compile(r"global:0x([0-9a-f]{4})(?:\[(\d+)\])?")
+
+
+def walk_matches(pattern: str, row: str) -> bool:
+    """Whether a walk's pattern (the hand tables' NOT_OFFERED and PICKER_LISTS "walk") matches the report's row: as
+    named, as the camera draws it, or as any older name the camera's ROW_NAMES gives it (camkit.row_names), so a pattern
+    written before a row was renamed still finds it."""
+    return any(re.search(pattern, name) for name in row_names.names(row))
 
 
 class NotCut(Exception):
@@ -105,7 +112,7 @@ def walked_list(name: str, entry: dict, doc: dict, report: list, tables: dict, p
             raise NotCut(f"no row of the report on {where} proves {s['key']} alone (its own cell), so nothing shows "
                          "which list its picker offers")
         lists.update({row: walked[base(row)][0] for row in own})
-    walks = [e for e in report if re.search(entry["walk"], e["row"])]
+    walks = [e for e in report if walk_matches(entry["walk"], e["row"])]
     if not walks:
         raise NotCut(f"no row of the report matches its walk, {entry['walk']!r}")
     if proofs is None:
@@ -590,7 +597,7 @@ def walked_rows(report: list, key: str, pattern: str) -> list:
     """The report's rows whose name matches `pattern` and that prove `key`: the walks of its list in each state. A
     row that chose only a sample of a picker stepped from the option the camera held ("sampled_from_start") walked no
     list, and is none of them."""
-    return [e for e in report if re.search(pattern, e["row"]) and key in e["records"]
+    return [e for e in report if walk_matches(pattern, e["row"]) and key in e["records"]
             and not e["records"][key].get("sampled_from_start")]
 
 
@@ -618,7 +625,7 @@ def twin_walks(report: list, key: str, pattern: str, tables: dict, proofs: list 
     labels = lambda item: [o["label"] for o in item.get("options") or []]
     out = []
     for e in report:
-        if key in e["records"] or not re.search(pattern, e["row"]) or base(e["row"]) not in cells:
+        if key in e["records"] or not walk_matches(pattern, e["row"]) or base(e["row"]) not in cells:
             continue
         item = cells[base(e["row"])][0]
         n = len(labels(item))

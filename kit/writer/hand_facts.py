@@ -11,7 +11,8 @@ whose lists were walked whole (PICKER_LISTS), the values the menus never offer (
 one video system (VIDEO_SYSTEM_VALUES), the copies (COPIES, COPY_MODES, COPY_MODES_UNKNOWN) and the switches that keep
 them apart (KEEPS_APART), the limits the camera keeps in order (LIMIT_PAIRS), how far each focus frame travels
 (FRAME_TRAVEL), why a record cannot be proved (UNPROVED)
-and proof contexts in other words (CONTEXT_WORDS). ZONE is a prover's (PROVERS). The rest the
+and proof contexts in other words (CONTEXT_WORDS). ZONE is a prover's (PROVERS), and ROW_NAMES every comparison of a
+row's name reads (EVERYWHERE, camkit.row_names). The rest the
 ILCE-1M2's own pass alone reads so far (A1_PASS_ONLY), or no part of the kit's passes (NO_READER): the plain pass
 refuses a camera whose file fills one (refusals), in plain words, for a mapper who fills in a table must not believe
 it took effect. Where an entry cannot take effect (a setting
@@ -50,6 +51,9 @@ PLAIN = ("RECORD_FIXES", "FILTER_FLAGS", "NEW_RECORDS", "NEW_LIKE", "NEW_WHOLE_L
          "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "LIMIT_PAIRS", "FRAME_TRAVEL", "UNPROVED", "CONTEXT_WORDS")
 # a table a prover reads for the camera it works on, which no pass of the writer reads
 PROVERS = {"ZONE": "kit/provers/framepos_run.py --zone-grid"}
+# a table every comparison of a row's name reads on every camera, the passes' among them (camkit.row_names): nothing the
+# plain pass puts on the definition itself
+EVERYWHERE = {"ROW_NAMES": "an older row name and the camera's, one row wherever row names are compared"}
 # the tables only the ILCE-1M2's own pass (kit/schema_update.py main) reads so far, each with what it is for: rules tied
 # to that pass's own code (its checklist records, its Recall Custom holds, its My Menu, the first kit's spellings)
 A1_PASS_ONLY = {
