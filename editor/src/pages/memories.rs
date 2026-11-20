@@ -62,7 +62,14 @@ impl App {
                 ui.separator();
             }
         });
+        let mut fold_every = None;
         ui.horizontal_wrapped(|ui| {
+            // every group folded or open (`fold_all`), with their keys
+            let ctx = ui.ctx().clone();
+            let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+            if ui.small_button("Collapse all").on_hover_text(format!("Fold every group ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
+            if ui.small_button("Expand all").on_hover_text(format!("Open every group ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
+            ui.separator();
             if ui.checkbox(&mut self.prefs.memories_only_diff, "Only rows that differ from Live")
                 .on_hover_text("Show only the settings where a memory holds another value than the live settings").changed() {
                 self.prefs.save();
@@ -77,10 +84,14 @@ impl App {
         let rows: Vec<&(String, String, Vec<Setting>)> = kept.into_iter()
             .filter(|r| !self.prefs.memories_only_diff || dial.iter().any(|&m| self.memory_differs(Col::a(m), &r.2[0])))
             .collect();
+        if let Some(collapse) = fold_every {
+            self.fold_all(collapse);
+        }
         if rows.is_empty() {
             ui.label(if self.prefs.memories_only_diff { "No memory holds another value than the live settings here." } else { "No settings match." });
             return actions;
         }
+        let mut toggle: Option<String> = None;
         let mut last_group = String::new();
         // the columns share the width shown, so every memory fits beside the live settings: the names and values are
         // cut short to their column (in full on hover)
@@ -97,11 +108,20 @@ impl App {
             ui.end_row();
             for (tab, group, linked) in rows {
                 let g = format!("{tab} > {group}");
+                let closed = self.mem_closed.contains(&g);
                 if g != last_group {
-                    fixed(ui, RichText::new(&g).strong().color(tab_ink(ui.visuals(), &self.schema.camera, tab)), name_w);
+                    // the group's heading folds or shows its rows, by a click or by Enter or Space with the focus on it
+                    let head = RichText::new(format!("{} {g}", if closed { "⏵" } else { "⏷" })).strong().color(tab_ink(ui.visuals(), &self.schema.camera, tab));
+                    let r = ui.scope(|ui| { ui.set_width(name_w); ui.add(egui::Label::new(head).truncate().sense(egui::Sense::click())) }).inner;
+                    if r.on_hover_text(if closed { "Click to show this group's settings" } else { "Click to fold this group's settings" }).clicked() {
+                        toggle = Some(g.clone());
+                    }
                     for _ in 0..=dial.len() { ui.label(""); }
                     ui.end_row();
                     last_group = g;
+                }
+                if closed {
+                    continue;
                 }
                 let s = &linked[0];
                 let text = |c: Col| -> String {
@@ -131,6 +151,11 @@ impl App {
                 ui.end_row();
             }
         });
+        if let Some(g) = toggle {
+            if !self.mem_closed.remove(&g) {
+                self.mem_closed.insert(g);
+            }
+        }
         actions
     }
 

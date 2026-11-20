@@ -1669,6 +1669,89 @@ pub(crate) mod copy_tests {
         done(&dir, &user);
     }
 
+    /// Follow-up 2: a note on a Compare row names the other menus by Compare's binding (each menu its own mode's copy),
+    /// where it differs from Edit's: a file whose mode is not known, ISO's movie copy apart from it when the file was
+    /// opened. A change of Movie's row in Compare writes that copy alone, which S&Q's Compare row shows too, so the note
+    /// names S&Q; Edit's rows (which show the setting itself there) say it changes Movie's alone. The page the same.
+    #[test]
+    fn a_compare_rows_note_names_the_menus_compare_shows() {
+        use crate::test_support::{done, sample_app, stub_menus, SAMPLE_BYTES};
+        let (mut app, dir, user) = sample_app("cmp_note_bind", Some(stub_menus));
+        let rec = app.schema.settings.iter().find(|s| Some(&s.key) == app.schema.camera.live_mode.as_ref().map(|m| &m.key)).cloned().unwrap();
+        let (iso, movie) = ["global:0x0334", "global:0x0df4"].map(|k| app.schema.settings.iter().find(|s| s.key == k).cloned().unwrap()).into();
+        let mut c = test_parse(SAMPLE_BYTES).unwrap();
+        c.sections[0].get_mut(rec.id).unwrap().put(rec.index, 9).unwrap();
+        let held = c.sections[0].get(movie.id).unwrap().get(movie.index).unwrap();
+        let other = movie.values.iter().map(|(v, _)| *v).find(|v| *v != held).unwrap();
+        c.sections[0].get_mut(movie.id).unwrap().put(movie.index, other).unwrap();
+        let f = dir.join("CAMSET04.DAT");
+        std::fs::write(&f, c.to_bytes()).unwrap();
+        app.open(f);
+        let row = app.compare_rows(Some("Movie"), &BarKey::All, "").iter().find(|r| r.2[0].key == movie.key).map(|r| r.2[0].clone()).expect("Movie's ISO row shows the movie copy");
+        let (compare, _) = app.copy_note_bound(&row, 0, &Bind::Menu).unwrap();
+        assert!(compare.starts_with("Changing this changes it in the S&Q menu too"), "{compare}");
+        // the same row told of by Edit's binding (each menu the setting itself here): Movie's alone, untrue in Compare
+        let (edit, _) = app.copy_note(&row, 0).unwrap();
+        assert!(edit.starts_with("Changing this changes it in the Movie menu alone"), "{edit}");
+        // the change itself: S&Q's Compare row moves with it
+        let v = movie.values.iter().map(|(v, _)| *v).find(|v| *v != other && *v != held).unwrap();
+        let sq = |app: &App| app.col_value(Col::a(0), &app.row_record(&iso, "S&Q", &Bind::Menu).clone());
+        app.apply(vec![Action::Set(0, row.slot(), v)]);
+        assert_eq!(sq(&app), Some(v), "S&Q's Compare row changed with it");
+        app.undo();
+        // the page's Compare cell says the same
+        let a = crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["a", 1]], "menu": "Movie", "only_diff": false }));
+        let j: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+        let r = j["rows"].as_array().unwrap().iter().find(|r| r["key"] == movie.key.as_str()).cloned().unwrap();
+        assert!(r["cells"][0]["why"].as_str().is_some_and(|w| w.contains("in the S&Q menu too")), "{r}");
+        done(&dir, &user);
+    }
+
+    /// Follow-up 3: a fraction's two parts changed in two steps (two Expert-mode edits, one part each) never come apart in
+    /// History: the first step's line holds both parts, and its Revert puts the pair back as it was before that step
+    /// (the second step's part too), a pair a file held, never one part from one state and one from another; its words
+    /// say so; All edits' line puts both back as the file was opened.
+    #[test]
+    fn a_fractions_parts_changed_in_two_steps_go_back_together() {
+        use crate::test_support::{done, sample_app, strip_menus};
+        let (mut app, dir, user) = sample_app("cmp_fraction_steps", Some(strip_menus));
+        let tile = app.schema.camera.main_tiles.clone().unwrap().0[0].tiles.iter().find(|t| t.kind == TileKind::Fraction).cloned().unwrap();
+        let find = |app: &App, k: &Option<String>| app.schema.settings.iter().find(|s| Some(&s.key) == k.as_ref()).cloned().unwrap();
+        let (num, den) = (find(&app, &tile.numerator_key), find(&app, &tile.denominator_key));
+        let m = app.dial_sets()[0];
+        let speed = |app: &App| (app.col_value(Col::a(m), &num), app.col_value(Col::a(m), &den));
+        let opened = speed(&app);
+        app.prefs.expert = true;
+        app.apply(vec![Action::Set(m, num.slot(), opened.0.unwrap() + 1)]);
+        app.last_edit = None;
+        app.apply(vec![Action::Set(m, den.slot(), opened.1.unwrap() + 3)]);
+        assert_eq!(app.undo.len(), 2);
+        for expert in [false, true] {
+            app.prefs.expert = expert;
+            let doc = app.doc.as_ref().unwrap();
+            let line = app.history_lines(0, &doc.edited).iter().find(|l| l.slots.contains(&num.slot())).cloned().unwrap();
+            assert!(line.slots.contains(&den.slot()), "expert {expert}: the first step's line holds both parts");
+            assert!(app.edit_line_revert_words(&line, true).is_some_and(|w| w.contains(&tile.caption)), "expert {expert}: its words");
+            // the reviewer's finding 2: the later change to the other part goes back too, and its words say so; the
+            // second step's line, with nothing changed since, says nothing of the kind, the page as the window
+            let words = app.history_revert_words(0, &line, &doc.edited).unwrap();
+            assert!(words.contains(&format!("A later edit changed {} since", den.name)), "expert {expert}: {words}");
+            let second = app.history_lines(1, &doc.edited).iter().find(|l| l.slots.contains(&den.slot())).cloned().unwrap();
+            assert!(!app.history_revert_words(1, &second, &doc.edited).unwrap().contains("later edit"), "expert {expert}");
+            let j: serde_json::Value = serde_json::from_slice(&crate::web::tests::answer(&mut app, "history", serde_json::json!({})).body).unwrap();
+            assert!(j["steps"].as_array().unwrap().iter().any(|s| s["step"] == 0 && s["revert_words"].as_str().is_some_and(|w| w.contains("A later edit changed"))), "expert {expert}: the page");
+            let doc = app.doc.as_ref().unwrap();
+            let acts = line.put_back(&app.undo[0], &doc.edited);
+            app.history_revert(acts);
+            assert_eq!(speed(&app), opened, "expert {expert}: the pair as before that step");
+            app.undo();
+            let doc = app.doc.as_ref().unwrap();
+            let lines: Vec<EditLine> = app.edit_lines(&doc.original, &doc.edited).into_iter().filter(|l| l.slots.contains(&num.slot()) || l.slots.contains(&den.slot())).collect();
+            assert!(lines.len() == 1 && app.edit_line_revert_words(&lines[0], false).is_some_and(|w| w.contains("together")), "expert {expert}: All edits' one line");
+        }
+        done(&dir, &user);
+    }
+
     /// Second integration review, MUST 3: Edit's Main shows the Shutter Speed tile but changes it nowhere (a tile of two
     /// settings is not edited in place), so outside Expert mode Compare writes neither of its parts: no arrow, picker
     /// or copy target, a copy leaves them and says so, the reason is where one presses, in the window and on the page.

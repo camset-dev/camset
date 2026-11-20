@@ -191,6 +191,15 @@ struct App {
     mm_visible: Option<(usize, usize)>,
     /// Compare view: the tabs (tab, "") and groups (tab, group) folded shut.
     matrix_closed: std::collections::HashSet<(String, String)>,
+    /// The Memories page's groups folded, by "tab > group" (all open to start with, as the page has always been drawn).
+    mem_closed: std::collections::HashSet<String>,
+    /// The view in front's own folds (the exposure page's "What decides" sections, a family group's table, the record
+    /// map's records), all to fold (true) or all to open (false) the next time it is drawn (`fold_all`); each keeps its
+    /// state where a click leaves it (egui's, the record map's).
+    head_fold: Option<bool>,
+    /// The control that had egui's focus when the fold keys were pressed, to have it back the next frame: egui moves the
+    /// focus with an arrow whatever the modifiers (`fold_keys`).
+    refocus: Option<egui::Id>,
     target: usize,
     mode: Mode,
     view: View,
@@ -212,6 +221,10 @@ struct App {
     /// camera ("Fixed Speed REC" under Remote Zoom Speed and under Custom Key Z. Speed): a key of one of its
     /// settings. Ignored when only one row bears the name, so a jump that sets `item` alone still lands.
     item_key: Option<String>,
+    /// A row of the camera's menu that holds others, chosen in the items column in place of a setting (its labels, as
+    /// `fold_key` takes them): Up and Down stop on it, Enter or Space folds or shows what it holds, Left folds it and
+    /// Right shows it. Any setting chosen clears it (`select`).
+    item_head: Option<Vec<String>>,
     /// The camera's rows folded in the "As on the camera" layout, by tab, group and labels (`fold_key`).
     folded: std::collections::HashSet<String>,
     /// The sub-choice opened from a search, F3, All edits, Compare or the history while the rows are laid out as on
@@ -367,6 +380,9 @@ impl App {
             mm_rows: Vec::new(),
             mm_visible: None,
             matrix_closed: Default::default(),
+            mem_closed: Default::default(),
+            head_fold: None,
+            refocus: None,
             target: 0,
             mode: Mode::Edit,
             view: View::Tab(first_tab),
@@ -378,6 +394,7 @@ impl App {
             group: None,
             item: None,
             item_key: None,
+            item_head: None,
             folded: Default::default(),
             sub_focus: None,
             sub_scroll: Default::default(),
@@ -632,6 +649,8 @@ impl eframe::App for App {
             if undo { self.undo(); }
             if redo { self.redo(); }
         }
+        // Collapse all / Expand all (Cmd/Ctrl+Shift+↑ / ↓) before the arrows move anything (`fold_keys`)
+        self.fold_keys(ctx);
         // Up and Down through the Menu's own entries, before the columns' keys (`bar_nav`)
         self.bar_nav(ctx);
         self.keyboard_nav(ctx);

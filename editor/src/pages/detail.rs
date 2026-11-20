@@ -282,6 +282,8 @@ impl App {
         egui::CollapsingHeader::new(RichText::new(title).strong().color(tab_ink(ui.visuals(), &self.schema.camera, pp.first().map_or("", |s| s.tab.as_str()))))
             .id_salt((title, self.target))
             .default_open(true)
+            // Collapse all / Expand all (`head_fold`, `fold_all`), for this one drawing
+            .open(self.head_fold.map(|collapse| !collapse))
             .show(ui, |ui| {
                 ui.label(RichText::new(format!("{}Values the camera never produces are not offered.", self.family_note(pp))).small().color(tone::weak(ui.visuals())));
                 egui::ScrollArea::horizontal().id_salt((title, "scroll")).show(ui, |ui| {

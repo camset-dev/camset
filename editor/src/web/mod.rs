@@ -225,6 +225,18 @@ impl App {
             "tab" => WebReply::json(self.web_tab(target, menu, body["tab"].as_str(), body["q"].as_str().unwrap_or(""))),
             "main" => WebReply::json(self.web_main(target, body["set"].as_u64().unwrap_or(0) as usize, menu)),
             "set" => self.web_set(target, &body, &from),
+            // All edits' line of My Menu (`MYMENU_LINE`): all of My Menu back as the file was opened, as the window's
+            "revert" if body["key"].as_str() == Some(MYMENU_LINE) && !self.prefs.expert => {
+                if !self.editable() {
+                    return WebReply::error(409, &self.view_only_why(true));
+                }
+                let (words, acts) = self.mymenu_revert_all();
+                if let Some(why) = self.apply(acts) {
+                    return WebReply::error(409, &why);
+                }
+                self.status = self.with_moved(format!("{words} {from}"));
+                WebReply::json(json!({ "ok": true }))
+            }
             "revert" => {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
                 // as the window's Revert: a copy in step with its setting takes the setting and its other copies back
@@ -266,10 +278,12 @@ impl App {
                 if si >= self.n_sections() {
                     return WebReply::error(400, "This file has no such set.");
                 }
-                if let Some(why) = self.apply(vec![Action::Revert(si, (id, None))]) {
+                // a page of My Menu goes back with the whole list, as the file was opened (`mymenu_record`)
+                let (words, acts) = if self.mymenu_record(si, id) { self.mymenu_revert_all() } else { (format!("Record 0x{id:04x} reverted"), vec![Action::Revert(si, (id, None))]) };
+                if let Some(why) = self.apply(acts) {
                     return WebReply::error(409, &why);
                 }
-                self.status = self.with_moved(format!("Record 0x{id:04x} reverted {from}"));
+                self.status = self.with_moved(format!("{words} {from}"));
                 WebReply::json(json!({ "ok": true }))
             }
             "revert_flagged" => {
@@ -1805,6 +1819,7 @@ impl App {
         let Some(doc) = &self.doc else { return json!({ "changes": [] }) };
         let changes: Vec<Value> = self.edit_lines(&doc.original, &doc.edited).into_iter().map(|l| json!({
             "section": l.si, "id": l.id, "key": l.key, "where": self.schema.camera.target_name(l.si), "name": l.name, "was": l.before, "now": l.after,
+            "revert_words": self.edit_line_revert_words(&l, false),
         })).collect();
         json!({ "changes": changes })
     }
@@ -2062,7 +2077,7 @@ impl App {
                     .chain(self.locked_why(s, c.section).filter(|_| file_a).map(|(w, _)| w))
                     .chain(self.compare_why(s).filter(|_| file_a))
                     .chain(self.fraction_words(s).filter(|_| file_a))
-                    .chain(self.copy_note(s, c.section).filter(|_| file_a).map(|(w, _)| w)).collect();
+                    .chain(self.copy_note_bound(s, c.section, &Bind::Menu).filter(|_| file_a).map(|(w, _)| w)).collect();
                 if !why.is_empty() {
                     cell["why"] = json!(why.join("\n\n"));
                 }
@@ -2460,8 +2475,11 @@ impl App {
                 let key = body["key"].as_str();
                 let Some((name, acts)) = self.doc.as_ref().zip(self.undo.get(step)).and_then(|(d, before)| {
                     let rec = before.sections.get(si)?.get(id)?;
-                    let Some(key) = key else { return Some((format!("Record 0x{id:04x}"), vec![Action::SetRecord(si, rec.clone())])) };
                     let after = self.undo.get(step + 1).unwrap_or(&d.edited);
+                    // a page of My Menu goes back with the whole list, as History's My Menu line puts it back
+                    // (`mymenu_record`); none where this edit left My Menu as it was
+                    let key = if key.is_none() && self.mymenu_record(si, id) { Some(MYMENU_LINE) } else { key };
+                    let Some(key) = key else { return Some((format!("Record 0x{id:04x}"), vec![Action::SetRecord(si, rec.clone())])) };
                     let line = self.edit_lines(before, after).into_iter().find(|l| l.si == si && l.id == id && l.key.as_deref() == Some(key))?;
                     Some((self.placed_name(si, &line.name), line.put_back(before, &d.edited)))
                 }) else {
@@ -3094,7 +3112,7 @@ impl App {
             // setting by setting, as the window's History lists them (`edit_lines`), a Revert putting back that setting alone
             for l in self.edit_lines(before, after) {
                 steps.push(json!({ "step": i, "section": l.si, "id": l.id, "key": l.key, "name": self.placed_name(l.si, &l.name), "before": l.before, "after": l.after,
-                    "revert": self.editable() }));
+                    "revert": self.editable(), "revert_words": self.history_revert_words(i, &l, &doc.edited) }));
             }
         }
         json!({ "steps": steps })
