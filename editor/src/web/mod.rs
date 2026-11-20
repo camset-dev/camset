@@ -1687,13 +1687,16 @@ impl App {
             }
             shown = Self::describe(s, Some(v));
             // another record of the setting with no value of that name, left as it was: said, as the window says it; and
-            // a limit moved to keep two in order (`limit_moves`), as the window's status says it
-            message = self.twins_left(s, v, target);
+            // a limit moved to keep two in order (`limit_moves`), as the window's status says it. Worked out for the
+            // definition's own setting (`def_of`): a menu's row is the setting as that menu lays it out, which no record
+            // of the definition is a twin of
+            message = self.twins_left(self.def_of(s), v, target);
             if let Some(m) = &self.limits_moved.1 {
                 message = Some(message.map_or_else(|| m.clone(), |t| format!("{t} {m}")));
             }
         }
-        self.status = format!("{} set to {shown} {from}", s.name);
+        // by the setting's own name, as the window's status names it, not the camera's title of a menu's row
+        self.status = format!("{} set to {shown} {from}", self.def_of(s).name);
         if let Some(m) = &message {
             self.status = format!("{} {m}", self.status);
         }
@@ -5636,6 +5639,51 @@ pub(crate) mod tests {
     fn a_set_of(app: &App, mode: &str) -> (usize, String) {
         let set = (1..app.n_sections()).find(|&s| app.schema.camera.memory_mode(s) == Some(mode)).expect("a memory set of the mode");
         (set, app.opening_menu(set).expect("its menu"))
+    }
+
+    /// A change made in a camera menu says what it left, and the status names the setting, as in the flat list: the
+    /// definition's own setting is what the warnings are worked out for (`twins_left`), not the row as the menu laid it
+    /// out (the review's case: Drive Mode set to Continuous Shooting, the camera keeping it in two places). And every
+    /// row a menu shows says what the same records say as the definition's own (its value, list, locks, notes and
+    /// put-backs): only its title, place and the menu's sub-choices and links are the menu's.
+    #[test]
+    fn a_change_in_a_camera_menu_says_what_it_left_as_the_flat_list() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let (mut app, dir, user) = sample_app("web_menus_twins", Some(stub_menus));
+        let drive = app.schema.settings.iter().find(|s| s.key == "global:0x02b5").cloned().unwrap();
+        let cur = app.doc.as_ref().unwrap().value(0, drive.slot());
+        let v = app.offered_values(&drive, 0).into_iter().map(|(v, _)| v).find(|v| Some(*v) != cur && app.twins_left(&drive, *v, 0).is_some())
+            .expect("a value one of its records has no name for");
+        app.prefs.flat_list = true;
+        let flat = ask(&mut app, "set", json!({ "target": 0, "key": drive.key, "value": v }));
+        let (words, status) = (flat["message"].clone(), app.status.clone());
+        assert!(words.as_str().is_some_and(|w| w.contains("places in this file")), "{words}");
+        ask(&mut app, "undo", json!({}));
+        app.prefs.flat_list = false;
+        let m = app.menus_of(&drive)[0].clone();
+        let laid = ask(&mut app, "set", json!({ "target": 0, "menu": m, "key": drive.key, "value": v }));
+        assert_eq!((&laid["message"], &app.status), (&words, &status), "in {m} as in the flat list");
+        ask(&mut app, "undo", json!({}));
+        // every row of every menu: what the records say is the definition's (a copy's note words the row by its title, as
+        // the window's detail panel does, so it is left out here)
+        let same = ["value", "label", "original", "changed", "kind", "options", "editable", "locked", "put_back", "unnamed", "warn", "inactive", "proof", "help", "stored"];
+        let mut rows = 0;
+        for m in app.menus().iter().map(|m| m.name.clone()).collect::<Vec<_>>() {
+            let s = ask(&mut app, "state", json!({ "target": 0, "menu": m }));
+            for t in s["tabs"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()) {
+                let j = ask(&mut app, "tab", json!({ "target": 0, "menu": m, "tab": t }));
+                for r in j["groups"].as_array().unwrap().iter().filter(|g| g["family"] != true).flat_map(|g| g["rows"].as_array().unwrap().clone()) {
+                    let own = app.web_linked(0, r["key"].as_str().unwrap()).expect("the definition's records");
+                    let want = app.web_row_in(0, Some(&m), &own);
+                    for f in same {
+                        assert_eq!(r.get(f), want.get(f), "{m} > {t}: {} {f}", r["key"]);
+                    }
+                    rows += 1;
+                }
+            }
+        }
+        assert!(rows > 500, "{rows} rows");
+        done(&dir, &user);
     }
 
     /// Recall or Register of "only the rows shown" from the page's Compare copies the rows the page showed: those of the
