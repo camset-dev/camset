@@ -20,15 +20,16 @@ reader's reading is under "voters". Rules, from the readings of 2026-10-28:
     subtitle names the selected cell ("Tracking: Spot M"; the vision reader said "M");
   - lists, checklists, side lists: the two readers when they agree, else the majority of the voices on the option's
     tiebreak line (majority: OCR, the second reader and each third reader, one vote per model family, as the line's
-    "models" name them); a line kit/tiebreak.py wrote before it named its models keeps the winner it wrote, the majority
-    of three, until kit/tiebreak.py --revote asks today's third readers about it;
+    "models" name them, none for a family that read two things); a label neither OCR nor the second reader gave, which
+    third readers alone carry, is told apart in its source (", third readers alone") for a look by eye; a line
+    kit/tiebreak.py wrote before it named its models keeps the winner it wrote, the majority of three, until
+    kit/tiebreak.py --revote asks today's third readers about it;
   - the cursor on OK/Cancel is a button, not an option;
   - star ratings, and anything without a majority, go on the review list.
 It prints a summary with the review list.
 """
 import argparse
 import collections
-import itertools
 import json
 import re
 import sys
@@ -36,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import coverage, first_open, jsonl, paths  # noqa: E402
-from camkit.reading import model_id  # noqa: E402
+from camkit.reading import model_id, standing  # noqa: E402
 from camkit.runs import private_if_marked  # noqa: E402
 from page_model import same_option  # noqa: E402
 from runner import read_json  # noqa: E402
@@ -62,25 +63,23 @@ def voices(line: dict) -> list:
 
 
 def majority(said: list) -> tuple:
-    """(the reading that stands, the voices behind it) of voices() or (None, ()): as camkit.reading.tally counts, with
-    page_model.same_option as the comparison pass 1 has always made. A reading stands when voices of two sources or
-    more name it (OCR is one source, each model family one) and no reading that names something else has as many; a
-    source counts once however many of its readers name it; voices stand together only as a group whose every two
-    readings are one option. The reading kept is the group's first in voices' order (OCR's, else the second reader's,
-    else a third reader's). No majority is no reading: the option goes on the review list, never a guess."""
-    named = [v for v in said if v[2].strip()]
-    groups = {}
-    for i, (_, _, text) in enumerate(named):
-        members = [j for j, w in enumerate(named) if j == i or same_option(text, w[2])]
-        if all(same_option(named[a][2], named[b][2]) for a, b in itertools.combinations(members, 2)):
-            groups.setdefault(tuple(members), [named[j] for j in members])
-    ranked = sorted(groups.values(), key=lambda g: len({w[1] for w in g}), reverse=True)
-    if not ranked:
-        return None, ()
-    n = len({w[1] for w in ranked[0]})
-    if n < 2 or (len(ranked) > 1 and len({w[1] for w in ranked[1]}) == n):
-        return None, ()
-    return ranked[0][0][2], tuple(w[0] for w in ranked[0])
+    """(the reading that stands, the voices behind it) of voices() or (None, ()): camkit.reading.standing, the rule
+    camkit.reading.tally counts by, with page_model.same_option as the comparison pass 1 has always made. A reading
+    stands when voices of two sources or more name it (OCR is one source, each model family one) and no reading that
+    names something else has as many; a source counts once however many of its readers name it, and not at all where
+    its readers read two things; voices stand together only as a group whose every two readings are one option. The
+    reading kept is the group's first in voices' order (OCR's, else the second reader's, else a third reader's). No
+    majority is no reading: the option goes on the review list, never a guess."""
+    group = standing([v for v in said if v[2].strip()], lambda a, b: same_option(a[2], b[2]), lambda v: v[1])
+    return (group[0][2], tuple(w[0] for w in group)) if group else (None, ())
+
+
+def third_only(text, line: dict) -> bool:
+    """Whether a reading that stands (majority's) is one neither OCR nor the second reader gave on the line (its "ocr"
+    and "vllm", page_model.same_option), so third readers alone carry it. The rule lets it stand; such a line is marked
+    and counted, for a look by eye. A reading the second reader gave whose family read two things (no vote) is not
+    one: the second reader gave it."""
+    return bool(text) and not any(same_option(text, line.get(k) or "") for k in ("ocr", "vllm"))
 
 
 def counted(line: dict) -> bool:
@@ -89,15 +88,18 @@ def counted(line: dict) -> bool:
     return isinstance(line.get("models"), dict)
 
 
+THIRD_ONLY = ", third readers alone"       # added to the source of a label third readers alone carry (third_only)
+
+
 def tie_label(line: dict) -> tuple:
     """(the label a tiebreak line settles, or None; the map's source for it): the majority of its voices by family
-    ("majority of three", "majority of four"... by the voices on the line) where it names its models, else the winner
-    it was written with ("majority of three")."""
+    ("majority of three", "majority of four"... by the voices on the line, with THIRD_ONLY where third readers alone
+    carry it) where it names its models, else the winner it was written with ("majority of three")."""
     if not counted(line):
         return line.get("winner") or None, "majority of three"
     said = voices(line)
     text, _ = majority(said)
-    return text, f"majority of {COUNTED.get(len(said), len(said))}"
+    return text, f"majority of {COUNTED.get(len(said), len(said))}" + (THIRD_ONLY if third_only(text, line) else "")
 
 
 def build(run: Path) -> dict:
@@ -248,6 +250,12 @@ def main(argv=None):
             more = "".join(f" {v['reader']}={str(v['selected'])[:20]!r}" for v in r.get("voters") or [])
             print(f"  {r['frame']:16s} {' > '.join(r['path'][1:])[:30]:30s} OCR={r['ocr'][:20]!r} "
                   f"vLLM={r['vllm'][:20]!r} omlx={r['omlx'][:20]!r}{more}")
+        alone = [(r["path"], op) for r in m["rows"] for op in r["options"] if str(op.get("source")).endswith(THIRD_ONLY)]
+        if alone:
+            print(f"  {len(alone)} labels stand on third readers alone, a reading neither OCR nor the second reader gave "
+                  f"(source \"...{THIRD_ONLY}\"): look at each frame by eye")
+            for path, op in alone:
+                print(f"    {op['frame']:16s} index {json.dumps(op['index'])} {' > '.join(path)[:60]}")
         old_ties = sum(1 for t in jsonl.read(run / "tiebreak.jsonl") if not counted(t))
         if old_ties:
             print(f"  {old_ties} tiebreak lines name no models: each keeps the winner it was written with (the "
