@@ -206,6 +206,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   hold 3 restores the copy, and a hold that failed part way now exits 8 where it exited 0. A notice after Register
   counts only as the camera's "Registered." alone, and the coverage ledger no longer reads a registration mirror line
   not applied as a refusal.
+- **A restore's check keeps trying a camera slow to restart for up to 300 s,** the one limit every run and tool goes
+  by, where it gave up at 130 s; twice the camera had only been late.
+- **A restore's check says what it waits for,** the camera's restart and up to 5 minutes, before its first try, and a
+  first Ctrl-C meanwhile says the check goes on and that a second one would leave it undone.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.
