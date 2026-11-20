@@ -186,6 +186,11 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
         print(f"HAND_PLACES: {k}'s row ({' | '.join(hand[k])}) is not in the camera's menu tree: not placed")
     if not menus:
         return found
+    why = placement.menus_refusal(tree, menus)
+    if why:
+        raise hand_tables.Refused(f"{paths.shown(datafiles.hand_tables_file(definitions.key(doc)))}: {why}. Nothing was "
+                                  "written: name MENUS' modes as the camera file and the menu tree name them (kit/tools/"
+                                  "menu_tree.py --mode), then run the command again.")
     guide = definitions.data_dir(definitions.key(doc)) / f"help_guide_menu_{definitions.key(doc)}.jsonl"
     guide = jsonl.read(guide, bad="skip") if guide.exists() else []
     by = placement.by_menu(doc, tree, menus, boxes, hand, found, guide, modes)

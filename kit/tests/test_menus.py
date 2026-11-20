@@ -619,3 +619,29 @@ def test_rows_a_menu_read_from_its_held_row_keep_the_settings_own_order():
         got = placement.by_menu(copy.deepcopy(d), tree, [MENUS[0], MENUS[2]])["global:0x0001"]
         assert got.get("row_menus") == ["Still", "S&Q"]
         assert got.get("row_places", {}).get("S&Q") == places, order
+
+
+def test_a_menus_table_that_misses_the_trees_menus_is_refused():
+    """MENUS names its modes as the camera file does, and the menu tree names its menus so (menu_tree.py --mode): a
+    table whose menus hold none of the tree's top-level menu (its "tabs": the Stills menu), or a menu whose modes
+    match no menu of the tree, is refused in one sentence naming the tree's names and the table's, never left to give a
+    menu that holds nothing."""
+    assert placement.menus_refusal(TREE, MENUS) is None
+    why = placement.menus_refusal(TREE, [{"name": "Photo", "modes": ["Photo"]}, {"name": "Movie", "modes": ["Movie"]}])
+    assert "'Stills'" in why and "'Photo'" in why and "top-level" in why
+    why = placement.menus_refusal(TREE, MENUS + [{"name": "Night", "modes": ["Night"]}])
+    assert "'Night'" in why and "Movie" in why and "S&Q" in why
+
+
+def test_the_writer_stops_on_a_menus_table_the_tree_does_not_match(tmp_path, monkeypatch):
+    """Through fromdata.places: a MENUS table naming the stills mode otherwise than the tree ("Photo") stops the write,
+    naming the hand tables file and what to do; the a1 II's own names write."""
+    d = doc(*copy.deepcopy(SETTINGS))
+    tree = tmp_path / "tree.json"
+    tree.write_text(json.dumps(TREE), encoding="utf-8")
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda key: tree)
+    monkeypatch.setattr(fromdata, "box_orders", lambda key: {})
+    assert fromdata.places(d, MENUS)["global:0x0001"]["row_menus"] == ["Still"]
+    with pytest.raises(hand_tables.Refused) as e:
+        fromdata.places(d, [{"name": "Photo", "modes": ["Photo"]}, MENUS[1], MENUS[2]])
+    assert "'Photo'" in str(e.value.code) and "menu_tree.py --mode" in str(e.value.code)

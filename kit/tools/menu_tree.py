@@ -554,7 +554,8 @@ def main(argv=None):
                          "(default: kit2_crawl when it is there, and none with --mode)")
     ap.add_argument("--mode", default=None,
                     help="write this shooting mode's menu (Movie, S&Q) into the tree's \"modes\", from its own scan "
-                         "and crawls, leaving the Stills menu as it is")
+                         "and crawls, leaving the Stills menu as it is; the name as the camera file's live_mode names "
+                         "the mode, which the camera's MENUS table names too")
     ap.add_argument("--out", default=None,
                     help="the file to write (default: private/evidence/<model>_fw<fw>/menu_tree_<model>_fw<fw>.json)")
     ap.add_argument("--dry-run", action="store_true", help="say what would be written; write nothing")

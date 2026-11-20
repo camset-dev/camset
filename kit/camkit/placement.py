@@ -863,6 +863,23 @@ def menu_modes(tree) -> dict:
     return {TOP_MODE: None, **{m["mode"]: m["mode"] for m in tree.get("modes") or [] if m.get("mode")}}
 
 
+def menus_refusal(tree, menus: list) -> str | None:
+    """Why the camera's menus (MENUS' entries) and its menu tree cannot be read together, in one sentence, or None: no
+    menu holds the tree's top-level menu (TOP_MODE: its "tabs"), or a menu's modes match none of the tree's menus
+    (menu_modes): MENUS names its modes as the camera file does, and kit/tools/menu_tree.py --mode names the tree's
+    menus so; a name that matches nothing would give a menu that silently holds nothing."""
+    have = list(menu_modes(tree))
+    said = ", ".join(repr(m) for m in have)
+    if not any(TOP_MODE in (m.get("modes") or []) for m in menus):
+        return (f"no menu of MENUS holds the menu tree's top-level menu, the {TOP_MODE!r} mode's (the tree's menus: {said}; "
+                f"MENUS' modes: {', '.join(repr(x) for m in menus for x in m.get('modes') or [])})")
+    for m in menus:
+        if not set(m.get("modes") or []) & set(have):
+            return (f"MENUS' {m.get('name')!r} names the modes {', '.join(repr(x) for x in m.get('modes') or [])}, none of "
+                    f"which the menu tree holds a menu of (the tree's menus: {said})")
+    return None
+
+
 def menu_of(menu: dict, tree) -> object:
     """The key of the tree's menu a camera menu (camera.menus' entry) is drawn from: the first of its modes the tree holds
     a menu of (menu_modes); False when the tree holds none of its modes (the menu then holds no setting)."""
