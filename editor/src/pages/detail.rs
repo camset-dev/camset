@@ -537,8 +537,9 @@ impl App {
                     ui.end_row();
                 }
             });
+            // a fraction tile's part goes back with its other part (`revert_actions`)
             if changed && ui.button(format!("Revert to {}", Self::describe(s, orig))).clicked() {
-                actions.push(Action::Revert(self.target, s.slot()));
+                actions.extend(self.revert_actions(std::slice::from_ref(s), self.target));
             }
             // where the plain Revert does not serve: a value a Save As kept put back to what the camera wrote, a copy put
             // back in step with its setting (`put_back_choice`), its hover saying which (`put_back_hover`)
@@ -787,7 +788,7 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(format!("was {}", Self::describe(sub, so))).small().color(tone::weak(ui.visuals())));
                         if ui.small_button("Revert").clicked() {
-                            actions.push(Action::Revert(self.target, sub.slot()));
+                            actions.extend(self.revert_actions(std::slice::from_ref(sub), self.target));
                         }
                     });
                 }

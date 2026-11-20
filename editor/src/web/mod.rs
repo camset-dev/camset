@@ -228,8 +228,9 @@ impl App {
             "revert" => {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
                 // as the window's Revert: a copy in step with its setting takes the setting and its other copies back
-                // along (`apply`); a step that would leave a setting held by none of its copies is refused, with why
-                if let Some(why) = self.apply(linked.iter().map(|l| Action::Revert(target, l.slot())).collect()) {
+                // along (`apply`); a step that would leave a setting held by none of its copies is refused, with why; a
+                // fraction tile's part goes back with its other part (`revert_actions`)
+                if let Some(why) = self.apply(self.revert_actions(&linked, target)) {
                     return WebReply::error(409, &why);
                 }
                 self.status = self.with_moved(format!("{} reverted {from}", linked[0].name));

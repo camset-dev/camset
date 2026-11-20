@@ -259,8 +259,9 @@ impl App {
                     if self.main_focus.as_deref() == Some(caption) { name = name.strong().underline(); }
                     ui.label(name).on_hover_text(self.where_kept(&s));
                     self.compact_editor(ui, &s, editable, &mut actions);
+                    // a fraction tile's part goes back with its other part (`revert_actions`)
                     if self.changed(&s) && ui.small_button("Revert").clicked() {
-                        actions.push(Action::Revert(target, s.slot()));
+                        actions.extend(self.revert_actions(std::slice::from_ref(&s), target));
                     } else {
                         ui.label("");
                     }

@@ -517,7 +517,22 @@ impl App {
         if linked.first().is_some_and(|s| self.place_why(s).is_some()) {
             return self.mymenu_revert_all();
         }
-        ("Revert".into(), linked.iter().map(|l| Action::Revert(section, l.slot())).collect())
+        // a fraction's part: both parts back, in either mode (`revert_actions`), and the words say so
+        if let Some((n, d, caption)) = linked.first().and_then(|s| self.fraction_of(s)) {
+            return (format!("Revert {caption} ({} and {} together, as the file was opened)", n.name, d.name), self.revert_actions(linked, section));
+        }
+        ("Revert".into(), self.revert_actions(linked, section))
+    }
+
+    /// The Revert of a row of records in set `section`, the window's and the page's: each record of the row as the file
+    /// was opened; a fraction tile's part with its other part (`fraction_of`), so no Revert leaves a pair of values no
+    /// camera wrote.
+    pub(crate) fn revert_actions(&self, linked: &[Setting], section: usize) -> Vec<Action> {
+        let mut slots: Vec<Slot> = linked.iter().map(|l| l.slot()).collect();
+        if let Some((n, d, _)) = linked.first().and_then(|s| self.fraction_of(s)) {
+            slots.extend([n.slot(), d.slot()].into_iter().filter(|s| !linked.iter().any(|l| l.slot() == *s)));
+        }
+        slots.into_iter().map(|slot| Action::Revert(section, slot)).collect()
     }
 
     /// Why one of My Menu's places (`is_mymenu_place`) takes no value from Compare outside Expert mode, in the window
@@ -1590,6 +1605,67 @@ pub(crate) mod copy_tests {
         b.sections[0].get_mut(place.id).unwrap().put(place.index, code).unwrap();
         app.compare = Some((PathBuf::from("B.DAT"), b));
         assert_eq!(found(&app), 1, "{label}: the item file B holds there");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's third look: a Revert of a fraction's part puts back both parts, as the file was opened, in one
+    /// step, in either mode, and says so before the press: Compare's cell in the window, the page's revert (Expert mode,
+    /// the only one in which the page finds the part), and All edits and History, which list the two as one line.
+    /// The scenario: in Expert mode an arrow from B takes both parts (0,0 becomes B's 1,2); then Expert mode off.
+    #[test]
+    fn a_fractions_parts_are_reverted_together() {
+        use crate::test_support::{done, sample_app, strip_menus};
+        let (mut app, dir, user) = sample_app("cmp_fraction_revert", Some(strip_menus));
+        let tile = app.schema.camera.main_tiles.clone().unwrap().0[0].tiles.iter().find(|t| t.kind == TileKind::Fraction).cloned().unwrap();
+        let find = |app: &App, k: &Option<String>| app.schema.settings.iter().find(|s| Some(&s.key) == k.as_ref()).cloned().unwrap();
+        let (num, den) = (find(&app, &tile.numerator_key), find(&app, &tile.denominator_key));
+        let m = app.dial_sets()[0];
+        let speed = |app: &App| (app.col_value(Col::a(m), &num), app.col_value(Col::a(m), &den));
+        let opened = speed(&app);
+        let (n0, d0) = (opened.0.unwrap(), opened.1.unwrap());
+        let mut b = app.doc.as_ref().unwrap().edited.clone();
+        b.sections[m].get_mut(num.id).unwrap().put(num.index, n0 + 1).unwrap();
+        b.sections[m].get_mut(den.id).unwrap().put(den.index, d0 + 2).unwrap();
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        let theirs = (Some(n0 + 1), Some(d0 + 2));
+        app.prefs.expert = true;
+        let acts = app.copy_row(std::slice::from_ref(&num), Col::b(m), Col::a(m));
+        app.apply(acts);
+        assert_eq!(speed(&app), theirs, "the arrow took both parts");
+        // Compare's cell Revert, out of Expert mode and in it
+        for expert in [false, true] {
+            app.prefs.expert = expert;
+            let (words, acts) = app.cell_revert(std::slice::from_ref(&num), m);
+            assert!(words.contains(&num.name) && words.contains(&den.name) && words.contains(&tile.caption), "{words}");
+            app.apply(acts);
+            assert_eq!(speed(&app), opened, "expert {expert}: both parts as the file was opened");
+            app.undo();
+            assert_eq!(speed(&app), theirs, "one undo step");
+        }
+        // the page's revert, in Expert mode
+        let a = crate::web::tests::answer(&mut app, "revert", serde_json::json!({ "target": m, "key": num.key }));
+        assert_eq!(a.status, 200, "{}", String::from_utf8_lossy(&a.body));
+        assert_eq!(speed(&app), opened, "the page: both parts");
+        app.undo();
+        // All edits and History: the two parts one line, whose Revert puts back both
+        for expert in [false, true] {
+            app.prefs.expert = expert;
+            let doc = app.doc.as_ref().unwrap();
+            let lines: Vec<EditLine> = app.edit_lines(&doc.original, &doc.edited).into_iter().filter(|l| l.slots.contains(&num.slot()) || l.slots.contains(&den.slot())).collect();
+            assert_eq!(lines.len(), 1, "expert {expert}: one line for the two parts");
+            assert!(lines[0].slots.contains(&num.slot()) && lines[0].slots.contains(&den.slot()));
+            app.apply(lines[0].slots.iter().map(|&slot| Action::Revert(m, slot)).collect());
+            assert_eq!(speed(&app), opened, "expert {expert}: All edits' Revert");
+            app.undo();
+            let step = app.undo.len() - 1;
+            let doc = app.doc.as_ref().unwrap();
+            let line = app.history_lines(step, &doc.edited).iter().find(|l| l.slots.contains(&num.slot())).cloned().unwrap();
+            assert!(line.slots.contains(&den.slot()), "expert {expert}: History's line holds both");
+            let acts = line.put_back(&app.undo[step], &doc.edited);
+            app.history_revert(acts);
+            assert_eq!(speed(&app), opened, "expert {expert}: History's Revert");
+            app.undo();
+        }
         done(&dir, &user);
     }
 
