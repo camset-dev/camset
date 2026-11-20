@@ -1193,8 +1193,8 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
 
 # what reads through the new questions, and the tool that measures them: nowhere else in the kit until a caller is
 # switched, kind by kind (docs/REMAPPING_PLAYBOOK.md, section 5)
-NEW_QUESTION_NAMES = re.compile(r'\.v[23]["\']|\bicon_left_out\(|\bwithout_icon\(|\bfind=True\b|\breading\.region\('
-                                r'|\bQUESTIONS\b|\bask_named_reader\(|\bwith_options\(|\breading\.read\('
+NEW_QUESTION_NAMES = re.compile(r'\.v[23]["\']|\.grey\d?["\']|\bicon_left_out\(|\bwithout_icon\(|\bfind=True\b'
+                                r'|\breading\.region\(|\bQUESTIONS\b|\bask_named_reader\(|\bwith_options\(|\breading\.read\('
                                 r'|\bCliReader\b|claude-cli')
 MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader_census.py"}
 # proving/greyed.py names QUESTIONS and the whole-list question's key ("entries.v2"), and nothing else of the list: it
@@ -1223,6 +1223,18 @@ def test_no_caller_asks_the_new_questions_or_reads_by_the_rule_yet():
     assert sorted(found) == [], f"these name the new questions or read through camkit.reading.read: {found}"
     assert BUT_QUESTIONS.search("reading.read(") and BUT_QUESTIONS.search('"lit.v2"') and \
         not BUT_QUESTIONS.search("reading.QUESTIONS[kind]")
+
+
+@pytest.mark.parametrize("probe", ['QUESTION = ("lit.v2.grey", "selected")', "PROMPTS['option.grey']",
+                                   'ask(frame, "dialog.grey")', 'ask(frame, "carousel.v2.grey2")',
+                                   "x = 'cell.v2.grey'", 'ask(frame, "entries.v2")'])
+def test_a_kit_file_asking_a_measured_question_not_adopted_fails_the_no_caller_guard(probe):
+    """The reviewer's probe (2026-11-20): a tuple naming lit.v2.grey added to kit/proving/sidelists.py passed the
+    guard. Every ".grey" version and the second carousel wording are refused outside the reading modules, as the ".v2"
+    questions are; proving/greyed.py names none of them but through QUESTIONS and entries.v2."""
+    assert NEW_QUESTION_NAMES.search(probe), probe
+    if "entries.v2" not in probe:
+        assert BUT_QUESTIONS.search(probe.replace(GREYED_MAY_ASK, "")), probe       # greyed.py's own exemption too
 
 
 def test_no_reader_a_camera_run_builds_is_the_census_claude_command_line(monkeypatch):
