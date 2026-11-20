@@ -2310,11 +2310,15 @@ function drawMyMenu(j) {
 }
 
 /** One place of a My Menu page: its number, its item (edited in the edit colour, what it held on hover), the value
- *  of the setting it opens, and its buttons; an empty place says so. */
+ *  of the setting it opens, and its buttons; an empty place says so. The place a jump opened (Compare's Open in Edit:
+ *  `openSetting`, by the place's key) is marked "▶ n", as the window marks it, and found by its key. */
 function myMenuPlace(j, p, i, x) {
   const was = x.edited ? `\nWas: ${x.was}` : "";
   const mark = x.edited ? "✏ " : "";
-  const tr = el("tr", { class: x.edited ? "mm-edited" : null }, el("td", { class: "weak" }, String(i + 1)));
+  const here = x.key && xp.subFocus === x.key;
+  const cls = [x.edited ? "mm-edited" : null, here ? "mm-here" : null].filter(Boolean).join(" ") || null;
+  const tr = el("tr", { class: cls, "data-key": x.key || null },
+    here ? el("td", { class: "strong", title: "The place opened from Compare" }, `▶ ${i + 1}`) : el("td", { class: "weak" }, String(i + 1)));
   const pick = (e) => showMyMenuPicker(j, p, i, x, e.currentTarget);
   if (x.empty) {
     tr.append(el("td", { class: "mm-item weak", colspan: "2", title: `An empty place${was}` }, el("i", {}, mark + x.name)),

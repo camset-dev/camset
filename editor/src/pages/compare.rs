@@ -1674,6 +1674,11 @@ pub(crate) mod copy_tests {
             assert!(j["message"].as_str().is_some_and(|m| m.contains("of My Menu's places left as it was") && m.contains("My Menu page")), "{name}: {j}");
             assert_eq!(app.col_value(Col::a(0), &place), Some(code), "{name}: the place as it was");
         }
+        // the page: its link on the place's row opens My Menu's page by the place's key, which the page's My Menu
+        // answer gives that place, so the page marks it as the window does
+        assert_eq!((row["open_tab"].as_str(), row.get("open_key").and_then(|k| k.as_str()).unwrap_or(row["key"].as_str().unwrap())), (Some(app.schema.camera.text.my_menu_name()), place.key.as_str()), "{row}");
+        let (_, mm) = ask(&mut app, "mymenu_page", serde_json::json!({ "target": 0 }));
+        assert_eq!(mm["pages"][0]["places"][0]["key"].as_str(), Some(place.key.as_str()));
         // Open in Edit opens it on My Menu's page
         app.open_in_edit_from_compare(&place, 0);
         assert!(app.mode == Mode::Edit && app.view == View::MyMenu, "{:?}", app.view);

@@ -2909,7 +2909,10 @@ impl App {
                 if let Some(m) = o.as_object_mut() { m.extend(at); }
                 o
             });
-            json!({ "code": x.code, "empty": x.empty, "name": x.name, "edited": x.edited, "was": x.edited.then_some(&x.was), "opens": opens,
+            // the place's own key, which Compare's Open in Edit opens it by (the page marks it, as the window does)
+            let key = self.schema.camera.my_menu.as_ref().and_then(|mm| self.schema.settings.iter().find(|s| self.is_mymenu_place(s) && Some(&s.id) == mm.records.get(p) && s.index == u16::try_from(i).ok()))
+                .map(|s| s.key.clone());
+            json!({ "key": key, "code": x.code, "empty": x.empty, "name": x.name, "edited": x.edited, "was": x.edited.then_some(&x.was), "opens": opens,
                 "more": x.settings.iter().skip(1).map(|s| format!("{} > {} > {}", s.tab, s.group, s.name)).collect::<Vec<_>>(),
                 "up": self.mymenu_move(p, i, -1).is_some(), "down": self.mymenu_move(p, i, 1).is_some(),
                 "pick": !x.empty || !packed || first_empty == Some(i) })

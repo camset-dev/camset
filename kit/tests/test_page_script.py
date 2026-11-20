@@ -368,6 +368,22 @@ def test_the_my_menu_picker_filters_and_refuses(tmp_path):
 
 
 @needs_node
+def test_open_in_edit_marks_the_place_of_my_menu_it_opens(tmp_path):
+    """Compare's Open in Edit on a place of My Menu opens My Menu's page with that place marked "▶ n" and found by its key
+    (`data-key`, which `openSetting` brings into view), as the window marks it; another place is not marked."""
+    got = run(tmp_path, MYMENU + """
+(async () => {
+  xp.subFocus = "global:0x0c8a[1]";
+  const place = (i, key, empty) => myMenuPlace(j, 0, i, { key, code: empty ? 2 : 11, name: empty ? "(empty)" : "Alpha", empty, edited: false, was: null,
+    opens: null, more: [], up: false, down: false, pick: true });
+  const rows = [place(0, "global:0x0c8a[0]", false), place(1, "global:0x0c8a[1]", false), place(2, "global:0x0c8a[2]", true)];
+  console.log(JSON.stringify(rows.map((r) => [r.getAttribute("data-key"), r.children[0].textContent, r.classList.contains("mm-here")])));
+})();
+""")
+    assert got == [["global:0x0c8a[0]", "1", False], ["global:0x0c8a[1]", "▶ 2", True], ["global:0x0c8a[2]", "3", False]]
+
+
+@needs_node
 def test_mapping_text_reaches_expert_mode_only(tmp_path):
     """A row and its details: the mapping team's note, the records, the record id beside the name, the proof badge,
     the stored number and the values no file has held are drawn in Expert mode only,
