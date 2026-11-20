@@ -933,8 +933,9 @@ def fewer_menus(doc, tree, menus: list, placed: dict) -> list:
     by_menu's row_menus, as writer.fromdata.places gives them; no copy) listed in fewer camera menus than the menus
     whose own tree holds its top row (the same top row by the merged numbering and its label), where that menu never
     read the rows down to the setting's (a menu that read them and has no such row lacks it truly: Breathing Comp. in
-    the Still menu): the work a mapping has left, a row crawled or proved in those menus' modes (a mapping is not done
-    while there is any)."""
+    the Still menu), and where no other record of the same row and option is listed in it (records of one row kept to
+    their own modes' menus, the Help Guide's SteadyShot twins: the row is there, by its own record): the work a mapping
+    has left, a row crawled or proved in those menus' modes (a mapping is not done while there is any)."""
 
     def unread(node, labels):
         for label in labels[1:]:
@@ -953,16 +954,22 @@ def fewer_menus(doc, tree, menus: list, placed: dict) -> list:
         key = menu_of(menu, tree)
         if key is not False:
             tops[menu["name"]] = _nodes_at(trees[key], key, number)
-    out = []
+    out, listed = [], collections.defaultdict(set)          # (tab, row, row_at, option) -> the menus that list it
+    for s in doc["settings"]:
+        p = placed.get(s["key"]) or {}
+        if p.get("row") and not s.get("copy_of"):
+            at = (p.get("row_tab") or s.get("tab") or "Other", tuple(p["row"]), tuple(p["row_at"]), p.get("under_option"))
+            listed[at] |= set(p.get("row_menus") or ())
     for s in doc["settings"]:
         p = placed.get(s["key"]) or {}
         if s.get("copy_of") or not p.get("row") or "row_menus" not in p:
             continue
         tab = p.get("row_tab") or s.get("tab") or "Other"
+        here = listed[(tab, tuple(p["row"]), tuple(p["row_at"]), p.get("under_option"))]
         lack = []
         for m in menus:
             node = (tops.get(m["name"]) or {}).get((tab, p["row_at"][0]))
-            if m["name"] in p["row_menus"] or node is None or norm(node["l"]) != norm(p["row"][0]):
+            if m["name"] in here or node is None or norm(node["l"]) != norm(p["row"][0]):
                 continue
             if len(p["row"]) == 1 or unread(node, p["row"]):
                 lack.append(m["name"])

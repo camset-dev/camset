@@ -931,3 +931,13 @@ def test_the_writer_says_which_settings_are_in_fewer_menus_than_their_row(tmp_pa
            "prove or crawl them there" in said
     assert ("global:0x0003", "Shooting", "Lens Compensation", ["S&Q"]) in short          # Still read the rows, none of it
     assert "  Shooting > Anti-flicker Set.: 2 settings, not in S&Q" in said
+    # records of one row kept to their own modes' menus (the Help Guide's SteadyShot twins): the row is in every menu,
+    # each by its own record, so none of them is open work
+    rows = [page("1/1", "Image Stabilization", row("SteadyShot"))]
+    tw = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}],
+          "modes": [{"mode": m, "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}]} for m in ("Movie", "S&Q")]}
+    placed = {"global:0x0001": {"row": ["SteadyShot"], "row_at": [0], "row_menus": ["Still"]},
+              "global:0x0002": {"row": ["SteadyShot"], "row_at": [0], "row_menus": ["Movie", "S&Q"]}}
+    two = {"model": "TEST", "tabs": ["Shooting"], "menu": [{"tab": "Shooting", "group": "Image Stabilization", "label": "SteadyShot", "order": 0}],
+           "settings": [setting("global:0x0001", "SteadyShot", "Image Stabilization"), setting("global:0x0002", "SteadyShot (Movie)", "Image Stabilization")]}
+    assert placement.fewer_menus(two, tw, MENUS, placed) == []
