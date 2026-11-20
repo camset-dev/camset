@@ -6,7 +6,7 @@ import re
 import unicodedata
 
 from camkit import placement
-from pass2_report import close
+from pass2_report import close, cut_words
 
 LATIN = str.maketrans("СсАаЕеОоРрТтНМВК", "CcAaEeOoPpTtHMBK")
 
@@ -71,14 +71,28 @@ def check_labels(s: dict, proved: dict, changed: list):
     s["values"] = [[v, lab] for v, lab in sorted(labels.items())]
 
 
+def word_swapped(a: str, b: str) -> bool:
+    """Two names of as many words where a word of one stands where the other has a word of its own, neither a slip of
+    the other (alike at 0.75 or more) nor the other with letters glued on: "Av Auto/Manual Switch" and "Tv Auto/Manual
+    Switch" name two functions, where "Subject Reccgnition AF" and "faRegist. Face Priority" are slips. A word of one
+    character is never one ("S&d" for "S&Q" is a slip of one letter, mended as before)."""
+    wa, wb = (re.findall(r"[a-z0-9★]+", str(x).lower()) for x in (a, b))
+    return len(wa) == len(wb) and any(
+        x != y and min(len(x), len(y)) >= 2 and not (x.startswith(y) or y.startswith(x) or x.endswith(y) or y.endswith(x))
+        and difflib.SequenceMatcher(None, x, y).ratio() < 0.75 for x, y in zip(wa, wb, strict=True))
+
+
 def snap(label: str, vocabulary: list) -> str:
     """A function's name read off a picker, replaced by the name the schema already uses for it
     anywhere when that is clearly the same text ("Subject Reccgnition AF", "faRegist. Face Priority"), and never one
-    whose numbers differ, however alike the rest (snap never crosses a digit)."""
+    whose numbers differ, however alike the rest (snap never crosses a digit), one that is the reading less a word of
+    the camera's (pass2_report.cut_words: "Auto/Manual Switch" for "Av Auto/Manual Switch"), or one with another word in
+    a word's place (word_swapped: "Tv Auto/Manual Switch" for it)."""
     key = lambda t: re.sub(r"[^a-z0-9★]", "", t.lower())
     digits = re.findall(r"\d+", label)
     # never across a digit: "Custom Look 1" and "Custom Look 2" are alike at 0.909 and two names
-    vocabulary = [w for w in vocabulary if re.findall(r"\d+", w) == digits]
+    vocabulary = [w for w in vocabulary if re.findall(r"\d+", w) == digits and not cut_words(w, label)
+                  and not word_swapped(w, label)]
     best = max(vocabulary, key=lambda w: difflib.SequenceMatcher(None, key(w), key(label)).ratio(), default=None)
     if best and difflib.SequenceMatcher(None, key(best), key(label)).ratio() >= 0.9:
         return best

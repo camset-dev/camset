@@ -1436,6 +1436,8 @@ def main():
                 changed.append((x["key"], x["name"], pair[0], pair[1], fix))
                 pair[1] = fix
                 derived[x["key"]][pair[0]] = "derived"
+                if over[x["key"]].get(pair[0]) == "schema kept":
+                    over[x["key"]][pair[0]] = "derived"     # the schema's name is gone: as the family pass says it
     # a key or tile proved in full lends the codes it proved to the slots sampled against it
     proved_codes = collections.defaultdict(set)
     for e in report:

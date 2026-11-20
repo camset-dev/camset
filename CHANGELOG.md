@@ -201,6 +201,17 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   live list row on each option in turn, in one session,** for a record the hold writes from a setting its screen does
   not show (the a1 II's lead: 0x0c39 and the Exposure step). Each Register writes a "registration mirror" proof line, applied
   only where the hold's element of the record changed to the option's code.
+- **A function picker's name that lost a word of the camera's is no longer taken for agreement:** pass 2's report
+  marks it "wording" where the reading is still alike and names no other value, and the writer gives the camera's
+  words where two readers read them ("AF Transition Speed", "Av Auto/Manual Switch"). `label_audit.py` lists such a
+  picker name as "a cut form of what is read", never confirmed, and a name a family correction replaces is "derived".
+- **`reader_census.py --questions` measures three wordings for the lit item (variant "cursor") and takes `--frames`:**
+  the option with the radio dot and the left column's category are never the lit item, and the sample can be a list of
+  frames kept outside the repository and the runs, options drawn alike taken too. Its variant "icon" asks the local
+  readers what icon the lit item draws, written [icon] where it stands.
+- **`reader_census.py --questions` and `label_audit.py` say why each reader failed, by count:** an HTTP status and
+  its reason phrase (never the server's body), a timeout, a refused connection or "an answer that is no usable JSON",
+  beside the asked line and in the line that stops a reader after a run of failures, never what an answer held.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.

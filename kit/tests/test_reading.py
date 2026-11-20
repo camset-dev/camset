@@ -1176,6 +1176,94 @@ def test_the_whole_list_candidates_are_pinned_and_asked_by_no_kit_caller():
     assert "list" not in greyed.WHOLE_LIST
 
 
+# the census's candidates for the lit item (2026-11-20, from the label audit's frames checked by eye), pinned as written
+CURSOR_CANDIDATES = {"lit.cursor.v3": "aa0132b9704a71ac", "lit.cursor.stars.v3": "0e053cd4e77fe4fc",
+                     "lit.cursor.icons.v3": "13720eb69ff5c351"}
+
+
+def test_the_lit_items_cursor_candidates_are_pinned_and_asked_by_no_kit_caller():
+    """The three wordings for the lit item stay with the census (CANDIDATES, never camkit.vlm.PROMPTS or a kind's
+    question, so no run asks them), pinned by digest: each is lit.v2's text, then that the option with the orange radio
+    dot and the left column's category are never the lit item, then (one each) the stars drawn as stars or the icon
+    before the name left out with the name's own words kept, then lit.v2's "none" sentence and JSON line. The census's
+    variant "cursor" asks them on a list, a side list and a table's picker, and on no other kind."""
+    import hashlib
+
+    import reader_census as rc
+    lit = vlm.PROMPTS["lit.v2"]
+    head, tail = lit.split(" If no item is highlighted")[0], lit[lit.index(" If no item is highlighted"):]
+    for key, digest in CURSOR_CANDIDATES.items():
+        text = rc.CANDIDATES[key]
+        assert hashlib.sha1(text.encode()).hexdigest()[:16] == digest and key not in vlm.PROMPTS, key
+        assert text.startswith(head) and text.endswith(tail) and "radio button with an orange dot" in text, key
+        assert "never copy a category" in text and key not in {q.prompt for q in reading.QUESTIONS.values()}, key
+    assert STAR in rc.CANDIDATES["lit.cursor.stars.v3"] and STAR not in rc.CANDIDATES["lit.cursor.v3"]
+    assert "keep every word of the name itself" in rc.CANDIDATES["lit.cursor.icons.v3"]
+    picker = rc.Item("table picker", Path("f.png"), "A", ["A", "B"])
+    assert [q[0] for q in rc.questions_of(picker, [picker], {"cursor"})] == ["cursor", "cursor: stars", "cursor: icons"]
+    assert [q[0] for q in rc.questions_of(picker, [picker], {"new", "cursor"})][0] == "new"
+    assert rc.questions_of(rc.Item("scale", Path("f.png"), "1", ["1", "2"]), [], {"cursor"}) == []
+    assert "cursor" in rc.VARIANTS and set(rc.CURSOR) == {"list", "side list", "table picker"}
+
+
+def test_the_census_takes_the_listed_frames_alone_and_the_list_only_from_outside_the_runs(tmp_path, monkeypatch,
+                                                                                          capsys, own_runs):
+    """--frames: the sample is the listed frames' items, all of them and no other, each listed by its path from the
+    run root as the label audit writes it; the file is refused inside the runs and the repository (as --truth is), and
+    --per-kind and --held-out do not go with it."""
+    import reader_census
+    root, asked = questions_run(tmp_path), []
+    census_config(monkeypatch, QuestionsReader(root / "kit2_pass2" / "shots", asked))
+    listed = tmp_path / "frames.json"
+    listed.write_text(json.dumps(["kit2_pass2/shots/00001.png", "kit2_pass2/shots/00003.png"]), encoding="utf-8")
+    args = [str(root), "--questions", "--json", "--kinds", "list", "--variants", "new,cursor", "--dry-run",
+            "--cache", str(tmp_path / "answers"), "--frames", str(listed)]
+    assert reader_census.main(args) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert got["sampled"]["list"]["frames"] == 2 and got["asked"]["fake"]["would ask"] == 2 * 4 and asked == []
+    for inside in (root / "frames.json", ROOT / "frames.json"):
+        with pytest.raises(SystemExit):
+            reader_census.main([*args[:-1], str(inside)])
+        assert not inside.exists()
+    for extra in (["--per-kind", "2"], ["--held-out"]):
+        with pytest.raises(SystemExit):
+            reader_census.main([*args, *extra])
+    listed.write_text(json.dumps(["00001.png"]), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        reader_census.main(args)
+
+
+# the census's question for the icon drawn on the lit item (2026-11-20, for the held names), pinned as written
+ICON_CANDIDATE = {"lit.icon.v3": "3f386abb11056ade"}
+
+
+def test_the_lit_items_icon_question_says_where_an_icon_stands_and_listed_frames_take_options_drawn_alike(tmp_path):
+    """lit.icon.v3 asks for the lit item's text with each icon written [icon] in its place and said in words, never
+    copied as letters: what tells two options drawn alike apart (the movie Custom Keys' two "AEL hold", the Playback Fn
+    Menu's two "FTP Trans. (This Img.)"). It stays with the census, asked by its variant "icon" on a list, a side list
+    and a table's picker. With --frames, a listed frame's option drawn like another of its row is taken too (its
+    answers say what the screen draws), where the ordinary sample leaves it out."""
+    import hashlib
+
+    import reader_census as rc
+    for key, digest in ICON_CANDIDATE.items():
+        text = rc.CANDIDATES[key]
+        assert hashlib.sha1(text.encode()).hexdigest()[:16] == digest and key not in vlm.PROMPTS, key
+        assert "[icon]" in text and '"icons"' in text and '"selected"' in text and text.isascii(), key
+    picker = rc.Item("table picker", Path("f.png"), "A", ["A", "B"])
+    assert [q[0] for q in rc.questions_of(picker, [picker], {"icon"})] == ["icon"] and "icon" in rc.VARIANTS
+    run = tmp_path / "kit2_pass2"
+    (run / "shots").mkdir(parents=True)
+    from PIL import Image
+    for i in (1, 2):
+        Image.new("RGB", (640, 480), (30 * i, 20, 20)).save(run / "shots" / f"0000{i}.png")
+    lines = [{"path": ["Zqx Keys"], "kind": "table", "option": "Zqx Button", "opens": "picker", "index": i,
+              "label": lab, "shown": lab, "chosen_frame": f"0000{i + 1}.png"}
+             for i, lab in enumerate(["\u2022 Zqx hold", "\u2022 E Zqx hold"])]       # BULLET; an icon read as E
+    assert {it.frame.name for it in rc.question_items(run, lines, {})} == set()
+    assert {it.frame.name for it in rc.question_items(run, lines, {}, alike=True)} == {"00001.png", "00002.png"}
+
+
 def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
     """The old questions keep their text (the answers already cached are keyed by it, and every caller asks them); each
     kind of screen's new question is a key of its own and asks for its field in one pinned JSON line, in plain ASCII;
@@ -2153,6 +2241,117 @@ def test_a_readers_failures_are_its_own_and_stop_it_after_a_run_of_them(tmp_path
     assert a["not asked"] > 0 and "asked" not in a and "failed 8 questions in a row" in said.err
     every = collections_merge(got["scores"])
     assert set(every) == {"reader failed", "not asked"} and every["reader failed"] == reader_census.FAIL_RUN
+    assert a["failures"] == {"HTTP 507 Insufficient Storage": reader_census.FAIL_RUN}
+    assert "failed 8 questions in a row: asked nothing more (the last: HTTP 507 Insufficient Storage)" in said.err
+    # as text: the reasons by count beside the summary line
+    census_config(monkeypatch, FailingReader([]))
+    assert reader_census.main([str(root), "--questions", "--variants", "old,new,options,decoy",
+                               "--cache", str(tmp_path / "answers2")]) == 0
+    text = capsys.readouterr().out
+    assert "\nwhy the readers failed: fake: HTTP 507 Insufficient Storage 8\n" in text
+    assert "asked: fake: failed 8, not asked" in text and "{'HTTP" not in text
+
+
+class MixedReader:
+    """A reader that fails one way per question, by the frame asked about: a server short of memory, a timeout, a
+    refused connection, an answer that is no JSON object (it holds a made-up label and a frame's name), a refusal held
+    in the answer, an error whose words name a frame's path and one that names a frame's file; the next frame is
+    answered."""
+
+    def __init__(self, frames: dict):
+        self.frames = frames
+
+    def answer(self, image: bytes, prompt: str, waits=None):
+        name = self.frames[image]
+        if name == "00001.png":
+            raise urllib.error.HTTPError("http://127.0.0.1:9/v1", 507, "Insufficient Storage", {}, None)
+        if name == "00002.png":
+            raise TimeoutError("timed out")
+        if name == "00003.png":
+            raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+        if name == "00004.png":
+            return {"_unparsed": "Zqx Alpha on 00004.png"}
+        if name == "00005.png":
+            return {"_error": "Zqx Beta"}
+        if name == "00006.png":
+            raise OSError(2, "No such file or directory", "/x/runs/TEST-CAM_fw9.99/kit2_pass2/shots/00006.png")
+        if name == "00007.png":
+            raise ValueError("cannot decode 00007_down.png")
+        return {"selected": "Zqx Delta"}
+
+
+def test_a_bulk_job_says_why_each_reader_failed_by_count_and_never_what_it_read(tmp_path, monkeypatch):
+    """ask_all keeps, per reader, why each question failed, by count ("failures", most first): camkit.vlm.failure's
+    plain words for an exception (an HTTP status, a timeout, a refused connection), with any path or file name in them
+    taken out, and an answer that is no usable JSON a reason of its own, never the answer's text; the summary's text
+    gives them beside the asked line, a reader with no failure has none, and no label or frame name is printed."""
+    import reader_census
+    root = questions_run(tmp_path)
+    shots = root / "kit2_pass2" / "shots"
+    frames = {p.read_bytes(): p.name for p in shots.glob("*.png")}
+    census_config(monkeypatch, MixedReader(frames))
+    cfg = {"name": "fake", "url": "http://127.0.0.1:9/v1", "model": "m", "parallel": 1}
+    asks = [(shots / f"0000{i}.png", vlm.PROMPTS["option"], None) for i in range(1, 9)]
+    said = []
+    answers, tally, _ = reader_census.ask_all(cfg, asks, 5, tmp_path / "answers", (), 7, say=said.append, fail_run=100)
+    assert tally["failed"] == 7 and tally["asked"] == 1 and "stopped after failures" not in tally
+    assert answers[asks[7]] == {"selected": "Zqx Delta"} and all(answers[a] is reader_census.FAILED for a in asks[:7])
+    assert tally["failures"] == {"HTTP 507 Insufficient Storage": 1, "no answer within 7 s (timed out)": 1,
+                                 "could not connect (Connection refused)": 1, reader_census.NO_JSON: 2,
+                                 "FileNotFoundError: [Errno 2] No such file or directory: <path>": 1,
+                                 "ValueError: cannot decode <file>": 1}
+    assert list(tally["failures"].values()) == sorted(tally["failures"].values(), reverse=True)
+    lines = reader_census.asked_lines({"fake": tally, "calm": {"asked": 3, "seconds": 1}})
+    text = "\n".join(lines)
+    assert lines[0] == f"asked: fake: failed 7, asked 1, seconds {tally['seconds']}; calm: asked 3, seconds 1"
+    assert lines[1].startswith("why the readers failed: fake: an answer that is no usable JSON 2, HTTP 507 ")
+    assert "calm" not in lines[1] and len(lines) == 2
+    for secret in ("Zqx", "0000", ".png", "/x/runs", "TEST-CAM"):
+        assert secret not in text + "\n".join(said), secret
+    assert reader_census.asked_lines({"calm": {"asked": 3, "seconds": 1}}) == ["asked: calm: asked 3, seconds 1"]
+
+
+def test_a_bulk_jobs_failure_reason_says_an_http_error_by_its_status_alone():
+    """The review of 2026-11-20: a server's error body can echo the request, and so the start of a census question
+    with a list's labels: the bulk tools say an HTTP failure by its status and reason phrase alone, never by the body
+    camkit.vlm.failure passes on (which reader_check.py, asking the kit's fixed test picture, keeps saying)."""
+    import reader_census as rc
+    body = io.BytesIO(json.dumps({"error": {"message": "invalid request: This is a Sony camera menu screen. "
+                                                       "Options: Zqx Alpha, Zqx Beta"}}).encode())
+    e = urllib.error.HTTPError("http://127.0.0.1:9/v1", 400, "Bad Request", {}, body)
+    assert rc.failure_reason(e, 7) == "HTTP 400 Bad Request"
+    body.seek(0)
+    assert "Zqx Alpha" in vlm.failure(urllib.error.HTTPError("http://127.0.0.1:9/v1", 400, "Bad Request", {}, body))
+
+    class SdkError(Exception):                  # the Anthropic SDK's errors: a status code and a message
+        status_code, message = 503, "upstream said: This is a Sony camera menu screen. Zqx Gamma"
+    assert rc.failure_reason(SdkError("Zqx Gamma"), 7) == "HTTP 503 Service Unavailable"
+    assert rc.failure_reason(TimeoutError("timed out"), 7) == "no answer within 7 s (timed out)"
+
+
+def test_the_failed_in_a_row_line_names_the_last_reason(tmp_path, monkeypatch):
+    """A reader stopped after a run of failures is said once, with the last failure's reason: a server that went from
+    short of memory to refusing connections says the refusal."""
+    import reader_census
+    root = questions_run(tmp_path)
+    shots = root / "kit2_pass2" / "shots"
+    calls = []
+
+    class Failing:
+        def answer(self, image, prompt, waits=None):
+            calls.append(image)
+            if len(calls) < 3:
+                raise urllib.error.HTTPError("http://127.0.0.1:9/v1", 507, "Insufficient Storage", {}, None)
+            raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+    census_config(monkeypatch, Failing())
+    cfg = {"name": "fake", "url": "http://127.0.0.1:9/v1", "model": "m", "parallel": 1}
+    asks = [(shots / f"0000{i}.png", vlm.PROMPTS["option"], None) for i in range(1, 9)]
+    said = []
+    _, tally, _ = reader_census.ask_all(cfg, asks, 5, tmp_path / "answers", (), 7, say=said.append, fail_run=4)
+    assert len(calls) == 4 and tally["stopped after failures"] == 1 and tally["not asked"] == 4
+    assert tally["failures"] == {"HTTP 507 Insufficient Storage": 2, "could not connect (Connection refused)": 2}
+    assert said == ["  fake: failed 4 questions in a row: asked nothing more (the last: could not connect (Connection "
+                    "refused))"]
 
 
 def collections_merge(scores: dict) -> dict:

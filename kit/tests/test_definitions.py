@@ -1775,6 +1775,101 @@ def test_snap_never_crosses_a_digit():
     assert S.snap("Subject Reccgnition AF", ["Subject Recognition AF"]) == "Subject Recognition AF"
 
 
+def test_a_picker_name_less_a_word_of_the_camera_is_no_agreement_and_the_reading_is_not_snapped_back(monkeypatch):
+    """A function picker's schema label that is the camera's reading less a word ("Transition Speed" for "AF Transition
+    Speed", "Auto/Manual Switch" for "Av Auto/Manual Switch": 2026-11-20, five codes in 101 slots) is no agreement but
+    "wording", sure where two readers read it, so the writer gives the camera's words; snap never takes such a reading
+    back to the cut name, nor to a name with another word in a word's place ("Tv ..." for "Av ..."). An icon's capitals,
+    an icon repeating the name, a lead every option draws and the kit's "(2)" are no word: those still agree. Made-up
+    labels."""
+    import pass2_report as R
+    import schema_update as S
+    monkeypatch.setattr(R, "SURE", {"AF Zqx Speed", "Qv Zqx Switch"})
+    vals = {"AF Zqx Speed": 1, "Qv Zqx Switch": 2, "Zqx Hold (2)": 3, "MR Zqx Memory": 4, "Zqx Speed Mde": 5,
+            "Zqx Other": 6, "50M L: 50M": 7}
+    known = {1: "Zqx Speed", 2: "Zqx Switch", 3: "Zqx Hold", 4: "Zqx Memory", 5: "Zqx Speed Mode", 6: "Nothing Alike",
+             7: "L: 50M"}
+    verdict, notes = R.judge_functions(vals, known)
+    by = {n["value"]: n for n in notes}
+    assert verdict == "conflict" and set(by) == {1, 2, 6}
+    assert by[1]["kind"] == by[2]["kind"] == "wording" and by[1]["sure"] and by[2]["sure"] and by[6]["kind"] == "conflict"
+    assert R.cut_words("Zqx Speed", "AF Zqx Speed") == "AF" and R.cut_words("Zqx Mode", "Zqx Mode (2)") is None
+    assert R.cut_words("Zqx Alpha", "Qrw Zqx Alpha", ["Qrw Zqx Alpha", "Qrwl Zqx Beta"]) is None      # an icon column
+    assert R.cut_words("Zqx Alpha", "Qrw Zqx Alpha", ["Qrw Zqx Alpha", "Zqx Beta"]) == "Qrw"
+    assert R.cut_words("Hi", "Zqx Mode Hi") == "Zqx Mode" and R.cut_words("Zqx", "Zqxy") is None
+    assert S.snap("Qv Zqx Switch", ["Zqx Switch", "Tv Zqx Switch"]) == "Qv Zqx Switch"
+    assert S.snap("AF Zqx Speed", ["Zqx Speed", "AF Zqx Speed"]) == "AF Zqx Speed"
+    assert S.snap("faZqx Regist. Face", ["Zqx Regist. Face"]) == "Zqx Regist. Face"           # glued icon letters
+    assert S.snap("Zqx Reccgnition Mode", ["Zqx Recognition Mode"]) == "Zqx Recognition Mode"   # a slip in a word
+
+
+def test_a_reading_that_is_another_values_name_in_the_list_is_no_cut_form(monkeypatch):
+    """The review of 2026-11-20: a reading that is another value's schema name in the list ("S&Q Record Setting" for
+    765 while 767 is named so) is no cut form, or the writer would give 765 its neighbour's name: the schema's name
+    stands, as before the cut-word rule. Made-up labels."""
+    import pass2_report as R
+    monkeypatch.setattr(R, "SURE", {"S&Q Zqx Setting", "AF Zqx Speed"})
+    known = {765: "Zqx Setting", 767: "S&Q Zqx Setting", 1: "Zqx Speed"}
+    verdict, notes = R.judge_functions({"S&Q Zqx Setting": 765, "AF Zqx Speed": 1}, known)
+    assert [n["value"] for n in notes] == [1] and notes[0]["kind"] == "wording" and verdict == "wording"
+
+
+def test_a_reading_far_from_the_schema_label_stays_a_conflict_whatever_words_it_holds(monkeypatch):
+    """The review of 2026-11-20: a reading far from the schema label (likeness under 0.6: "Off" read "Peaking Display
+    Off", 0.3) was a conflict, a gate question; that the schema label is its last word makes it no "wording", which the
+    gate never asks. Made-up labels."""
+    import pass2_report as R
+    monkeypatch.setattr(R, "SURE", {"Zqx Display Off"})
+    verdict, notes = R.judge_functions({"Zqx Display Off": 5}, {5: "Off"})
+    assert R.close("Off", "Zqx Display Off") < 0.6 and [n["kind"] for n in notes] == ["conflict"] and verdict == "conflict"
+
+
+def test_a_single_letter_is_no_word_and_snap_still_mends_a_one_letter_slip(monkeypatch):
+    """The review of 2026-11-20: a stray single letter after a name ("Monitor Brightness l") is no word the name lacks,
+    and snap still mends a slip of one letter in a word of one ("S&d Record Setting" for "S&Q Record Setting", as it
+    did before the word rule), while it never takes "Av" for "Tv", two words of their own. Made-up labels."""
+    import pass2_report as R
+    import schema_update as S
+    from writer.labels import word_swapped
+    monkeypatch.setattr(R, "SURE", {"Zqx Brightness l"})
+    assert R.judge_functions({"Zqx Brightness l": 6}, {6: "Zqx Brightness"}) == ("agrees", [])
+    assert R.cut_words("Zqx Brightness", "Zqx Brightness l") is None and R.cut_words("Zqx", "Zqx 1") == "1"
+    assert S.snap("S&d Zqx Setting", ["S&Q Zqx Setting"]) == "S&Q Zqx Setting"
+    assert word_swapped("Av Zqx Switch", "Tv Zqx Switch") and not word_swapped("S&d Zqx", "S&Q Zqx")
+
+
+def af_crossing_row(option: str, key: str, sure: bool) -> dict:
+    """A made-up pass-2 row of the stills Fn Menu's picker at `option`, its slot `key` proving code 294, which the
+    camera draws "AF Lvl for Crossing" and the definition names "Lvl for Crossing": a "wording" note, sure where two
+    readers read it."""
+    return {"row": f"Fn Menu Settings / {option}", "options": 1, "notices": [],
+            "records": {key: {"verdict": "wording", "proved": {"AF Lvl for Crossing": 294}, "linear": None,
+                              "names": {"AF Lvl for Crossing": "two readers" if sure else "one reader (ocr)"},
+                              "notes": [{"value": 294, "camera": "AF Lvl for Crossing", "schema": "Lvl for Crossing",
+                                         "kind": "wording", "sure": sure}]}}}
+
+
+@needs_evidence
+def test_a_name_a_family_correction_replaces_is_derived_never_schema_kept(tmp_path, monkeypatch, capsys):
+    """The review of 2026-11-20: a slot whose own reading was not sure keeps the schema's name for the moment ("schema
+    kept", listed for review), but where a sure slot of its family corrects that name, the correction reaches it and
+    its name is no longer the schema's: its source is "derived", as the family pass makes it, never "schema kept"."""
+    report = [af_crossing_row("Still Upper / 1", "global:0x0445[0]", sure=False),
+              af_crossing_row("Still Lower / 6", "global:0x0445[11]", sure=True)]
+    proofs = [{"path": ["Fn Menu Settings"], "kind": "table", "option": o, "opens": "picker", "index": 0,
+               "label": "• AF Lvl for Crossing", "applied": True, "changes": []}
+              for o in ("Still Upper / 1", "Still Lower / 6")]
+    S, target, write = a1_run(tmp_path, monkeypatch, report, A1_PROOFS + proofs)
+    said = write(capsys)
+    doc = definitions.load(target)
+    by = {s["key"]: s for s in doc["settings"]}
+    for k in ("global:0x0445[0]", "global:0x0445[11]", "global:0x0445[5]"):
+        assert dict((v, lab) for v, lab in by[k]["values"])[294] == "AF Lvl for Crossing", k
+    names = by["global:0x0445[0]"]["proved"].get("names") or {}
+    assert names.get("294") == "derived", names.get("294")
+    assert "review global:0x0445[0]   294: schema 'Lvl for Crossing', camera read 'AF Lvl for Crossing'" in said
+
+
 # a made-up report of one row, a KEEP_LABELS record whose label stands against the camera's reading (Proxy Rec.
 # Settings, which the a1 II's accepted file does not list)
 GATE_REPORT = [{"row": "Proxy Rec. Settings", "options": 2, "notices": [],

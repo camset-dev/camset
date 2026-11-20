@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -310,6 +311,57 @@ def test_a_name_is_right_only_where_the_reading_spells_it_as_published():
                       held)[1] == "all agree"
 
 
+def test_a_name_less_a_word_of_what_is_read_is_never_confirmed():
+    """A published name that is the reading less a leading or trailing word of the camera's ("Transition Speed" read
+    "AF Transition Speed", the proof having recorded the whole: 2026-11-20) is no longer right by the held rule but a
+    vote of its own, "cut form", and a verdict of its own, listed second; one family spelling it as published makes it
+    "some agree". An icon's text is still no word: one repeating the name ("50M" of "50M L: 50M"), a lead every line
+    of the row draws ("Qrw"), and a carousel axis's part after its colon. Made-up labels."""
+    import label_audit as la
+    two = {"qwen": None, "gemma": None}
+    opts = ["AF Zqx Speed", "Zqx Mode", "Zqx Hold"]
+    assert judge_name("table picker", "Zqx Speed", "AF Zqx Speed", opts, dict.fromkeys(two, "AF Zqx Speed")) == \
+        (["cut form"] * 2, "a cut form of what is read")
+    assert judge_name("table picker", "Zqx Speed", "AF Zqx Speed", opts,
+                      {"qwen": "AF Zqx Speed", "gemma": "Zqx Speed"})[1] == "some agree"
+    # the run recorded the cut name itself: a reading of the whole line is still a cut form
+    assert judge_name("table picker", "Record Setting", "Record Setting", ["Record Setting", "Movie Zqx", "Zqx Hold"],
+                      dict.fromkeys(two, "S&Q Record Setting")) == (["cut form"] * 2, "a cut form of what is read")
+    held = ["50M L: 50M", "21M M: 21M"]
+    assert judge_name("table picker", "L: 50M", "50M L: 50M", held, dict.fromkeys(two, "50M L: 50M"))[1] == "all agree"
+    column = ["Qrw Zqx Alpha", "Qrw Zqx Beta", "Qrwl Zqx Gamma"]
+    assert judge_name("table picker", "Zqx Alpha", "Qrw Zqx Alpha", column,
+                      dict.fromkeys(two, "Qrw Zqx Alpha"))[1] == "all agree"
+    axis = {"Zqx Mode: Hi": {("1", "Hi")}, "Zqx Mode: Lo": {("0", "Lo")}}
+    assert judge_name("axis", "Hi", "Zqx Mode: Hi", list(axis), dict.fromkeys(two, "Zqx Mode: Hi"), axis)[1] == "all agree"
+    assert la.LISTED.index("a cut form of what is read") == 1 and la.VERDICTS[1] == "a cut form of what is read"
+
+
+def test_the_cut_form_is_a_function_pickers_alone():
+    """The review of 2026-11-20: the cut-form vote is the writer's rule, a function picker's: a list's or a scale's name
+    recorded with its unit, tail or icon ("8" of "8 shots", "1" of "1 (Narrow)", "Custom" of "Custom 1", an icon's
+    letters before or after a name) is confirmed by a reading of the whole line, as before. Made-up labels."""
+    two = {"qwen": None, "gemma": None}
+    for kind, name, recorded, others in (("list", "8", "8 shots", ["16 shots", "32 shots"]),
+                                         ("list", "1", "1 (Narrow)", ["2", "3"]),
+                                         ("list", "Custom", "Custom 1", ["Off", "Standard"]),
+                                         ("list", "Zqx Settings", "Px Zqx Settings", ["Zqx Other"]),
+                                         ("list", "Zqx Comp (M)", "Zqx Comp (M) KAW", ["Zqx Other"])):
+        assert judge_name(kind, name, recorded, [recorded, *others], dict.fromkeys(two, recorded))[1] == "all agree", name
+
+
+def test_a_reading_that_spells_another_option_names_that_option_never_a_cut_form():
+    """The review of 2026-11-20: a reading that spells another option of the list, of which the name is a cut form
+    ("S&Q Record Setting" for "Record Setting" where both are functions of the movie Custom Keys, "Spot AEL hold" for
+    "AEL hold"), names that option: "another option", never "cut form". Made-up rows, the camera's word pairs."""
+    two = {"qwen": None, "gemma": None}
+    assert judge_name("table picker", "Record Setting", "Record Setting", ["Record Setting", "S&Q Record Setting"],
+                      dict.fromkeys(two, "S&Q Record Setting")) == (["another option"] * 2,
+                                                                     "none agree, all on another reading")
+    assert judge_name("table picker", "AEL hold", "AEL hold", ["AEL hold", "Spot AEL hold", "AEL toggle"],
+                      dict.fromkeys(two, "Spot AEL hold"))[0] == ["another option"] * 2
+
+
 def test_all_agree_needs_two_families():
     import label_audit as la
     right, wrong = ("right", "Zqx", None), ("another option", "Zqy", ("option", 0))
@@ -466,6 +518,33 @@ def test_nothing_is_asked_twice_and_the_census_cache_is_used(own_runs, tmp_path,
     _, again = run_audit(args, capsys)
     assert len(asked) == n and again["asked"]["gm"]["from a cache"] == 9
     assert again["verdicts by source"] == got["verdicts by source"]
+
+
+def test_the_audit_says_why_each_reader_failed_by_count_and_never_what_it_read(own_runs, tmp_path, monkeypatch,
+                                                                                capsys):
+    """A reader that fails is counted with its reasons beside the asked line (reader_census.ask_all's "failures"): the
+    server's words, or "an answer that is no usable JSON", never the answer's text, a label or a frame's name; the
+    run of failures that stops a reader is said with its last reason."""
+    root, definition = camera(own_runs, tmp_path)
+    asked = []
+    readers(monkeypatch, root, asked)
+    frames = {p.read_bytes(): (p.parent.parent.name, p.name) for p in root.glob("*/shots/*.png")}
+
+    class Broken(FakeReader):
+        def answer(self, image: bytes, prompt: str, waits=None):
+            if self.name == "gm":
+                raise urllib.error.HTTPError(LOCAL, 507, "Insufficient Storage", {}, None)
+            if self.name == "qb":
+                return {"_unparsed": "Zqx Alpha 00001.png"}
+            return super().answer(image, prompt, waits)
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, **kw: Broken(cfg, frames, asked))
+    said, _ = run_audit(["--definition", str(definition), "--cache", str(tmp_path / "answers")], capsys)
+    why = [ln for ln in said.out.splitlines() if ln.startswith("why the readers failed: ")]
+    assert why == ["why the readers failed: qb: an answer that is no usable JSON 8; gm: HTTP 507 Insufficient Storage 8"]
+    assert "gm: failed 8 questions in a row: asked nothing more (the last: HTTP 507 Insufficient Storage)" in said.err
+    assert "Zqx" not in said.out + said.err and "00001" not in said.out + said.err
+    _, got = run_audit(["--json", "--definition", str(definition), "--cache", str(tmp_path / "answers")], capsys)
+    assert got["asked"]["gm"]["failures"] == {"HTTP 507 Insufficient Storage": 8} and "failures" not in got["asked"]["qa"]
 
 
 def test_a_local_only_run_in_scope_asks_local_readers_only_and_builds_no_other(own_runs, tmp_path, monkeypatch,

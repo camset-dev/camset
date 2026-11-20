@@ -50,7 +50,9 @@ one with the options expected there handed over ("new + options") or with every 
 pick handing it options can cause), through camkit.vlm.ask_named_reader. Each answer is judged against the option the
 proof's file proved: right, another option, no option, or no answer (it holds no reading there), which make the right
 rate; "reader failed" (an HTTP error, a timeout, a refusal, an answer that is no JSON object) and "not asked" (the
-reader's --minutes passed, or it failed FAIL_RUN times in a row and was asked nothing more) are counted apart. The
+reader's --minutes passed, or it failed FAIL_RUN times in a row and was asked nothing more) are counted apart, and
+each reader's failures by their reason (an HTTP status and its reason phrase, never a server's body, or the kit's
+words; never what an answer held: ask_all, failure_reason). The
 answers are kept in --cache (by default a folder in the system's temporary folder); the camera's own answers' cache is
 looked in and never written; an answer already kept and usable is taken whatever the time (--minutes 0: those alone).
 A notice's and a title's truth is the text the run recorded, not a proof. --per-kind, --variants, --minutes and
@@ -61,7 +63,12 @@ sample of the same size from the frames the first does not take, to check a chan
 on; --truth judges every answer also against a truth checked by eye, a file of {kind: {label as recorded: label as
 drawn}} kept outside the repository and the runs (refused inside them, private/ apart), for labels a run recorded as
 OCR read an icon or a garbled letter; a fix that would make two of a reading's options one is not made there, and
-counted.
+counted. "cursor" (since 2026-11-20) asks the lit item's candidates the label audit's frames checked by eye called for
+(CURSOR: the option with the radio dot and the left column's category never the lit item; the stars, or the icon
+before the name, besides); --frames cuts the sample to a list of frames kept where --truth is (the audit's frames where
+its readers went wrong, and as many where they went right), every item on them taken, an option drawn like another
+of its row too. "icon" asks the lit item's text with each icon written [icon] where it stands and said in words
+(lit.icon.v3), for the names two options drawn alike but for an icon share, asked of the local readers.
 Where a proof kept OCR's reading ("shown"), each answer is also counted against it (BOTH): a reader's wrong answer OCR
 reads alike is the dangerous case, which OCR-main and reader-backup (decision 22) would not catch. A self-check ("unsure")
 in an answer is counted against whether the answer was right; the seconds each question took are said.
@@ -121,6 +128,7 @@ the owner's runs, so it stays out of commits, issues and the docs unless the own
 import argparse
 import collections
 import contextlib
+import http
 import io
 import ipaddress
 import itertools
@@ -130,6 +138,7 @@ import re
 import sys
 import tempfile
 import threading
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
@@ -419,7 +428,8 @@ def third_vote(tally: "Tally", shown: str, who: str, said: str, ocr2, label: str
 # no JSON object), "not asked" (past the reader's --minutes, or after it failed FAIL_RUN times in a row)
 VERDICTS = ("right", "another option", "no option", "no answer", "reader failed", "not asked")
 JUDGED = VERDICTS[:4]
-VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey", "entries", "entries.radio", "entries.compare")
+VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey", "entries", "entries.radio", "entries.compare",
+            "cursor", "icon")
 # a Claude model asked through the Claude Code command line (--claude-cli MODEL), on the person's own signed-in plan:
 # census-only (CliReader), never a reader a camera run could pick up; one call at a time
 CLI = "claude"                       # the command, found on PATH (CAMSET_CLAUDE_CLI names another)
@@ -463,6 +473,11 @@ FAIL_RUN = 8                         # failures in a row after which a reader is
 SKIP = object()                      # a question that judges nothing for this item (the old question, a box it skips)
 FAILED = object()                    # the reader failed, or answered nothing usable (camkit.vlm.usable)
 NOT_ASKED = object()                 # past the reader's time or after FAIL_RUN failures in a row, and in no cache
+NO_JSON = "an answer that is no usable JSON"     # a failure's reason: what the answer held is never said
+LIMITED = "a usage or rate limit"                # the Claude Code command line's (CliLimit)
+# a path or a file's name in a failure's words (the frame asked about, a cache file): taken out (failure_reason)
+PATH_WORD = re.compile(r"\S*[/\\]\S*")
+FILE_WORD = re.compile(r"[^\s'\"]+\.(?:png|jpe?g|bmp|gif|webp|json|jsonl|dat|txt|log|cube)\b", re.I)
 WB_SIDES = {"A-B": ("A", "B"), "G-M": ("G", "M")}    # each readout's letters: the first negative (proving.wbgrid)
 STAR_LABEL = re.compile(r"\u2605+")                  # a label of rating stars alone (BLACK STAR)
 BULLET = re.compile(r"^[\u2022\u00B7]\s*")           # the radio dot a picker's label is recorded with (BULLET, MIDDLE DOT)
@@ -848,6 +863,41 @@ CANDIDATES.update({
         "before them (a grey or an orange radio button, an icon). Judge the highlighted option's letters the same way. "
         + _ENTRY_TAIL),
 })
+# Candidates for the lit item on a list, a side list and a table's picker (2026-11-20), from the label audit's frames
+# checked by eye: of 249 readings that named no published name on a frame showing it, 46 named the option with the
+# orange radio dot (the value the camera held) instead of the one on the orange bar, 37 the lit category in the left
+# column of a two-column picker, 40 miscounted rating stars and 24 copied the icon text before the name ("50M", "X.FINE",
+# "RAW"). lit.cursor.v3 adds to lit.v2 the radio dot and the category column; the two others each add one more thing
+# to it, the stars drawn as stars and the icon left out, so that each change is measured alone. Measured by the
+# census's variant "cursor" (with --frames, on the audit's frames); no kit caller asks them.
+_CURSOR = (" The highlighted item is the one the orange bar or box covers. A round radio button with an orange dot "
+           "inside marks the value the camera holds now, which is often another item: never copy an item for its orange "
+           "dot alone. Where the screen has a column of numbered categories at the left, never copy a category: the "
+           "item is in the list the orange bar is in, at the right.")
+_NONE = " If no item is highlighted, write none. " + _JSON + '{"selected": "<the text>"}'
+CANDIDATES.update({
+    "lit.cursor.v3": _LIT + _CURSOR + _NONE,
+    "lit.cursor.stars.v3": (
+        _LIT + _CURSOR + " Where the item holds rating stars, write each star as \u2605, as many as are drawn: count "
+        "every star, in every row (four stars stand as two rows of two, five as rows of two, one and two)." + _NONE),
+    # (\u2605 above: BLACK STAR, as the definition writes a rating's stars)
+    "lit.cursor.icons.v3": (
+        _LIT + _CURSOR + " A small icon or short code drawn before the item's name, such as a size (50M), a quality "
+        "mark (X.FINE, STD) or RAW, is no part of the name: leave it out, but keep every word of the name itself, "
+        "such as AF or ISO at its start." + _NONE),
+})
+# A question for the icon drawn on the lit item (2026-11-20), asked of the local readers on the frames behind names a
+# hosted model may not settle: two options a list draws alike but for an icon (the movie Custom Keys' two "AEL hold",
+# the Playback Fn Menu's two "FTP Trans. (This Img.)"). Each icon is written [icon] where it stands and said in words,
+# never copied as letters, so the readers' texts can be laid side by side, the icon's letters apart. Asked by the
+# census's variant "icon", with --frames; no kit caller asks it.
+CANDIDATES["lit.icon.v3"] = (
+    "This is a Sony camera menu screen. One item is highlighted: it sits on an orange bar or inside an orange box. Copy "
+    "that item's own text exactly as drawn, every letter, digit, sign and space, in its case, leaving out the radio "
+    "button before it. Where a small picture or symbol, an icon, is drawn before, inside or after the text, never copy "
+    "it as letters: write [icon] where it stands, and say in a few words what each icon shows. If no item is "
+    "highlighted, write none. " + _JSON + '{"selected": "<the text, with [icon] for each icon>", "icons": ["<what an '
+    'icon shows>"]}')
 QUESTION_TEXTS = {**vlm.PROMPTS, **CANDIDATES}
 
 
@@ -869,6 +919,14 @@ HYPOTHESES = {
     "look scale": [("v3: crop", "lookscale.v2", _ends, "scale crop")],
     "title": [("v3: v2", "title.v2", _field("title"), None)],
 }
+# the lit item's candidates of 2026-11-20 (variant "cursor"), per kind: the radio dot and the category column, then the
+# stars or the icon besides
+CURSOR_V3 = [("cursor", "lit.cursor.v3", _selected, None), ("cursor: stars", "lit.cursor.stars.v3", _selected, None),
+             ("cursor: icons", "lit.cursor.icons.v3", _selected, None)]
+CURSOR = {"list": CURSOR_V3, "side list": CURSOR_V3, "table picker": CURSOR_V3}
+# the lit item's icon written where it stands (variant "icon"), on the same kinds
+ICON_V3 = [("icon", "lit.icon.v3", _field("selected"), None)]
+ICON = {"list": ICON_V3, "side list": ICON_V3, "table picker": ICON_V3}
 CROPS = {"lit crop": None, "scale crop": (540, 70, 640, 272)}   # the scale's ends: proving.looks.look_cell's boxes
 # "best": each kind's best measured question, one per reading: the new one (QUESTIONS), but where a v3 that is no
 # question of QUESTIONS measured better on both samples (the list's routing), that one in its place
@@ -1191,8 +1249,9 @@ def questions_of(item: Item, frame_items: list, variants) -> list:
     """[(question id, the question's whole text, pick, what the reader is shown: image_of's transform)] item is judged
     by: the old questions, the kind's new one (camkit.reading.QUESTIONS), the new one with the options expected there
     handed to the reader ("options") or with every option but the one the file proved ("decoy": a reader that picks
-    from the list rather than read the screen names another option there), and the candidates for a third ("v3",
-    HYPOTHESES). A number-entry screen's options are said box by box (frame_items: the frame's items, a box each)."""
+    from the list rather than read the screen names another option there), the candidates for a third ("v3",
+    HYPOTHESES) and the lit item's candidates of 2026-11-20 ("cursor", CURSOR). A number-entry screen's options are said
+    box by box (frame_items: the frame's items, a box each)."""
     out = []
     if "old" in variants:
         out += [(f"old: {key}", vlm.PROMPTS[key], pick, None) for key, pick in OLD[item.kind]]
@@ -1204,6 +1263,10 @@ def questions_of(item: Item, frame_items: list, variants) -> list:
         for qid, key, v3_pick, transform in HYPOTHESES.get(item.kind, ()):
             if "v3" in variants or qid in BEST.get(item.kind, ()):
                 out.append((qid, _question(key(item) if callable(key) else key), v3_pick, transform))
+    if "cursor" in variants:
+        out += [(qid, _question(key), c_pick, transform) for qid, key, c_pick, transform in CURSOR.get(item.kind, ())]
+    if "icon" in variants:
+        out += [(qid, _question(key), i_pick, transform) for qid, key, i_pick, transform in ICON.get(item.kind, ())]
     if item.kind in NO_OPTIONS or not {"options", "decoy"} & set(variants):
         return out
     if item.kind == "number field":
@@ -1226,11 +1289,12 @@ def questions_of(item: Item, frame_items: list, variants) -> list:
     return out
 
 
-def question_items(run: Path, lines: list, reread: dict) -> list:
+def question_items(run: Path, lines: list, reread: dict, alike: bool = False) -> list:
     """The Items of one run's proof lines, by kind (camkit.reading.QUESTIONS), each with the row's options: a proof
     line whose option is not on its own frame (an axis's last visit, which puts the carousel back on the option it
     opened on; a list proof that kept no OCR of its bar, a prover's that read the screen elsewhere) or whose frame is
-    missing gives none."""
+    missing gives none. An option drawn like another of its row (drawn_alike) gives none either, but with alike
+    (--frames: what the screen draws is asked, the judging against the proved option loose)."""
     from proving.screens import axis_lit_x, cell_code
 
     from camkit import screen
@@ -1272,7 +1336,7 @@ def question_items(run: Path, lines: list, reread: dict) -> list:
                 seen = screen.read(load(frame)).kind if site == "list" else None
                 if seen == "shooting":
                     continue                 # no menu up on the frame
-                if expect_of(r) == "label" and drawn_alike(lab, labels):
+                if expect_of(r) == "label" and drawn_alike(lab, labels) and not alike:
                     continue
                 # a list proof on a carousel whose second axis lights a strip cell (HYPOTHESES' route)
                 strip = seen == "dialog" and axis_lit_x(load(frame).image) is not None
@@ -1527,25 +1591,60 @@ def ask_cli(reader: CliReader, image: bytes, prompt: str, cache, read_only=(), a
     return vlm.keep(key, reader.answer(image, prompt), cache)
 
 
+def failure_reason(e: BaseException, timeout: float | None = None) -> str:
+    """Why a question to a reader failed, in words fit for the counts: an HTTP failure by its status and reason phrase
+    alone ("HTTP 503 Service Unavailable"), never the server's body, which can echo the request and so the start of a
+    question with a list's labels (camkit.vlm.failure passes it on, for kit/tools/reader_check.py, whose question is the
+    kit's fixed test picture); any other by camkit.vlm.failure's words (a timeout, a refused connection, else the
+    exception), with every path and file name in them taken out (PATH_WORD, FILE_WORD), so that no frame's or file's
+    name is printed (decision 16)."""
+    if isinstance(e, urllib.error.HTTPError):
+        return vlm.scrub(f"HTTP {e.code} {e.reason}".rstrip())
+    status = getattr(e, "status_code", None)              # the Anthropic SDK's errors
+    if isinstance(status, int):
+        try:
+            phrase = http.HTTPStatus(status).phrase
+        except ValueError:
+            phrase = ""
+        return f"HTTP {status} {phrase}".rstrip()
+    return FILE_WORD.sub("<file>", PATH_WORD.sub("<path>", vlm.failure(e, timeout)))
+
+
+def asked_lines(asked: dict) -> list:
+    """{reader: ask_all's counts} as text: the asked line (each reader's counts), then, where any reader failed, why,
+    each reader's reasons by count, most first: a server's or the kit's words, never a reading, a label, a value or a
+    file name (decision 16)."""
+    lines = ["asked: " + "; ".join(f"{r}: " + ", ".join(f"{k} {v}" for k, v in a.items() if k != "failures")
+                                   for r, a in asked.items())]
+    why = [f"{r}: " + ", ".join(f"{k} {v}" for k, v in a["failures"].items()) for r, a in asked.items()
+           if a.get("failures")]
+    if why:
+        lines.append("why the readers failed: " + "; ".join(why))
+    return lines
+
+
 def ask_all(cfg: dict, asks: list, minutes: float, cache: Path, read_only: tuple, timeout: float,
             say=print, max_questions: int | None = None, dry: bool = False, workers: int | None = None,
             fail_run: int = FAIL_RUN, cli: CliReader | None = None) -> tuple:
     """({(frame, question, transform): the answer, FAILED or NOT_ASKED}, {"asked", "from a cache", "failed", "not
-    asked", "stopped after failures", "seconds"}, {ask: the seconds the reader took to answer it, for each one asked
-    now}): each question to the reader cfg describes, about each frame (or the part image_of cuts out), once
+    asked", "stopped after failures", "failures", "seconds"}, {ask: the seconds the reader took to answer it, for each
+    one asked now}): each question to the reader cfg describes, about each frame (or the part image_of cuts out), once
     (camkit.vlm.ask_named_reader, its answers kept in cache), as many at once as its "parallel" allows. An answer
     already kept (in cache or read_only, and usable) is always taken; once `minutes` have passed (0: at once), once
     max_questions have been asked, or once the reader has failed FAIL_RUN times in a row (its server down, or short of
-    memory: the run says so once), nothing more is asked. dry: nothing is asked at all, and each question not kept is
-    counted "would ask" (the cost of a run, before it)."""
+    memory: the run says so once, with the last failure's reason), nothing more is asked. "failures", where any question
+    failed: {why: how many}, most first (failure_reason's words for an exception, NO_JSON for an answer that is not
+    usable, LIMITED), never what an answer held. dry: nothing is asked at all, and each question not kept is counted
+    "would ask" (the cost of a run, before it)."""
     import time
     from concurrent.futures import ThreadPoolExecutor
     t0 = time.monotonic()
     deadline = t0 + minutes * 60
-    tally = collections.Counter()
+    tally, reasons = collections.Counter(), collections.Counter()
     lock = threading.Lock()
     state = {"in a row": 0, "down": False, "asking": 0}
     took = {}
+    waited = cli.timeout if cli is not None else timeout
 
     def asked_of(image, prompt, ask):
         if cli is not None:
@@ -1570,25 +1669,27 @@ def ask_all(cfg: dict, asks: list, minutes: float, cache: Path, read_only: tuple
                 return a, got if got is not None else NOT_ASKED
             state["asking"] += 1
         t = time.monotonic()
-        limited = False
+        limited, why = False, None
         try:
             got = asked_of(image, prompt, True)
         except CliLimit:
-            got, limited = FAILED, True
-        except Exception:        # noqa: BLE001 - a failure is the reader's, counted apart from the question's
-            got = FAILED
+            got, limited, why = FAILED, True, LIMITED
+        except Exception as e:   # noqa: BLE001 - a failure is the reader's, counted apart from the question's
+            got, why = FAILED, failure_reason(e, waited)
         if got is not FAILED and not vlm.usable(got):
-            got = FAILED
+            got, why = FAILED, NO_JSON
         with lock:
             took[a] = time.monotonic() - t
             state["in a row"] = state["in a row"] + 1 if got is FAILED else 0
+            if why:
+                reasons[why] += 1
             if limited and not state["down"]:
                 state["down"] = True
                 tally["stopped at a usage or rate limit"] = 1
                 say(f"  {cfg.get('name')}: a usage or rate limit was reached: asked nothing more")
             if state["in a row"] >= fail_run and not state["down"]:
                 state["down"] = True
-                say(f"  {cfg.get('name')}: failed {fail_run} questions in a row: asked nothing more")
+                say(f"  {cfg.get('name')}: failed {fail_run} questions in a row: asked nothing more (the last: {why})")
             tally["failed" if got is FAILED else "asked"] += 1
             done = sum(tally.values())
         if done % 200 == 0:
@@ -1599,7 +1700,8 @@ def ask_all(cfg: dict, asks: list, minutes: float, cache: Path, read_only: tuple
         answers = dict(ex.map(one, asks))
     if state["down"] and "stopped at a usage or rate limit" not in tally:
         tally["stopped after failures"] = 1
-    return answers, {**tally, "seconds": round(time.monotonic() - t0)}, took
+    failures = {"failures": dict(reasons.most_common())} if reasons else {}
+    return answers, {**tally, **failures, "seconds": round(time.monotonic() - t0)}, took
 
 
 def answers_folder(given, places: list) -> Path:
@@ -1684,7 +1786,8 @@ def measure(places: list, args) -> dict:
         lines = [r for r in jsonl.read(run / "proofs.jsonl", bad="skip") if not identity_line(r)]
         reread = {r["frame"]: str(r["reading"]) for r in jsonl.read(run / "readings.jsonl", bad="skip")
                   if r.get("frame") and r.get("reading")}
-        items += [it for it in question_items(run, lines, reread) if it.kind in kinds]
+        items += [it for it in question_items(run, lines, reread, alike=bool(getattr(args, "frames", None)))
+                  if it.kind in kinds]
         if entry_variants:
             entry_all += [it for it in entry_items(run, lines) if it.kind in kinds]
     lit = {}
@@ -1693,6 +1796,12 @@ def measure(places: list, args) -> dict:
         if frame not in lit:
             lit[frame] = not black(load(frame))
         return lit[frame]
+    if getattr(args, "frames", None):
+        # the sample is the listed frames' items, all of them (listed_frames)
+        want = listed_frames(args.frames, places)
+        items = [it for it in items if frame_key(it.frame) in want]
+        entry_all = [it for it in entry_all if frame_key(it.frame) in want]
+        args.per_kind = max(1, len(items), len(entry_all))
     chosen = sample(items, args.per_kind, usable)
     if args.held_out:
         # a second sample of the same size, the same way, from the frames the first did not take (never tuned on)
@@ -1969,22 +2078,45 @@ def read_truth(path, places: list = ()) -> dict:
     the run recorded OCR's reading of an icon or a garbled letter. Refused (a SystemExit), before it is read, inside
     the runs (in_runs, places the ones read) and inside the clone other than under private/, whose files are never
     committed (docs/decisions/0018)."""
-    from camkit import ROOT
-    target = Path(path).expanduser().resolve()
-    if in_runs(target, list(places)):
-        sys.exit("--truth: the file given is inside the runs, which this tool only reads; keep it outside the repository "
-                 "or in private/")
-    root = Path(ROOT).resolve()
-    if target.is_relative_to(root) and not target.is_relative_to((root / "private").resolve()):
-        sys.exit("--truth: the file given is inside the repository, where it could be committed (the owner's labels: "
-                 "docs/decisions/0016); keep it outside the repository or in private/")
-    try:
-        got = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        sys.exit(f"--truth: cannot be read ({type(e).__name__})")
+    got = private_json(path, places, "--truth", "the owner's labels")
     if not isinstance(got, dict) or not all(isinstance(v, dict) for v in got.values()):
         sys.exit("--truth: it must be {kind: {recorded label: label as drawn}}")
     return got
+
+
+def private_json(path, places: list, flag: str, what: str):
+    """A JSON file of the owner's (--truth, --frames), read only where it is kept outside the runs and the repository or
+    in private/: refused (a SystemExit) before it is read inside the runs (in_runs) or inside the clone other than under
+    private/, whose files are never committed (docs/decisions/0016, 0018)."""
+    from camkit import ROOT
+    target = Path(path).expanduser().resolve()
+    if in_runs(target, list(places)):
+        sys.exit(f"{flag}: the file given is inside the runs, which this tool only reads; keep it outside the "
+                 "repository or in private/")
+    root = Path(ROOT).resolve()
+    if target.is_relative_to(root) and not target.is_relative_to((root / "private").resolve()):
+        sys.exit(f"{flag}: the file given is inside the repository, where it could be committed ({what}: "
+                 "docs/decisions/0016); keep it outside the repository or in private/")
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        sys.exit(f"{flag}: cannot be read ({type(e).__name__})")
+
+
+def listed_frames(path, places: list = ()) -> set:
+    """--frames: the frames the sample is cut to, a JSON list of each frame's path from its camera's run root
+    ("kit2_pass2/shots/00123_down.png", as kit/tools/label_audit.py's private list writes them), kept where --truth is
+    (private_json): every item of a kind asked on a listed frame is taken, none other (the audit's frames where its
+    readers went wrong, and as many where they went right, to measure a candidate on both)."""
+    got = private_json(path, places, "--frames", "the frames' names")
+    if not isinstance(got, list) or not all(isinstance(f, str) and f.count("/") >= 2 for f in got):
+        sys.exit("--frames: it must be a list of frame paths from the run root, as \"<run>/shots/<frame>.png\"")
+    return set(got)
+
+
+def frame_key(frame: Path) -> str:
+    """A frame's path from its camera's run root: its run, shots/ and its name (listed_frames)."""
+    return "/".join(Path(frame).parts[-3:])
 
 
 def corrected(item: Item, fixes: dict, left_out: collections.Counter | None = None) -> Item:
@@ -2104,7 +2236,7 @@ def show_questions(out: dict) -> None:
         print(f"{r}: " + ", ".join(f"{k} {v}" for k, v in c.items()))
     if out.get("dry run"):
         print("dry run: nothing was asked ('would ask' is what a run would ask each reader; 'from a cache' is free)")
-    print("asked: " + "; ".join(f"{r}: " + ", ".join(f"{k} {v}" for k, v in a.items()) for r, a in out["asked"].items()))
+    print("\n".join(asked_lines(out["asked"])))
 
 
 def grey_rates(c: dict, truth: str) -> tuple:
@@ -2266,6 +2398,9 @@ def main(argv=None) -> int:
     q.add_argument("--truth", default=None, help="a file of {kind: {label as recorded: label as drawn}} kept outside "
                                                  "the repository (or in private/) and the runs: each answer judged "
                                                  "against it too")
+    q.add_argument("--frames", default=None, help="a JSON list of frame paths from the run root (\"<run>/shots/<frame>"
+                                                  ".png\"), kept where --truth is: the sample is those frames' items, "
+                                                  "all of them, and no other (--per-kind and --held-out unused)")
     q.add_argument("--claude-cli", action="append", default=[], metavar="MODEL",
                    help="a Claude model asked through the Claude Code command line on the person's signed-in plan, "
                         "no API key from the environment passed on (sonnet, haiku, opus or a full id; repeatable; one "
@@ -2284,10 +2419,12 @@ def main(argv=None) -> int:
         ap.error("--cache goes with --ask or --questions")
     if args.ask and args.questions:
         ap.error("--ask and --questions are two modes: give one")
-    if not args.questions and (args.reader or args.kinds or args.held_out or args.truth or args.claude_cli
-                               or args.dry_run or args.max_questions is not None):
-        ap.error("--reader, --kinds, --held-out, --truth, --claude-cli, --dry-run and --max-questions go with "
-                 "--questions")
+    if not args.questions and (args.reader or args.kinds or args.held_out or args.truth or args.frames
+                               or args.claude_cli or args.dry_run or args.max_questions is not None):
+        ap.error("--reader, --kinds, --held-out, --truth, --frames, --claude-cli, --dry-run and --max-questions go "
+                 "with --questions")
+    if args.frames and (args.held_out or args.per_kind is not None):
+        ap.error("--frames takes every listed frame: --held-out and --per-kind do not go with it")
     if not 1 <= args.parallel <= 8:
         ap.error("--parallel: from 1 to 8")
     for m in args.claude_cli:
