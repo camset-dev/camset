@@ -188,6 +188,12 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
+  label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
+  Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.
+- **`carousel_fields_run.py` refuses a Right onto Drive Mode's › box after the bracket fields,** which Touch Operation On
+  outlines as a box and which opened Bracket Settings once a Right reached it, committing the option. The run stops as
+  on any press the guards will not send; with Touch Operation Off the › is no box and nothing changes.
 - **`carousel_fields_run.py --number` no longer passes every number over on Focus Bracket's digit boxes:** the camera
   held each number as asked, but the check before Enter compared a box's picture taken with one box lit against one
   taken with another, and the pixel reader finds a box's sides where the lit box beside it leaves them. Each box's
