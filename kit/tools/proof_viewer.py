@@ -556,6 +556,12 @@ def menu(doc, recs, here: Path) -> list:
         datafiles.say_no_menu_tree(datafiles.menu_tree_file(cam), "the viewer lists every record under its tab and "
                                    "group, not on the camera's own menu rows")
         tree = {"tabs": []}
+    # each record hangs by the paths the writer places it by (placement.placing_paths): its row given by hand
+    # (HAND_PLACES) in place of its proof paths, a silent proof's path in the mode the camera's own files give it
+    from writer import hand_tables          # here: the definition viewer (--public) runs from kit/camkit alone
+    tables = hand_tables.load(cam, evidence=False)          # the public tables: HAND_PLACES, MENUS
+    paths_of = placement.placing_paths(doc, tree, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}, tables.MENUS)
+    by_key = {s["key"]: s for s in doc["settings"]}
     cam_tree = placement.Tree(doc, tree, walk_frames(here))          # the rows, and where a record hangs on them
     modes = placement.mode_trees(doc, tree, {m.get("mode"): walk_frames(here, m["mode"]) for m in tree.get("modes") or [] if m.get("mode")})
     tabs, by_tab, nodes, find = cam_tree.tabs, cam_tree.by_tab, cam_tree.nodes, cam_tree.find
@@ -572,7 +578,7 @@ def menu(doc, recs, here: Path) -> list:
                 fams[row["id"]].setdefault(r["sub"], (r.get("so", 999), []))[1].append(r["k"])
                 row["fam"] = r["fam"]
                 continue
-        menus = [r["menu"]] if isinstance(r["menu"], str) else r["menu"]
+        menus = paths_of(by_key[r["k"]]) if r["k"] in by_key else [r["menu"]] if isinstance(r["menu"], str) else r["menu"]
         # as the definition places it: in another tab where its own has no row, on the sub-rows its paths name where
         # the tree knows none (headings with no walk frames of their own)
         _, hit = placement.grown(cam_tree, modes, leaves, menus, r["t"], r["cg"], r["n"])
@@ -1173,9 +1179,18 @@ def public_menu(doc, expert: bool = False) -> list:
     group first in their tab, as the editor's table, each profile or look a subsection; a profile's page an option
     opens is its own group too, as in the editor. No numbers (the editor shows none), no walk frames and no row states
     (the camera's runs have them, not the definition); a node carries only what it has (the page gives the rest its
-    empty value). Every setting listed is on at least one row."""
+    empty value). Every setting listed is on at least one row. Where the definition lists the camera's menus
+    (camera.menus, menu_rows.menu_list), the default one is the first of them (the a1 II's Still menu, first_menu) as
+    the editor lays it out for the live settings saved in its first mode (menu_rows.Menu.listed, a row titled as the
+    camera draws it); the Expert one stays every setting, so a row only another menu has is there."""
     menu, n = menu_rows.Menu(doc), [0]
-    listed = menu_rows.shown(doc, expert)
+    first = None if expert else first_menu(doc)
+    if first is None:
+        listed, in_menu = menu_rows.shown(doc, expert), False
+    else:
+        listed = [s for s in menu.listed(first["name"], (first.get("modes") or [None])[0]) if s.get("area") == "global"
+                  and not s.get("expert")]
+        in_menu = True
     near = collections.defaultdict(list)          # (tab as shown, camera group) -> the settings listed there: beside()'s
     for o in listed:
         near[(menu.layout_tab(o), menu_rows.camera_group(o))].append(o)
@@ -1189,7 +1204,7 @@ def public_menu(doc, expert: bool = False) -> list:
             x["mode"] = mode
         return x
     tabs = []
-    for entry, settings in menu.entries(listed):
+    for entry, settings in menu.entries(listed, in_menu=in_menu):
         t = {"tab": entry, "groups": [], "others": []}
         for name, fam, rows in menu.groups(entry, settings):
             g = {"name": name, "num": "", "rows": [], "extra": []}
@@ -1235,6 +1250,13 @@ def public_menu(doc, expert: bool = False) -> list:
     return tabs
 
 
+def first_menu(doc) -> dict | None:
+    """The camera's menu the definition viewer shows by default: the first the definition lists (camera.menus, where it
+    lists two or more: menu_rows.menu_list), None where it lists none. The page names it over its Menu column."""
+    menus = menu_rows.menu_list(doc)
+    return menus[0] if menus else None
+
+
 def public_data(doc, where: Path) -> dict:
     """One camera's data for the definition viewer, from its public definition (`doc`, read from `where` with
     definitions.load_public) and its sample, when the definition names one beside it (a file the camera wrote after
@@ -1257,6 +1279,8 @@ def public_data(doc, where: Path) -> dict:
             "memory_names": (cam.get("memory_sets") or {}).get("names") or {},
             "memory_modes": (cam.get("memory_sets") or {}).get("modes") or {},
             "menu": public_menu(doc), "menu_expert": public_menu(doc, expert=True), "records": {r["k"]: r for r in recs},
+            # the camera menu the default Menu is (the first), and every menu's name, which the page says
+            "menu_name": (first_menu(doc) or {}).get("name"), "menu_names": [m["name"] for m in menu_rows.menu_list(doc)],
             "my_menu": my_menu(doc, where.parent), "main": main, "guides": [], "help_source": {"own": helps} if helps else {}}
 
 

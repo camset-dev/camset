@@ -1212,8 +1212,11 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     import schema_update as S
     slots = S.mymenu_slots(DOC)
     mirror = S.mirror_of(DOC)
+    # a row given by hand counts as none for the mapping words (the memories' shutter parts on Camera Set. Memory's row
+    # since 2026-11-20 keep their mark), as from_data judges them
+    hand = frozenset(hand_tables.load(A1, evidence=False).HAND_PLACES)
     flagged = [s["key"] for s in DOC["settings"] if s.get("expert")]
-    assert flagged == [s["key"] for s in DOC["settings"] if S.expert(s, slots, mirror)]
+    assert flagged == [s["key"] for s in DOC["settings"] if S.expert(s, slots, mirror, hand)]
     # + 27 on no camera row with a mapping word in their name (the memories' shutter numerators and denominators,
     # 2 of the sets' own and 24 of the live copy, and the SDK's "Unknown"), 2026-11-07
     # + 4 copies written together with their main record (JPEG/HEIF Quality and Image Size, Slot 1 and 2), 2026-11-07
@@ -1230,8 +1233,8 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     # + 2 the single-slot JPEG/HEIF Quality's and Image Size's copies (0x01e0, 0x01e4), 2026-11-19
     # + 4 Custom 2's and Custom 3's height and width times 1000 (set:0x1490-0x1496), "(3:2 copy)" as Custom 1's two
     #   (set:0x148c, 0x148e), which the 78 held while they were taken for the box in use's, 2026-11-19
-    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4
-    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4   # + the live copy
+    assert len([s for s in DOC["settings"] if S.expert(s, hand=hand)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4
+    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror, hand=hand)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4   # + the live copy
     assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4
     assert {s["key"] for s in DOC["settings"] if s["name"].endswith("copy)")} <= set(flagged)
     assert {s.get("expert") for s in DOC["settings"]} == {True, None}            # true, or no key
@@ -3809,6 +3812,37 @@ def test_the_published_definition_carries_every_record_fix_and_no_reason_the_tab
             and s.get("group") not in pp] == []
 
 
+def altered_pass(tmp: Path, mp) -> tuple:
+    """altered_a1_run's pass, in the test's folder `tmp` with its monkeypatch `mp`: (what it printed, the definition
+    written by key, its evidence file)."""
+    import contextlib
+    import io
+
+    import schema_update as S
+    _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
+    definitions.evidence_path(target).unlink(missing_ok=True)
+    doc = json.loads(target.read_text(encoding="utf-8"))
+    by = {s["key"]: s for s in doc["settings"]}
+    for k, s in by.items():
+        if k.startswith(("global:0x0f9b[", "global:0x0fbb[")):
+            s["values"] = [[v, f"x{v}"] for v, _ in s["values"]]
+    by["global:0x04e2"]["range"] = [0, 255]
+    by["global:0x1672"]["unproved_reason"]["date"] = "2026-01-02"
+    by["set:0x0180@260"]["unproved_sets"]["date"] = "2026-01-03"
+    public, evidence = definitions.split(doc)
+    target.write_text(json.dumps(public, indent=1, ensure_ascii=False), encoding="utf-8")
+    definitions.evidence_path(target).write_text(json.dumps(evidence, indent=1), encoding="utf-8")
+    mp.setattr(S, "UNPROVED", {k: (kind, None, why) for k, (kind, _, why) in S.UNPROVED.items()})
+    mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
+    mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
+    said = io.StringIO()
+    with contextlib.redirect_stdout(said):
+        S.main()
+    written = json.loads(target.read_text(encoding="utf-8"))
+    ev = definitions.evidence_path(target).read_text(encoding="utf-8")
+    return said.getvalue(), {s["key"]: s for s in written["settings"]}, ev
+
+
 @pytest.fixture(scope="module")
 def altered_a1_run(tmp_path_factory):
     """The a1 II's full pass (main, --write --force) on a made-up run whose definition was changed where the hand
@@ -3816,34 +3850,26 @@ def altered_a1_run(tmp_path_factory):
     and a day on one reason and on one memory set's reason in the definition's evidence, which the hand tables
     (UNPROVED, every day taken away) no longer give. The public definition alone otherwise, whatever this computer
     holds. Returns (what it printed, the definition written, its evidence file)."""
-    import contextlib
-    import io
-
-    import schema_update as S
-    tmp = tmp_path_factory.mktemp("altered_a1")
     with pytest.MonkeyPatch.context() as mp:
-        _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
-        definitions.evidence_path(target).unlink(missing_ok=True)
-        doc = json.loads(target.read_text(encoding="utf-8"))
-        by = {s["key"]: s for s in doc["settings"]}
-        for k, s in by.items():
-            if k.startswith(("global:0x0f9b[", "global:0x0fbb[")):
-                s["values"] = [[v, f"x{v}"] for v, _ in s["values"]]
-        by["global:0x04e2"]["range"] = [0, 255]
-        by["global:0x1672"]["unproved_reason"]["date"] = "2026-01-02"
-        by["set:0x0180@260"]["unproved_sets"]["date"] = "2026-01-03"
-        public, evidence = definitions.split(doc)
-        target.write_text(json.dumps(public, indent=1, ensure_ascii=False), encoding="utf-8")
-        definitions.evidence_path(target).write_text(json.dumps(evidence, indent=1), encoding="utf-8")
-        mp.setattr(S, "UNPROVED", {k: (kind, None, why) for k, (kind, _, why) in S.UNPROVED.items()})
-        mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
-        mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
-        said = io.StringIO()
-        with contextlib.redirect_stdout(said):
-            S.main()
-        written = json.loads(target.read_text(encoding="utf-8"))
-        ev = definitions.evidence_path(target).read_text(encoding="utf-8")
-    return said.getvalue(), {s["key"]: s for s in written["settings"]}, ev
+        return altered_pass(tmp_path_factory.mktemp("altered_a1"), mp)
+
+
+@pytest.mark.parametrize("tree", ["a made-up menu tree", "no menu tree"])
+def test_the_altered_pass_keeps_the_committed_places_with_a_menu_tree_here_or_none(tree, tmp_path, monkeypatch):
+    """altered_a1_run's pass reads the public definition alone, then proves three rows: whether this computer holds a
+    menu tree or not, its write keeps every setting's place as the committed definition has them, for the definition
+    as read held no proof path (fromdata.places_rebuilt). On 2026-11-20 a computer with the tree took the row off every
+    setting but the few the pass proved, and the Main tile on Record Setting (XAVC S 4K, 60p) stopped the write."""
+    from writer.fromdata import PLACE_KEYS
+    path = tmp_path / "menu_tree.json"
+    if tree == "a made-up menu tree":
+        path.write_text(json.dumps({"model": "ILCE-1M2", "firmware": "4.00", "source": "made up", "tabs": [
+            {"tab": "Exposure/Color", "pages": [{"page": "1/1", "group": "Metering", "rows": [
+                {"label": "Metering Mode", "state": "walked", "why": "", "kind": "dialog"}]}]}]}), encoding="utf-8")
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda k: path)
+    _, by, _ = altered_pass(tmp_path, monkeypatch)
+    assert {k: {f: s.get(f) for f in PLACE_KEYS} for k, s in by.items()} == \
+           {k: {f: s.get(f) for f in PLACE_KEYS} for k, s in PUB_BY.items()}
 
 
 def test_a_reason_whose_day_the_hand_evidence_does_not_give_is_written_without_one(altered_a1_run):

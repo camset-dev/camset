@@ -734,7 +734,10 @@ def test_the_page_carries_help_my_menu_and_main_with_their_frames(clone, monkeyp
     root = clone / "runs" / A1
     mapped_camera(root, key)
     tree = datafiles.load_menu_tree(A1)          # the mapper's own, private whole: a row the walk never opened
-    bare = next(r["label"] for t in tree["tabs"] for p in t["pages"] for r in p["rows"] if r.get("state") == "never")
+    held = {placement.norm(x) for x in (y for s in doc["settings"] for y in s.get("row") or [])}
+    # ... and no setting is placed on (My Menu's Add Item holds the item places since the menus of 2026-11-20)
+    bare = next(r["label"] for t in tree["tabs"] for p in t["pages"] for r in p["rows"]
+                if r.get("state") == "never" and placement.norm(r["label"]) not in held)
     help_run(root, {"help.jsonl": [{"context": "Stills mode", "label": bare, "text": "A made-up action guide.", "frames": ["a.png"]}],
                     "option_help.jsonl": [{"context": "Stills mode", "path": ["Some Row"], "index": -1, "label": None,
                                            "text": "Made-up setting help.", "frames": ["r.png"]},
@@ -1060,7 +1063,8 @@ BLOCK = camset.Block.parse(definitions.load_public(A1)["camera"]["file"])
 # every key the definition viewer's data may hold, at every level (decision 16: anything else is not public until
 # shown to be): an exact set where a key is always there, an allowed set and the ones always there where some may not be
 TOP_KEYS = {"public", "model", "camera", "pictures", "file", "values", "colors", "format", "memory_names", "memory_modes",
-            "menu", "menu_expert", "records", "my_menu", "main", "guides", "help_source"}
+            "menu", "menu_expert", "records", "my_menu", "main", "guides", "help_source",
+            "menu_name", "menu_names"}          # the camera menu the default Menu is, and the camera's menus (public)
 RECORD_KEYS = {"k", "n", "g", "vals", "pv", "menu", "sampled", "proved", "why", "us", "is", "note", "ev", "help"}
 RECORD_MAY = RECORD_KEYS | {"hs", "hg", "oh", "rg", "u", "x"}
 NODE_KEYS, NODE_MAY = {"id", "l"}, {"id", "l", "recs", "kids", "subs", "mode"}
@@ -1225,6 +1229,8 @@ def test_every_cameras_data_holds_nothing_but_its_public_definition_and_sample(v
         assert data["file"] == {"name": f"{key}.DAT", "b64": base64.b64encode((viewer / "definitions" / f"{key}.DAT").read_bytes()).decode()}
         assert set(data["colors"]) <= set(doc["tabs"]) and data["format"] == doc["camera"]["file"]
         assert data["memory_names"] == doc["camera"]["memory_sets"]["names"] and data["memory_modes"] == doc["camera"]["memory_sets"]["modes"]
+        names = [m["name"] for m in menu_rows.menu_list(doc)]
+        assert data["menu_names"] == names and data["menu_name"] == (names[0] if names else None)
         recs = data["records"]
         assert set(recs) == set(by)
         assert data["colors"] == doc["camera"]["tab_colors"] and data["values"] == doc["camera"]["sample"]
@@ -1243,7 +1249,12 @@ def test_every_cameras_data_holds_nothing_but_its_public_definition_and_sample(v
         assert all(len(x) == 2 for x in mm["names"]) and all(set(v) <= set(recs) for v in mm["opens"].values())
         assert set(data["main"]) == {"title", "modes"} and all(set(m) == {"name", "tiles", "frames"} and m["frames"] == [] for m in data["main"]["modes"])
         assert all(t in doc["camera"]["main_tiles"][i]["tiles"] for i, m in enumerate(data["main"]["modes"]) for t in m["tiles"])
-        for menu, listed in ((data["menu"], {s["key"] for s in menu_rows.shown(doc)}), (data["menu_expert"], set(recs))):
+        # the default menu: where the definition lists the camera's menus, what the first lists (the live settings saved
+        # in its first mode, without the Expert ones), else the editor's default Menu; the Expert menu every setting
+        first = (menu_rows.menu_list(doc) or [None])[0]
+        default = ({s["key"] for s in menu_rows.Menu(doc).listed(first["name"], first["modes"][0])
+                    if s.get("area") == "global" and not s.get("expert")} if first else {s["key"] for s in menu_rows.shown(doc)})
+        for menu, listed in ((data["menu"], default), (data["menu_expert"], set(recs))):
             for t in menu:
                 assert set(t) == {"tab", "groups", "others"} and t["others"] == []
                 for g in t["groups"]:
@@ -1519,33 +1530,43 @@ def test_the_public_viewer_refuses_what_does_not_go_with_it(args, tmp_path):
 
 def test_the_menus_are_the_editors_and_the_expert_one(viewer):
     """The viewer's menu is the editor's default one (camkit.menu_rows, the live settings without the Expert ones, the
-    same entries and groups the editor's test writes), its Expert menu every setting; a definition that places none
-    has no entry for what the menus do not hold, as in the editor."""
+    same entries and groups the editor's test writes): where the definition lists the camera's menus, the first of
+    them as the editor lays it out for the live settings saved in the golden's mode, named so on the page
+    (menu_name); its Expert menu every setting; a definition that places none has no entry for what the menus do not
+    hold, as in the editor."""
     data = data_scripts((viewer / "camset-viewer.html").read_text(encoding="utf-8"))[A1]
     doc = definitions.load_public(A1)
     golden = json.loads((ROOT / "editor" / "tests" / "data" / f"menu_{A1}.json").read_text(encoding="utf-8"))
+    first = golden["menus"][0] if "menus" in golden else None          # one block per camera menu, or the one Menu
+    entries = first["entries"] if first else golden["entries"]
+    assert data["menu_name"] == (first["menu"] if first else None)
+    assert data["menu_names"] == [m["menu"] for m in golden.get("menus") or []]
     tabs = [t["tab"] for t in data["menu"]]
-    assert tabs[:len(golden["entries"])] == [e["entry"] for e in golden["entries"]]
-    for t, e in zip(data["menu"], golden["entries"], strict=False):
+    assert tabs[:len(entries)] == [e["entry"] for e in entries]
+    for t, e in zip(data["menu"], entries, strict=False):
         assert [g["name"] for g in t["groups"]] == [g["group"] for g in e["groups"]], t["tab"]
     assert {x["tab"] for x in data["menu_expert"]} >= set(tabs)
     menu = menu_rows.Menu(doc)
-    listed = menu_rows.shown(doc)
+    listed = ([s for s in menu.listed(first["menu"], first["mode"]) if s.get("area") == "global" and not s.get("expert")]
+              if first else menu_rows.shown(doc))
     beside = {s["key"]: len(dict.fromkeys(o for _, o in menu.beside(s, listed))) for s in listed}
+    names = {s["key"]: s["name"] for s in doc["settings"]}
 
     def flat(rows, depth=0, out=None, mode=None):
-        """A group's nodes as the golden file's lines: a row by its keys, a heading by its label, "mode" where the
-        mode changes; the choices shown beside a row's options (its first kids, an option's heading each) left out."""
+        """A group's nodes as the golden file's lines: a row by its keys (in one of the camera's menus, with its title
+        last where the menu titles it otherwise than its setting), a heading by its label, "mode" where the mode
+        changes; the choices shown beside a row's options (its first kids, an option's heading each) left out."""
         out = [] if out is None else out
         for x in rows:
             if depth == 0 and x.get("mode") != mode:
                 mode = x.get("mode")
                 out.append(["mode", mode])
             recs = x.get("recs") or []
-            out.append(["row", recs, depth] if recs else ["heading", x["l"], depth])
+            titled = [x["l"]] if first and recs and x["l"] != names[recs[0]] else []
+            out.append(["row", recs, depth] + titled if recs else ["heading", x["l"], depth])
             flat((x.get("kids") or [])[beside.get(recs[0], 0) if recs else 0:], depth + 1, out, mode)
         return out
-    for t, e in zip(data["menu"], golden["entries"], strict=False):
+    for t, e in zip(data["menu"], entries, strict=False):
         for g, want in zip(t["groups"], e["groups"], strict=True):
             if want["family"]:
                 assert {k for x in g["rows"] for sub in x["subs"] for k in sub["keys"]} == set(want["keys"]), g["name"]
@@ -1704,7 +1725,8 @@ def test_the_viewer_starts_on_the_first_camera_with_its_sample_and_the_editors_m
     assert first["cams"] == ["ILCE-1M2 · α1 II, firmware 4.00", "ILCE-7M4 · made up, firmware 3.00"]
     assert first["open"] == "Open your settings file…" and first["privacy"] == "read in this browser, never sent anywhere"
     golden = json.loads((ROOT / "editor" / "tests" / "data" / f"menu_{A1}.json").read_text(encoding="utf-8"))
-    assert [t.split("(")[0] for t in first["tabs"][1:len(golden["entries"]) + 1]] == [e["entry"] for e in golden["entries"]]
+    entries = golden["menus"][0]["entries"] if "menus" in golden else golden["entries"]          # the first camera menu's
+    assert [t.split("(")[0] for t in first["tabs"][1:len(entries) + 1]] == [e["entry"] for e in entries]
     assert first["expert"] == "false" and first["expert_on"] != first["tabs"]
     assert "exist only for whoever mapped the camera with Camset's kit" in first["detail"]
     assert first["tries"]["garbage"]["msg"] == ("garbage.DAT: this is not a settings file this viewer can read: it reads files laid out like "

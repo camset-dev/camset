@@ -29,6 +29,7 @@ EXPERT_WORDS = ("copy", "flag", "alt numbering", "working", "in use", "toggle", 
 # the lists; its name is the kit's to make plain (RECORD_FIXES), and test_definitions' "mapping words" test holds it.
 MAPPING_WORDS = re.compile(r"\brecord\b|slot memory|numerator|denominator|mirror|kind memory|copy\)|\(inferred|"
                            r"\bthird\b|second record|\bsdk\b", re.I)
+NO_ROW = "it stands on no camera row"            # expert_why's words for MAPPING_WORDS' rule, which a refusal tells apart
 
 
 def expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None, hand: frozenset = frozenset()) -> bool:
@@ -40,18 +41,27 @@ def expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None, hand: f
     given by hand (`hand`: the HAND_PLACES keys) counting as none, since a hand place never changes whether a record is
     shown (it shows under its row in Expert mode only); or a copy named so ("JPEG/HEIF Quality (Slot 1, copy)", which
     the camera writes with Slot 1's on every choice): the main one is the photographer's, the copy a duplicate."""
+    return expert_why(s, slots, mirror, hand) is not None
+
+
+def expert_why(s: dict, slots: frozenset = frozenset(), mirror: dict = None, hand: frozenset = frozenset()) -> str | None:
+    """Why expert() shows the setting in Expert mode only, in words a refusal can give, or None where it does not."""
     if s.get("area") == "global" and s.get("id") in slots:
-        return True
+        return "one of My Menu's places, which the editor's My Menu page edits place by place"
     if re.search(r"\bcopy\)$", s["name"]):
-        return True
+        return "a copy by its name, which the camera writes with its main setting"
     if mirror_place(s["key"], mirror or {})[0] is not None:
-        return True
-    if ("row" not in s or s.get("key") in hand) and MAPPING_WORDS.search(s["name"]):
-        return True
+        return "a field of the memories' live copy, which each memory set holds on its own"
+    word = MAPPING_WORDS.search(s["name"]) if "row" not in s or s.get("key") in hand else None
+    if word:
+        return (f"{NO_ROW}{' but one given by hand' if 'row' in s else ''}, and its name holds {word.group(0)!r}, a word "
+                "of how the kit found the record")
     # how the record's meaning was found ("source") is evidence (camkit.definitions): a definition read without its
     # evidence keeps the mark it has for this last rule
     derived = s["source"] == "Derived" if "source" in s else bool(s.get("expert"))
-    return derived and any(w in s["name"].lower() for w in EXPERT_WORDS)
+    if derived and any(w in s["name"].lower() for w in EXPERT_WORDS):
+        return "a derived working copy, flag or alternate numbering, by its name"
+    return None
 
 
 def mymenu_slots(doc: dict) -> frozenset:
@@ -163,7 +173,22 @@ NO_TREE = "the definition's menu list and each setting's place on the camera sta
 MENU_FIELDS = ("name", "modes", "main_tiles", "hover")          # a camera menu, as camera.menus holds it
 
 
-def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
+def places_rebuilt(doc: dict) -> bool:
+    """Whether a write may rebuild the places of the definition `doc` as it was read, before a pass adds any proof: it
+    holds proof paths (proved.menu, evidence: camkit.definitions), or no place at all (a new camera's first pass). A
+    definition read without its evidence holds places and no path, and a write from it keeps every place and the
+    camera's menus as it has them, whatever proof paths the pass then gives a few settings (from_data's `rebuild`): the
+    writer never takes a place from a setting for want of evidence it cannot see (2026-11-20: a made-up pass of three
+    rows on a computer with the menu tree took the row off 1,676 settings)."""
+    settings = doc.get("settings") or []
+    return any("menu" in (s.get("proved") or {}) for s in settings) or not any("row" in s for s in settings)
+
+
+KEPT_PLACES = ("the definition was read without its proof paths (its evidence is not on this computer), so each "
+               "setting's place on the camera and the camera's menus stay as it has them, though this pass proves a few")
+
+
+def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = True) -> dict | None:
     """Each setting's place on the camera, from the camera's menu tree (the Stills menu, and the other shooting modes'
     menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths, or its rows
     given by hand (`hand`: HAND_PLACES, {key: [row paths]}, camkit.placement.with_hand) (camkit.placement, the proof
@@ -171,9 +196,13 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
     camera's menus (`menus`, the MENUS table's entries, each menu's Help Guide words with them), each placed setting's
     "row_menus" and, where a menu places it otherwise, "row_places" too (camkit.placement.by_menu, the camera's Help Guide
     menu list telling records that differ by mode apart). None, so the places stay as they are, for a definition read without its
-    evidence (no setting holds its proof paths, proved.menu, which are evidence: camkit.definitions) or with no menu
-    tree on this computer (a fresh clone, CI: the places are what is public of the menus)."""
+    evidence (no setting holds its proof paths, proved.menu, which are evidence: camkit.definitions; or `rebuild`
+    False: places_rebuilt said so of the definition as read, before the pass gave a few settings proof paths) or with no
+    menu tree on this computer (a fresh clone, CI: the places are what is public of the menus)."""
     if not any("menu" in (s.get("proved") or {}) for s in doc["settings"]):
+        return None
+    if not rebuild:
+        print(f"places: {KEPT_PLACES}")         # each write that keeps them says so, on the console
         return None
     tree = definitions.menu_tree_file(definitions.key(doc))
     if not tree.exists():
@@ -181,8 +210,8 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
         return None
     tree, boxes, hand = datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)), hand or {}
     modes = placement.menu_modes_of(doc)          # from the proofs' evidence, never the runs
-    every = set(placement.menu_modes(tree)) | {m for menu in menus or [] for m in menu.get("modes") or []}
-    found = placement.settings(doc, tree, boxes, placement.with_modes(placement.with_hand(hand), modes, every))
+    # the proof viewer places by the same paths (placement.placing_paths): one placement for both
+    found = placement.settings(doc, tree, boxes, placement.placing_paths(doc, tree, hand, menus))
     for k in sorted(set(hand) - set(found)):
         print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
     if not menus:
@@ -265,6 +294,24 @@ def camera_menus(doc: dict, table: list) -> list | None:
         raise hand_tables._refused(where, f"MENUS leaves the camera's mode {live[0]!r} without a menu (camera.live_mode "
                                           "names it): give it to the menu the camera shows in it")
     return [{f: menu[f] for f in MENU_FIELDS if f in menu} for menu in table]
+
+
+def menus_named(doc: dict, menus: list | None) -> list | None:
+    """The camera's menus for a definition whose places stay as they are and whose camera section came without its
+    menus (rebuilt from the camera file, which never holds them): the MENUS table's (`menus`, camera_menus), public,
+    where its settings name menus (row_menus, row_places), so no setting names a menu the definition lists none of;
+    None where they name none. Refused in plain words where they name a menu the table does not."""
+    named = {m for s in doc["settings"] for m in list(s.get("row_menus") or []) + list(s.get("row_places") or {})}
+    if not named:
+        return None
+    lacking = sorted(named - {m["name"] for m in menus or []})
+    if lacking:
+        raise hand_tables.Refused(
+            f"{definitions.key(doc)}: its settings name the camera menus {', '.join(map(repr, lacking))} (row_menus, "
+            f"row_places), which {paths.shown(datafiles.hand_tables_file(definitions.key(doc)))}'s MENUS does not, and "
+            "its camera section holds no menus. Nothing was written: name those menus in MENUS, or write where the "
+            "menu tree is, then run the command again.")
+    return menus
 
 
 def with_menus(camera: dict, menus: list | None) -> dict:
@@ -360,20 +407,32 @@ def linked_refusal(doc: dict) -> str | None:
     return None
 
 
-def main_tile_refusal(doc: dict) -> str | None:
-    """Why the camera's Main tiles cannot stand beside the definition's Expert marks, in one plain sentence, or None: a
-    tile's own key (its keys, its memory_keys) is never a setting shown in Expert mode only, for the editor's Compare
-    lists Main's settings among those shown outside Expert mode, and the tile would show what Compare lacks. A fraction
-    tile's two parts (numerator_key, denominator_key) may be: the tile is the plain way to show them."""
+def main_tile_expert(doc: dict) -> tuple | None:
+    """(page name, tile caption, setting) of the first Main tile whose own key (its keys, its memory_keys) is a setting
+    shown in Expert mode only, or None. A fraction tile's two parts (numerator_key, denominator_key) are never one."""
     expert = {s["key"]: s for s in doc.get("settings") or [] if s.get("expert")}
     for page in (doc.get("camera") or {}).get("main_tiles") or []:
         for tile in page.get("tiles") or []:
             for k in list(tile.get("keys") or []) + list(tile.get("memory_keys") or []):
                 if k in expert:
-                    return (f"the {page.get('name')} page's tile {tile.get('caption')!r} shows {k} ({expert[k]['name']}), "
-                            "which the definition shows in Expert mode only, so the editor's Compare would lack it "
-                            "outside Expert mode")
+                    return page.get("name"), tile.get("caption"), expert[k]
     return None
+
+
+def main_tile_refusal(doc: dict, why=None) -> str | None:
+    """Why the camera's Main tiles cannot stand beside the definition's Expert marks, in one plain sentence, or None: a
+    tile's own key (its keys, its memory_keys) is never a setting shown in Expert mode only, for the editor's Compare
+    lists Main's settings among those shown outside Expert mode, and the tile would show what Compare lacks. A fraction
+    tile's two parts (numerator_key, denominator_key) may be: the tile is the plain way to show them. The sentence says
+    why the setting is Expert-only: `why` (a setting -> words), by default expert_why's (no My Menu or memory copy to
+    judge by)."""
+    hit = main_tile_expert(doc)
+    if hit is None:
+        return None
+    name, caption, s = hit
+    because = (why or expert_why)(s)
+    return (f"the {name} page's tile {caption!r} shows {s['key']} ({s['name']}), which the definition shows in Expert "
+            f"mode only{f' ({because})' if because else ''}, so the editor's Compare would lack it outside Expert mode")
 
 
 def with_place(s: dict, place: dict) -> dict:
@@ -388,7 +447,7 @@ def with_place(s: dict, place: dict) -> dict:
     return out if "order" in s else {**out, **place}
 
 
-def from_data(doc: dict) -> dict:
+def from_data(doc: dict, rebuild: bool = None) -> dict:
     """The parts of a definition the kit takes from data/ alone, whatever the runs hold: the format and the camera
     section, the memory copies named from it, the project's own help, the menu list (with_menu) and each setting's
     place on the camera's menus; and the kit's own rules over it, the Expert marks, the photographer's words (with_plain_words), each note tidy (with_tidy_note) and its evidence apart (shown in
@@ -397,8 +456,11 @@ def from_data(doc: dict) -> dict:
     (without_written_with: it told how the camera was set).
     The camera's menus (camera.menus from the MENUS table, each setting's row_menus and row_places) are rebuilt only
     where the places are (places: the menu tree and the proof paths here); elsewhere (a fresh clone, CI) they stay
-    exactly as the definition has them, what the writer cannot rebuild left untouched.
+    exactly as the definition has them, what the writer cannot rebuild left untouched. `rebuild`: places_rebuilt of the
+    definition as the pass read it, before its proofs (schema_update.main and the plain pass give it), else of `doc`.
     main() ends the same way, so on the committed data this gives the committed definition."""
+    rebuild = places_rebuilt(doc) if rebuild is None else rebuild
+    had_row = {s["key"] for s in doc["settings"] if "row" in s}          # the rows the definition holds as read
     kept = (doc.get("camera") or {}).get("menus")          # the definition's own, for a write that cannot rebuild them
     doc = with_menu(with_camera(doc))
     tables = hand_tables.load(definitions.key(doc), evidence=False)       # the public tables: MENUS, HAND_PLACES
@@ -409,7 +471,9 @@ def from_data(doc: dict) -> dict:
     mirror_names(doc)
     own_help(doc)
     doc["layouts"] = [with_evidence_apart(with_tidy_note(lay)) for lay in doc["layouts"]]
-    found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()})
+    found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}, rebuild)
+    if found is None and kept is None:
+        kept = menus_named(doc, menus)
     if "camera" in doc:
         doc["camera"] = with_menus(doc["camera"], menus if found is not None else kept)
     slots, mirror = mymenu_slots(doc), mirror_of(doc)
@@ -425,11 +489,28 @@ def from_data(doc: dict) -> dict:
         raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: prove the row in the mode of each "
                                   "menu the records share, or give them rows by hand (HAND_PLACES), then run the "
                                   "command again.")
-    why = main_tile_refusal(doc)
-    if why:
+    hit = main_tile_expert(doc)
+    if hit is not None:
+        s = hit[2]
+        word = MAPPING_WORDS.search(s["name"])
+        if s["key"] in had_row and "row" not in s and word:
+            # the row went in this write, for no proof path of it is here: the camera file is not the cause
+            why = main_tile_refusal(doc, lambda x: (
+                f"it has no row in this write, for no proof path of it is here to place it, and on no row its name's "
+                f"{word.group(0)!r} reads as a word of how the kit found the record"))
+            raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: write where the definition's "
+                                      "evidence is (its proof paths place the setting), or prove that row again, then run "
+                                      "the command again.")
+        because = expert_why(s, slots, mirror, by_hand)
+        why = main_tile_refusal(doc, lambda x: because)
+        if (because or "").startswith(NO_ROW):
+            what = ("take the key off the tile in the camera file, or prove the setting through its row on the camera or "
+                    "give it a plain name (RECORD_FIXES)")
+        else:
+            what = ("take the key off the tile in the camera file: a tile shows the photographer's own setting, never a "
+                    "copy, a place or a working record of it")
         raise hand_tables.Refused(f"{paths.shown(definitions.camera_file(definitions.key(doc)))}: {why}. Nothing was "
-                                  "written: take the key off the tile in the camera file, or make the setting one shown "
-                                  "outside Expert mode, then run the command again.")
+                                  f"written: {what}, then run the command again.")
     return doc
 
 

@@ -178,7 +178,13 @@ def test_option_trees_command_prints_the_audit_and_writes_only_with_write(tmp_pa
     assert "tree  global:0x0f46 Focus Area memory (horizontal)" in out
     assert "Spot [XL, L, M, S, XS]" in out and "Custom [Custom 1, Custom 2, Custom 3]" in out
     assert "none  global:0x0e62 Tracking start area memory (horizontal)" in out
-    assert "none  global:0x0367 White Balance" in out and "not placed on a menu row" in out
+    assert "none  global:0x0367 White Balance" in out
+    # AF Area Registration's Tracking start area (nested-looking labels): on no row until HAND_PLACES gave it its row
+    # (2026-11-20), then on a row whose axis no proof walks; the audit says which, as the definition places it
+    reg = next(s for s in definitions.load(A1)["settings"] if s["key"] == "global:0x0e74")
+    line = next(x for x in out.splitlines() if "none  global:0x0e74 " in x)
+    assert line.endswith("its row has no carousel axis in the proofs: the camera lists these options flat" if reg.get("row")
+                         else "not placed on a menu row"), line
     assert target.read_bytes() == before, "shown, not written"
 
 

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from camkit import datafiles, definitions, placement
+from writer import hand_tables
 
 import proof_viewer as pv
 import schema_update as S
@@ -472,7 +473,8 @@ def test_the_viewer_hangs_a_record_where_the_definition_places_it():
 def test_the_a1s_rows_in_another_tab_as_on_the_camera():
     """The owner's case (2026-11-06): the Custom Key cells the definition keeps in Shooting, Focus and Playback hang on
     Setup's key settings' rows, Movie's Exposure Ctrl Type on the Movie menu's Shooting tab, Time Code Preset's parts
-    on TC/UB there; what no path leads to a row of stays unplaced (the SDK's own setters, Preset Focus/Zoom)."""
+    on TC/UB there; what no path leads to a row of stays unplaced (the SDK's own setters), unless HAND_PLACES gives it
+    its row (Preset Focus/Zoom, 2026-11-20)."""
     d = definitions.load(A1)
     by = {s["key"]: s for s in d["settings"]}
     assert {k: (by[k]["row_tab"], by[k]["row_group"], by[k]["row"]) for k in ("global:0x0436", "global:0x0441")} == {
@@ -480,12 +482,20 @@ def test_the_a1s_rows_in_another_tab_as_on_the_camera():
         "global:0x0441": ("Setup", "Operation Customize", ["Custom Key Setting"])}
     assert (by["global:0x02b0"]["row_tab"], by["global:0x02b0"]["row_mode"], by["global:0x02b0"]["row"]) == ("Shooting", "Movie", ["Exposure Ctrl Type"])
     assert (by["global:0x0c48"]["row_tab"], by["global:0x0c48"]["row_group"]) == ("Shooting", "TC/UB")
+    hand = hand_tables.load(A1, evidence=False).HAND_PLACES          # a row given by hand: Preset Focus/Zoom's, 2026-11-20
     for k in ("global:0x10ff", "global:0x167c", "global:0x04e5"):
-        assert "row" not in by[k], k
+        if k in hand:
+            tab, *_, label = hand[k]["row"].split(" > ")
+            assert (by[k]["row_tab"], by[k]["row"][-1]) == (tab, label), k
+        else:
+            assert "row" not in by[k], k
+    # My Menu's tab, which has a page of its own in the editor (its item places on My Menu Setting's row, 2026-11-20)
+    my_menu = (d["camera"].get("text") or {}).get("my_menu_name") or "My Menu"
+    tabs = set(d["tabs"]) | ({my_menu} if (d["camera"].get("my_menu") or {}).get("records") else set())
     for s in d["settings"]:
         assert ("row_tab" in s) <= ("row" in s) and s.get("row_tab") != s["tab"], s["key"]
         if "row_tab" in s:
-            assert s["row_tab"] in d["tabs"] and "row_group" in s, s["key"]
+            assert s["row_tab"] in tabs and "row_group" in s, s["key"]
 
 
 @needs_evidence

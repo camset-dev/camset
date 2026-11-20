@@ -3387,13 +3387,18 @@ def test_camset_ksy_matches_the_reader():
 def test_camera_json_matches_the_schema_copy():
     """Each data/<model>_fw<fw>/camera_<model>_fw<fw>.json and its definition's "camera" section are one set of facts
     kept twice: they must agree (the schema's had the movie memories' names, 2026-11-03, when the data file did not),
-    the container block included (docs/decisions/0020)."""
-    from writer.fromdata import CAMERA_FILE_ONLY
+    the container block included (docs/decisions/0020). The camera's menus are the one part the camera file never
+    holds: the definition's are its hand tables' MENUS (writer.fromdata.camera_menus), or none without the table."""
+    from writer import hand_tables
+    from writer.fromdata import CAMERA_FILE_ONLY, camera_menus
     for p, doc in definitions.every():
         data = json.loads(Path(definitions.camera_file(p.stem)).read_text(encoding="utf-8"))
         for k in CAMERA_FILE_ONLY:          # what only the kit reads is never copied (save_load_excluded)
             data.pop(k, None)
-        assert data == doc["camera"], p.name
+        assert "menus" not in data, p.name
+        assert data == {k: v for k, v in doc["camera"].items() if k != "menus"}, p.name
+        table = hand_tables.load(p.stem, evidence=False).MENUS
+        assert doc["camera"].get("menus") == camera_menus({**doc, "camera": data}, table), p.name
 
 
 def test_volatile_records_have_one_source():
