@@ -181,7 +181,8 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
         return None
     tree, boxes, hand = datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)), hand or {}
     modes = placement.menu_modes_of(doc)          # from the proofs' evidence, never the runs
-    found = placement.settings(doc, tree, boxes, placement.with_modes(placement.with_hand(hand), modes))
+    every = set(placement.menu_modes(tree)) | {m for menu in menus or [] for m in menu.get("modes") or []}
+    found = placement.settings(doc, tree, boxes, placement.with_modes(placement.with_hand(hand), modes, every))
     for k in sorted(set(hand) - set(found)):
         print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
     if not menus:

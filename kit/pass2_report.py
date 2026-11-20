@@ -711,7 +711,8 @@ def silent_modes(run: Path, save: bool = True) -> dict:
     """{(a record's key, its row's labels: camkit.placement.split): the shooting modes its counted proofs whose context
     names no mode (camkit.placement.mode_of, the camera file's modes) were made in}, by the camera's own files: the
     live-mode record in each one's base download (live_mode_reader); a base download that is gone, or a code the
-    camera file's live_mode names no mode for, gives none. Each record by its element's key and its whole record's.
+    camera file's live_mode names no mode for, gives none (a row all of whose such proofs give none: an empty set).
+    Each record by its element's key and its whole record's.
     The report's rows and what they credit stay as the contexts give them: a proof made in S&Q of a record every mode
     shares (the key tables, Playback's filter) is that record's proof all the same. The writer keeps these modes in
     the proofs' evidence (writer/proofs.with_menu_modes), and placement takes them from there alone. The camera's
@@ -730,12 +731,13 @@ def silent_modes(run: Path, save: bool = True) -> dict:
         if placement.mode_of(f"x [{r.get('context') or ''}]", modes) is not None or not r.get("base"):
             continue
         mode = reader.mode(base_file(r["base"]))
-        if mode is None:
-            continue                       # its base download gone, or a code no mode: no mode, never the top one
         labels = tuple(placement.split(row_name(r)))
         for c in element_changes(r):
             for k in {c["key"], c["key"].split("[")[0]}:
-                out[(k, labels)].add(mode)
+                if mode is None:
+                    out[(k, labels)]              # its base download gone, or a code no mode: no mode, never the top one
+                else:
+                    out[(k, labels)].add(mode)
     if save:
         reader.save()
     return dict(out)

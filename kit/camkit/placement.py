@@ -102,6 +102,19 @@ def context(path: str) -> list:
     return [w for m in re.findall(r"\[([^\]]*)\]", path or "") for w in context_items(m)]
 
 
+NO_MODE = "no mode known"          # a silent proof whose base download is gone (with_modes): no menu's mode, not Stills
+
+
+def no_mode_known(path: str) -> bool:
+    """Whether a path is a proof of no known mode (with_modes marks it NO_MODE): it adds no menu by its mode."""
+    return any(norm(w) == norm(NO_MODE) for w in context(path))
+
+
+def context_free(path: str) -> bool:
+    """A path whose context says nothing: none, or only that no mode is known (no_mode_known)."""
+    return not context(path) or no_mode_known(path) and len(context(path)) == 1
+
+
 def mode_of(path: str, modes) -> str | None:
     """The shooting mode of `modes` (the menu tree's mode names) a path's context names, an item of it (context) that is
     the mode's name, or its name and "mode": "[Movie mode]", "[movie]", "[Movie mode (dial set with the menu)]" and
@@ -432,7 +445,7 @@ def reach(t: "Tree", modes: list, paths: list, tab: str, near, name: str) -> tup
     for mode, m in modes:
         mine = [p for p, w in zip(paths, said, strict=True) if w == mode]
         if not mine and tab in t.by_tab:          # a path with no context at all, on a row only a mode's menu has
-            mine = [p for p in paths if not context(p)]
+            mine = [p for p in paths if context_free(p)]
         node = m.hang(tab, mine, near, "", by_name=False)[0] if mine else None
         if node:
             return m, node
@@ -441,7 +454,7 @@ def reach(t: "Tree", modes: list, paths: list, tab: str, near, name: str) -> tup
         if node:
             return t, node
     for mode, m in modes:
-        mine = [p for p, w in zip(paths, said, strict=True) if w == mode] or [p for p in paths if not context(p)]
+        mine = [p for p, w in zip(paths, said, strict=True) if w == mode] or [p for p in paths if context_free(p)]
         for other in [x for x in m.by_tab if x != tab and x in t.by_tab] if mine else []:
             node = m.hang(other, mine, None, "", by_name=False, anywhere=False)[0]
             if node:
@@ -691,22 +704,28 @@ def menu_modes_of(doc: dict) -> dict:
     return out
 
 
-def with_modes(paths_of, modes: dict | None):
+def with_modes(paths_of, modes: dict | None, every=()):
     """The paths `paths_of` gives a setting, each whose context names no mode given the shooting modes its proofs were
     made in by the camera's own files (`modes`: {(key, the row's labels): {mode}}, menu_modes_of, the setting's own
     key): the path as it is where one was the top-level menu's (TOP_MODE), and the path with "[<mode> mode]" for each
-    other mode; a path the lookup does not know stays as it is. `paths_of` itself where there is no lookup."""
+    other mode; a path whose lookup holds no mode (every silent proof of it lost its base download) marked NO_MODE,
+    which adds no menu by its mode, not even the Still menu's, and still places its setting as a path with no context
+    does; a path the lookup does not know stays as it is. `every`: the modes a context may name (the tree's menus and
+    the camera menus'), beside those of the lookup. `paths_of` itself where there is no lookup."""
     if not modes:
         return paths_of
-    every = {TOP_MODE} | {m for ms in modes.values() for m in ms}
+    every = {TOP_MODE} | set(every) | {m for ms in modes.values() for m in ms}
     normed = {(k, tuple(norm(x) for x in labels)): ms for (k, labels), ms in modes.items()}
 
     def paths(s):
         out = []
         for p in paths_of(s):
             labels = tuple(norm(x) for x in split(p))
-            got = set() if mode_of(p, sorted(every)) else normed.get((s.get("key"), labels)) or set()
-            if not got - {TOP_MODE}:
+            got = None if mode_of(p, sorted(every)) else normed.get((s.get("key"), labels))
+            if got is not None and not got:
+                out.append(f"{p} [{NO_MODE}]")          # every silent proof of it lost its base download: no mode
+                continue
+            if not (got or set()) - {TOP_MODE}:
                 out.append(p)
                 continue
             out += ([p] if TOP_MODE in got else []) + [f"{p} [{m} mode]" for m in sorted(got - {TOP_MODE})]
@@ -1144,7 +1163,7 @@ def proof_modes(paths: list, place: dict, every) -> set:
     """The shooting modes a setting's proofs of its own row were made in: for each path naming the row (_names_row), the
     mode its context names, else TOP_MODE (a path whose context names no mode was proved in the top-level menu, as
     by_menu's own paths take it), so a record proved from both rows has both; {TOP_MODE} where no path names the row."""
-    return {mode_of(p, sorted(every)) or TOP_MODE for p in paths if _names_row(p, place)} or {TOP_MODE}
+    return {mode_of(p, sorted(every)) or TOP_MODE for p in paths if _names_row(p, place) and not no_mode_known(p)} or {TOP_MODE}
 
 
 def split_by_guide(doc, top: dict, out: dict, menus: list, guide: list, paths_of, every) -> int:
@@ -1257,8 +1276,9 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None,
     (place_differs). `modes`: the modes the camera's own files give the proofs whose context names none (with_modes),
     so such a proof is its mode's own path."""
     hand = hand or {}
-    proved = with_modes(proof_paths, modes)
-    paths_of = with_modes(with_hand(hand), modes)
+    every = set(menu_modes(tree)) | {m for menu in menus for m in menu.get("modes") or []}
+    proved = with_modes(proof_paths, modes, every)
+    paths_of = with_modes(with_hand(hand), modes, every)
     top = settings(doc, tree, boxes, paths_of) if top is None else top
     t = Tree(doc, tree)
     modes = mode_trees(doc, tree)
@@ -1269,7 +1289,6 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None,
         groups[s.get("tab") or "Other"].add(s.get("group") or "")
     by_key = {s["key"]: s for s in doc["settings"]}
     options = _options_at({"settings": [{**s, **top.get(s["key"], {})} for s in doc["settings"]]})
-    every = set(menu_modes(tree)) | {m for menu in menus for m in menu.get("modes") or []}
     out, owns = {}, {}                  # owns: each menu's top rows by number (_nodes_at), the settings' own menus'
     for menu in menus:
         key = menu_of(menu, tree)
@@ -1282,10 +1301,10 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None,
         def own(s, own_modes=own_modes, key=key):
             if s["key"] in hand:
                 return list(hand[s["key"]])
-            mine = list(proved(s))
+            mine = [p for p in proved(s) if not no_mode_known(p)]          # a proof of no known mode adds no menu
             for c in s.get("copies") or []:
                 if own_modes & set((by_key.get(c) or {}).get("copy_for") or ()):
-                    mine += proved(by_key[c])
+                    mine += [p for p in proved(by_key[c]) if not no_mode_known(p)]
             said = [mode_of(p, sorted(every)) for p in mine]
             return [p for p, w in zip(mine, said, strict=True) if w in own_modes or (w is None and key is None)]
         alone = {"tabs": tree["tabs"] if key is None else next(x["tabs"] for x in tree["modes"] if x.get("mode") == key)}

@@ -102,8 +102,9 @@ Movie and S&Q), the definition carries them as `camera.menus`, and each placed s
   names: Movie's Playback Filter Condition, a checklist of the items the Stills menu holds as rows.
 - **Where proofs made in one of the menu's modes reach the row.** A proof made in a mode is that mode's reading of
   the row. The mode is the one a proof's context names; for a proof whose context names none, it is the one the
-  camera's own files say it was made in, which the writer keeps in the proof's evidence. Rows the menu never read are
-  then taken from those proofs' paths, in the setting's own order.
+  camera's own files say it was made in, which the writer keeps in the proof's evidence. A proof whose base download
+  is gone gives no mode: it adds no menu by its mode, not even the Still menu's, though it still places its setting.
+  Rows the menu never read are then taken from those proofs' paths, in the setting's own order.
 - **Rows given by hand.** `HAND_PLACES` gives the row of a record no proof path places: one a row's own function
   writes, or a row the walk can never read, seen on the camera. Such a row is in every menu whose tree has its top
   row. Its public entry is the row alone; why it is the record's is in the private hand evidence.

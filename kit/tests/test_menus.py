@@ -527,7 +527,8 @@ def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode_for_placemen
     live_mode) in its base download, read once and kept in the camera's cache, written by the writer into the proof's
     evidence (proved.menu_modes, writer/proofs.with_menu_modes) and read from there alone. A silent proof whose base
     download says Movie is its record's proof in the Movie menu too, where that menu never read the rows under the row;
-    one whose base says Stills, whose context names a mode, or whose base download is gone, gives none. The report's
+    one whose base says Stills, or whose context names a mode, gives none; one whose base download is gone gives
+    no mode at all (an empty list). The report's
     rows, and so what they credit, stay as the contexts give them, and proofs.jsonl is not rewritten."""
     import pass2_report
     from camkit import camset, live_modes, paths
@@ -558,7 +559,8 @@ def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode_for_placemen
     assert rows == ["Exposure Std. Adjust > Spot", "Exposure Std. Adjust > Multi", "Exposure Std. Adjust > Spot [S&Q mode]",
                     "Exposure Std. Adjust > Center"]
     assert pass2_report.silent_modes(run, save=False) == {("global:0x0031", ("Exposure Std. Adjust", "Spot")): {"Movie"},
-                                                           ("global:0x0032", ("Exposure Std. Adjust", "Multi")): {"Stills"}}
+                                                           ("global:0x0032", ("Exposure Std. Adjust", "Multi")): {"Stills"},
+                                                           ("global:0x0034", ("Exposure Std. Adjust", "Center")): set()}
     assert not (tmp_path / "live_mode.json").exists()                                    # a dry run keeps nothing
     assert pass2_report.silent_modes(run) and len(json.loads((tmp_path / "live_mode.json").read_text(encoding="utf-8"))["codes"]) == 2
     monkeypatch.setattr(camset, "parse", lambda *a, **k: (_ for _ in ()).throw(AssertionError("read again")))
@@ -567,10 +569,11 @@ def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode_for_placemen
     d = doc(setting("global:0x0031", "Spot", "Exposure", "Exposure Std. Adjust > Spot"),
             setting("global:0x0032", "Multi", "Exposure", "Exposure Std. Adjust > Multi"),
             setting("global:0x0034", "Center", "Exposure", "Exposure Std. Adjust > Center"))
-    assert writer_proofs.with_menu_modes(d, run) == 1
+    assert writer_proofs.with_menu_modes(d, run) == 2
     by = {s["key"]: s for s in d["settings"]}
     assert by["global:0x0031"]["proved"]["menu_modes"] == {"Exposure Std. Adjust > Spot": ["Movie"]}
-    assert "menu_modes" not in by["global:0x0032"]["proved"] and "menu_modes" not in by["global:0x0034"]["proved"]
+    assert "menu_modes" not in by["global:0x0032"]["proved"]                           # the Still menu's: nothing to keep
+    assert by["global:0x0034"]["proved"]["menu_modes"] == {"Exposure Std. Adjust > Center": []}          # gone: no mode
     from camkit import definitions as D
     assert D.lean_proof(by["global:0x0031"]["proved"]).keys() <= {"values", "shared", "sampled"}          # never public
     assert by_key(copy.deepcopy(d))["global:0x0031"] == {"row_menus": ["Still"]}         # the menus as by the paths alone
@@ -974,6 +977,7 @@ def test_a_menu_whose_walk_read_a_row_as_a_list_holds_the_rows_its_options_name(
     assert got["global:0x0001"] == {"row_menus": ["Still"]} and got["global:0x0002"] == {"row_menus": ["Still"]}   # the rows decide
     assert got["global:0x0003"]["row_menus"] == ["Still", "Movie"]
 
+
 def test_the_writer_stops_on_records_of_one_row_with_overlapping_menus(tmp_path, monkeypatch):
     """Through from_data: two records of one name in one place, one placed by its proofs (in the Still menu alone: Movie
     and S&Q never read the rows under Exposure Std. Adjust) and one by a row given by hand (in every menu with the top
@@ -1027,3 +1031,26 @@ def test_check_public_refuses_a_place_field_that_is_no_label_in_plain_words():
     for words in ("global:0x0001: row_places['Movie']: row_tab is no label", "global:0x0001: row_places['Movie']: under_option is no label",
                   "global:0x0002: row_group is no label"):
         assert words in got, words
+
+
+def test_a_silent_proof_whose_base_download_is_gone_adds_no_mode_not_even_stills():
+    """A proof whose context names no mode and whose base download is gone gives no mode: the writer keeps its row with
+    no mode in the evidence (menu_modes: []), and placement reads it as a proof of no menu's mode, never the Still
+    menu's: it adds no menu by its mode and counts in no split by mode, while its record and row are placed as
+    before. D-Range Optimizer's movie record proved in Movie and by such a proof is the Movie record alone, apart from
+    the still one proved in Stills (an unknown mode read as Stills would have kept the two one row)."""
+    rows = [page("1/1", "Color/Tone", row("D-Range Optimizer"))]
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}],
+            "modes": [{"mode": "Movie", "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}]}]}
+    still = setting("global:0x0001", "D-Range Optimizer", "Color/Tone", "D-Range Optimizer")
+    movie = setting("global:0x0002", "D-Range Optimizer", "Color/Tone", "D-Range Optimizer [Movie mode]", "D-Range Optimizer")
+    movie["proved"]["menu_modes"] = {"D-Range Optimizer": []}                        # its silent proof: its base download gone
+    d = {"model": "TEST", "tabs": ["Shooting"], "menu": [{"tab": "Shooting", "group": "Color/Tone", "label": "D-Range Optimizer", "order": 0}],
+         "settings": [still, movie]}
+    menus = [MENUS[0], MENUS[1]]
+    modes = placement.menu_modes_of(d)
+    every = ["Stills", "Movie", "S&Q", "Time-lapse"]
+    assert placement.with_modes(placement.proof_paths, modes, every)(movie) == ["D-Range Optimizer [Movie mode]", "D-Range Optimizer [no mode known]"]
+    got = placement.by_menu(copy.deepcopy(d), tree, menus, modes=modes)
+    assert (got["global:0x0001"]["row_menus"], got["global:0x0002"]["row_menus"]) == (["Still"], ["Movie"])
+    assert placement.settings(copy.deepcopy(d), tree, None, placement.with_modes(placement.proof_paths, modes, every))["global:0x0002"]["row"] == ["D-Range Optimizer"]
