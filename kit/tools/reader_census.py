@@ -840,7 +840,7 @@ BEST = {"list": ("v3: route",)}
 # "grey": the ".grey" questions (camkit.vlm) judged on whether the item they read is drawn grey, against a truth that
 # needs no person, and beside the questions they were made from on the item's text, on the same frames (the owner,
 # 2026-11-19: "the VLM text needs to include which text is grey, does it respond with that?"). The truth, by source:
-#   drawn    grey: a line proving.greyed wrote greyed as drawn
+#   drawn    grey: a line proving.greyed wrote greyed as drawn by its pixels (never one the reader alone told)
 #   refused  grey: the camera's notice after the option's Enter said "not available" (it refused the option)
 #   pixels   grey or white: proving.screens.drawn_grey's measure GREY_SURE or more from its GREY_LINE (a list and a side
 #            list): every list and side list proof frame of the first camera measured 110-139 grey or 220-259 white
@@ -857,10 +857,12 @@ GREY_VERDICTS = (*GREY_JUDGED, "reader failed", "not asked")
 
 def line_grey(r: dict) -> dict:
     """What a proof line says, needing no person, of whether the option it chose was drawn grey: {"drawn": True}
-    (proving.greyed wrote it greyed as drawn), {"refused": True} (the camera's notice said "not available"),
-    {"applied": True} (the camera took it: applied, a record changed, no notice); {} where it says none of these."""
+    (proving.greyed wrote it greyed as drawn by its pixels: "greyed_by" absent, written before the reader was asked,
+    "pixels" or "both"; never where the reader alone told it, whose answer would be judged against itself), {"refused":
+    True} (the camera's notice said "not available", whoever told it grey), {"applied": True} (the camera took it:
+    applied, a record changed, no notice); {} where it says none of these."""
     out = {}
-    if r.get("greyed") == "drawn":
+    if r.get("greyed") == "drawn" and r.get("greyed_by") in (None, "pixels", "both"):
         out["drawn"] = True
     notice = r.get("notice") if isinstance(r.get("notice"), dict) else None
     if notice and NOT_AVAILABLE.search(str(notice.get("text") or "")):

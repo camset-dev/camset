@@ -1761,6 +1761,14 @@ def test_a_lines_grey_and_the_pixels_make_the_truth_and_disagree_out():
     import reader_census as rc
     took = [{"key": "k", "before": 0, "after": 1}]
     assert rc.line_grey({"greyed": "drawn", "applied": False}) == {"drawn": True}
+    for who in ("pixels", "both"):
+        assert rc.line_grey({"greyed": "drawn", "greyed_by": who, "applied": False}) == {"drawn": True}
+    # the reader alone told it grey: its own earlier answer is no truth to judge a reader by, the camera's refusal is
+    assert rc.line_grey({"greyed": "drawn", "greyed_by": "reader", "applied": False}) == {}
+    assert rc.line_grey({"greyed": "drawn", "greyed_by": "reader", "entered": "for its reason", "applied": False,
+                         "notice": {"text": "This operation or setting not available as follows Gamma"}}) == \
+        {"refused": True}
+    assert rc.line_grey({"greyed": "drawn", "greyed_by": "a guess"}) == {}
     assert rc.line_grey({"notice": {"text": "... not available as follows Gamma"}, "applied": True}) == {"refused": True}
     assert rc.line_grey({"applied": True, "changes": took, "notice": None}) == {"applied": True}
     for r in ({"applied": True, "changes": [], "notice": None}, {"applied": True, "changes": took,
