@@ -1562,6 +1562,26 @@ const settle = async () => { for (let i = 0; i < 4; i++) await tick(); };
 
 
 @needs_node
+def test_compare_collapse_by_the_keys_gives_the_focus_to_the_tabs_heading(tmp_path):
+    """The reviewer's finding 3: in Compare, Collapse all by the keys while a cell has the keyboard takes that cell
+    out of sight; its tab's heading takes the keyboard, so the arrows and a screen reader have somewhere to be."""
+    got = run(tmp_path, MATRIX + """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+cmp.cols = [["a", 0], ["a", 3]]; cmp.folded.clear();
+cmp.last = answer();
+$("content").replaceChildren(...drawCompare());
+const rows = () => $("content").querySelectorAll("tr").filter((tr) => tr.dataset.key === "k:a");
+const cell = rows()[0].querySelectorAll("button, [tabindex]")[0];
+cell.focus();
+const before = document.activeElement === cell;
+shortcut(key("ArrowUp"));
+const a = document.activeElement;
+console.log(JSON.stringify({ before, rows: rows().length, head: a.classList.contains("cmp-fold"), fold: a.dataset.fold, inside: $("content").contains(a) }));
+""")
+    assert got == {"before": True, "rows": 0, "head": True, "fold": "t\u0000Shoot", "inside": True}
+
+
+@needs_node
 def test_compare_column_headers_are_one_tab_stop_the_arrows_move_along(tmp_path):
     """Compare's column headers are one Tab stop (a roving tabindex): Tab lands on one, the arrows move to the header
     beside it (stopping at either end), Home and End to the first and the last, and the stop goes with the focus, which

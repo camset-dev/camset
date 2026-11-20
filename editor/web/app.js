@@ -4299,9 +4299,17 @@ function groupFolds(where) {
 function foldAll(collapse) {
   if (view.mode === "compare") {
     if (cmp.records || !cmp.last || !cmp.last.rows) return false;
+    // the row with the keyboard: if the fold takes it out of sight, its tab's heading takes the keyboard
+    const a = document.activeElement;
+    const holder = a && a.closest && $("content").contains(a) ? a.closest("tr[data-key]") : null;
+    const held = holder && cmp.last.rows.find((r) => r.key === holder.dataset.key);
     if (collapse) for (const r of cmp.last.rows) cmp.folded.add(foldKeys(r)[0]);
     else cmp.folded.clear();
     redrawCompare();
+    if (held && !$("content").contains(document.activeElement)) {
+      const head = $("content").querySelectorAll(".cmp-fold").find((h) => h.dataset.fold === foldKeys(held)[0]);
+      if (head) head.focus({ preventScroll: true });
+    }
     return true;
   }
   const groups = [...$("content").querySelectorAll("details.grp")].filter((d) => d._where !== undefined);
