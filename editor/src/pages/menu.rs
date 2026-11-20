@@ -245,8 +245,8 @@ impl App {
     }
 
     /// The groups the camera's menus hold, as on the camera: the tab (`menu_rows::camera_tab`) and the camera group
-    /// (`menu_rows::camera_group`) of every setting the definition places on a row of the camera. Worked out once per
-    /// definition.
+    /// (`menu_rows::camera_group`) of every setting the definition places on a row of the camera, in any of its menus
+    /// (`row_places` too). Worked out once per definition.
     pub(crate) fn placed_groups(&self) -> PlacedGroups {
         if let Some((generation, set)) = &*self.placed_cache.borrow() {
             if *generation == self.schema_gen {
@@ -254,8 +254,12 @@ impl App {
             }
         }
         let mut by_tab: std::collections::HashMap<String, std::collections::HashSet<String>> = Default::default();
-        for s in self.schema.settings.iter().filter(|s| s.placed()) {
-            by_tab.entry(menu_rows::camera_tab(s).to_string()).or_default().insert(menu_rows::camera_group(s).to_string());
+        for s in self.schema.settings.iter().filter(|s| s.placed_anywhere()) {
+            // its own place, and each one menu gives it (`row_places`)
+            let places = std::iter::once(s.clone()).chain(s.row_places.keys().map(|m| s.place_in(m)));
+            for p in places.filter(Setting::placed) {
+                by_tab.entry(menu_rows::camera_tab(&p).to_string()).or_default().insert(menu_rows::camera_group(&p).to_string());
+            }
         }
         let set: PlacedGroups = std::rc::Rc::new(by_tab);
         *self.placed_cache.borrow_mut() = Some((self.schema_gen, set.clone()));
@@ -263,12 +267,13 @@ impl App {
     }
 
     /// Whether `s` is one of the settings the camera's menus do not hold, given the groups they do (`placed_groups`):
-    /// a setting of a tab the definition lists on no row of the camera, whose group has no setting on one either (a
+    /// a setting of a tab the definition lists on no row of the camera (in none of its menus), whose group has no
+    /// setting on one either (a
     /// group with some keeps the others under "More settings in this group"), and not of a family shown as one table
     /// (`camera.families`), nor of My Menu's own tab, which its page shows. Only the definition's places decide it;
     /// the layout is not asked here (`off_menu`).
     fn off_menu_in(&self, s: &Setting, placed: &std::collections::HashMap<String, std::collections::HashSet<String>>) -> bool {
-        !s.placed() && self.schema.tabs.contains(&s.tab)
+        !s.placed_anywhere() && self.schema.tabs.contains(&s.tab)
             && !(self.has_mymenu_page() && s.tab == self.schema.camera.text.my_menu_name())
             && !self.schema.camera.families.iter().any(|f| !f.prefix.is_empty() && s.group.starts_with(&f.prefix))
             && !placed.get(&s.tab).is_some_and(|g| g.contains(&s.group))
@@ -1865,6 +1870,302 @@ pub(crate) mod facts_tests {
         let keys: Vec<BarKey> = app.edit_entries(0, None, "", false).into_iter().map(|e| e.key).collect();
         let tabs: Vec<BarKey> = app.menu_tabs().into_iter().filter(|t| app.side_bar_lists(t)).map(BarKey::Tab).collect();
         assert_eq!(keys, [vec![BarKey::Main, BarKey::MyMenu], tabs].concat());
+        done(&dir, &user);
+    }
+
+    /// The stub's menus given other names and modes (`stub_menus`): the menus and each setting's `row_menus`.
+    fn menus_as(v: &mut serde_json::Value, menus: serde_json::Value, rename: &[(&str, &[&str])]) {
+        crate::test_support::stub_menus(v);
+        v["camera"]["menus"] = menus;
+        for s in v["settings"].as_array_mut().unwrap() {
+            let Some(was) = s["row_menus"].as_array().cloned() else { continue };
+            let mut now: Vec<&str> = Vec::new();
+            for w in was.iter().filter_map(|w| w.as_str()) {
+                for n in rename.iter().find(|(from, _)| *from == w).map_or(&[][..], |(_, to)| *to) {
+                    if !now.contains(n) { now.push(n); }
+                }
+            }
+            s["row_menus"] = serde_json::json!(now);
+        }
+    }
+
+    /// Two menus: "Still", and "Motion" for Movie, S&Q and Time-lapse.
+    fn two_menus(v: &mut serde_json::Value) {
+        menus_as(v, serde_json::json!([{ "name": "Still", "modes": ["Stills"] }, { "name": "Motion", "modes": ["Movie", "S&Q", "Time-lapse"] }]),
+            &[("Still", &["Still"]), ("Movie", &["Motion"]), ("S&Q", &["Motion"])]);
+    }
+
+    /// Four menus named otherwise, one per shooting mode.
+    fn four_menus(v: &mut serde_json::Value) {
+        menus_as(v, serde_json::json!([{ "name": "One", "modes": ["Stills"] }, { "name": "Two", "modes": ["Movie"] }, { "name": "Three", "modes": ["S&Q"] }, { "name": "Four", "modes": ["Time-lapse"] }]),
+            &[("Still", &["One"]), ("Movie", &["Two"]), ("S&Q", &["Three", "Four"])]);
+    }
+
+    /// Two menus, the first for Stills and Movie, so that both of ISO's copies are for it.
+    fn shared_menus(v: &mut serde_json::Value) {
+        menus_as(v, serde_json::json!([{ "name": "A", "modes": ["Stills", "Movie"] }, { "name": "B", "modes": ["S&Q", "Time-lapse"] }]),
+            &[("Still", &["A"]), ("Movie", &["A"]), ("S&Q", &["B"])]);
+    }
+
+    /// One menu: no choice of menu.
+    fn one_menu(v: &mut serde_json::Value) {
+        menus_as(v, serde_json::json!([{ "name": "Still", "modes": ["Stills", "Movie", "S&Q", "Time-lapse"] }]), &[("Still", &["Still"]), ("Movie", &["Still"]), ("S&Q", &["Still"])]);
+    }
+
+    /// One frame of the window.
+    fn frame(app: &mut App) {
+        let ctx = egui::Context::default();
+        let mut frame = eframe::Frame::_new_kittest();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(app, ctx, &mut frame));
+    }
+
+    fn setting(app: &App, key: &str) -> Setting {
+        app.schema.settings.iter().find(|s| s.key == key).unwrap().clone()
+    }
+
+    /// A menu shows its own rows (design point 3): no "In Movie mode" heading in any menu, a row of Movie mode's menu in
+    /// Movie's and S&Q's alone, each menu's own SteadyShot titled as the camera draws its row with its full name for the
+    /// detail; the entry for what the menus do not hold the same in every menu, a group's unplaced settings under "More
+    /// settings in this group" where the menu shows the group. Expert mode: every record a row under its own name.
+    #[test]
+    fn a_menu_shows_its_own_rows_as_the_camera_draws_them() {
+        let (mut app, dir, user) = sample_app("menus_rows", Some(crate::test_support::stub_menus));
+        for m in ["Still", "Movie", "S&Q"] {
+            for tab in app.menu_tabs() {
+                for (g, family, rows) in app.tab_groups_in(0, Some(m), &tab, "", false) {
+                    assert!(family || !app.group_lines(&rows).iter().any(|l| matches!(l, Line::Mode(_))), "{m} > {tab} > {g}");
+                }
+            }
+        }
+        let row = |app: &App, m: &str, key: &str| app.settings_in_menu(0, m, None).into_iter().find(|s| s.key == key);
+        assert!(row(&app, "Movie", "global:0x02e9").is_some() && row(&app, "S&Q", "global:0x02e9").is_some() && row(&app, "Still", "global:0x02e9").is_none());
+        let movie = row(&app, "Movie", "global:0x02f9").unwrap();
+        assert_eq!((movie.name.as_str(), app.full_name(&movie).as_str()), ("SteadyShot", "SteadyShot (Movie)"));
+        assert_eq!(row(&app, "Still", "global:0x02f7").unwrap().name, "SteadyShot");
+        assert!(row(&app, "Still", "global:0x02f9").is_none() && row(&app, "Movie", "global:0x02f7").is_none());
+        // the entry for what the menus do not hold: the same in every menu, as before menus
+        let off = app.schema.camera.text.off_menu_name().to_string();
+        let keys = |app: &App, m: Option<&str>| app.visible_in(0, m, Some(&off), "", false).into_iter().map(|s| s.key).collect::<Vec<_>>();
+        assert!(!keys(&app, Some("Still")).is_empty());
+        assert!(["Movie", "S&Q"].iter().all(|m| keys(&app, Some(m)) == keys(&app, Some("Still"))));
+        assert_eq!(keys(&app, Some("Still")), keys(&app, None).into_iter().filter(|k| keys(&app, Some("Still")).contains(k)).collect::<Vec<_>>());
+        // a group's settings placed nowhere, under "More settings in this group" in a menu that shows the group
+        let more = app.tab_groups_in(0, Some("Still"), "Shooting", "", false).into_iter().any(|(_, f, rows)| !f && app.group_lines(&rows).contains(&Line::More));
+        assert!(more, "Shooting Mode's settings placed nowhere");
+        // Expert mode: every record a row of its own, under its own name
+        app.prefs.expert = true;
+        let names: Vec<String> = app.settings_in_menu(0, "Movie", None).into_iter().filter(|s| s.row == ["ISO"] && s.under_option.is_none()).map(|s| s.name).collect();
+        assert!(["ISO", "ISO (stills)", "ISO (movie)"].iter().all(|n| names.contains(&n.to_string())), "{names:?}");
+        assert_eq!(row(&app, "Movie", "global:0x02f9").unwrap().name, "SteadyShot (Movie)");
+        done(&dir, &user);
+    }
+
+    /// A setting a menu places otherwise (`row_places`): under that place's rows in that menu, as its own place says in
+    /// the other; a jump from that menu lands on it there.
+    #[test]
+    fn a_place_of_its_own_in_one_menu() {
+        let (mut app, dir, user) = sample_app("menus_place", Some(crate::test_support::stub_menus_and_a_place));
+        let audio = setting(&app, "global:0x02e9");
+        let lines = |app: &App, m: &str| {
+            let groups = app.tab_groups_in(0, Some(m), "Shooting", "", false);
+            let (_, _, rows) = groups.into_iter().find(|(_, _, rows)| rows.iter().flatten().any(|s| s.key == audio.key)).unwrap();
+            app.group_lines(&rows).into_iter().map(|l| match l {
+                Line::Heading { label, depth, .. } => format!("{label}/{depth}"),
+                Line::Row { index, depth } => format!("{}#{depth}", rows[index][0].key),
+                _ => String::new(),
+            }).collect::<Vec<_>>()
+        };
+        let sq = lines(&app, "S&Q");
+        let at = sq.iter().position(|l| l == "Audio Settings/0").expect("its place's row, a heading in S&Q's menu");
+        assert_eq!(sq[at + 1], format!("{}#1", audio.key));
+        assert!(lines(&app, "Movie").contains(&format!("{}#0", audio.key)), "its own place in Movie's");
+        app.set_menu("S&Q");
+        app.go_to(&audio);
+        assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some("S&Q"), Some(audio.key.as_str())));
+        done(&dir, &user);
+    }
+
+    /// Design point 4: in a menu other than the one of the mode the file was saved in, the ISO row shows its copy for
+    /// that menu, under the setting's name, and an edit goes to that copy's record (what follows it is `apply`'s rule,
+    /// as before menus); the copies are no rows of their own there; in the file's own menu the row is the setting.
+    #[test]
+    fn the_iso_row_in_another_modes_menu_shows_and_edits_its_copy() {
+        let (mut app, dir, user) = sample_app("menus_iso", Some(crate::test_support::stub_menus));
+        let own = app.opening_menu(0).unwrap();
+        let iso = setting(&app, "global:0x0334");
+        let other = app.menus().iter().map(|m| m.name.clone()).find(|m| *m != own && app.copy_for_menu(&iso, m).is_some()).unwrap();
+        let copy = app.copy_for_menu(&iso, &other).unwrap().clone();
+        let groups = app.tab_groups_in(0, Some(&other), "Exposure/Color", "", false);
+        let rows: Vec<Vec<Setting>> = groups.into_iter().filter(|(g, _, _)| g == "Exposure").flat_map(|(_, _, r)| r).collect();
+        let named: Vec<&Vec<Setting>> = rows.iter().filter(|r| r[0].row == ["ISO"] && r[0].under_option.is_none() && app.full_name(&r[0]).starts_with("ISO (")).collect();
+        assert_eq!(named.len(), 1, "one ISO row");
+        let row = named[0][0].clone();
+        assert_eq!((row.name.as_str(), row.key.as_str()), ("ISO", copy.key.as_str()));
+        assert!(!rows.iter().any(|r| r[0].name.starts_with("ISO (")), "no copy a row of its own");
+        let doc = app.doc.as_ref().unwrap();
+        assert_eq!(app.row_value(&row), App::describe(&copy, doc.value(0, copy.slot())));
+        let cur = doc.value(0, copy.slot()).unwrap();
+        let v = copy.offered(false).into_iter().map(|(v, _)| v).find(|&v| v != cur).unwrap();
+        assert_eq!(app.apply(vec![Action::Set(0, row.slot(), v)]), None);
+        assert_eq!(app.doc.as_ref().unwrap().value(0, copy.slot()), Some(v), "the copy's record takes it");
+        assert_eq!(app.listed_record(&iso, 0, &own).key, iso.key, "in the file's own menu, the setting");
+        // Compare's rows always show the copy for the menu
+        assert_eq!(app.row_record(&iso, &own, &Bind::Menu).key, app.copy_for_menu(&iso, &own).unwrap().key);
+        done(&dir, &user);
+    }
+
+    /// Two menus, four named otherwise, a menu two of a setting's copies are for (its rows as before menus), and one
+    /// menu (no choice: every listing as before menus).
+    #[test]
+    fn two_four_and_one_menu() {
+        let movie_copy = "global:0x0df4";
+        let (app, dir, user) = sample_app("menus_two", Some(two_menus));
+        assert_eq!(app.menus().iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), ["Still", "Motion"]);
+        let iso = setting(&app, "global:0x0334");
+        assert_eq!(app.copy_for_menu(&iso, "Motion").map(|c| c.key.as_str()), Some(movie_copy));
+        assert_eq!(app.menu_sets(Some("Motion")), [0, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        assert_eq!(app.menu_sets(Some("Still")), [0, 1, 2, 3]);
+        done(&dir, &user);
+        let (app, dir, user) = sample_app("menus_four", Some(four_menus));
+        assert_eq!(app.menus().iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), ["One", "Two", "Three", "Four"]);
+        assert_eq!((app.menu_sets(Some("Four")), app.opening_menu(10), app.opening_menu(7)), (vec![0, 10, 11, 12], Some("Four".into()), Some("Three".into())));
+        assert!(app.tab_groups_in(0, Some("Two"), "Shooting", "", false).iter().any(|(g, _, _)| g == "TC/UB"));
+        assert!(!app.tab_groups_in(0, Some("One"), "Shooting", "", false).iter().any(|(g, _, _)| g == "TC/UB"));
+        assert_eq!(app.copy_for_menu(&iso, "Four").map(|c| c.key.as_str()), Some(movie_copy));
+        done(&dir, &user);
+        let (app, dir, user) = sample_app("menus_shared", Some(shared_menus));
+        assert!(app.copy_for_menu(&iso, "A").is_none(), "two copies are for A");
+        let names: Vec<String> = app.settings_in_menu(0, "A", None).into_iter().filter(|s| s.row == ["ISO"] && s.under_option.is_none()).map(|s| s.name).collect();
+        assert!(["ISO (stills)", "ISO (movie)"].iter().all(|n| names.contains(&n.to_string())), "the rows as before menus: {names:?}");
+        done(&dir, &user);
+        let (one, dir, user) = sample_app("menus_one", Some(one_menu));
+        let (plain, dir2, user2) = sample_app("menus_plain", None);
+        assert!(one.menus().is_empty() && one.menu_shown().is_none());
+        let shape = |app: &App, tab: &str| app.tab_groups(tab).into_iter().map(|(g, f, rows)| (g, f, rows.iter().map(|r| r[0].key.clone()).collect::<Vec<_>>())).collect::<Vec<_>>();
+        for tab in plain.menu_tabs() {
+            assert_eq!(shape(&one, &tab), shape(&plain, &tab), "{tab}");
+        }
+        done(&dir, &user);
+        done(&dir2, &user2);
+    }
+
+    /// Design point 2 and 5: each set opens on its mode's menu; the viewer's pick holds until another set is edited;
+    /// the file saved in another mode opens on that mode's menu, whose button says so; the "Editing:" row's sets are
+    /// the menu's; no menu picked, nor any frame drawn with it, changes a byte of the file.
+    #[test]
+    fn a_menu_opens_on_the_sets_mode_and_changes_no_byte() {
+        let (mut app, dir, user) = sample_app("menus_open", Some(crate::test_support::stub_menus));
+        assert_eq!([1, 4, 7, 10].map(|t| app.opening_menu(t)), [Some("Still".into()), Some("Movie".into()), Some("S&Q".into()), Some("S&Q".into())]);
+        let before = app.doc.as_ref().unwrap().edited.to_bytes();
+        let own = app.opening_menu(0).unwrap();
+        app.view = View::Tab("Shooting".into());
+        frame(&mut app);
+        assert_eq!(app.menu_shown(), Some(own.clone()));
+        app.set_menu("S&Q");
+        frame(&mut app);
+        assert_eq!(app.menu_shown().as_deref(), Some("S&Q"), "the pick holds");
+        app.target = 4;
+        frame(&mut app);
+        assert_eq!(app.menu_shown().as_deref(), Some("Movie"), "another set: its own menu");
+        app.target = 0;
+        frame(&mut app);
+        assert_eq!(app.menu_shown(), Some(own.clone()));
+        for m in ["Still", "Movie", "S&Q"] {
+            app.set_menu(m);
+            frame(&mut app);
+            assert_eq!(app.doc.as_ref().unwrap().edited.to_bytes(), before, "{m}");
+        }
+        assert_eq!(app.shown_sections(), (0..13).collect::<Vec<_>>(), "every menu's sets can be edited");
+        assert_eq!(app.menu_sets(Some("Movie")), [0, 4, 5, 6]);
+        // saved in Movie mode: Movie's menu, and its button says so
+        let lm = app.schema.camera.live_mode.clone().unwrap();
+        let mode = setting(&app, &lm.key);
+        let movie = lm.modes.iter().find(|(_, m)| *m == "Movie").map(|(v, _)| v.parse::<i64>().unwrap()).unwrap();
+        app.allow_unobserved = true;
+        app.apply(vec![Action::Set(0, mode.slot(), movie)]);
+        app.menu = None;
+        assert_eq!(app.menu_shown().as_deref(), Some("Movie"));
+        assert!(app.menu_hover("Movie").ends_with("This file was saved in Movie mode."), "{}", app.menu_hover("Movie"));
+        assert_eq!(app.menu_hover("S&Q"), "Slow and quick motion, and time-lapse");
+        done(&dir, &user);
+    }
+
+    /// Design point 7: the next edit (F3) goes from a row of Still's menu to one only Movie's has, showing Movie's
+    /// menu, and back; a jump a view makes by hand (the setting's key chosen) shows the menu that shows the row from
+    /// the next frame; a jump to a copy opens its setting's row where that row shows it.
+    #[test]
+    fn jumps_and_the_next_edit_change_menus() {
+        let (mut app, dir, user) = sample_app("menus_jump", Some(crate::test_support::stub_menus));
+        let (still, audio) = (setting(&app, "global:0x02f7"), setting(&app, "global:0x02e9"));
+        for s in [&still, &audio] {
+            let cur = app.doc.as_ref().unwrap().value(0, s.slot());
+            let v = s.values.iter().map(|(v, _)| *v).find(|v| Some(*v) != cur).unwrap();
+            assert_eq!(app.apply(vec![Action::Set(0, s.slot(), v)]), None);
+        }
+        app.set_menu("Still");
+        app.view = View::Main;
+        app.step_edit(1);
+        assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some("Still"), Some(still.key.as_str())));
+        app.step_edit(1);
+        assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref(), app.group.as_deref()), (Some("Movie"), Some(audio.key.as_str()), Some("Audio Recording")));
+        app.step_edit(1);
+        assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some("Still"), Some(still.key.as_str())));
+        // a jump made by hand
+        (app.view, app.group, app.item, app.item_key) = (View::Tab("Shooting".into()), Some("Audio Recording".into()), Some(audio.name.clone()), Some(audio.key.clone()));
+        frame(&mut app);
+        assert_eq!((app.menu_shown().as_deref(), app.item.as_deref()), (Some("Movie"), Some("Audio Recording")));
+        // a copy: its setting's row, in the menu where that row shows it
+        let iso = setting(&app, "global:0x0334");
+        let own = app.opening_menu(0).unwrap();
+        let (m, copy) = app.menus().iter().map(|m| m.name.clone()).filter(|m| *m != own).find_map(|m| app.copy_for_menu(&iso, &m).cloned().map(|c| (m, c))).unwrap();
+        app.set_menu(&own);
+        app.go_to(&copy);
+        assert_eq!((app.menu_shown(), app.item.as_deref(), app.item_key.as_deref()), (Some(m), Some("ISO"), Some(copy.key.as_str())));
+        done(&dir, &user);
+    }
+
+    /// Design point 9's keys: Up and Down in the Menu's column step through the bar's own entries, Main and My Menu
+    /// above the tabs and the entry for what the camera's menus do not hold below them, from a tab's page or Main's;
+    /// in a menu, only the tabs it holds.
+    #[test]
+    fn up_and_down_step_through_the_bars_own_entries() {
+        let press = |app: &mut App, key: egui::Key| {
+            let ctx = egui::Context::default();
+            let input = egui::RawInput { events: vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], ..Default::default() };
+            let _ = ctx.run(input, |ctx| app.keyboard_nav(ctx));
+        };
+        let (mut app, dir, user) = sample_app("menus_keys", None);
+        let first = app.menu_tabs()[0].clone();
+        (app.mode, app.view, app.focus) = (Mode::Edit, View::Tab(first), Focus::Tabs);
+        press(&mut app, egui::Key::ArrowUp);
+        assert_eq!(app.view, View::MyMenu);
+        press(&mut app, egui::Key::ArrowUp);
+        press(&mut app, egui::Key::ArrowUp);
+        assert_eq!(app.view, View::Main, "Main first, and no further");
+        for _ in 0..20 {
+            press(&mut app, egui::Key::ArrowDown);
+        }
+        let off = app.schema.camera.text.off_menu_name().to_string();
+        assert_eq!(app.view, View::Tab(off.clone()), "the entry for what the menus do not hold, last");
+        // from Main's page, Left takes the Menu's column
+        (app.view, app.focus) = (View::Main, Focus::Items);
+        press(&mut app, egui::Key::ArrowLeft);
+        press(&mut app, egui::Key::ArrowDown);
+        assert_eq!((app.focus, app.view.clone()), (Focus::Tabs, View::MyMenu));
+        done(&dir, &user);
+        let (mut app, dir, user) = sample_app("menus_keys_menu", Some(crate::test_support::stub_menus));
+        let listed: Vec<BarKey> = app.bar_keys(false, 0, Some("Movie"), "", false);
+        let all: Vec<BarKey> = app.bar_keys(false, 0, Some("Still"), "", false);
+        assert!(listed.len() <= all.len() && listed.contains(&BarKey::Tab("Shooting".into())));
+        app.set_menu("Movie");
+        (app.mode, app.view, app.focus) = (Mode::Edit, View::Main, Focus::Tabs);
+        let mut seen = Vec::new();
+        for _ in 0..listed.len() {
+            press(&mut app, egui::Key::ArrowDown);
+            seen.push(app.view.clone());
+        }
+        let want: Vec<View> = listed[1..].iter().map(|k| match k { BarKey::MyMenu => View::MyMenu, BarKey::Tab(t) => View::Tab(t.clone()), _ => View::Main }).collect();
+        assert_eq!(seen[..want.len()], want[..]);
         done(&dir, &user);
     }
 

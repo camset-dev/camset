@@ -10,7 +10,7 @@ pub(crate) fn step_in(len: usize, pos: usize, step: i32) -> Option<usize> {
 }
 
 /// Which of the menu columns the arrow keys move in.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Focus {
     Tabs,
     Groups,
@@ -34,37 +34,49 @@ pub(crate) const KEY_SETTINGS: egui::KeyboardShortcut = egui::KeyboardShortcut::
 pub(crate) const SEARCH_ID: &str = "search_box";
 
 impl App {
-    /// Arrow keys: Left/Right pick the column (tabs, groups, items); Up/Down move inside it.
-    /// Items are handled in menu_view; tabs and groups here.
+    /// Arrow keys: Left/Right pick the column (the Menu's entries, groups, items); Up/Down move inside it. The Menu's
+    /// column steps through the bar's own entries (`bar_keys`: Main, My Menu, the tabs, Other and the entry for what
+    /// the camera's menus do not hold), from a tab's page or from Main's and My Menu's. Items are handled in
+    /// menu_view; the Menu's entries and groups here.
     pub(crate) fn keyboard_nav(&mut self, ctx: &egui::Context) {
         if self.mode != Mode::Edit || ctx.wants_keyboard_input() {
             return;
         }
-        let View::Tab(tab) = self.view.clone() else { return };
+        let tab = match self.view.clone() {
+            View::Tab(t) => Some(t),
+            View::Main | View::MyMenu => None,
+            _ => return,
+        };
         let (left, right, up, down) = ctx.input(|i| (
             i.key_pressed(egui::Key::ArrowLeft), i.key_pressed(egui::Key::ArrowRight),
             i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown),
         ));
         if left {
-            self.focus = match self.focus { Focus::Items => Focus::Groups, _ => Focus::Tabs };
+            self.focus = match self.focus { Focus::Items if tab.is_some() => Focus::Groups, _ => Focus::Tabs };
         }
-        if right {
+        if right && tab.is_some() {
             self.focus = match self.focus { Focus::Tabs => Focus::Groups, _ => Focus::Items };
         }
         let step: i32 = if down { 1 } else if up { -1 } else { 0 };
         if step == 0 {
             return;
         }
-        match self.focus {
-            Focus::Tabs => {
-                let tabs = self.schema.tabs.clone();
-                let pos = tabs.iter().position(|t| *t == tab).unwrap_or(0);
-                if let Some(t) = step_in(tabs.len(), pos, step).and_then(|i| tabs.get(i)) {
-                    self.view = View::Tab(t.clone());
+        match (self.focus, tab) {
+            (Focus::Tabs, _) => {
+                // the bar's entries, as it lists them in the menu shown
+                let keys = self.bar_keys(false, self.target, self.menu_shown().as_deref(), &self.search, self.only_changed);
+                let view_of = |k: &BarKey| match k {
+                    BarKey::MyMenu => View::MyMenu,
+                    BarKey::Tab(t) => View::Tab(t.clone()),
+                    BarKey::Main | BarKey::All => View::Main,
+                };
+                let pos = keys.iter().position(|k| view_of(k) == self.view).unwrap_or(0);
+                if let Some(k) = step_in(keys.len(), pos, step).and_then(|i| keys.get(i)) {
+                    self.view = view_of(k);
                     self.group = None;
                 }
             }
-            Focus::Groups => {
+            (Focus::Groups, Some(tab)) => {
                 let groups: Vec<String> = self.tab_groups(&tab).into_iter().map(|(n, _, _)| n).collect();
                 let pos = groups.iter().position(|g| Some(g) == self.group.as_ref()).unwrap_or(0);
                 if let Some(g) = step_in(groups.len(), pos, step).and_then(|i| groups.get(i)) {
@@ -72,7 +84,7 @@ impl App {
                     self.item = None;
                 }
             }
-            Focus::Items => {}
+            _ => {}
         }
     }
 
@@ -114,35 +126,48 @@ impl App {
         }
     }
 
-    /// Edit mode: go to the next (`dir` 1) or previous (-1) edited setting of the set being edited, in menu order.
+    /// Edit mode: go to the next (`dir` 1) or previous (-1) edited setting of the set being edited, in menu order. Where
+    /// the Menu shows the camera's menus, each edit in the menu a jump to it opens from the set's own menu
+    /// (`jump_place`), the menus in their order, and the step shows that menu.
     pub(crate) fn step_edit(&mut self, dir: i32) {
         let Some(doc) = &self.doc else { return };
         let in_set = self.target != 0;
         let tab_idx = |t: &str| self.schema.tabs.iter().position(|x| x == t).unwrap_or(99);
-        // in the order the rows are drawn (`menu_at`); one row per setting and place, its records together
+        let menus: Vec<String> = self.menus().iter().map(|m| m.name.clone()).collect();
+        let bind = self.bind_for(self.target);
+        // in the order the rows are drawn (`menu_at`, a menu's `rank_in`); one row per setting and place, its records together
         let at = self.menu_at();
         let place = |s: &Setting| format!("{:?}{:?}{:?}{:?}", s.row, s.row_at, s.under_option, s.row_mode);
         // by the Menu entry that shows it (`entry_of`): a place of My Menu on the My Menu page, though the place itself is
         // Expert-only, and a setting the camera's menus do not hold under the entry for those, after the tabs
         let off = self.schema.camera.text.off_menu_name();
-        let entry = |s: &Setting| if self.is_mymenu_place(s) { self.schema.camera.text.my_menu_name().to_string() } else { self.entry_of(s) };
-        let mut edits: Vec<(usize, i64, String, String, String, String, String)> = doc.changes().into_iter()
+        type Edit = (usize, usize, i64, String, String, String, String, String, Option<String>);
+        let mut edits: Vec<Edit> = doc.changes().into_iter()
             .filter(|(si, _)| *si == self.target)
             .filter_map(|(_, id)| self.schema.find(in_set, id))
             .filter(|s| self.prefs.expert || !Self::expert_only(s) || self.is_mymenu_place(s))
-            .map(|s| { let e = entry(s); (if e == off { usize::MAX } else { tab_idx(self.layout_tab(s)) }, at(s), e, self.shown_group_of(s), s.name.clone(), place(s), s.key.clone()) })
+            .map(|s| {
+                let (menu, entry, group) = self.jump_place(s, self.target, None);
+                let menu_at = menu.as_ref().and_then(|m| menus.iter().position(|x| x == m)).unwrap_or(0);
+                let shown = match &menu { Some(m) => self.listed_record(s, self.target, m), None => s.clone() };
+                let rank = match &menu { Some(m) => self.rank_in(m, &bind).get(&s.key).copied().unwrap_or(s.order), None => at(s) };
+                let entry = if self.is_mymenu_place(s) { self.schema.camera.text.my_menu_name().to_string() } else { entry };
+                (menu_at, if entry == off { usize::MAX } else { tab_idx(self.layout_tab(&shown)) }, rank, entry, group, shown.name.clone(), place(&shown), shown.key.clone(), menu)
+            })
             .collect();
         edits.sort();
-        edits.dedup_by(|a, b| (&a.2, &a.3, &a.4, &a.5) == (&b.2, &b.3, &b.4, &b.5));
+        edits.dedup_by(|a, b| (a.0, &a.3, &a.4, &a.5, &a.6) == (b.0, &b.3, &b.4, &b.5, &b.6));
         if edits.is_empty() {
             self.status = format!("No edits in {}", self.schema.camera.target_name(self.target));
             return;
         }
-        // the edit shown now, on the page that shows its tab (`shown_view`: My Menu's tab on the My Menu page, a tab
-        // the definition does not list under Other), and of two rows of one name the one `item_key` names
-        let selected_place = self.item_key.as_ref().and_then(|k| self.schema.settings.iter().find(|s| &s.key == k)).map(place);
-        let here = edits.iter().position(|e| self.shown_view(View::Tab(e.2.clone())) == self.view && Some(&e.3) == self.group.as_ref() && Some(&e.4) == self.item.as_ref()
-            && selected_place.as_ref().is_none_or(|p| *p == e.5 || !edits.iter().any(|o| o.4 == e.4 && o.3 == e.3 && o.5 == *p)));
+        // the edit shown now, in the menu shown, on the page that shows its tab (`shown_view`: My Menu's tab on the My
+        // Menu page, a tab the definition does not list under Other), and of two rows of one name the one `item_key` names
+        let now = self.menu_shown();
+        let selected_place = self.item_key.as_ref().and_then(|k| edits.iter().find(|e| &e.7 == k)).map(|e| e.6.clone())
+            .or_else(|| self.item_key.as_ref().and_then(|k| self.schema.settings.iter().find(|s| &s.key == k)).map(place));
+        let here = edits.iter().position(|e| e.8 == now && self.shown_view(View::Tab(e.3.clone())) == self.view && Some(&e.4) == self.group.as_ref() && Some(&e.5) == self.item.as_ref()
+            && selected_place.as_ref().is_none_or(|p| *p == e.6 || !edits.iter().any(|o| o.5 == e.5 && o.4 == e.4 && o.6 == *p)));
         let n = edits.len();
         let k = match (here, dir > 0) {
             (Some(i), true) => (i + 1) % n,
@@ -150,8 +175,11 @@ impl App {
             (None, true) => 0,
             (None, false) => n - 1,
         };
-        let (_, _, tab, group, name, _, key) = edits[k].clone();
-        self.status = format!("Edit {} of {n}: {name}", k + 1);
+        let (_, _, _, tab, group, name, _, key, menu) = edits[k].clone();
+        if let Some(m) = menu.filter(|m| Some(m) != now.as_ref()) {
+            self.menu = Some(MenuChoice { name: m, target: self.target, opened: self.doc.as_ref().map_or(0, |d| d.opened) });
+        }
+        self.status = format!("Edit {} of {n}: {}", k + 1, self.schema.settings.iter().find(|s| s.key == key).map_or(name.clone(), |s| s.name.clone()));
         self.view = self.shown_view(View::Tab(tab));
         self.group = Some(group);
         self.item = Some(name);

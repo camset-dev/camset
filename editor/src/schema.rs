@@ -2539,6 +2539,42 @@ mod tests {
     /// factory value the camera writes itself) stays offered. The shipped definition marks the stills dials' surplus functions
     /// and ISO AUTO Minimum's factory ISO 64, held.
     #[test]
+    fn a_setting_in_the_cameras_menus() {
+        let s = |more: serde_json::Value| -> Setting {
+            let mut v = serde_json::json!({ "key": "global:0x0001", "area": "global", "id": 1, "name": "Audio", "tab": "Shooting", "group": "Audio",
+                "order": 1, "in_sets": false, "scalar": true, "values": [], "row": ["Audio"], "row_at": [5] });
+            v.as_object_mut().unwrap().extend(more.as_object().unwrap().clone());
+            serde_json::from_value(v).unwrap()
+        };
+        let menus = serde_json::json!([{ "name": "Still", "modes": ["Stills"] }, { "name": "Movie", "modes": ["Movie"] }, { "name": "S&Q", "modes": ["S&Q", "Time-lapse"] }]);
+        let cam: Camera = serde_json::from_value(serde_json::json!({ "menus": menus })).unwrap();
+        assert_eq!(cam.menu_list().len(), 3);
+        assert_eq!(cam.menu_of_mode("Time-lapse").map(|m| m.name.as_str()), Some("S&Q"));
+        // the menus that hold its row: its row_menus; without them row_mode's menu, else the first; and its row_places'
+        let named = s(serde_json::json!({ "row_menus": ["Movie", "S&Q", "Gone"] }));
+        assert_eq!(cam.menus_of(&named), ["Movie", "S&Q"], "a name of no menu left out");
+        let audio = s(serde_json::json!({ "row_mode": "Movie", "row_places": { "S&Q": { "row": ["Audio Settings", "Audio"], "row_at": [3, 0], "row_group": "Sound" } } }));
+        assert_eq!(cam.menus_of(&audio), ["Movie", "S&Q"]);
+        assert_eq!(cam.menus_of(&s(serde_json::json!({}))), ["Still"]);
+        assert!(cam.menus_of(&s(serde_json::json!({ "row": [], "row_at": [] }))).is_empty(), "placed nowhere");
+        // as a menu lays it out: its place there field by field, no other mode's menu named, that menu alone
+        let p = audio.place_in("S&Q");
+        assert_eq!((p.row.clone(), p.row_at.clone(), p.row_group.as_deref(), p.row_tab.as_deref(), p.row_mode.as_deref()), (vec!["Audio Settings".to_string(), "Audio".into()], vec![3, 0], Some("Sound"), None, None));
+        assert_eq!((p.row_menus.clone(), p.shown_in.as_deref(), p.name.as_str(), p.key.as_str()), (vec!["S&Q".to_string()], Some("S&Q"), "Audio", "global:0x0001"));
+        assert_eq!(p.place_in("S&Q").row, p.row, "laid out once");
+        let q = audio.place_in("Movie");
+        assert_eq!((q.row.clone(), q.row_mode.as_deref()), (vec!["Audio".to_string()], None));
+        // two records of one name on one row in two menus' rows are two rows
+        let (a, b) = (s(serde_json::json!({ "row_menus": ["Still"] })), s(serde_json::json!({ "key": "global:0x0002", "id": 2, "row_menus": ["Movie"] })));
+        assert!(!a.same_row(&b) && !a.links_with(&b));
+        assert!(a.same_row(&s(serde_json::json!({ "key": "global:0x0003", "id": 3, "row_menus": ["Still"] }))));
+        // one menu, or none: no choice of menu
+        let one: Camera = serde_json::from_value(serde_json::json!({ "menus": [{ "name": "Still", "modes": ["Stills"] }] })).unwrap();
+        assert!(one.menu_list().is_empty() && one.menus_of(&a).is_empty() && Camera::default().menu_list().is_empty());
+        assert_eq!((one.text.menus_label(), one.text.menus_hover().ends_with("This changes nothing in the file.")), ("Camera menu:", true));
+    }
+
+    #[test]
     fn a_value_the_menus_never_offer_is_left_out_unless_held() {
         let s: Setting = serde_json::from_value(serde_json::json!({
             "key": "global:0x0001", "area": "global", "id": 1, "name": "Dial", "tab": "Setup", "group": "Dial",
