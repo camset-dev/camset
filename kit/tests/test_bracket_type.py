@@ -1153,6 +1153,109 @@ def test_enter_judges_the_box_on_a_fresh_frame(own_runs, monkeypatch):
     assert cam.keys == ["enter"] and chosen.endswith("_enter-check.png")
 
 
+# ------------------------------------------------------------------------------------- the title with a box lit
+
+SELF_TIMER = ["On", "Off"]                 # movie Self-timer's options (kit2_crawl_mv_selftimer's own map)
+
+
+class TitleReplay:
+    """The camera's own frames replayed: `frames` the frame on show first, then the one each press brings
+    ({frame: {key: next}}), `settles` the frame a settled look takes after one ({frame: next}); read() is the pixel
+    reader's on the frame on show, which OCR reads by its path."""
+
+    def __init__(self, first, frames=None, settles=None):
+        self.frames, self.settles, self.keys = frames or {}, settles or {}, []
+        self.show(first)
+
+    def show(self, name):
+        self.frame = load(need(A1 / name))
+        self.name = name
+
+    def press(self, key, **kw):
+        self.keys.append(key)
+        self.show(self.frames[self.name][key])
+
+    def refresh(self, tag, frame=None):
+        self.show(self.settles.get(self.name, self.name))
+
+    def read(self):
+        return screen.read(self.frame)
+
+
+def replayed(monkeypatch, said):
+    """carousel_fields_run's title read on the replayed frames: its own settled look (title_settled: the frame a look
+    after the press took), OCR on the frame itself, and the second reader standing in for by what it said on that very
+    frame (`said`: {frame name: the option it named}, from its cached answers of the day), each question noted."""
+    import carousel_fields_run as F
+    asked = []
+    monkeypatch.setattr(F, "title_settled", lambda cam: cam.refresh("reread"))
+
+    def vlm_option(cam):
+        asked.append(cam.frame.path.name)
+        return said.get(cam.frame.path.name)
+    monkeypatch.setattr(F, "vlm_option", vlm_option)
+    return F, asked
+
+
+# 2026-11-20, mv_selftimer_look (kit2_pass2): the carousel open on On (270325), Right into box 0 (270327, settled on
+# 270328: box 0 lit under "Rec Start delay", the title still "On"). The second reader's answers to its option question,
+# cached that day: "On" with the option lit, "3 s" (the lit box) with box 0 lit
+SELF_TIMER_SAID = {"270325_reread.png": "On", "270326_fresh.png": "On", "270327_right.png": "3 s",
+                   "270328_reread.png": "3 s"}
+
+
+def test_a_short_title_stands_on_ocr_once_a_box_is_lit_on_the_cameras_frames(monkeypatch):
+    """The look of 2026-11-20 stopped here: OCR read the title "On", a short word and so a doubt, the second reader was
+    asked its option question and, with a box lit, named the box ("3 s"), so box_refused said the title no longer named
+    On while the camera stood on it. With a box lit, OCR's reading stands where it names one option and its only doubt
+    is its shortness; the reader is asked with the option lit, as before."""
+    F, asked = replayed(monkeypatch, SELF_TIMER_SAID)
+    cam = TitleReplay("kit2_pass2/shots/270325_reread.png", {"kit2_pass2/shots/270326_fresh.png":
+                                                          {"right": "kit2_pass2/shots/270327_right.png"}},
+                    {"kit2_pass2/shots/270325_reread.png": "kit2_pass2/shots/270326_fresh.png",
+                     "kit2_pass2/shots/270327_right.png": "kit2_pass2/shots/270328_reread.png"})
+    F.into_box(cam, "On", SELF_TIMER, 0, None)
+    assert cam.keys == ["right"] and cam.name.endswith("270328_reread.png")
+    assert asked == ["270326_fresh.png"], "the reader on the option lit alone, never on the box"
+    assert F.box_refused(cam, "On", SELF_TIMER, 0, 2) == ""
+
+
+def test_with_a_box_lit_the_title_check_still_stops_a_carousel_on_another_option(monkeypatch):
+    """What the check is for: the carousel standing on the option the proof is about while its boxes are walked. A box
+    lit under another option's title stops it whatever the title's length: "On" read where the proof is about Off
+    (Self-timer, 270328), Single Bracket's box where it is about Cont. Bracket (kit2_fin_brtype_f_look 00007)."""
+    F, asked = replayed(monkeypatch, SELF_TIMER_SAID)
+    cam = TitleReplay("kit2_pass2/shots/270328_reread.png")
+    assert F.box_refused(cam, "Off", SELF_TIMER, 0, 2) == "its title no longer names 'Off'"
+    cam = TitleReplay("kit2_fin_brtype_f_look/shots/00007_right.png")
+    assert F.box_refused(cam, "Cont. Bracket", OPTIONS, 0, 2) == "its title no longer names 'Cont. Bracket'"
+    assert asked == [], "OCR named an option plainly enough each time"
+
+
+@pytest.mark.parametrize("name, option, field", [("kit2_fin_brtype_cont/shots/00006_right.png", "Cont. Bracket", 0),
+                                                 ("kit2_fin_brtype_cont_img/shots/00007_right.png", "Cont. Bracket", 1),
+                                                 ("kit2_fin_brtype_f_look2/shots/00008_right.png", "Focus Bracket", 0)])
+def test_bracket_types_long_titles_read_as_before_with_a_box_lit(monkeypatch, name, option, field):
+    """Bracket Type's own frames, a box lit under a title OCR reads plainly: the check passes on OCR alone, as it did
+    before the short title's rule, and no reader is asked."""
+    F, asked = replayed(monkeypatch, {})
+    cam = TitleReplay(name)
+    assert F.box_refused(cam, option, OPTIONS, field, None) == "" and asked == []
+
+
+@pytest.mark.parametrize("ocr_text, said, got", [("Оn", "On", "On"),         # a Cyrillic O: a lookalike doubt, the reader asked
+                                                 ("", "3 s", None),           # nothing read: the reader, naming the box
+                                                 ("Of", "3 s", None)])        # a reading naming no option exactly
+def test_with_a_box_lit_any_doubt_but_shortness_still_asks_the_reader(monkeypatch, ocr_text, said, got):
+    import carousel_fields_run as F
+    asked = []
+    monkeypatch.setattr(F, "title_settled", lambda cam: None)
+    monkeypatch.setattr(F, "carousel_text", lambda cam: ocr_text)
+    monkeypatch.setattr(F, "vlm_option", lambda cam: asked.append(1) or said)
+    cam = SimpleNamespace(read=lambda: SimpleNamespace(kind="dialog", field=0, boxes=[(1, 2), (3, 4)]))
+    assert F.title_reads(cam, SELF_TIMER) == got and asked == [1]
+
+
 # ------------------------------------------------------------------------------------- a value the camera does not keep
 
 SHOTS = [box("Step Width", ["3", "4(Standard)", "5"], "4(Standard)"),

@@ -182,14 +182,29 @@ def title_reads(cam, labels: list) -> str | None:
     """The carousel option the title names, one of the map's `labels`: OCR's orange line (proving.screens.carousel_text)
     where it names one plainly (camkit.reading: no doubt, one option named), else the second reader's (vlm_option);
     None where neither names one. Read once the title has settled (proving.screens.title_settled): it redraws after the
-    strip, and a frame just after a Down can show the strip on the next option under the old title."""
+    strip, and a frame just after a Down can show the strip on the next option under the old title.
+    With a box lit (the pixel reader's field), OCR's reading also stands where it is exactly one option's name and its
+    only doubt is that it is short (short_title_stands): the second reader's option question answers the lit box there,
+    not the title, so it can never confirm a short one (movie Self-timer's "On", the reader saying "3 s" on box 0,
+    kit2_pass2 270328, 2026-11-20). A title that names another option still names it, and any other doubt still asks."""
     title_settled(cam)
     t = carousel_text(cam)
     i = reading.choice_of(t, "label", labels)
-    if i is None or reading.doubts(t, "label", choices=labels):
+    why = reading.doubts(t, "label", choices=labels)
+    if i is not None and why and short_title_stands(cam, t, labels[i], why):
+        return labels[i]
+    if i is None or why:
         v = vlm_option(cam)
         i = reading.choice_of(v, "label", labels) if v else None
     return labels[i] if i is not None else None
+
+
+def short_title_stands(cam, text: str, label: str, why: list) -> bool:
+    """Whether OCR's reading `text` of the title stands alone with a box lit: the screen on show has a field lit, the
+    reading is the option `label`'s name exactly (option_key, nothing loose), and every doubt about it is its shortness
+    (camkit.reading.doubts' "short word")."""
+    return (getattr(cam.read(), "field", None) is not None and option_key(text) == option_key(label)
+            and all(str(w).startswith("short word") for w in why))
 
 
 def is_option(name: str | None, option: str) -> bool:
