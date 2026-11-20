@@ -679,10 +679,11 @@ def test_the_lit_box_is_read_by_ocr_and_the_reader_where_ocr_is_unsure(monkeypat
     assert bool(asked) == (got[1] != "ocr")
 
 
-# the third role's readers where OCR's plain reading and the second reader's are two numbers (box_vote): OCR's bullet for
-# the minus sign, kit2_pass2 266268 (2026-11-20); the models as the a1 II's readers name them, the first two families apart
+# the third role's readers where OCR's plain reading and the second reader's are two numbers (box_vote), and OCR's bullet
+# for the minus sign, kit2_pass2 266268 (2026-11-20), a doubt (box_doubts); the models as the a1 II's readers name them,
+# the first two families apart
 SECOND, GEMMA, GLM = "RedHatAI/Qwen3.8-27B-INT4", "google/gemma-4-26b-it", "zai/GLM-4.6V-Flash"
-MINUS, PLUS, BULLET = "2 Images (-)", "2 Images (+)", "2 Images (•)"
+MINUS, PLUS, BULLET = "2 Images (-)", "2 Images (+)", "2 Images (\u2022)"
 
 
 def voting_cam(eyes, monkeypatch, ocr_text, second, voters):
@@ -707,36 +708,36 @@ def voting_cam(eyes, monkeypatch, ocr_text, second, voters):
 
 
 def test_the_third_readers_settle_ocr_and_the_second_reader_apart(eyes, monkeypatch):
-    """OCR "2 Images (bullet)", the second reader "2 Images (-)": the third readers asked the second reader's own box
+    """OCR's plain "2 Images (+)", the second reader "2 Images (-)": the third readers asked the second reader's own box
     question, in turn while no reading stands; the first agreeing with the second reader makes two model families against
     OCR's one, the kit's rule (camkit.reading.tally), so the second is not asked. The reading taken says so ("votes"), and
     the proof line keeps every vote with its reader's model."""
-    F, cam = voting_cam(eyes, monkeypatch, BULLET, MINUS, [(GEMMA, MINUS), (GLM, MINUS)])
+    F, cam = voting_cam(eyes, monkeypatch, PLUS, MINUS, [(GEMMA, MINUS), (GLM, MINUS)])
     r = F.lit_read(cam, True)
-    assert (r.text, r.by, r.ocr, r.vlm, r.reader) == (MINUS, "votes", BULLET, MINUS, "vllm")
+    assert (r.text, r.by, r.ocr, r.vlm, r.reader) == (MINUS, "votes", PLUS, MINUS, "vllm")
     assert [(v["eye"], v["model"], v["text"]) for v in r.votes] == [
-        ("ocr", None, BULLET), ("reader", SECOND, MINUS), ("third", GEMMA, MINUS)]
+        ("ocr", None, PLUS), ("reader", SECOND, MINUS), ("third", GEMMA, MINUS)]
     assert eyes.asked == ["third box"]
     assert F.votes_of(r) == {"box_votes": list(r.votes)} and F.votes_of(F.BoxRead(MINUS, MINUS)) == {}
 
 
 def test_a_third_reader_that_does_not_answer_casts_no_vote(eyes, monkeypatch):
     from camkit import vlm
-    F, cam = voting_cam(eyes, monkeypatch, BULLET, MINUS, [(GEMMA, vlm.NoReader("down")), (GLM, MINUS)])
+    F, cam = voting_cam(eyes, monkeypatch, PLUS, MINUS, [(GEMMA, vlm.NoReader("down")), (GLM, MINUS)])
     r = F.lit_read(cam, True)
     assert (r.text, r.by) == (MINUS, "votes") and eyes.asked == ["third box", "third.2 box"]
     assert r.votes[2]["text"] is None and r.votes[2]["why"] and r.votes[3]["model"] == GLM
 
 
 @pytest.mark.parametrize("voters, asked", [
-    ([(GEMMA, PLUS), (GLM, "2 Images")], ["third box", "third.2 box"]),   # split: each its own reading, backing neither
-    ([(GEMMA, PLUS), (GLM, PLUS)], ["third box", "third.2 box"]),         # agreed on a reading neither of the first two gave
-    ([("mlx-community/Qwen3.8-27B-4bit", MINUS)], []),                     # the second reader's family: never asked
-    ([], [])])                                                             # no third reader
+    ([(GEMMA, "3 Images"), (GLM, "2 Images")], ["third box", "third.2 box"]),   # split, each backing neither reading
+    ([(GEMMA, "2 Images"), (GLM, "2 Images")], ["third box", "third.2 box"]),   # agreed on a reading neither gave
+    ([("mlx-community/Qwen3.8-27B-4bit", MINUS)], []),                           # the second reader's family: never asked
+    ([], [])])                                                                   # no third reader
 def test_a_vote_that_settles_nothing_stops_the_row_as_before(eyes, monkeypatch, voters, asked):
     import re
-    F, cam = voting_cam(eyes, monkeypatch, BULLET, MINUS, voters)
-    with pytest.raises(F.Failed, match=re.escape(f"OCR read {BULLET!r} and the second reader {MINUS!r}: the kit does "
+    F, cam = voting_cam(eyes, monkeypatch, PLUS, MINUS, voters)
+    with pytest.raises(F.Failed, match=re.escape(f"OCR read {PLUS!r} and the second reader {MINUS!r}: the kit does "
                                                  "not guess which")):
         F.lit_read(cam, True)
     assert eyes.asked == asked
@@ -746,6 +747,42 @@ def test_ocr_and_the_second_reader_agreeing_ask_nobody_else(eyes, monkeypatch):
     F, cam = voting_cam(eyes, monkeypatch, "2 mages (-)", MINUS, [(GEMMA, PLUS), (GLM, PLUS)])
     r = F.lit_read(cam, True)
     assert (r.text, r.by, r.votes) == (MINUS, "both", ()) and eyes.asked == []
+
+
+@pytest.mark.parametrize("ocr_text, second, asked, got", [
+    (BULLET, MINUS, ["second"], (MINUS, "reader")),      # the bullet, a doubt: the second reader's reading, no vote
+    ("2 mages (-)", MINUS, [], ("2 mages (-)", "ocr")),  # a clean reading: nobody asked
+    (PLUS, MINUS, [], (PLUS, "ocr"))])                    # plain: OCR alone, as before
+def test_a_read_with_ocr_alone_doubts_the_bullet(eyes, monkeypatch, ocr_text, second, asked, got):
+    """OCR's bullet in a lit box is never what the camera draws there (BOX_MISREADS): a read with OCR alone (lit_read's
+    False: the navigation checks) asks the second reader instead of taking "2 Images (bullet)" for another value."""
+    F, cam = voting_cam(eyes, monkeypatch, ocr_text, second, [(GEMMA, MINUS)])
+    called = []
+    monkeypatch.setattr(F, "box_answer", lambda c: called.append("second") or (second, "vllm", False))
+    r = F.lit_read(cam, False)
+    assert (r.text, r.by) == got and called == asked and eyes.asked == []
+    assert F.box_doubts(BULLET) and not F.box_doubts(MINUS)
+
+
+@pytest.mark.parametrize("ocr_text, second, voter, pressed", [
+    (BULLET, MINUS, MINUS, True),        # the bullet doubted: the second reader's "2 Images (-)" stands
+    (PLUS, MINUS, MINUS, True),          # OCR's plain "(+)" outvoted
+    (PLUS, MINUS, PLUS, False)])         # OCR and a voter on "(+)": the reading that stands is another value
+def test_enter_goes_only_where_the_reading_that_stands_is_the_value_chosen(eyes, monkeypatch, ocr_text, second, voter,
+                                                                           pressed):
+    """The check before Enter on a box reads it by both readers (lit_read's True) and the vote where they differ: OCR
+    alone refused an Enter on a misread frame. A reading that stands on another value refuses the Enter, as before."""
+    F, cam = voting_cam(eyes, monkeypatch, ocr_text, second, [(GEMMA, voter)])
+    keys = []
+    cam.refresh = lambda tag, frame=None: None
+    cam.press = keys.append
+    pic = F.box_pic(cam, 1)
+    if pressed:
+        assert F.enter(cam, "Cont. Bracket", [], 1, 2, MINUS, pic) == "266268_up.png" and keys == ["enter"]
+    else:
+        with pytest.raises(F.Failed, match=r"no Enter: box 1 no longer reads '2 Images \(-\)'"):
+            F.enter(cam, "Cont. Bracket", [], 1, 2, MINUS, pic)
+        assert keys == []
 
 
 @pytest.mark.parametrize("a, b, same", [("0.5EV", "0.5 EV", True), ("5 mages", "5 Images", True),

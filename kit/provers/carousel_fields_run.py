@@ -286,9 +286,25 @@ def voters_said(votes: tuple) -> str:
         ": no reading stands by the kit's rule)"
 
 
+# Characters OCR reads into a lit box that the camera never draws in one: the bullet it read for the minus sign of
+# "2 Images (-)" (16 of the 327 HDMI frames of that value, none of the 554 of "(+)", none over OSD). Measured 2026-11-20 on
+# the 11,612 dialog frames recorded with a box lit (Apple Vision; 483 readings): the bullet in those 16 alone, and no
+# other dot-like character (a middle dot, a dot operator) in any. A reading holding one is doubted (box_doubts), so the
+# second reader reads the box on a read with OCR alone too, where the bullet would make another value
+BOX_MISREADS = "\u2022"
+
+
+def box_doubts(raw: str) -> list:
+    """Why OCR's reading of a lit box is not plain: camkit.reading.doubts as a number, and each character OCR reads there
+    that the camera never draws (BOX_MISREADS)."""
+    odd = [f"U+{ord(c):04X}, which the camera never draws in a lit box" for c in dict.fromkeys(raw) if c in BOX_MISREADS]
+    return reading.doubts(raw, "number", lit=True) + odd
+
+
 def lit_read(cam, always: bool) -> BoxRead:
     """The lit box's value, as optboxes_run reads its boxes: OCR's reading (boxes_run.lines) stands alone where it is
-    plain (camkit.reading.doubts, a number: four characters or more, no look-alike) and `always` is False. Otherwise,
+    plain (box_doubts: camkit.reading.doubts, a number: four characters or more, no look-alike; and no character the
+    camera never draws there, BOX_MISREADS) and `always` is False. Otherwise,
     and always where `always` (a new value, the value held, a value Enter goes on: each decides a proof), the second
     reader is asked about the lit box itself (ask_box): where OCR was unsure, its reading is taken (the owner's rule,
     2026-11-06: the reader is right where OCR drops or mangles short digits, and it is asked before a row fails); where
@@ -300,7 +316,7 @@ def lit_read(cam, always: bool) -> BoxRead:
     guess."""
     frame = cam.frame.path.name
     raw = ocr.text_in(lines(cam), lit_box(cam)).strip()
-    doubted = reading.doubts(raw, "number", lit=True)
+    doubted = box_doubts(raw)
     if not doubted and not always:
         return BoxRead(reading.canonical(raw), raw)
     said, who = ask_box(cam)
@@ -480,13 +496,16 @@ def step_known(cam, option: str, b: int, count: int, way: str, want: tuple, name
 def enter(cam, option: str, labels: list, b: int | None, count: int | None, want: str | None, pic=None) -> str:
     """Enter on this row's option itself (b None) or on its box b holding `want` (its picture `pic`, as the walk saw
     that value): judged first (option_refused; on a box, a fresh frame grabbed, box_refused with the title read, the
-    box's picture and reading on it), then by the camera's own Enter guard (LiveCamera). The fresh frame is the box
+    box's picture and its reading by both readers on it, lit_read's vote where they differ: Enter goes only where the
+    reading that stands is `want`), then by the camera's own Enter guard (LiveCamera). The fresh frame is the box
     prover's own: LiveCamera's look before Enter compares screens by their signature, and a dialog's cannot see what its
-    lit box holds (0.3EV lit and 0.5EV lit are one signature on the camera's frames). Returns the frame Enter went on."""
+    lit box holds (0.3EV lit and 0.5EV lit are one signature on the camera's frames). OCR alone refused an Enter on a
+    frame it misread (a bullet for the minus sign of "2 Images (-)", about one HDMI frame of that value in twenty).
+    Returns the frame Enter went on."""
     if b is not None:
         cam.refresh("enter-check")
     why = option_refused(cam, option, labels) if b is None else box_refused(cam, option, labels, b, count)
-    if not why and b is not None and (not same_pic(box_pic(cam, b), pic) or key(lit_read(cam, False).text) != key(want)):
+    if not why and b is not None and (not same_pic(box_pic(cam, b), pic) or key(lit_read(cam, True).text) != key(want)):
         why = f"box {b} no longer reads {want!r}"
     if why:
         raise Failed(f"{option}: no Enter: {why} ({cam.frame.path.name})")
