@@ -2064,7 +2064,7 @@ impl App {
                 let file_a = st && c.editable();
                 let why: Vec<String> = self.unnamed_why(s, v).filter(|_| st).into_iter()
                     .chain(self.locked_why(s, c.section).filter(|_| file_a).map(|(w, _)| w))
-                    .chain(self.place_why(s).filter(|_| file_a))
+                    .chain(self.compare_why(s).filter(|_| file_a))
                     .chain(self.fraction_words(s).filter(|_| file_a))
                     .chain(self.copy_note(s, c.section).filter(|_| file_a).map(|(w, _)| w)).collect();
                 if !why.is_empty() {
@@ -2083,7 +2083,7 @@ impl App {
             diffs += usize::from(d);
             // the sets of file A where the setting is view only outside Expert mode (`locked_why`): no copy goes there,
             // as the window's right-click menu offers none (`copy_targets`)
-            let locked: Vec<usize> = (0..self.n_sections()).filter(|&si| self.locked(s, si) || self.place_why(s).is_some()).collect();
+            let locked: Vec<usize> = (0..self.n_sections()).filter(|&si| self.locked(s, si) || self.compare_why(s).is_some()).collect();
             // its name opens it in Edit in the first column of file A that keeps it (the page's `cmpOpenInEdit`), where
             // the window's Open in Edit lands from this menu (`compare_place`)
             let into = cols.iter().find(|c| c.editable() && stored(c, s)).map_or(0, |c| c.section);

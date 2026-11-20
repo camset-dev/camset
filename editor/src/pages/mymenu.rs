@@ -108,6 +108,14 @@ impl App {
         }
     }
 
+    /// All of My Menu's places back as the file was opened, in one step (`Action::Revert` of each), and its words: the
+    /// Revert of a place outside Expert mode, which never puts back one place alone (`cell_revert`).
+    pub(crate) fn mymenu_revert_all(&self) -> (String, Vec<Action>) {
+        let name = self.schema.camera.text.my_menu_name();
+        let acts = self.schema.settings.iter().filter(|s| self.is_mymenu_place(s)).map(|s| Action::Revert(0, s.slot())).collect();
+        (format!("Revert {name} (all its items, as the file was opened)"), acts)
+    }
+
     /// Edits to My Menu, as its Menu entry counts them: the places changed and the settings of its own tab changed, in
     /// the live settings.
     pub(crate) fn mymenu_edits(&self) -> usize {

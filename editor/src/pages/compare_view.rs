@@ -512,7 +512,7 @@ impl App {
                     // one the camera keeps in more than one record what changing it changes (`copy_note`)
                     let r = match self.locked_why(s, c.section).filter(|_| c.editable()) { Some((why, _)) => r.on_hover_text(why), None => r };
                     // one of My Menu's places says where it is changed instead (`place_why`)
-                    let r = match self.place_why(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
+                    let r = match self.compare_why(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
                     // a fraction's part says it goes with its other part (`fraction_words`)
                     let r = match self.fraction_words(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
                     let r = match self.copy_note(s, c.section).filter(|_| c.editable()) { Some((note, _)) => r.on_hover_text(note), None => r };
@@ -567,9 +567,14 @@ impl App {
                             open_edit = Some((s.clone(), c.section));
                             ui.close_menu();
                         }
-                        if edited && ui.button("Revert").clicked() {
-                            for l in linked.iter() { actions.push(Action::Revert(c.section, l.slot())); }
-                            ui.close_menu();
+                        // one of My Menu's places, outside Expert mode: all of My Menu back as opened, never one place
+                        // (`cell_revert`)
+                        if edited {
+                            let (words, acts) = self.cell_revert(linked, c.section);
+                            if ui.button(words).clicked() {
+                                actions.extend(acts);
+                                ui.close_menu();
+                            }
                         }
                         // where the plain Revert does not serve: back where the camera keeps it (`put_back_choice`)
                         if editable && c.editable() {

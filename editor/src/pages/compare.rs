@@ -132,8 +132,9 @@ pub(crate) type Row = (String, String, Vec<Setting>);
 /// What a list of compare rows was worked out from: the camera definition (its generation), the search in
 /// lower case, the camera's menu (None: as before menus), the Menu entry, Expert mode, whether the rows are laid out as
 /// on the camera (which records a row holds, `same_row`), and whether they hold the records a Main tile shows that the
-/// live settings' rows leave out (`tile_records`: Compare's do, `matrix_rows_for`'s do not).
-pub(crate) type RowsKey = (u64, String, Option<String>, BarKey, bool, bool, bool);
+/// live settings' rows leave out (`tile_records`: Compare's do, `matrix_rows_for`'s do not), and under a search what
+/// they depend on in the files (`rows_files_key`).
+pub(crate) type RowsKey = (u64, String, Option<String>, BarKey, bool, bool, bool, Vec<i64>);
 
 /// How many lists of compare rows are kept: every entry of the Menu in the menu shown, each menu's whole list for its
 /// button's count, and a few the web page asks for.
@@ -373,7 +374,7 @@ impl App {
         // a column takes no value of a setting that is view only in its set outside Expert mode (`locked_why`), nor of
         // one of My Menu's places, which its page changes (`place_why`), nor of a fraction's part whose other part the
         // two columns do not both keep (`copy_row`)
-        let place = self.place_why(s).is_some();
+        let place = self.compare_why(s).is_some();
         let half = self.fraction_of(s).is_some_and(|(n, d, _)| [n, d].iter().any(|p| self.col_value(left, p).is_none() || self.col_value(right, p).is_none()));
         let takes = |c: Col| c.editable() && !self.locked(s, c.section) && !place && !half;
         match (self.col_value(left, s), self.col_value(right, s)) {
@@ -416,7 +417,7 @@ impl App {
         }
         // view only in that set outside Expert mode (a copy, or a setting no menu writes: `locked_why`), or one of My
         // Menu's places, which its page changes (`place_why`)
-        if self.locked(s, c.section) || self.place_why(s).is_some() {
+        if self.locked(s, c.section) || self.compare_why(s).is_some() {
             return false;
         }
         let Some(doc) = &self.doc else { return false };
@@ -430,7 +431,7 @@ impl App {
     /// that store the setting and that the file holds, never the cell it comes from, nor a set where the setting is view
     /// only outside Expert mode (`locked_why`).
     pub(crate) fn copy_targets(&self, from: Col, s: &Setting) -> Vec<Col> {
-        if self.place_why(s).is_some() {
+        if self.compare_why(s).is_some() {
             return Vec::new();
         }
         self.cols.iter().copied()
@@ -455,8 +456,12 @@ impl App {
     }
 
     /// What one is told before a copy of a fraction's part (`fraction_of`), where one presses (an arrow, a cell, a
-    /// right-click), the window's and the page's: the two go together. None for any other setting.
+    /// right-click), the window's and the page's: the two go together. None for any other setting, and where Compare
+    /// copies neither (`compare_why`).
     pub(crate) fn fraction_words(&self, s: &Setting) -> Option<String> {
+        if self.compare_why(s).is_some() {
+            return None;
+        }
         let (n, d, caption) = self.fraction_of(s)?;
         Some(format!("{} and {} are the two parts of {caption}: a copy takes both from the same column, in one step, or neither, so the value is always one a file held. Neither part takes a value of its own here.", n.name, d.name))
     }
@@ -484,6 +489,37 @@ impl App {
         (actions, n)
     }
 
+    /// Why Compare writes no value of `s` outside Expert mode, where a person would press, the window's and the page's:
+    /// one of My Menu's places (`place_why`), or one of Expert mode's own records (`expert_why`). None where it may.
+    pub(crate) fn compare_why(&self, s: &Setting) -> Option<String> {
+        self.place_why(s).or_else(|| self.expert_why(s))
+    }
+
+    /// Why one of Expert mode's own records (`expert_only`) that Compare shows outside it (a fraction tile's parts:
+    /// Edit's Main shows the tile and changes it nowhere, a tile of two settings not being edited in place) takes no
+    /// value there. None for any other setting, and in Expert mode.
+    pub(crate) fn expert_why(&self, s: &Setting) -> Option<String> {
+        let d = self.def_of(s);
+        if self.prefs.expert || !Self::expert_only(d) {
+            return None;
+        }
+        Some(match self.fraction_of(d) {
+            Some((n, den, caption)) => format!("{} and {}, the two parts of {caption}, are Expert mode's own records: Edit's Main page shows {caption} and changes it nowhere, so outside Expert mode Compare copies neither. Expert mode (⚙ Settings > Editing & Compare) copies the two together.", n.name, den.name),
+            None => "This is Expert mode's own record: outside Expert mode it is shown, not changed. Expert mode (⚙ Settings > Editing & Compare) changes it.".to_string(),
+        })
+    }
+
+    /// A compare cell's Revert in file A's set `section`, the window's: its words and its actions. Outside Expert mode a
+    /// place of My Menu is never reverted alone (an item could then stand in two places): all of My Menu's places go
+    /// back as the file was opened, in one step, a My Menu the camera itself wrote, and the words say so
+    /// (`mymenu_revert_all`); any other row, its records.
+    pub(crate) fn cell_revert(&self, linked: &[Setting], section: usize) -> (String, Vec<Action>) {
+        if linked.first().is_some_and(|s| self.place_why(s).is_some()) {
+            return self.mymenu_revert_all();
+        }
+        ("Revert".into(), linked.iter().map(|l| Action::Revert(section, l.slot())).collect())
+    }
+
     /// Why one of My Menu's places (`is_mymenu_place`) takes no value from Compare outside Expert mode, in the window
     /// and on the page alike: Compare writes a record at a time and would pass by every rule the My Menu page keeps for
     /// its items (`mymenu_set`: an item once, the pages packed, what the camera takes). None for any other setting, and
@@ -506,8 +542,23 @@ impl App {
     /// Whether the search `q` (lower case, trimmed) finds one of My Menu's places: by its name, or by the name of the item
     /// it holds in file A's live settings (never by every item it could hold).
     pub(crate) fn place_found(&self, s: &Setting, q: &str) -> bool {
-        let held = self.doc.as_ref().and_then(|d| d.value(0, s.slot())).and_then(|c| s.label_for(c));
-        q.is_empty() || s.name.to_lowercase().contains(q) || held.is_some_and(|l| l.to_lowercase().contains(q))
+        q.is_empty() || s.name.to_lowercase().contains(q) || self.place_codes_at(s).into_iter().filter_map(|c| s.label_for(c)).any(|l| l.to_lowercase().contains(q))
+    }
+
+    /// The items the open files hold at place `s` of My Menu (file A as edited, file B, the base), in that order.
+    fn place_codes_at(&self, s: &Setting) -> Vec<i64> {
+        let files = [self.doc.as_ref().map(|d| &d.edited), self.compare.as_ref().map(|(_, c)| c), self.base.as_ref().map(|(_, c)| c)];
+        files.into_iter().flatten().filter_map(|c| c.sections.first()?.get(s.id)?.get(s.index)).collect()
+    }
+
+    /// What Compare's rows under the search `q` depend on in the files (`place_found`): the items every open file holds
+    /// in My Menu's places, kept with the rows (`RowsKey`) so they are worked out again when one changes. Empty without
+    /// a search, or without My Menu's page.
+    fn rows_files_key(&self, q: &str) -> Vec<i64> {
+        if q.trim().is_empty() || !self.has_mymenu_page() {
+            return Vec::new();
+        }
+        self.schema.settings.iter().filter(|s| self.is_mymenu_place(s)).flat_map(|s| self.place_codes_at(s)).collect()
     }
 
     /// The page of My Menu a place is on, as its page heads it ("My Menu 2").
@@ -531,7 +582,7 @@ impl App {
         // at all: where one of the two is not kept in both columns, is view only there, has another shape, or is not
         // among the rows a copy over rows shows (`copying_over`), neither is written, and the row is counted as left
         let mut with_other: Vec<Setting>;
-        let linked = match linked.first().and_then(|l| self.fraction_of(l)) {
+        let linked = match linked.first().filter(|l| self.compare_why(l).is_none()).and_then(|l| self.fraction_of(l)) {
             None => linked,
             Some((num, den, _)) => {
                 let parts = [num, den];
@@ -563,9 +614,15 @@ impl App {
             return Vec::new();
         }
         let mut left = self.copy_skipped.get();
-        // one of My Menu's places, outside Expert mode: its page changes it, never a copy (`place_why`); counted, and said
+        // one of My Menu's places, outside Expert mode: its page changes it, never a copy (`place_why`); one of Expert
+        // mode's own records outside it (`expert_why`), changed nowhere outside Expert mode; each counted, and said
         if linked.iter().any(|l| self.place_why(l).is_some()) {
             left.places += 1;
+            self.copy_skipped.set(left);
+            return Vec::new();
+        }
+        if linked.iter().any(|l| self.expert_why(l).is_some()) {
+            left.expert += 1;
             self.copy_skipped.set(left);
             return Vec::new();
         }
@@ -645,7 +702,7 @@ impl App {
     /// them (`matrix_rows_for`: the Memories page and a recall compare the sets' own rows).
     fn rows_with(&self, menu: Option<&str>, entry: &BarKey, q: &str, tiles: bool) -> std::rc::Rc<Vec<Row>> {
         let menu = menu.filter(|m| self.menu_named(m).is_some());
-        let key: RowsKey = (self.schema_gen, Self::query(q), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout(), tiles);
+        let key: RowsKey = (self.schema_gen, Self::query(q), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout(), tiles, self.rows_files_key(q));
         if let Some((_, rows)) = self.rows_cache.borrow().iter().find(|(k, _)| *k == key) {
             return rows.clone();
         }
@@ -912,8 +969,9 @@ pub(crate) mod copy_tests {
         assert!(app.editable(), "sample must be editable");
         let dial = app.dial_sets();
         assert!(!dial.is_empty());
-        // a setting stored in the memories whose Memory 1 value differs from Live
-        let s = app.schema.settings.iter().filter(|s| s.in_sets && s.scalar && s.area == "global")
+        // a setting stored in the memories whose Memory 1 value differs from Live (not one of Expert mode's own records,
+        // which Compare copies in Expert mode only: `expert_why`)
+        let s = app.schema.settings.iter().filter(|s| s.in_sets && s.scalar && s.area == "global" && !App::expert_only(s))
             .find(|s| { let l = app.col_value(Col::a(0), s); let m = app.col_value(Col::a(dial[0]), s); l.is_some() && m.is_some() && l != m })
             .cloned().expect("a setting that differs between Live and Memory 1");
         let want = app.col_value(Col::a(dial[0]), &s);
@@ -1310,12 +1368,14 @@ pub(crate) mod copy_tests {
     /// (`copying_over`: left, and said), the page's copy and copy of the rows shown, a merge in the window
     /// (`merge_rows`) and on the page, a register from the live settings (which keep neither part: nothing written,
     /// nothing said), and a memory that keeps one part only (left, said, no arrow); the words where one presses name
-    /// both parts. Without menus and in each of the stub's menus.
+    /// both parts. Without menus and in each of the stub's menus, in Expert mode, where Compare copies them (outside it
+    /// they are view only: `a_fractions_parts_are_view_only_outside_expert_mode`).
     #[test]
     fn a_fractions_two_parts_are_copied_together() {
         use crate::test_support::{done, sample_app, strip_menus, stub_menus, SAMPLE_BYTES};
         for (with_menus, stub) in [(false, strip_menus as fn(&mut serde_json::Value)), (true, stub_menus)] {
             let (mut app, dir, user) = sample_app("cmp_fraction", Some(stub));
+            app.prefs.expert = true;
             let tile = app.schema.camera.main_tiles.clone().unwrap().0[0].tiles.iter().find(|t| t.kind == TileKind::Fraction).cloned().unwrap();
             let find = |app: &App, k: &str| app.schema.settings.iter().find(|s| s.key == k).cloned().unwrap();
             let (num, den) = (find(&app, tile.numerator_key.as_deref().unwrap()), find(&app, tile.denominator_key.as_deref().unwrap()));
@@ -1478,6 +1538,92 @@ pub(crate) mod copy_tests {
             }
             done(&dir, &user);
         }
+    }
+
+    /// Second integration review, MUST 1: outside Expert mode Compare's Revert on a place of My Menu puts back all of My
+    /// Menu's places as the file was opened, in one undo step, and says so before the press; never one place alone (two
+    /// items, the first moved down: a Revert of that place alone would hold one item twice). Expert mode as before.
+    #[test]
+    fn a_places_revert_in_compare_puts_back_all_of_my_menu() {
+        use crate::test_support::{done, sample_app, strip_menus};
+        let (mut app, dir, user) = sample_app("cmp_mymenu_revert", Some(strip_menus));
+        let opened = app.mymenu_pages().unwrap();
+        fill_mymenu(&mut app, 2);
+        let (acts, _) = app.mymenu_move(0, 0, 1).unwrap();
+        app.apply(acts);
+        let moved = app.mymenu_pages().unwrap();
+        let place = app.schema.settings.iter().find(|s| s.key == place_keys(&app)[0]).cloned().unwrap();
+        let (words, acts) = app.cell_revert(std::slice::from_ref(&place), 0);
+        assert_eq!(words, "Revert My Menu (all its items, as the file was opened)");
+        app.apply(acts);
+        assert_eq!(app.mymenu_pages().unwrap(), opened, "My Menu as the file was opened");
+        app.undo();
+        assert_eq!(app.mymenu_pages().unwrap(), moved, "one undo step");
+        app.prefs.expert = true;
+        let (words, acts) = app.cell_revert(std::slice::from_ref(&place), 0);
+        assert_eq!((words.as_str(), acts.len()), ("Revert", 1), "Expert mode: that place");
+        done(&dir, &user);
+    }
+
+    /// Second integration review, MUST 2: Compare's rows under a search follow the files: an item put into My Menu on
+    /// its page is found at once (and gone after an undo), and a place is found by the item file B holds there too.
+    #[test]
+    fn compares_rows_under_a_search_follow_the_files() {
+        use crate::test_support::{done, sample_app, strip_menus};
+        let (mut app, dir, user) = sample_app("cmp_mymenu_search", Some(strip_menus));
+        let mm = app.schema.camera.my_menu.clone().unwrap();
+        let place = app.schema.settings.iter().find(|s| s.key == place_keys(&app)[0]).cloned().unwrap();
+        let (code, label) = place.values.iter().filter(|(v, _)| *v != mm.empty && app.mymenu_find(*v).is_none() && app.mymenu_add(*v).is_ok())
+            .find(|(_, l)| app.compare_rows(None, &BarKey::MyMenu, l).is_empty()).cloned().expect("an item no place holds");
+        let found = |app: &App| app.compare_rows(None, &BarKey::MyMenu, &label).iter().filter(|r| app.is_mymenu_place(&r.2[0])).count();
+        assert_eq!(found(&app), 0);
+        let (acts, _) = app.mymenu_add(code).unwrap();
+        app.apply(acts);
+        assert_eq!(found(&app), 1, "{label}: found once put in");
+        app.undo();
+        assert_eq!(found(&app), 0, "{label}: gone after an undo");
+        let mut b = app.doc.as_ref().unwrap().edited.clone();
+        b.sections[0].get_mut(place.id).unwrap().put(place.index, code).unwrap();
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        assert_eq!(found(&app), 1, "{label}: the item file B holds there");
+        done(&dir, &user);
+    }
+
+    /// Second integration review, MUST 3: Edit's Main shows the Shutter Speed tile but changes it nowhere (a tile of two
+    /// settings is not edited in place), so outside Expert mode Compare writes neither of its parts: no arrow, picker
+    /// or copy target, a copy leaves them and says so, the reason is where one presses, in the window and on the page.
+    /// Each part is under one entry besides Main (the one that shows it).
+    #[test]
+    fn a_fractions_parts_are_view_only_outside_expert_mode() {
+        use crate::test_support::{done, sample_app, strip_menus};
+        let (mut app, dir, user) = sample_app("cmp_fraction_ro", Some(strip_menus));
+        let tile = app.schema.camera.main_tiles.clone().unwrap().0[0].tiles.iter().find(|t| t.kind == TileKind::Fraction).cloned().unwrap();
+        let num = app.schema.settings.iter().find(|s| Some(&s.key) == tile.numerator_key.as_ref()).cloned().unwrap();
+        let m = app.dial_sets()[0];
+        let mut b = app.doc.as_ref().unwrap().edited.clone();
+        let cur = app.col_value(Col::a(m), &num).unwrap();
+        b.sections[m].get_mut(num.id).unwrap().put(num.index, cur + 1).unwrap();
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(m), Col::b(m)], false);
+        let why = app.compare_why(&num).expect("a reason outside Expert mode");
+        assert!(why.contains(&tile.caption) && why.contains("Expert mode"), "{why}");
+        assert_eq!(app.arrows_between(Col::b(m), Col::a(m), &num), (false, false));
+        assert!(!app.cell_editable(Col::a(m), std::slice::from_ref(&num)) && app.copy_targets(Col::b(m), &num).is_empty());
+        app.copy_skipped.set(Default::default());
+        assert!(app.copy_row(std::slice::from_ref(&num), Col::b(m), Col::a(m)).is_empty() && app.copy_skipped.get().expert == 1);
+        app.apply(Vec::new());
+        assert!(app.status.contains("Expert mode's own record"), "{}", app.status);
+        let a = crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", m], ["b", m]], "entry": "main", "only_diff": false }));
+        let j: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+        let row = j["rows"].as_array().unwrap().iter().find(|r| r["key"] == num.key.as_str()).cloned().unwrap();
+        assert!(row["cells"][0]["why"].as_str().is_some_and(|w| w.contains(&tile.caption)) && row["arrows"][0] == serde_json::json!([false, false]), "{row}");
+        // one entry besides Main: the one that shows it (`entry_here`)
+        let under: Vec<BarKey> = app.bar_keys(true, 0, None, "", false).into_iter().filter(|k| !matches!(k, BarKey::All | BarKey::Main))
+            .filter(|k| app.compare_rows(None, k, "").iter().any(|r| r.2.iter().any(|s| s.key == num.key))).collect();
+        assert_eq!(under, vec![BarKey::Tab(app.entry_of(&num))]);
+        app.prefs.expert = true;
+        assert!(app.compare_why(&num).is_none() && app.arrows_between(Col::b(m), Col::a(m), &num) == (false, true), "Expert mode: an arrow, which takes the two together");
+        done(&dir, &user);
     }
 
     /// Integration review finding 2: outside Expert mode a place of My Menu is never written from Compare, in the window
