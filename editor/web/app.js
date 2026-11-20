@@ -152,19 +152,22 @@ const UNREACHABLE = "The editor could not be reached. Is it still running, with 
 
 let code = null;   // the access code typed or given by the link, for this page's life
 let state = null;
-// page: "main", "tab" or "edits"; a search (q) shows its results over any of them
-const view = { page: "main", tab: null, target: 0, q: "", only: false, set: 0, focus: null, mode: "edit" };
+// page: "main", "tab" or "edits"; a search (q) shows its results over any of them; menu: the camera's menu picked on
+// this page (null: the one the set edited opens on, as the editor says in `state.menu`), sent with each request that
+// lists rows, as `target` is, and kept nowhere else
+const view = { page: "main", tab: null, target: 0, q: "", only: false, set: 0, focus: null, mode: "edit", menu: null };
 let drawn = null;          // what the page was last drawn for
 let loading = 0;           // the newest page request; answers to older ones are dropped
 let hits = null;           // settings the search found
 const openGroups = new Map();  // per tab: the groups left open
 // The page's own Compare view, kept here as the window keeps its own, so neither moves the other:
 // the columns ([file, set], the first the baseline; null until the state gives the window's), the
-// search, the tab ("" for all), "Only rows that differ" and "Show raw values" (null: the window's
-// choice), the three-way filter, the tabs and groups folded, the difference cursor (a row's index),
-// the record map, the files the columns were made for, the Edit page to go back to, the last answer
-// drawn and the change map's marks.
-const cmp = { cols: null, q: "", tab: "", only: null, raw: null, three: "all", folded: new Set(), cursor: null,
+// search, the entry of the Menu column shown ("all", "main", "mymenu" or "tab:<name>", as the editor names its
+// `entries`), "Only rows that differ" and "Show raw values" (null: the window's choice), the three-way filter, the
+// tabs and groups folded, the difference cursor (a row's index), the record map, the files the columns were made for,
+// the Edit page to go back to, the last answer drawn and the change map's marks. The camera's menu is Edit's
+// (`view.menu`): one choice for both.
+const cmp = { cols: null, q: "", entry: "all", only: null, raw: null, three: "all", folded: new Set(), cursor: null,
   records: false, files: null, back: null, last: null, marks: [],
   // "Open in Edit" from a row: where Edit was opened (setting key, tab, set) while it offers "← Back to Compare",
   // and the row (setting key) that Back puts under the cursor once the comparison is drawn
@@ -180,6 +183,27 @@ let askOpen = null;        // how the question shown ends (with false when anoth
 let polls = 0;             // the newest state request; an older one answered later is dropped, so it cannot undo a newer state
 /** The editor out of reach: since when, how many polls in a row failed, the file open before. */
 const away = { since: 0, fails: 0, file: null, slow: false };
+/** A request's body with the camera's menu picked on this page (`view.menu`), when one is: without it the editor lists
+ *  the rows in the menu the set edited opens on, as the window does. */
+const withMenu = (body) => (view.menu ? { ...body, menu: view.menu } : body);
+
+/** The camera's menu the page shows: the one picked, while the definition still lists it, else the editor's
+ *  (`state.menu`); null where the definition lists no menus. */
+function curMenu() {
+  const menus = (state && state.menus) || [];
+  if (view.menu && menus.some((m) => m.name === view.menu)) return view.menu;
+  return (state && state.menu) || null;
+}
+
+/** Show the camera's menu `name`: the state and the page are asked for again in it. Nothing in the file changes. */
+function pickMenu(name) {
+  if (name === curMenu()) return;
+  view.menu = name;
+  cmp.cursor = null;
+  drawSide();
+  refresh();
+}
+
 // the page's own state for the rest of the window (none of it is the editor's)
 const xp = {
   detail: new Set(),                                          // the rows whose details are unfolded, by setting key
@@ -198,6 +222,7 @@ const xp = {
   camera: null, cameraKey: null,                              // the camera cards (`camera_cards`), the state's camera they follow
   sending: false,                                             // Write… is being opened: a second tap waits for it
   sendRound: 0,                                               // the login ends a Write check still running (`checkSend`)
+  opened: undefined,                                          // the opening of the file the camera's menu was picked for
 };
 
 let searchTimer = null;    // the search box's wait for the typing to stop
@@ -428,8 +453,17 @@ async function poll() {
   if ($("app").hidden) return;
   const n = ++polls;
   try {
-    const s = await api("state", { target: view.target });
+    const s = await api("state", withMenu({ target: view.target }));
     if (n !== polls) return;
+    // a file opened since the camera's menu was picked opens on its own menu, as in the window: asked for again so
+    if (s.opened !== xp.opened) {
+      const was = xp.opened;
+      xp.opened = s.opened;
+      if (was !== undefined && view.menu) {
+        view.menu = null;
+        return poll();
+      }
+    }
     state = s;
     away.slow = false;
     backAgain(s);
@@ -835,9 +869,11 @@ function drawTargets() {
   const key = JSON.stringify(state.targets) + "|" + view.target;
   if ($("targets").dataset.key === key) return;
   $("targets").dataset.key = key;
+  // another set edited opens on its own camera menu, as in the window
   const pick = (i) => {
     if (i === view.target) return;
     view.target = i;
+    view.menu = null;
     drawTargets();
     refresh();
   };
@@ -942,11 +978,35 @@ function probeDetails() {
   return d;
 }
 
-/** The Menu column: Main, the tabs with their colours and counts, then the other pages. */
+/** The camera's menus to pick one of, heading the Menu column (the window's selector): its words, then a button per
+ *  menu in the definition's order, the one shown pressed, each with its hover (the file's own menu says it was saved
+ *  in it); in Compare each also says how many of its rows differ. Only where the definition lists two or more and the
+ *  rows are laid out as on the camera (the editor sends `menus` then). */
+function menuSelector() {
+  const s = state;
+  if (!s.menus || s.menus.length < 2) return null;
+  const cur = curMenu();
+  const counts = view.mode === "compare" && cmp.last && cmp.last.menus ? new Map(cmp.last.menus.map((m) => [m.name, m.differ])) : null;
+  const label = s.menus_label || "Camera menu:";
+  return el("div", { class: "menus", role: "group", "aria-label": label.replace(/:\s*$/, ""), title: s.menus_hover || undefined },
+    el("span", { class: "menus-label", "aria-hidden": "true" }, label),
+    ...s.menus.map((m) => {
+      const on = m.name === cur;
+      const n = counts ? counts.get(m.name) : undefined;
+      return el("button", { class: "sel" + (on ? " on" : ""), "aria-pressed": String(on), "data-menu": m.name, title: m.title || undefined, onclick: () => pickMenu(m.name) },
+        m.name, n ? el("span", { class: "badge", title: "rows that differ in this menu" }, String(n)) : null);
+    }));
+}
+
+/** The Menu column: the camera's menus to pick one of, then in Edit Main, the tabs with their colours and counts and the
+ *  other pages; in Compare the same entries as the window's Compare bar (`entries`: All settings, Main, My Menu, the
+ *  tabs), each saying how many of its rows differ, a click showing its rows. */
 function drawSide() {
   const s = state;
+  const compare = view.mode === "compare";
   const key = JSON.stringify([s.tab_info, s.my_menu, s.edits, s.memories, s.exposure, s.known, s.definition, s.help_src, s.help_refused,
-    view.page, view.tab, view.q, view.only, hits]);
+    view.page, view.tab, view.q, view.only, hits, s.menus, s.menu, s.menus_label, s.menus_hover, view.menu, compare,
+    compare ? [cmp.entry, cmpOnly(), cmp.last && cmp.last.entries, cmp.last && cmp.last.menus] : 0]);
   if ($("side").dataset.key === key) return;
   $("side").dataset.key = key;
   const go = (page, tab) => () => {
@@ -966,9 +1026,23 @@ function drawSide() {
     el("button", { class: "sel" + (on ? " on" : ""), "aria-current": on ? "page" : null, title, onclick }, label,
       edited ? el("span", { class: "badge", title: badgeTitle || "settings edited in this tab" }, String(edited)) : null));
   const side = $("side"), was = side.dataset.at, left = side.scrollLeft;
-  side.dataset.at = JSON.stringify([view.page, view.tab, searching]);
+  side.dataset.at = JSON.stringify([view.page, view.tab, searching, compare, cmp.entry]);
   const mm = s.my_menu;
-  side.replaceChildren(...[
+  // the foot: what the editor knows of this camera, Expert mode only, as the window's side bar has it
+  const foot = el("div", { class: "foot" }, ...(!expert ? [] : [
+    el("div", { class: "small", title: "The settings the editor can name for this camera. Where they come from: ⚙ Settings > Camera support & web page" }, `${s.known} known settings`),
+    // the definition and the help file in Expert mode only, as the window's side bar has them
+    el("div", { class: "small weak", title: s.definition }, `definition: ${fileName(s.definition)}`),
+    s.help_src ? el("div", { class: "small weak", title: s.help_src }, `help: ${fileName(s.help_src)}`) : null,
+    // a help file of the definition's name that is another camera's: not used, said by its name, why in the hover
+    ...(s.help_refused || []).map((r) => el("div", { class: "small warn", title: r.text }, `help: ${r.file} not used`))]));
+  // Compare's bar: a click filters Compare to that entry; the badge is how many of its rows differ
+  const pickEntry = (k) => () => { if (cmp.entry === k) return; cmp.entry = k; cmp.cursor = null; drawSide(); maybeDraw(); };
+  const entries = () => ((cmp.last && cmp.last.entries) || []).map((e) => item({ label: `${e.name}  (${cmpOnly() ? e.differ : e.count})`,
+    color: e.color || (e.key === "main" ? "var(--main-mark)" : null), on: cmp.entry === e.key, onclick: pickEntry(e.key),
+    edited: e.differ, title: e.title || undefined, badgeTitle: "rows that differ here" }));
+  side.replaceChildren(...(compare ? [menuSelector(), el("h1", { class: "menu-title" }, "Menu"), ...entries(), el("hr"), foot] : [
+    menuSelector(),
     el("h1", { class: "menu-title" }, "Menu"),
     item({ label: "Main", color: "var(--main-mark)", on: showing("main"), onclick: go("main") }),
     // My Menu, a tab of its own on the camera, under Main as in the window
@@ -988,14 +1062,8 @@ function drawSide() {
     expert ? item({ label: "Record map", on: view.page === "records", onclick: go("records"),
       title: "Every record of the set in file order, mapped or not, so an unmapped record can be read next to its neighbours" }) : null,
     el("hr"),
-    el("div", { class: "foot" }, ...(!expert ? [] : [
-      el("div", { class: "small", title: "The settings the editor can name for this camera. Where they come from: ⚙ Settings > Camera support & web page" }, `${s.known} known settings`),
-      // the definition and the help file in Expert mode only, as the window's side bar has them
-      el("div", { class: "small weak", title: s.definition }, `definition: ${fileName(s.definition)}`),
-      s.help_src ? el("div", { class: "small weak", title: s.help_src }, `help: ${fileName(s.help_src)}`) : null,
-      // a help file of the definition's name that is another camera's: not used, said by its name, why in the hover
-      ...(s.help_refused || []).map((r) => el("div", { class: "small warn", title: r.text }, `help: ${r.file} not used`))])),
-  ].filter(Boolean));
+    foot,
+  ]).filter(Boolean));
   // the Menu as a strip (a phone): where it was, or the page now shown brought into view
   const on = side.querySelector("button.on");
   if (was === side.dataset.at || !on) side.scrollLeft = left;
@@ -1065,13 +1133,13 @@ function clearSearch() {
 /** What the page's content is drawn for: it is fetched and drawn again when this changes. */
 function contentKey() {
   const what = view.q ? "?" + view.q : view.page === "main" ? "main:" + view.set : view.page === "tab" ? "tab:" + view.tab : "*" + view.page;
-  return [state.rev, view.target, what, view.only, extraKey()].join("|");
+  return [state.rev, view.target, what, view.only, extraKey()].join("|") + (view.menu ? "|" + view.menu : "");
 }
 
 /** More that a page's content depends on beyond `view`: Compare is fetched again when its columns or filters change
  *  (its folds and cursor are drawn from the last answer). */
 function extraKey() {
-  return view.mode === "compare" ? JSON.stringify([cmp.cols, cmp.q, cmp.tab, cmpOnly(), cmpRaw(), cmp.three]) : "";
+  return view.mode === "compare" ? JSON.stringify([cmp.cols, cmp.q, cmp.entry, cmpOnly(), cmpRaw(), cmp.three]) : "";
 }
 
 /** How many Undo and Redo pressed on the keyboard the editor has not answered yet (`shortcut`). The key came to the
@@ -1100,17 +1168,18 @@ function maybeDraw() {
 
 /** The pages by name (`pageName`): how each is fetched from the editor and drawn from its answer, and for the pages
  *  of settings how a newer answer is patched in (false when its rows are not the same ones: the page is drawn anew). */
+// the pages that list rows or link to them ask in the camera's menu the page shows (`withMenu`)
 const pages = {
-  main: { load: () => api("main", { target: view.target, set: view.set }), draw: drawMain, patch: patchMain },
-  tab: { load: () => api("tab", { target: view.target, tab: view.tab }), draw: (j) => drawTab(j.groups, j), patch: (a, b) => patchGroups(a.groups, b.groups) },
-  search: { load: () => api("tab", { target: view.target, q: view.q }), draw: (j) => drawSearch(j.groups), patch: (a, b) => patchGroups(a.groups, b.groups) },
+  main: { load: () => api("main", withMenu({ target: view.target, set: view.set })), draw: drawMain, patch: patchMain },
+  tab: { load: () => api("tab", withMenu({ target: view.target, tab: view.tab })), draw: (j) => drawTab(j.groups, j), patch: (a, b) => patchGroups(a.groups, b.groups) },
+  search: { load: () => api("tab", withMenu({ target: view.target, q: view.q })), draw: (j) => drawSearch(j.groups), patch: (a, b) => patchGroups(a.groups, b.groups) },
   edits: { load: () => api("changes"), draw: (j) => drawChanges(j.changes) },
   memories: { load: () => api("memories", { q: memView.q, ...(memView.all === null ? {} : { all: memView.all }), ...(memView.only === null ? {} : { only_diff: memView.only }) }),
     draw: drawMemories },
-  exposure: { load: () => api("exposure"), draw: drawExposure },
-  mymenu: { load: () => api("mymenu_page", { target: view.target }), draw: drawMyMenu },
+  exposure: { load: () => api("exposure", withMenu({})), draw: drawExposure },
+  mymenu: { load: () => api("mymenu_page", withMenu({ target: view.target })), draw: drawMyMenu },
   unmapped: { load: () => api("unmapped", { target: view.target, q: view.q, only: view.only }), draw: drawUnmapped },
-  records: { load: () => api("records", { target: view.target, q: view.q, only_unmapped: xp.rm.unmapped, only_edited: xp.rm.edited, open: [...xp.rm.open] }),
+  records: { load: () => api("records", withMenu({ target: view.target, q: view.q, only_unmapped: xp.rm.unmapped, only_edited: xp.rm.edited, open: [...xp.rm.open] })),
     draw: drawRecords },
   compare: { load: () => api("compare", cmpBody()), draw: drawCompareAnswer },
   compare_records: { load: () => api("compare_records", cmpBody()), draw: (j) => { cmp.last = j; return drawCompareRecords(); } },
@@ -1252,7 +1321,8 @@ const replyRows = (j) => (!j ? [] : Array.isArray(j.rows) ? j.rows.filter(Boolea
 function setSetting(r, body) {
   // from the compare's picker: the cell's column goes with it, and the compare, not a page of rows, shows the answer
   if (r.col) return cmpPickSet(r, body);
-  return act("set", { target: rowTarget(r), key: r.key, ...body }, null, {
+  // the rows the editor answers with are drawn as the page's camera menu shows them (`withMenu`)
+  return act("set", withMenu({ target: rowTarget(r), key: r.key, ...body }), null, {
     done: (j) => {
       const rows = replyRows(j);
       patchRows(rows, r.key);
@@ -1346,8 +1416,9 @@ function welcome() {
 /** The Main page: its pages (Stills, Movie, …), the tiles, then every setting they show as rows. */
 function drawMain(j) {
   view.set = j.set;
+  // its pages' buttons say which is shown (`aria-pressed`); none in a camera's menu that names its tiles (`sets` empty)
   const head = el("div", { class: "head" }, el("h1", {}, "Main"),
-    ...j.sets.map((n, i) => el("button", { class: "sel" + (i === j.set ? " on" : ""), onclick: () => { view.set = i; maybeDraw(); } }, n)));
+    ...j.sets.map((n, i) => el("button", { class: "sel" + (i === j.set ? " on" : ""), "aria-pressed": String(i === j.set), onclick: () => { view.set = i; maybeDraw(); } }, n)));
   if (!j.tiles.length) return [head, el("p", {}, "The editor has no Main page tiles for this camera. The settings are in the tabs on the left.")];
   return [head,
     el("div", { class: "tiles" }, ...j.tiles.map(drawTile)),
@@ -1425,9 +1496,11 @@ function drawSearch(groups) {
  *  list. The editor keeps the choice, for its window too. */
 function layoutSwitch(flat) {
   const pick = (on) => () => { if (flat !== on) act("prefs", { name: "flat_list", value: on }); };
+  // each button says whether it is the layout shown (`aria-pressed`)
+  const pressed = (b, on) => { b.setAttribute("aria-pressed", String(on)); return b; };
   return el("span", { class: "layout-switch" },
-    selButton(!flat, "As on the camera", pick(false), "The rows in the camera's order, each submenu's rows indented under it, as the camera's menu lists them"),
-    selButton(flat, "Flat list", pick(true), "Every setting of the group in one list"));
+    pressed(selButton(!flat, "As on the camera", pick(false), "The rows in the camera's order, each submenu's rows indented under it, as the camera's menu lists them"), !flat),
+    pressed(selButton(flat, "Flat list", pick(true), "Every setting of the group in one list"), flat));
 }
 
 /** A tab's groups as the window's collapsing headers, open as they were left (all of them for a search); Picture
@@ -1738,7 +1811,7 @@ function drawRow(r) {
  *  chosen option's ("Open the PP1 page"), then the others, each opening its page's group where it is shown. */
 function pageLinks(r) {
   const link = (p, words) => el("a", { href: "#", "data-page": p.option, title: `The ${p.count} settings the camera lists on the page ${p.option} opens`,
-    onclick: (e) => { e.preventDefault(); openSetting({ key: p.key, tab: p.open_tab, open_tab: p.open_tab, open_group: p.open_group }); } }, words);
+    onclick: (e) => { e.preventDefault(); openSetting({ ...p, tab: p.open_tab }); } }, words);
   const now = r.pages.find((p) => p.option === r.label);
   const others = r.pages.filter((p) => p !== now);
   return el("div", { class: "small pages" }, now ? link(now, now.words) : null,
@@ -1751,6 +1824,13 @@ function rowDetail(r) {
   const h = state.row_hovers || {};
   const expert = !!(state.prefs && state.prefs.expert);
   const out = [];
+  // in a camera's menu a row is titled as the camera draws it there: the setting's full name heads its details
+  if (r.full_name) out.push(el("div", { class: "strong", title: "The setting's full name" }, r.full_name));
+  // a search's hit in a camera's menu: where it is, and a way there (that menu shown, its tab and group open)
+  if (r.open && r.open.where) {
+    out.push(el("div", { class: "small" }, el("a", { href: "#", "data-open": "", title: "Show the camera menu that has this setting, with the setting open",
+      onclick: (e) => { e.preventDefault(); openSetting(r.open); } }, `Open in ${r.open.where}`)));
+  }
   // the photographer's line first: whose words the help is, as the window's hover says, the camera's own (a help file
   // on that computer) or Camset's
   if (r.help) out.push(el("div", { class: "help", title: r.help_from_file ? h.help : h.help_own }, r.help));
@@ -1862,9 +1942,13 @@ function menuPlace(tab) {
 /** Open a setting in its tab (or where the Menu shows it: `open_tab`, the entry for what the camera's menus do not
  *  hold as on the camera, else where the Menu shows its tab: `menuPlace`), with its group and details unfolded, and
  *  bring it into view. Its group is the one that shows it in the layout in use, as the editor names it
- *  (`open_group`: as on the camera, the camera group whose page holds its row), else its own. Answers the row (or the
- *  sub-choice's box) brought into view, if any. */
+ *  (`open_group`: as on the camera, the camera group whose page holds its row), else its own. Where the definition
+ *  lists the camera's menus, the editor names the menu that shows it (`open_menu`, as the window's jump picks it), which
+ *  the page then shows, and the row there that shows it where that is another's (`open_key`: a copy in its setting's
+ *  row). Answers the row (or the sub-choice's box) brought into view, if any. */
 async function openSetting(s) {
+  const menu = s.open_menu && s.open_menu !== curMenu() ? s.open_menu : null;
+  if (menu) view.menu = menu;
   const place = menuPlace(s.open_tab || s.tab);
   view.page = place.page;
   if (place.tab) view.tab = place.tab;
@@ -1872,17 +1956,21 @@ async function openSetting(s) {
   const where = place.page === "tab" ? place.tab : place.page;
   if (!openGroups.has(where)) openGroups.set(where, new Set());
   openGroups.get(where).add(s.open_group || s.group);
-  xp.detail.add(s.key);
-  xp.reveal = s.key;
-  xp.subFocus = s.key;
+  const shown = s.open_key || s.key;
+  xp.detail.add(shown);
+  xp.reveal = shown;
+  xp.subFocus = shown;
   drawSide();
   await drawContent(contentKey());
+  // another menu: its Menu column follows once the page is drawn (asked before, the state's answer would race the
+  // page's own request and could have it dropped)
+  if (menu) refresh();
   // its own row of the group, not its copy in another row's details (a choice shown under its option)
-  const key = CSS.escape(s.key);
+  const key = CSS.escape(shown);
   let at = document.querySelector(`details.grp > .grid > [data-key="${key}"]`);
   if (!at) {
     // as on the camera a sub-choice is no row: its owner's row opens, its details showing it beside the option, marked
-    const owner = [...document.querySelectorAll("details.grp > .grid > .row")].find((n) => n._row && n._row.subs && (n._row.subs.rows || []).some((x) => x.key === s.key));
+    const owner = [...document.querySelectorAll("details.grp > .grid > .row")].find((n) => n._row && n._row.subs && (n._row.subs.rows || []).some((x) => x.key === shown));
     if (owner) {
       xp.detail.add(owner._row.key);
       if (owner.hidden) unfoldTo(owner);
@@ -2373,9 +2461,16 @@ function cmpRaw() {
   return cmp.raw ?? !!(state && state.compare && state.compare.show_raw);
 }
 
-/** What the compare asks the editor for: the page's columns, search, tab and filters. */
+/** What the compare asks the editor for: the page's columns, search, entry of the Menu column, camera menu (the set
+ *  edited opens on its own: `target`) and filters. */
 function cmpBody() {
-  return { cols: cmp.cols || [], q: cmp.q, tab: cmp.tab || null, only_diff: cmpOnly(), raw: cmpRaw(), three: cmp.three, keep: cmp.kept };
+  return withMenu({ cols: cmp.cols || [], q: cmp.q, entry: cmp.entry, target: view.target, only_diff: cmpOnly(), raw: cmpRaw(), three: cmp.three, keep: cmp.kept });
+}
+
+/** A copy from Compare's rows: in a camera's menu a row holds the record for that menu, so the copy names the entry and
+ *  the menu its row was shown in. */
+function cmpWhere(body) {
+  return curMenu() ? withMenu({ ...body, entry: cmp.entry, target: view.target }) : body;
 }
 
 /** The compare drawn from the editor's answer: the cursor kept on a row still shown; back from Edit ("← Back to
@@ -2383,6 +2478,8 @@ function cmpBody() {
  *  cell, showing the setting as it is now (after a change, a Revert or an undo). */
 function drawCompareAnswer(j) {
   cmp.last = j;
+  // the entry the editor showed: the one asked for while the Menu column lists it, else All settings
+  if (typeof j.entry === "string") cmp.entry = j.entry;
   if (cmp.cursor !== null && cmp.cursor >= j.rows.length) cmp.cursor = null;
   if (cmp.goKey !== null) {
     const i = j.rows.findIndex((r) => r.key === cmp.goKey);
@@ -2442,7 +2539,8 @@ function cmpSync(s) {
   }
   if (was && was.base && !files.base) cmp.three = "all";
   cmp.files = files;
-  const sets = new Set(s.targets.map(([i]) => i));
+  // the sets a column can show: every camera menu's (`column_sets`), though the Editing row offers the menu's own
+  const sets = new Set(s.column_sets || s.targets.map(([i]) => i));
   cmp.cols = cmp.cols.filter(([src, sec]) => (src === "a" || !!files[src]) && sets.has(sec));
 }
 
@@ -2470,13 +2568,14 @@ function cmpSetMode(mode) {
 }
 
 /** The Compare bar: A, B and the base with their names and firmware badges (Open… on each), Swap A/B,
- *  Download A, Export CSV, the search, the tab and the switches, the line saying once which file
+ *  Download A, Export CSV, the search and the switches, the line saying once which file
  *  each letter of the columns' names is, the window's line when B or the base is from another firmware of the camera
- *  (`firmware_note`), and its line when the files were saved under different video systems (`video_note`). */
+ *  (`firmware_note`), and its line when the files were saved under different video systems (`video_note`). Which rows
+ *  it shows is the Menu column's, as in Edit (`drawSide`). */
 function drawCompareBar(s, f) {
-  const c = s.compare || { b: null, base: null, tabs: [] };
+  const c = s.compare || { b: null, base: null };
   const bar = $("bar-compare");
-  const key = JSON.stringify([f && [f.name, f.model, f.saved, f.badge, f.edit_anyway_in_desktop], c.b, c.base, c.tabs, c.video_note, c.firmware_note]);
+  const key = JSON.stringify([f && [f.name, f.model, f.saved, f.badge, f.edit_anyway_in_desktop], c.b, c.base, c.video_note, c.firmware_note]);
   if (bar.dataset.key !== key) {
     bar.dataset.key = key;
     const none = () => el("span", { class: "weak" }, "none");
@@ -2492,10 +2591,6 @@ function drawCompareBar(s, f) {
     $("cmp-base").replaceChildren(...file(c.base, "base").filter(Boolean));
     for (const e of bar.querySelectorAll(".cmp-base")) e.hidden = !c.b;
     $("b-close-base").hidden = !c.base;
-    const tabs = c.tabs || [];
-    if (cmp.tab && !tabs.includes(cmp.tab)) cmp.tab = "";
-    $("cmp-tab").replaceChildren(el("option", { value: "" }, "All tabs"), ...tabs.map((t) => el("option", { value: t }, t)));
-    $("cmp-tab").value = cmp.tab;
     const letters = !(c.b || c.base) ? [] : [
       f ? el("span", { class: "cmp-src-a" }, `A = ${f.name} (the file you edit)`) : null,
       c.b ? el("span", { class: "cmp-src-b" }, `B = ${c.b.name}`) : null,
@@ -2574,7 +2669,8 @@ function drawCompare() {
     el("p", { class: "small weak" }, "The first column is the baseline; cells that differ from it are highlighted. The small arrows between columns put a value into the column they point at (only the open file, A, takes values); a click on a value of A changes it; a click on a column header opens its menu (← and → move between the headers); right-click a cell for more (on a phone, touch and hold it).")];
   // one click to recall a memory into the live settings of file A, or to register the live settings into a memory
   if (j.editable && j.dial.length) {
-    const filter = cmp.q || cmp.tab ? { q: cmp.q, tab: cmp.tab || null } : null;
+    // "only the rows shown": the search and the Menu column's entry, in the page's camera menu
+    const filter = cmp.q || cmp.entry !== "all" ? withMenu({ q: cmp.q, entry: cmp.entry }) : null;
     // in the window's words
     out.push(el("div", { class: "cmp-tools" }, el("strong", {}, "Whole sets:"), ...j.whole_sets.flatMap((b) => wholeSetButtons(b, filter)),
       filter ? onlyShownBox() : null));
@@ -2609,7 +2705,7 @@ function drawCompare() {
 /** The three-way line: the counts, the filter, and the merge buttons (the window's, over the same rows). */
 function cmpThree(j) {
   const t = j.three;
-  const merge = (kind) => act("merge", { base: t.cols[0], a: t.cols[1], b: t.cols[2], kind, q: cmp.q, tab: cmp.tab || null });
+  const merge = (kind) => act("merge", withMenu({ base: t.cols[0], a: t.cols[1], b: t.cols[2], kind, q: cmp.q, entry: cmp.entry, target: view.target }));
   // drawn at once, though the list keeps the focus (`maybeDraw` waits while a list of the page has it, for a row's list
   // open under the hand); the focus stays on it (`drawContent`)
   const sel = el("select", { "aria-label": "Rows of the three-way compare", onchange: () => { cmp.three = sel.value; cmp.cursor = null; cmp.kept = null; drawContent(contentKey()); } },
@@ -2759,7 +2855,7 @@ function cmpGap(j, r, ci) {
     if (!(j.editable && slot)) continue;
     const what = `Put the value from ${from.name} into ${to.name}`;
     td.append(on
-      ? el("button", { class: "cmp-arrow", title: what, "aria-label": what, onclick: () => act("copy", { from: [from.src, from.section], to: [to.src, to.section], key: r.key }) }, glyph)
+      ? el("button", { class: "cmp-arrow", title: what, "aria-label": what, onclick: () => act("copy", cmpWhere({ from: [from.src, from.section], to: [to.src, to.section], key: r.key })) }, glyph)
       : el("span", { class: "cmp-arrow" }));
   }
   return td;
@@ -2789,11 +2885,11 @@ function cmpCellMenu(j, r, ci) {
     items.push(`Copy ${r.name} from ${c.name}`);
     for (const t of targets) {
       const at = j.cols.findIndex((x) => x.src === t.src && x.section === t.section);
-      items.push([`${at < ci ? "◀︎" : "▶︎"} ${t.name}`, `Put this value into ${t.name}`, () => act("copy", { from, to: [t.src, t.section], key: r.key })]);
+      items.push([`${at < ci ? "◀︎" : "▶︎"} ${t.name}`, `Put this value into ${t.name}`, () => act("copy", cmpWhere({ from, to: [t.src, t.section], key: r.key }))]);
     }
     if (targets.length > 1) {
       items.push([`All of A (${targets.length} columns)`, `Put this value into ${targets.map((t) => t.name).join(", ")}`,
-        () => act("copy", { from, to: targets.map((t) => [t.src, t.section]), key: r.key })]);
+        () => act("copy", cmpWhere({ from, to: targets.map((t) => [t.src, t.section]), key: r.key }))]);
     }
     items.push("-");
   }
@@ -2896,7 +2992,7 @@ function cmpHeadMenu(j, i) {
   items.push(["Remove column", null, () => { cmp.cols = cmp.cols.filter((x) => !same(x)); cmp.cursor = null; maybeDraw(); }]);
   if (j.editable) {
     for (const t of j.cols.filter((col) => col.editable && !(col.src === c.src && col.section === c.section))) {
-      items.push([`Copy all shown rows to ${t.name}`, null, () => act("copy_rows", { from: [c.src, c.section], to: [t.src, t.section], keys: j.rows.map((r) => r.key) })]);
+      items.push([`Copy all shown rows to ${t.name}`, null, () => act("copy_rows", cmpWhere({ from: [c.src, c.section], to: [t.src, t.section], keys: j.rows.map((r) => r.key) }))]);
     }
   }
   return items;
@@ -3233,7 +3329,8 @@ async function cmpOpenInEdit(r, section) {
   cmp.from = { key: r.key, tab: r.open_tab || r.tab, target };
   cmp.back = { page: "tab", q: "" };
   cmpSetMode("edit");
-  await openSetting({ tab: r.tab, group: r.group, open_group: r.open_group, open_tab: r.open_tab, key: r.key });
+  // in the camera's menu Compare showed it in, its row there (`open_menu`, `open_key`)
+  await openSetting({ tab: r.tab, group: r.group, open_group: r.open_group, open_tab: r.open_tab, open_menu: r.open_menu, open_key: r.open_key, key: r.key });
 }
 
 /** Whether Edit still shows what "Open in Edit" opened: that setting's tab, in that set. */
@@ -4257,12 +4354,11 @@ $("b-close-base").addEventListener("click", () => act("close_base"));
 $("b-swap").addEventListener("click", () => { if (!saysWhy($("b-swap"))) act("swap_ab"); });
 $("b-download-a").addEventListener("click", () => { if (!saysWhy($("b-download-a"))) downloadFile(); });
 $("b-csv-cmp").addEventListener("click", () => saysWhy($("b-csv-cmp")) || downloadAnswer("csv",
-  { target: view.target, compare: true, cols: cmp.cols, only_diff: cmpOnly(), raw: cmpRaw(), q: cmp.q, tab: cmp.tab || null }, "compare.csv"));
+  withMenu({ target: view.target, compare: true, cols: cmp.cols, only_diff: cmpOnly(), raw: cmpRaw(), q: cmp.q, entry: cmp.entry }), "compare.csv"));
 $("cmp-q").addEventListener("input", () => {
   clearTimeout(cmpSearchTimer);
   cmpSearchTimer = setTimeout(() => { cmp.q = $("cmp-q").value.trim(); maybeDraw(); }, 300);
 });
-$("cmp-tab").addEventListener("change", () => { cmp.tab = $("cmp-tab").value; maybeDraw(); });
 $("cmp-only").addEventListener("change", () => { cmp.only = $("cmp-only").checked; cmp.kept = null; maybeDraw(); });
 $("cmp-raw").addEventListener("change", () => { cmp.raw = $("cmp-raw").checked; maybeDraw(); });
 $("cmp-records").addEventListener("change", () => { cmp.records = $("cmp-records").checked; render(); });
