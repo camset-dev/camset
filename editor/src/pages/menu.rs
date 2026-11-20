@@ -1117,9 +1117,9 @@ impl App {
             let row = if rec.key == s.key {
                 p
             } else {
-                // the copy's record at the setting's place, under its name
+                // the copy's record at the setting's place, in its tab and group, under its name
                 let mut b = rec.place_in(menu);
-                (b.name, b.row, b.row_at, b.row_tab, b.row_group, b.under_option) = (p.name, p.row, p.row_at, p.row_tab, p.row_group, p.under_option);
+                (b.name, b.tab, b.group, b.row, b.row_at, b.row_tab, b.row_group, b.under_option) = (p.name, p.tab, p.group, p.row, p.row_at, p.row_tab, p.row_group, p.under_option);
                 b
             };
             row_of.insert(s.key.clone(), rows.len());
@@ -2002,6 +2002,28 @@ pub(crate) mod facts_tests {
         app.set_menu("S&Q");
         app.go_to(&audio);
         assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some("S&Q"), Some(audio.key.as_str())));
+        done(&dir, &user);
+    }
+
+    /// Review finding 1: a copy shown in its setting's row in a menu sits where the setting sits, in its tab and group,
+    /// whatever the copy's own tab and group say: White Balance's fine-tune movie copy (its own place Shooting > Other
+    /// settings) in the Movie menu of a file saved in Stills is the choice beside White Balance's option, in
+    /// Exposure/Color > White Balance, and no row of a group of its own.
+    #[test]
+    fn a_copy_in_its_settings_row_sits_in_its_settings_tab_and_group() {
+        let (app, dir, user) = sample_app("menus_copy_place", Some(crate::test_support::stub_menus));
+        let main = setting(&app, "global:0x0c63");
+        let copy = app.copy_for_menu(&main, "Movie").cloned().unwrap();
+        assert!(copy.tab != main.tab || copy.group != main.group, "the case: the copy's own tab and group are other");
+        assert_ne!(app.opening_menu(0).as_deref(), Some("Movie"), "a file saved in another mode than Movie's");
+        let shown = app.listed_record(&main, 0, "Movie");
+        assert_eq!(shown.key, copy.key);
+        assert_eq!((shown.tab.as_str(), shown.group.as_str()), (main.tab.as_str(), main.group.as_str()));
+        assert_eq!((app.layout_tab(&shown), app.layout_group(&shown)), (app.layout_tab(&main.place_in("Movie")), app.layout_group(&main.place_in("Movie"))));
+        // as on the camera, beside White Balance's option, not a row of another group
+        let wb = app.settings_in_menu(0, "Movie", None).into_iter().find(|s| menu_rows::is_own(s) && s.row == ["White Balance"]).unwrap();
+        assert!(app.beside_in(0, Some("Movie"), &wb).iter().any(|(x, _)| x.key == copy.key), "the fine-tune choice beside White Balance's option");
+        assert!(app.tab_groups_in(0, Some("Movie"), &copy.tab, "", false).iter().all(|(_, _, rows)| rows.iter().flatten().all(|s| s.key != copy.key || s.tab == main.tab)));
         done(&dir, &user);
     }
 

@@ -168,6 +168,17 @@ def test_what_one_menu_lists():
     assert all(x["row_menus"] == ["Movie"] for x in listed)
 
 
+def test_a_copy_in_its_settings_row_sits_in_its_settings_tab_and_group():
+    """editor/src/pages/menu.rs's test of the same name: a copy shown in its setting's row takes the setting's tab and
+    group, whatever its own say (White Balance's fine-tune movie copy, its own place Shooting > Other settings)."""
+    doc = {"tabs": ["Shooting", "Exposure/Color"], "camera": {"menus": MENUS[:2]}, "settings": [
+        s("wb", "WB fine-tune", ["White Balance"], [22], row_menus=["Still", "Movie"], copies=["wb_m"], tab="Exposure/Color", group="White Balance"),
+        s("wb_m", "WB fine-tune (movie)", ["White Balance"], [22], copy_of="wb", copy_for=["Movie"], tab="Shooting", group="Other settings")]}
+    row = mr.Menu(doc).listed("Movie", "Stills")[0]
+    assert (row["key"], row["tab"], row["group"]) == ("wb_m", "Exposure/Color", "White Balance")
+    assert mr.camera_tab(row) == "Exposure/Color" and mr.camera_group(row) == "White Balance"
+
+
 def test_a_row_without_its_own_setting_is_a_heading_and_nothing_placed_is_the_flat_list():
     assert mr.lay_out(rows(s("c", "Speed", ["Drive Mode"], [26], "Continuous Shooting"))) == [head("Drive Mode", 0, ["Drive Mode"]), row(0, 1)]
     assert mr.lay_out(rows(s("a", "A", [], []), s("b", "B", [], []))) == [row(0, 0), row(1, 0)]

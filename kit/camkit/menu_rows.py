@@ -372,7 +372,8 @@ class Menu:
             rec = s if expert else self.row_record(s, menu, mode)
             if rec is not s:
                 b = place_in(rec, menu)
-                for k in ("name", "row", "row_at", "row_tab", "row_group", "under_option"):
+                # the copy at its setting's place, in its tab and group, under its name
+                for k in ("name", "tab", "group", "row", "row_at", "row_tab", "row_group", "under_option"):
                     if p.get(k) is None:
                         b.pop(k, None)
                     else:
