@@ -3379,29 +3379,39 @@ pub(crate) mod tests {
         let raw = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": true, "raw": true }));
         let r = raw["rows"].as_array().unwrap().iter().find(|r| r["key"] == s.key.as_str()).unwrap();
         assert_eq!(r["cells"][1]["text"], format!("{}  [{other}]", App::describe(&s, Some(other))).as_str());
-        // every row (All settings, the entry shown when the page names none), then an entry of the Menu and a search
+        // every row (All settings, the entry shown when the page names none), then an entry of the Menu and a search, each
+        // the rows the window's Compare shows with the same columns, entry and search (`matrix_rows`)
         let keys = |j: &Value| j["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        let window = |app: &App, entry: &BarKey, q: &str| app.compare_rows(None, entry, q).iter().map(|r| r.2[0].key.clone()).collect::<Vec<_>>();
+        let window = |app: &mut App, entry: BarKey, q: &str| {
+            (app.mode, app.cols, app.compare_entry, app.search) = (Mode::Compare, vec![Col::a(0), Col::b(0)], entry, q.to_string());
+            app.matrix_rows().iter().map(|r| r.2[0].key.clone()).collect::<Vec<_>>()
+        };
         let all = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false }));
-        assert_eq!((all["entry"].as_str(), keys(&all)), (Some("all"), window(&app, &BarKey::All, "")));
+        assert_eq!((all["entry"].as_str(), keys(&all)), (Some("all"), window(&mut app, BarKey::All, "")));
         assert_eq!(all["total"], app.matrix_rows_for("", None).len(), "without menus, the rows Compare always had");
         assert_eq!(all["shown"], all["total"]);
         let tab = app.layout_tab(&s).to_string();
         let t = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false, "entry": format!("tab:{tab}") }));
-        assert_eq!((t["entry"].as_str(), keys(&t)), (Some(format!("tab:{tab}").as_str()), window(&app, &BarKey::Tab(tab.clone()), "")));
+        assert_eq!((t["entry"].as_str(), keys(&t)), (Some(format!("tab:{tab}").as_str()), window(&mut app, BarKey::Tab(tab.clone()), "")));
         assert!(t["rows"].as_array().unwrap().iter().all(|r| r["tab"] == tab.as_str()));
         let word = s.name.split(' ').next().unwrap().to_uppercase();
         let q = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false, "q": word }));
-        assert_eq!(keys(&q), window(&app, &BarKey::All, &word));
+        assert_eq!(keys(&q), window(&mut app, BarKey::All, &word));
         assert!(q["rows"].as_array().unwrap().iter().any(|r| r["key"] == s.key.as_str()));
         // an entry the Menu column does not list shows All settings, and says so
         assert_eq!(ask(&mut app, "compare", json!({ "cols": cols, "entry": "tab:No such tab" }))["entry"], "all");
-        // the Menu column as the window's Compare bar has it (`compare_bar`): each entry's rows and how many differ
-        let cols2 = [Col::a(0), Col::b(0)];
-        let want: Vec<Value> = app.compare_bar(None, "", &|x| app.row_differs(&cols2, x)).into_iter()
-            .map(|e| json!([App::web_entry_key(&e.key), e.label, e.count, e.badge])).collect();
+        // the Menu column is the window's Compare bar with the same columns (`compare_side_bar` calls `compare_bar` with
+        // the window's menu and search), and the window draws each entry as "Label  (rows)"
+        window(&mut app, BarKey::All, "");
+        let drawn = crate::test_support::texts(&egui::Context::default().run(egui::RawInput::default(), |ctx| eframe::App::update(&mut app, ctx, &mut eframe::Frame::_new_kittest())).shapes);
+        let wcols = app.cols.clone();
+        let bar = app.compare_bar(app.compare_menu().as_deref(), &app.search, &|x| app.row_differs(&wcols, x));
+        let want: Vec<Value> = bar.iter().map(|e| json!([App::web_entry_key(&e.key), e.label, e.count, e.badge])).collect();
         let got: Vec<Value> = all["entries"].as_array().unwrap().iter().map(|e| json!([e["key"], e["name"], e["count"], e["differ"]])).collect();
         assert_eq!(got, want);
+        for e in &bar {
+            assert!(drawn.contains(&format!("{}  ({})", e.label, e.count.unwrap())), "the window draws {} so", e.label);
+        }
         assert!(got.iter().any(|e| e[0] == "all" && e[3].as_u64() >= Some(1)), "the change counted under All settings: {got:?}");
         assert!(all.get("menus").is_none(), "no camera menus in this definition");
         // the window's own columns when the page names none; a file not open, a set not shown
@@ -5343,48 +5353,53 @@ pub(crate) mod tests {
         assert!(app.web_row(0, std::slice::from_ref(s)).get("not_on_camera").is_none());
     }
 
-    /// Every link in `v` (an object with `open_tab`, at any depth) lands where a jump of the window to its setting does
-    /// from menu `now` for set `target` (`jump_place`): the menu (`open_menu`), the entry and the group. `key_of` names
-    /// the setting of a link object. Answers how many links it checked.
-    fn links_as_the_window(app: &App, v: &Value, target: usize, now: Option<&str>, key_of: &dyn Fn(&Value) -> Option<String>) -> usize {
-        let mut n = 0;
-        match v {
-            Value::Object(o) => {
-                if o.contains_key("open_tab") {
-                    if let Some(s) = key_of(v).and_then(|k| app.schema.settings.iter().find(|s| s.key == k)) {
-                        let (menu, tab, group) = app.jump_place(s, target, now);
-                        assert_eq!((o.get("open_menu").and_then(Value::as_str), o["open_tab"].as_str(), o["open_group"].as_str()),
-                            (menu.as_deref(), Some(tab.as_str()), Some(group.as_str())), "the link to {}", s.key);
-                        n += 1;
-                    }
-                }
-                for x in o.values() {
-                    n += links_as_the_window(app, x, target, now, key_of);
-                }
-            }
-            Value::Array(a) => {
-                for x in a {
-                    n += links_as_the_window(app, x, target, now, key_of);
-                }
-            }
-            _ => {}
-        }
-        n
-    }
-
     /// The setting a link object of the page names: an owner's row (`owner`), else its own `key`.
     fn link_key(v: &Value) -> Option<String> {
         v.get("owner").or_else(|| v.get("key")).and_then(Value::as_str).map(str::to_string)
     }
 
-    /// The page in each of the camera's menus (the design of 2026-11-20), as the window lists it: the state names the
-    /// menus in the definition's order with their hovers, the one shown (without one named, the one the set edited opens
-    /// on) and the selector's words; the Menu column's entries, counts and edits are the window's in that menu
-    /// (`edit_entries`); the Editing row offers that menu's sets, each a button; each entry's groups and rows are the
-    /// window's (`tab_groups_in`, laid out by `group_lines`), each row titled as the camera draws it there with the full
-    /// name for its details; Main shows the menu's tiles with no buttons of its own; every link lands where the window's
-    /// jump does (`jump_place`, the menu as `open_menu`). A setting placed otherwise in one menu (`row_places`) is under
-    /// its row there; a row of a setting the camera keeps a copy of per mode shows, and changes, the record for the menu.
+    /// Every link object (one with `open_tab`) in `v`, at any depth: its setting (`key_of`), `open_menu`, `open_tab`,
+    /// `open_group`.
+    fn links_in(v: &Value, key_of: &dyn Fn(&Value) -> Option<String>, out: &mut Vec<(String, Option<String>, String, String)>) {
+        match v {
+            Value::Object(o) => {
+                if let (Some(k), Some(t), Some(g)) = (o.get("open_tab").and(key_of(v)), o.get("open_tab").and_then(Value::as_str), o.get("open_group").and_then(Value::as_str)) {
+                    out.push((k, o.get("open_menu").and_then(Value::as_str).map(str::to_string), t.to_string(), g.to_string()));
+                }
+                o.values().for_each(|x| links_in(x, key_of, out));
+            }
+            Value::Array(a) => a.iter().for_each(|x| links_in(x, key_of, out)),
+            _ => {}
+        }
+    }
+
+    /// Every link in `v` lands where the window's own jump to its setting lands (`go_to`) for set 0 while the window
+    /// shows menu `m`: the menu it then shows, the page (a tab's, or the page a tab without an entry goes to: `routes`)
+    /// and the group. The window is put back on `m` after each. Answers how many links it checked.
+    fn links_as_the_windows_jumps(app: &mut App, v: &Value, m: &str) -> usize {
+        let mut links = Vec::new();
+        links_in(v, &link_key, &mut links);
+        for (key, menu, tab, group) in &links {
+            let s = app.schema.settings.iter().find(|s| s.key == *key).cloned().expect("a setting of the definition");
+            app.target = 0;
+            app.set_menu(m);
+            app.go_to(&s);
+            assert_eq!((app.menu_shown(), &app.view, app.group.as_deref()), (menu.clone(), &app.shown_view(View::Tab(tab.clone())), Some(group.as_str())), "the link to {key} from {m}");
+        }
+        app.set_menu(m);
+        links.len()
+    }
+
+    /// The page in each of the camera's menus (the design of 2026-11-20) is what the window shows with the same set and
+    /// menu: the state names the menus in the definition's order with their hovers, the one shown (without one named,
+    /// the one the set edited opens on) and the selector's words; the Menu column's entries, counts and edits are the
+    /// window's side bar's (`side_bar` calls `edit_entries` with the window's set, menu, search and Only edited) and it
+    /// draws each tab as "Shooting  (n)"; the Editing row is the window's (`editing_sets`); each entry's groups and rows
+    /// are those the window's menu view lists (`tab_groups`, laid out by `group_lines`), each row titled as the camera
+    /// draws it there with the full name for its details; Main shows the window's tile set and offers buttons where the
+    /// window does (`main_tile_set`); every link lands where the window's own jump lands (`go_to`). A setting placed
+    /// otherwise in one menu (`row_places`) is under its row there; a row of a setting the camera keeps a copy of per mode
+    /// shows, and changes, the record for the menu.
     #[test]
     fn the_page_lists_each_camera_menu_as_the_window() {
         use crate::test_support::{done, sample_app, stub_menus_and_a_place};
@@ -5392,31 +5407,42 @@ pub(crate) mod tests {
         let names: Vec<String> = app.menus().iter().map(|m| m.name.clone()).collect();
         assert_eq!(names.len(), 3, "the stub's three menus");
         let s = ask(&mut app, "state", json!({ "target": 0 }));
-        assert_eq!(s["menu"].as_str(), app.opening_menu(0).as_deref(), "the menu the live settings open on");
+        assert_eq!(s["menu"].as_str(), app.menu_shown().as_deref(), "the menu the window opens the live settings on");
         assert_eq!(s["menus"], json!(names.iter().map(|n| json!({ "name": n, "title": app.menu_hover(n) })).collect::<Vec<_>>()));
         assert!(names.iter().any(|n| app.menu_hover(n).contains("This file was saved in")), "the file's own menu says so");
         assert_eq!((s["menus_label"].as_str(), s["menus_hover"].as_str()), (Some(app.schema.camera.text.menus_label()), Some(app.schema.camera.text.menus_hover())));
         assert!(s["opened"].is_string());
         assert_eq!(s["column_sets"], json!(app.shown_sections()), "Compare's columns may show every menu's sets");
+        let ctx = egui::Context::default();
+        let mut frame = eframe::Frame::_new_kittest();
         let mut rows_seen = 0;
         let mut links = 0;
         for m in &names {
+            // the window on the live settings in this menu, on its first tab
+            (app.target, app.mode) = (0, Mode::Edit);
+            app.set_menu(m);
             let s = ask(&mut app, "state", json!({ "target": 0, "menu": m }));
             assert_eq!(s["menu"], m.as_str());
-            // the Menu column: the window's entries in this menu, their counts and edits
-            let want: Vec<Value> = app.edit_entries(0, Some(m), "", false).into_iter()
-                .filter_map(|e| match &e.key { BarKey::Tab(t) => Some(json!([t, e.count, e.badge, e.hover])), _ => None }).collect();
+            app.view = View::Tab(s["tabs"][0].as_str().unwrap().to_string());
+            let drawn = crate::test_support::texts(&ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(&mut app, ctx, &mut frame)).shapes);
+            assert_eq!(app.menu_shown().as_deref(), Some(m.as_str()));
+            // the Menu column: the window's side bar's entries, their counts and edits, and its words for each tab
+            let side = app.edit_entries(app.target, app.menu_shown().as_deref(), &app.search, app.only_changed);
+            let want: Vec<Value> = side.iter().filter_map(|e| match &e.key { BarKey::Tab(t) => Some(json!([t, e.count, e.badge, e.hover])), _ => None }).collect();
             let got: Vec<Value> = s["tab_info"].as_array().unwrap().iter().map(|t| json!([t["name"], t["count"], t["edited"], t["title"]])).collect();
             assert_eq!(got, want, "{m}");
             assert_eq!(s["tabs"], json!(want.iter().map(|w| w[0].clone()).collect::<Vec<_>>()));
-            // the Editing row: the live settings and the menu's memory sets, each a button of its own
+            for t in s["tab_info"].as_array().unwrap() {
+                assert!(drawn.contains(&format!("{}  ({})", t["name"].as_str().unwrap(), t["count"])), "{m}: the window draws {} so: {drawn:?}", t["name"]);
+            }
+            // the Editing row: the window's
             let sets: Vec<usize> = s["targets"].as_array().unwrap().iter().map(|t| t[0].as_u64().unwrap() as usize).collect();
-            assert_eq!(sets, app.menu_sets(Some(m)), "{m}");
+            assert_eq!(sets, app.editing_sets(), "{m}");
             assert!(s["targets"].as_array().unwrap().iter().all(|t| t[2] == true));
-            // each entry's groups and rows, as the window lists them in this menu
+            // each entry's groups and rows, as the window's menu view lists them in this menu
             for t in s["tabs"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()) {
                 let j = ask(&mut app, "tab", json!({ "target": 0, "menu": m, "tab": t }));
-                let window = app.tab_groups_in(0, Some(m), &t, "", false);
+                let window = app.tab_groups(&t);
                 let groups = j["groups"].as_array().unwrap();
                 assert_eq!(groups.iter().map(|g| g["name"].as_str().unwrap()).collect::<Vec<_>>(), window.iter().map(|g| g.0.as_str()).collect::<Vec<_>>(), "{m} > {t}");
                 for (g, (name, family, rows)) in groups.iter().zip(&window) {
@@ -5435,27 +5461,28 @@ pub(crate) mod tests {
                     }
                     rows_seen += page.len();
                 }
-                links += links_as_the_window(&app, &j, 0, Some(m), &link_key);
+                links += links_as_the_windows_jumps(&mut app, &j, m);
             }
-            // Main: the menu's own tiles, without the Main page's buttons for the others
-            let main = ask(&mut app, "main", json!({ "target": 0, "menu": m, "set": 0 }));
-            assert_eq!(main["set"].as_u64(), app.menu_tile_set(m).map(|i| i as u64), "{m}");
-            assert_eq!(main["sets"], json!([]));
-            links += links_as_the_window(&app, &main, 0, Some(m), &link_key);
+            // Main: the window's tile set in this menu, and its own buttons where the window offers them
+            let (at, buttons) = app.main_tile_set();
+            let set = app.main_set;
+            let main = ask(&mut app, "main", json!({ "target": 0, "menu": m, "set": set }));
+            assert_eq!((main["set"].as_u64(), !main["sets"].as_array().unwrap().is_empty()), (Some(at as u64), buttons), "{m}");
+            links += links_as_the_windows_jumps(&mut app, &main, m);
             // the other answers' links: My Menu's items, the exposure page's settings
             let mm = ask(&mut app, "mymenu_page", json!({ "target": 0, "menu": m }));
-            links += links_as_the_window(&app, &mm, 0, Some(m), &link_key);
+            links += links_as_the_windows_jumps(&mut app, &mm, m);
             let ex = ask(&mut app, "exposure", json!({ "menu": m }));
-            links += links_as_the_window(&app, &ex, 0, Some(m), &link_key);
+            links += links_as_the_windows_jumps(&mut app, &ex, m);
         }
         assert!(rows_seen > 500 && links > 50, "{rows_seen} rows, {links} links");
-        // a menu not in the definition: the one the set opens on
+        // a menu not in the definition: the state answers in the one the set opens on (it is how the page learns them)
         assert_eq!(ask(&mut app, "state", json!({ "target": 0, "menu": "No such menu" }))["menu"].as_str(), app.opening_menu(0).as_deref());
         // the record map's links (Expert mode) land where the window's jump does from each menu
         app.prefs.expert = true;
         for m in &names {
             let rec = ask(&mut app, "records", json!({ "target": 0, "menu": m, "q": "0x02" }));
-            assert!(links_as_the_window(&app, &rec, 0, Some(m), &link_key) > 10);
+            assert!(links_as_the_windows_jumps(&mut app, &rec, m) > 10);
         }
         app.prefs.expert = false;
         // placed otherwise in one menu (`row_places`): Audio Recording under its row "Audio Settings" in S&Q's, alone there
@@ -5492,11 +5519,12 @@ pub(crate) mod tests {
         done(&dir, &user);
     }
 
-    /// The page's search where the definition lists the camera's menus covers every menu: each hit once, in the menu a
-    /// click on it opens (`search_hits_in`), under that menu's name, its row as that menu shows it, and the way there
-    /// (`open`: where it is in words, `where_in`, and the window's jump, `jump_place`).
+    /// A hit of the page's search where the definition lists the camera's menus names the menu it opens in: each row
+    /// once, under its menu's name, in the menu `search_hits_in` gives it, with the way there (`open`: `where_in`'s
+    /// words and `jump_place`'s entry and group). This compares nothing with the window's search view: that the page's
+    /// hits are the window's is another test's (one search path for both).
     #[test]
-    fn the_pages_search_covers_every_camera_menu() {
+    fn a_search_hit_on_the_page_names_the_camera_menu_it_opens_in() {
         use crate::test_support::{done, sample_app, stub_menus};
         let (mut app, dir, user) = sample_app("web_menus_search", Some(stub_menus));
         let now = app.opening_menu(0).unwrap();

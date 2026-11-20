@@ -2141,6 +2141,27 @@ const base = { ...state };
 
 
 @needs_node
+def test_compares_open_in_edit_and_a_page_link_go_where_the_editor_names(tmp_path):
+    """Compare's Open in Edit and the link to the page an option opens hand `openSetting` the place the editor named:
+    the camera's menu (`open_menu`) and the row that shows the setting there (`open_key`), besides its tab and group."""
+    got = run(tmp_path, MENUS + """
+const opened = [];
+openSetting = async (s) => { opened.push(s); return null; };
+cmp.last = { cols: [{ editable: true, section: 0 }] };
+(async () => {
+  await cmpOpenInEdit({ key: "k:copy", tab: "Shoot", group: "Drive", in_sets: true, open_tab: "Shoot", open_group: "Drive", open_menu: "S&Q", open_key: "k:b", cells: [{ edited: false }] }, 0);
+  const r = row("k:own", "Picture Profile", { label: "PP1", pages: [{ option: "PP1", count: 9, key: "k:pp1", open_tab: "Shoot", open_group: "PP1", open_menu: "Movie", open_key: "k:pp1m", words: "Open the PP1 page" }] });
+  pageLinks(r).querySelector("a").click();
+  await tick();
+  const place = (s) => [s.key, s.open_menu, s.open_key, s.open_tab, s.open_group];
+  console.log(JSON.stringify({ edit: place(opened[0]), page: place(opened[1]) }));
+})();
+""")
+    assert got["edit"] == ["k:copy", "S&Q", "k:b", "Shoot", "Drive"]
+    assert got["page"] == ["k:pp1", "Movie", "k:pp1m", "Shoot", "PP1"]
+
+
+@needs_node
 def test_picking_another_menu_keeps_the_set_edited(tmp_path):
     """A camera menu picked while a memory set of another menu is edited keeps that set: the editor lists it on the
     Editing row (as the window's, `editing_sets`), the page keeps editing it (`keepViewValid`), and the next requests
