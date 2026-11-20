@@ -183,6 +183,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **The third role in `private/config.json` may name several readers, `"third": ["gemma", "glm"]`, asked in turn
   where OCR and the second reader differ until two independent votes name one option;** of several, one that does not
   answer the start check is skipped for the run and said so, and one name, or none, works as before.
+- **A reading neither OCR nor the second reader gave no longer stands on later votes alone** (the second OCR engine,
+  the site's check or the third readers): it is refused, and `kit/pass1_map.py` sends such an option to review with
+  every reading, as 7 of the 10 the a1 II's re-vote let stand were wrong.
 - **One model is one vote, whatever its builds: two builds that read two things cast none, and a third reader of the
   second reader's model is not asked,** so a reading no longer stands on OCR and the third against the second when
   both readers are one model (as the quick start's old example had them), and the start check says so.
