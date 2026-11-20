@@ -2226,6 +2226,27 @@ def test_closing_a_rows_flags_leaves_the_grey_worker_only_the_question_it_is_ask
     assert first.result(timeout=5).answer == {"entries": []}
 
 
+@pytest.mark.parametrize("answered_by, taken", [("RedHatAI/Qwen3.8-27B-INT4", True), ("Qwen3.8-27B-4bit", True),
+                                                 ("glm-4.6v-flash", False), ("google/gemma-4-26b", False),
+                                                 (None, True)])
+def test_an_answer_under_the_second_readers_name_from_another_model_family_is_dropped(monkeypatch, answered_by, taken):
+    """A server that answers the second reader's name with another family's model (camkit.reading.model_id) gives no
+    flag, on a list as on a carousel; another build of the second's own model does."""
+    from camkit import vlm
+    from proving import greyed
+    monkeypatch.setattr(vlm, "role", lambda name: {"name": "qwen", "model": "Qwen3.8-27B"})
+    monkeypatch.setattr(vlm, "standing_in", lambda name: None)
+    answer = {"entries": [{"label": "Movie", "greyed": True}], "selected": "ISO 100", "greyed": True}
+    monkeypatch.setattr(greyed.reading, "ask", lambda frame, prompt, timeout, role="second":
+                        greyed.reading.Asked(answer, "qwen", answered_by, ""))
+    got = greyed.ask_entries(SimpleNamespace(path=Path("00001_down.png"), image=None))
+    assert (got.answer is not None) is taken and (got.why == greyed.NO_STAND_IN) is (not taken)
+    cam = SimpleNamespace(frame=SimpleNamespace(path=Path("00002_right.png"), image=None),
+                          read=lambda: SimpleNamespace(kind="dialog"))
+    said, kept = greyed.reader_grey(cam)
+    assert (said is True) is taken and (kept.get("why") == greyed.NO_STAND_IN) is (not taken)
+
+
 def test_a_reader_standing_in_for_the_second_is_never_asked_about_grey(monkeypatch):
     from camkit import vlm
     from proving import greyed

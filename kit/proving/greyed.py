@@ -149,25 +149,34 @@ def _screen_kind(cam):
 
 
 def _own_second():
-    """(the second reader's configured name or None where it cannot be told, whether a reader standing in plays the
-    role now): a stand-in is never asked about grey (NO_STAND_IN)."""
+    """(the second reader's configured entry, {} where it cannot be told; whether a reader standing in plays the role
+    now): a stand-in is never asked about grey (NO_STAND_IN)."""
     try:
-        own = vlm.role("second").get("name")
+        own = dict(vlm.role("second"))
     except Exception:           # noqa: BLE001 - no config to tell by: camkit.reading.ask says what is wrong
-        return None, False
+        return {}, False
     stand = vlm.standing_in("second")
-    return own, stand is not None and stand.get("name") != own
+    return own, stand is not None and stand.get("name") != own.get("name")
+
+
+def not_its_own(got, own: dict) -> bool:
+    """Whether an answer came from another reader than the second's own: another configured name, or a model of
+    another family than the role's configured one (camkit.reading.model_id: a server that answered the second reader's
+    name with another family's model). Where either side does not say, it is taken as the second's."""
+    if own.get("name") and got.name and got.name != own["name"]:
+        return True
+    return bool(own.get("model") and got.model) and reading.model_id(got.model) != reading.model_id(own["model"])
 
 
 def ask_entries(frame) -> reading.Asked:
     """The second reader's answer to the whole-list question (camkit.vlm's entries.v2) about frame, through
-    camkit.reading.ask with a proof's time; no answer where a reader stands in for it, or answered for it (NO_STAND_IN).
-    Run on the grey worker (_pool), never in line."""
+    camkit.reading.ask with a proof's time; no answer where a reader stands in for it, or another reader or another
+    model family answered for it (NO_STAND_IN, not_its_own). Run on the grey worker (_pool), never in line."""
     own, standing = _own_second()
     if standing:
         return reading.Asked(None, None, None, NO_STAND_IN)
     got = reading.ask(frame, ENTRIES, reading.TIMEOUTS["proof"])
-    if own and got.name and got.name != own:
+    if not_its_own(got, own):
         return reading.Asked(None, got.name, got.model, NO_STAND_IN)
     return got
 
@@ -339,7 +348,7 @@ def reader_grey(cam, k: int | None = None, flags: Flags | None = None, wait: flo
         got = reading.ask(cam.frame, q.grey_prompt, reading.TIMEOUTS["press"])
     except Exception as e:      # noqa: BLE001 - no answer: the pixels decide, as before
         return None, {"question": q.grey_prompt, "why": f"the question could not be asked ({type(e).__name__})"}
-    if own and got.name and got.name != own:
+    if not_its_own(got, own):
         return None, {"question": q.grey_prompt, "why": NO_STAND_IN}
     said = reading.greyed_of(got.answer, q)
     read = got.answer.get(q.field) if isinstance(got.answer, dict) else None
