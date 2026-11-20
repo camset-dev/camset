@@ -920,7 +920,77 @@ def _names_row(path: str, place: dict) -> bool:
     return bool(labels) and norm(nth(labels[-1])[0]) == norm(place["row"][-1])
 
 
-def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None) -> dict:
+def guide_items(guide: list, tab: str, label: str) -> list:
+    """The Help Guide menu list's items (`guide`: {tab, group, item, modes}) for a row of the tab named `label` (the item's
+    last part after ": "), with each item's modes as a set of the guide's words; only where it lists that label twice or
+    more under different modes, none of them empty: the camera's own items, one per mode, on one row of the menus."""
+    got = [h for h in guide or [] if h.get("tab") == tab and norm(str(h.get("item") or "").split(": ")[-1]) == norm(label)]
+    sets = [frozenset(w.strip() for w in str(h.get("modes") or "").split(",") if w.strip()) for h in got]
+    if len(set(sets)) < 2 or not all(sets):
+        return []
+    return [{**h, "words": s} for h, s in zip(got, sets, strict=True)]
+
+
+def proof_modes(paths: list, place: dict, every) -> set:
+    """The shooting modes a setting's proofs of its own row were made in: the modes the contexts of the paths naming the
+    row (_names_row) name; TOP_MODE where none names one (a path with no context was proved in the top-level menu's)."""
+    said = {mode_of(p, sorted(every)) for p in paths if _names_row(p, place)}
+    return (said - {None}) or {TOP_MODE}
+
+
+def split_by_guide(doc, top: dict, out: dict, menus: list, guide: list, paths_of, every) -> int:
+    """Records that differ by mode but share one camera row (the Help Guide lists the row's label as one item per set of
+    modes: the a1 II's SteadyShot, its "still image" item and its "movie, slow&quick motion" one): each record of such a
+    row is kept in the menus of the one item whose modes cover the modes its proofs of the row were made in (proof_modes;
+    a menu's guide words: camera.menus' "guide" in the MENUS table), its row_menus and row_places cut to them; a record no
+    item, or more than one, covers keeps its menus. How many settings it cut."""
+    words = {m["name"]: set(m.get("guide") or ()) for m in menus}
+    modes = {m["name"]: set(m.get("modes") or ()) for m in menus}
+    n = 0
+    for s in doc["settings"]:
+        k = s["key"]
+        if k not in out or k not in top:
+            continue
+        place = top[k]
+        items = guide_items(guide, place.get("row_tab") or s.get("tab") or "Other", place["row"][-1])
+        if not items:
+            continue
+        mine = proof_modes(paths_of(s), place, every)
+        fits = []
+        for it in items:
+            held = {name for name in words if words[name] & it["words"]}
+            if mine <= set().union(*(modes[name] for name in held)) if held else False:
+                fits.append(held)
+        if len(fits) != 1:
+            continue
+        keep = [m for m in out[k]["row_menus"] if m in fits[0]]
+        if keep and keep != out[k]["row_menus"]:
+            out[k]["row_menus"] = keep
+            for m in list(out[k].get("row_places") or {}):
+                if m not in keep:
+                    del out[k]["row_places"][m]
+            if "row_places" in out[k] and not out[k]["row_places"]:
+                del out[k]["row_places"]
+            n += 1
+    return n
+
+
+def place_differs(own: dict, got: dict, s) -> dict:
+    """A menu's place written as what differs from the setting's own (`own`): row and row_at together where either
+    differs; row_tab, row_group, under_option where they differ, the setting's own tab or group given where the menu's
+    place is in its own and the setting's own place is not (a field left out keeps the setting's own)."""
+    out = {}
+    if got.get("row") != own.get("row") or got.get("row_at") != own.get("row_at"):
+        out.update(row=got["row"], row_at=got["row_at"])
+    for f, mine in (("row_tab", s.get("tab")), ("row_group", s.get("group"))):
+        if got.get(f) != own.get(f):
+            out[f] = got.get(f) or mine
+    if got.get("under_option") != own.get("under_option") and got.get("under_option") is not None:
+        out["under_option"] = got["under_option"]
+    return out
+
+
+def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None) -> dict:
     """Each placed setting's camera menus (camera.menus, `menus`): {key: {"row_menus": [the menus, in their order, whose
     own rows hold its row], "row_places": {menu: its place there}}}, "row_places" only for a menu whose place differs from
     the setting's own (`top`, settings()'s: "row", "row_at", "row_tab", "row_group", "under_option"; the merged
@@ -933,7 +1003,9 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None) -> dict:
     those of the setting's copies for its modes (copy_for), or its rows given by hand (`hand`, every menu that has the row),
     where such a path names the row it lands on (settings() on that menu's tree alone, the rows it does not know grown
     from those paths only). A menu drawn from no menu of the tree holds nothing (menu_of). Nothing in a menu is taken
-    from another menu's rows."""
+    from another menu's rows. Records that differ by mode but share one row are then kept to their own mode's menus by
+    the Help Guide's items (`guide`, split_by_guide). A menu's place is written as what differs from the setting's own
+    (place_differs)."""
     hand = hand or {}
     paths_of = with_hand(hand)
     top = settings(doc, tree, boxes, paths_of) if top is None else top
@@ -991,6 +1063,9 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None) -> dict:
                 continue
             entry = out.setdefault(k, {"row_menus": []})
             entry["row_menus"].append(menu["name"])
-            if got != {f: place[f] for f in PLACE_FIELDS if f in place}:
-                entry.setdefault("row_places", {})[menu["name"]] = got
+            differs = place_differs({f: place[f] for f in PLACE_FIELDS if f in place}, got, s)
+            if differs:
+                entry.setdefault("row_places", {})[menu["name"]] = differs
+    if guide:
+        split_by_guide(doc, top, out, menus, guide, paths_of, every)
     return out

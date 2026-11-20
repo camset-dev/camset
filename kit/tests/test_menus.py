@@ -205,7 +205,7 @@ def test_a_row_given_by_hand_is_placed_in_every_menu_that_has_it():
 def test_the_menus_table_and_hand_places_are_held_to_their_shape(tmp_path):
     def read(**tables):
         p = tmp_path / "t.json"
-        p.write_text(json.dumps({"camera": "TEST_fw1.00", **tables}))
+        p.write_text(json.dumps({"camera": "TEST_fw1.00", **tables}), encoding="utf-8")
         return hand_tables.read(p, "TEST_fw1.00")
     assert read(MENUS=MENUS)["MENUS"] == MENUS
     for bad, words in ((MENUS + [{"name": "Still", "modes": ["X"]}], "twice"), ([{"name": "A", "modes": []}], "names no mode"),
@@ -249,7 +249,7 @@ def test_without_the_menus_table_the_places_are_todays(tmp_path, monkeypatch):
     camera.menus); with it, each placed setting gets its menus, its own place untouched."""
     d = doc(*copy.deepcopy(SETTINGS))
     tree = tmp_path / "tree.json"
-    tree.write_text(json.dumps(TREE))
+    tree.write_text(json.dumps(TREE), encoding="utf-8")
     monkeypatch.setattr(definitions, "menu_tree_file", lambda key: tree)
     monkeypatch.setattr(fromdata, "box_orders", lambda key: {})
     plain = fromdata.places(d)
@@ -294,7 +294,7 @@ def test_a_tree_takes_in_a_group_from_a_page_scan_never_the_owners_items(tmp_pat
         {"page": "1/9", "breadcrumb": "My Menu > My Menu1", "rows": [{"slot": 0, "label": "Drive Mode"}]},
         {"page": "2/9", "breadcrumb": "My Menu > My Menu Setting", "rows": [{"slot": 0, "label": "Add Item"},
                                                                         {"slot": 1, "label": "Display From My Menu"}]},
-        {"page": "3/9", "breadcrumb": "Shooting > Rec", "rows": [{"slot": 0, "label": "Rec. Media Settings"}]}]))
+        {"page": "3/9", "breadcrumb": "Shooting > Rec", "rows": [{"slot": 0, "label": "Rec. Media Settings"}]}]), encoding="utf-8")
     menu = copy.deepcopy({"tabs": STILLS})
     said = menu_tree.added(menu, scan, "My Menu", "My Menu Setting")
     assert [t["tab"] for t in menu["tabs"]] == ["My Menu", "Shooting"] and said
@@ -304,3 +304,39 @@ def test_a_tree_takes_in_a_group_from_a_page_scan_never_the_owners_items(tmp_pat
         with pytest.raises(SystemExit) as e:
             menu_tree.added(menu, scan, "My Menu", group)
         assert words in str(e.value.code), words
+
+
+def test_records_that_differ_by_mode_on_one_row_are_kept_to_their_own_menus_by_the_help_guide():
+    """The camera's Help Guide lists SteadyShot twice, a "still image" item and a "movie, slow&quick motion" one: of
+    the two records on that one row, the one proved in Movie mode goes to the Movie and S&Q menus, the one proved with
+    no mode named to the Still menu; a row the guide lists once, or under one set of modes, is left as the trees give
+    it, and so is a record no item fits."""
+    rows = [page("1/1", "Image Stabilization", row("SteadyShot"), row("SteadyShot Adjust."))]
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}],
+            "modes": [{"mode": m, "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}]} for m in ("Movie", "S&Q")]}
+    d = {"model": "TEST", "tabs": ["Shooting"], "menu": [{"tab": "Shooting", "group": "Image Stabilization", "label": x, "order": i}
+                                                         for i, x in enumerate(["SteadyShot", "SteadyShot Adjust."])],
+         "settings": [setting("global:0x0001", "SteadyShot", "Image Stabilization", "SteadyShot"),
+                      setting("global:0x0002", "SteadyShot (Movie)", "Image Stabilization", "SteadyShot [Movie mode]", "SteadyShot"),
+                      setting("global:0x0003", "SteadyShot Adjust.", "Image Stabilization", "SteadyShot Adjust.")]}
+    guide = [{"tab": "Shooting", "group": "Image Stabilization", "item": "SteadyShot", "modes": "still image"},
+             {"tab": "Shooting", "group": "Image Stabilization", "item": "SteadyShot", "modes": "movie, slow&quick motion"},
+             {"tab": "Shooting", "group": "Image Stabilization", "item": "SteadyShot Adjust.", "modes": "still image, movie, slow&quick motion"}]
+    menus = [{**MENUS[0], "guide": ["still image"]}, {**MENUS[1], "guide": ["movie"]}, {**MENUS[2], "guide": ["slow&quick motion"]}]
+    got = placement.by_menu(d, tree, menus, guide=guide)
+    assert got["global:0x0001"] == {"row_menus": ["Still"]}
+    assert got["global:0x0002"] == {"row_menus": ["Movie", "S&Q"]}
+    assert got["global:0x0003"] == {"row_menus": ["Still", "Movie", "S&Q"]}
+    assert placement.by_menu(d, tree, menus)["global:0x0001"] == {"row_menus": ["Still", "Movie", "S&Q"]}       # no guide
+
+
+def test_a_menus_place_says_what_differs_and_gives_the_settings_own_tab_back():
+    """row_places holds what differs from the setting's own place, row and row_at together; where the setting's own place
+    is in another tab or group and a menu's is in its own, that menu's place names its own tab and group (a field left
+    out keeps the setting's own)."""
+    s = {"tab": "Shooting", "group": "Drive Mode"}
+    own = {"row": ["Custom Key/Dial Set."], "row_at": [5], "row_tab": "Setup", "row_group": "Operation Customize"}
+    assert placement.place_differs(own, dict(own), s) == {}
+    assert placement.place_differs(own, {**own, "row_at": [6]}, s) == {"row": ["Custom Key/Dial Set."], "row_at": [6]}
+    assert placement.place_differs(own, {"row": ["Drive Mode"], "row_at": [2]}, s) == \
+        {"row": ["Drive Mode"], "row_at": [2], "row_tab": "Shooting", "row_group": "Drive Mode"}

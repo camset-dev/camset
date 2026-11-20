@@ -167,8 +167,9 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
     menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths, or its rows
     given by hand (`hand`: HAND_PLACES, {key: [row paths]}, camkit.placement.with_hand) (camkit.placement, the proof
     viewer's placement): {key: {"row", "row_at"[, "under_option"][, "row_tab"][, "row_group"][, "row_mode"]}}; with the
-    camera's menus (`menus`, camera.menus), each placed setting's "row_menus" and, where a menu places it otherwise,
-    "row_places" too (camkit.placement.by_menu). None, so the places stay as they are, for a definition read without its
+    camera's menus (`menus`, the MENUS table's entries, each menu's Help Guide words with them), each placed setting's
+    "row_menus" and, where a menu places it otherwise, "row_places" too (camkit.placement.by_menu, the camera's Help Guide
+    menu list telling records that differ by mode apart). None, so the places stay as they are, for a definition read without its
     evidence (no setting holds its proof paths, proved.menu, which are evidence: camkit.definitions) or with no menu
     tree on this computer (a fresh clone, CI: the places are what is public of the menus)."""
     if not any("menu" in (s.get("proved") or {}) for s in doc["settings"]):
@@ -183,7 +184,9 @@ def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
         print(f"HAND_PLACES: {k}'s row ({' | '.join(hand[k])}) is not in the camera's menu tree: not placed")
     if not menus:
         return found
-    by = placement.by_menu(doc, tree, menus, boxes, hand, found)
+    guide = definitions.data_dir(definitions.key(doc)) / f"help_guide_menu_{definitions.key(doc)}.jsonl"
+    guide = jsonl.read(guide, bad="skip") if guide.exists() else []
+    by = placement.by_menu(doc, tree, menus, boxes, hand, found, guide)
     return {k: {**v, **by.get(k, {})} for k, v in found.items()}
 
 
@@ -315,7 +318,8 @@ def from_data(doc: dict) -> dict:
     mirror_names(doc)
     own_help(doc)
     doc["layouts"] = [with_evidence_apart(with_tidy_note(lay)) for lay in doc["layouts"]]
-    found, slots, mirror = places(doc, menus, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}), mymenu_slots(doc), mirror_of(doc)
+    found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()})
+    slots, mirror = mymenu_slots(doc), mirror_of(doc)
     names = sorted({s["name"] for s in doc["settings"]}, key=len, reverse=True)
 
     def placed(s):

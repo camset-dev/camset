@@ -245,11 +245,11 @@
     },
     "row_tab": {
      "type": "string",
-     "description": "The tab whose menu holds \"row\", as the menu tree names it, when it is not the setting's own \"tab\": no row of its own tab is reached by its proof paths, and one of another tab is, from that tab's top row (the Custom Key cells a definition keeps in Shooting sit on Setup's Custom Key/Dial Set.). An editor laying the rows out as the camera does shows the setting in this tab, in \"row_group\" there; \"tab\" stays what the flat list, comparisons and exports use. Absent when the row is in the setting's own tab, or the setting has no \"row\"."
+     "description": "The tab whose menu holds \"row\", as the menu tree names it, when it is not the setting's own \"tab\": no row of its own tab is reached by its proof paths, and one of another tab is, from that tab's top row (the Custom Key cells a definition keeps in Shooting sit on Setup's Custom Key/Dial Set.). An editor laying the rows out as the camera does shows the setting in this tab, in \"row_group\" there; \"tab\" stays what the flat list and the exports use. Absent when the row is in the setting's own tab, or the setting has no \"row\"."
     },
     "row_group": {
      "type": "string",
-     "description": "The camera group whose page holds \"row\", by the definition's name for it, when it is not the setting's own \"group\" (a screen the definition keeps as a group of its own, as Fn Menu or Recall Custom hold 1, sits on its row in Operation Customize or Shooting Mode). An editor laying the rows out as the camera does shows the setting in this group; \"group\" stays what the flat list, comparisons and exports use. Absent when the row is in the setting's own group, or the setting has no \"row\"."
+     "description": "The camera group whose page holds \"row\", by the definition's name for it, when it is not the setting's own \"group\" (a screen the definition keeps as a group of its own, as Fn Menu or Recall Custom hold 1, sits on its row in Operation Customize or Shooting Mode). An editor laying the rows out as the camera does shows the setting in this group; \"group\" stays what the flat list and the exports use. Absent when the row is in the setting's own group, or the setting has no \"row\"."
     },
     "row_mode": {
      "type": "string",

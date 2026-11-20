@@ -572,8 +572,9 @@ def _shaped(name: str, kind: str, raw):
                              "bounds (inside and boxes, and sizes_tried where known)")
         return raw
     if kind == "menus":
-        # the camera's menus, one per position of its shooting-mode switch, in order: {name, modes[, main_tiles][, hover]}
-        # (writer/fromdata.py camera_menus holds each mode and tile set to the camera file)
+        # the camera's menus, one per position of its shooting-mode switch, in order: {name, modes[, main_tiles][, hover]
+        # [, guide]} (writer/fromdata.py camera_menus holds each mode and tile set to the camera file; guide, the Help
+        # Guide menu list's words for the menu's modes, is the kit's alone, never copied into the definition)
         for i, e in enumerate(_need(raw, list, "the table")):
             where = f"menu {i}"
             _fields(e, ("name", "modes"), where)
@@ -586,7 +587,9 @@ def _shaped(name: str, kind: str, raw):
             for f in ("main_tiles", "hover"):
                 if f in e:
                     _need(e[f], str, f"{where}'s {f}")
-            extra = sorted(set(e) - {"name", "modes", "main_tiles", "hover"})
+            for j, w in enumerate(_need(e.get("guide", []), list, f"{where}'s guide")):
+                _need(w, str, f"{where}'s guide[{j}]")
+            extra = sorted(set(e) - {"name", "modes", "main_tiles", "hover", "guide"})
             if extra:
                 raise _Shape(f"{where} holds {', '.join(map(repr, extra))}, which a menu does not have")
         _unique(raw, lambda e: e["name"])

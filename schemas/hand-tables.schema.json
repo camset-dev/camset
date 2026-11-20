@@ -445,7 +445,7 @@
   },
   "MENUS": {
    "type": "array",
-   "description": "The camera's menus, one for each position of its shooting-mode switch, in the camera's order: each its name as the switch says it, the shooting modes it covers (names of the camera file's memory_sets.modes or live_mode values; a mode in one menu only), the Main page's tile set it shows (a name of the camera file's main_tiles) and a few plain words an editor shows on hover. kit/writer/fromdata.py copies it into the definition's camera.menus and gives every placed setting the menus whose own menu tree holds its row (row_menus, row_places). Without it, or empty, a definition carries none of these.",
+   "description": "The camera's menus, one for each position of its shooting-mode switch, in the camera's order: each its name as the switch says it, the shooting modes it covers (names of the camera file's memory_sets.modes or live_mode values; a mode in one menu only), the Main page's tile set it shows (a name of the camera file's main_tiles), a few plain words an editor shows on hover, and the Help Guide's words for its modes. kit/writer/fromdata.py copies it into the definition's camera.menus and gives every placed setting the menus whose own menu tree holds its row (row_menus, row_places). Without it, or empty, a definition carries none of these.",
    "items": {
     "type": "object",
     "required": [
@@ -478,6 +478,15 @@
       "type": "string",
       "minLength": 1,
       "description": "What the menu's button says on hover, in plain words."
+     },
+     "guide": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+       "type": "string",
+       "minLength": 1
+      },
+      "description": "The camera's Help Guide menu list's words for this menu's modes (its \"modes\" column: \"slow&quick motion\"): where the guide lists one row as an item per set of modes, a record of that row is kept to the menus of the item its proofs fit (kit/camkit/placement.py split_by_guide). The kit's alone, never copied into the definition."
      }
     }
    }
