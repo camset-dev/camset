@@ -86,7 +86,7 @@ record holds, and a change to it is not proved on the camera and is at your own 
 **The camera's menu in each shooting mode.** Where a camera's definition lists the menus of its shooting modes (Still,
 Movie and S&Q, say), the Menu shows one at a time, picked under Camera menu: as the camera's switch picks it: its tabs,
 groups and rows in that menu's order, each row titled as the camera draws it there (its details give the setting's
-full name). It opens on the mode the file was saved in, and picking another changes nothing in the file. The Editing:
+full name), with an icon's words where only an icon tells two rows apart ("Fn Menu Settings (Playback)"). It opens on the mode the file was saved in, and picking another changes nothing in the file. The Editing:
 row offers that mode's memories, the search looks in every menu, and a jump to a setting opens the menu that shows it.
 In the flat list (Settings), and for a definition that lists no menus, every setting is shown as before.
 

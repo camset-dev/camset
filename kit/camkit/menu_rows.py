@@ -24,6 +24,26 @@ def drawn(label: str) -> str:
     return head if sep and head and n.isascii() and n.isdigit() else label
 
 
+def row_words(s, level: int) -> str | None:
+    """The words for label `level` of the setting's row (row_icons), trimmed; None where it has none: a missing item,
+    null or empty (Setting::row_words)."""
+    icons = s.get("row_icons") or []
+    w = (icons[level] or "").strip() if level < len(icons) else ""
+    return w or None
+
+
+def with_words(label: str, words: str | None) -> str:
+    """A row's label as drawn with its words: without its `#n`, then the words in brackets where there are any
+    ("Custom Key/Dial Set. (Still)"), as the camera tells such rows apart by an icon (menu_rows::with_words)."""
+    w = (words or "").strip()
+    return f"{drawn(label)} ({w})" if w else drawn(label)
+
+
+def drawn_row(s) -> str:
+    """The setting's row as drawn, from its top label down, each with its words (menu_rows::drawn_row)."""
+    return " > ".join(with_words(label, row_words(s, i)) for i, label in enumerate(s.get("row") or []))
+
+
 def norm(s) -> str:
     """Lower-case letters and digits only, as the editor compares menu labels (menu_rows::norm)."""
     return "".join(c for c in (s or "").lower() if c.isascii() and (c.islower() or c.isdigit()))
@@ -43,9 +63,13 @@ def place_in(s, menu: str) -> dict:
     if s.get("shown_in") == menu:
         return dict(s)
     p = dict(s)
-    for k, v in ((s.get("row_places") or {}).get(menu) or {}).items():
+    entry = (s.get("row_places") or {}).get(menu) or {}
+    for k, v in entry.items():
         if k in ("row", "row_at", "row_tab", "row_group") and v is not None or k == "under_option":
             p[k] = v
+    # its own row, with its own words or none
+    if entry.get("row") is not None:
+        p["row_icons"] = entry.get("row_icons") or []
     p.pop("row_mode", None)
     p.update(row_menus=[menu], row_places={}, shown_in=menu)
     return p
@@ -192,11 +216,19 @@ def _nest(rows: list, firsts: list, placed_rows: list, mode, strip, lines: list)
         return tuple(s["row_at"][k:k + n]), tuple(s["row"][k:k + n])
     length = lambda s: len(s["row"]) - strip(s)          # noqa: E731
     here, deeper = collections.defaultdict(set), set()
+    # the words each of the camera's rows is drawn with (row_icons): those every setting on or under it agrees on, none
+    # where one has other words or none
+    words, unset = {}, object()
     for i in placed_rows:
         s = rows[i][0]
         here[node(s, length(s))].add(row_of(s) if on_page(s) else s["key"])
         for n in range(1, length(s)):
             deeper.add(node(s, n))
+        for n in range(1, length(s) + 1):
+            for linked in rows[i]:
+                w = row_words(linked, strip(s) + n - 1)
+                prev = words.get(node(s, n), unset)
+                words[node(s, n)] = w if prev is unset or prev == w else None
     opened, row_here = [], None
     for i in sorted(placed_rows, key=lambda i: _key(rows, firsts, i)):
         s = rows[i][0]
@@ -211,7 +243,7 @@ def _nest(rows: list, firsts: list, placed_rows: list, mode, strip, lines: list)
             continue
         row_here = None
         for level in range(common, len(path)):
-            label = drawn(path[level][1])
+            label = with_words(path[level][1], words.get(node(s, level + 1)))
             labels = ([mode] if mode else []) + [p[1] for p in path[:level + 1]]
             opened.append(path[level])
             mine = node(s, level + 1)
@@ -390,7 +422,7 @@ class Menu:
             if rec is not s:
                 b = place_in(rec, menu)
                 # the copy at its setting's place, in its tab and group, under its name
-                for k in ("name", "tab", "group", "row", "row_at", "row_tab", "row_group", "under_option"):
+                for k in ("name", "tab", "group", "row", "row_at", "row_icons", "row_tab", "row_group", "under_option"):
                     if p.get(k) is None:
                         b.pop(k, None)
                     else:
@@ -406,7 +438,7 @@ class Menu:
             alone = [s for s in rows if placed(s) and s.get("under_option") is None and not s.get("expert")]
             count = collections.Counter(key(s) for s in alone)
             # titled as the camera draws the row, unless another row under the same heading would then be titled alike
-            titles = [drawn(s["row"][-1]) if not on_page(s) and count[key(s)] == 1 and drawn(s["row"][-1]) else None for s in alone]
+            titles = [with_words(s["row"][-1], row_words(s, len(s["row"]) - 1)) if not on_page(s) and count[key(s)] == 1 and drawn(s["row"][-1]) else None for s in alone]
             alike = collections.Counter((head(s), t or s["name"]) for s, t in zip(alone, titles, strict=True))
             for s, t in zip(alone, titles, strict=True):
                 if t and alike[(head(s), t)] == 1:

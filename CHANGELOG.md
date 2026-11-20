@@ -59,6 +59,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **Rows the camera tells apart by an icon alone carry the icon's words:** where a definition gives them (`row_icons`),
+  the two Custom Key/Dial Set. rows read "(Still)" and "(Movie)" after their label, in Edit, Compare, a row's place and
+  the page alike, and the definition viewer draws the same. The search finds a setting by the words of its row as drawn
+  too, so "Custom Key Still" finds that row's settings.
 - **Compare lists the settings only the memories keep:** a memory's focus frames, stored exposure and mode are rows
   whenever a memory of the menu shown is one of the columns, in the window and on the page, as Edit lists them for that
   memory, with their differences counted between the memories (the live settings hold none of them). A search that

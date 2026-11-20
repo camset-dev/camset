@@ -4,6 +4,7 @@ tests, made up the same way and expected the same, and the a1 II's public defini
 Run: .venv/bin/python -m pytest kit/tests/test_menu_rows.py -q
 """
 import json
+from pathlib import Path
 
 from camkit import definitions, menu_rows as mr, paths
 
@@ -195,6 +196,32 @@ def test_rows_titled_alike_under_one_heading_keep_their_names():
     lines = mr.lay_out([[x] for x in menu.listed("Still", "Stills")])
     assert ("heading", "Rec. Media Settings", 0, ["Rec. Media Settings#1"]) in lines
     assert mr.drawn("Fn Menu Settings#12") == "Fn Menu Settings" and mr.drawn("#1") == "#1" and mr.drawn("A#b") == "A#b"
+
+
+def test_rows_told_apart_by_an_icon_draw_its_words():
+    """The case of editor/tests/data/menu_row_icons.json, which editor/src/menu_rows.rs's test of the same name lays out
+    alike: a level is its label without its `#n`, then its words (row_icons) in brackets where every setting on or under
+    the row agrees on them, the headings' paths keeping the labels; a menu's own place takes its own words, none where it
+    gives its row and no words. And a row alone on its place titled with its words, so two rows titled alike without
+    them are told apart (editor/src/pages/menu.rs, rows_told_apart_by_an_icon_draw_its_words_everywhere)."""
+    case = json.loads((Path(__file__).resolve().parents[2] / "editor" / "tests" / "data" / "menu_row_icons.json").read_text())
+
+    def made(v):
+        return s(v["key"], v["name"], v["row"], v["row_at"], **{k: x for k, x in v.items() if k not in ("key", "name", "row", "row_at")})
+    settings = [made(v) for v in case["settings"]]
+    assert [list(x) for x in mr.lay_out(rows(*settings))] == case["lines"]
+    assert mr.drawn_row(settings[5]) == "Fn Menu Settings (Playback) > Fn Row", "an empty word is none"
+    placed = made(case["placed"])
+    for c in case["places"]:
+        p = mr.place_in(placed, c["menu"])
+        assert [mr.row_words(p, i) for i in range(len(p["row"]))] == c["words"], c["menu"]
+        assert mr.drawn_row(p) == c["drawn"]
+    assert mr.drawn_row(s("a", "Delay", ["Drive Mode#2", "Self-timer"], [26, 0])) == "Drive Mode > Self-timer", "no words: as before"
+    doc = {"tabs": ["Shooting"], "camera": {"menus": MENUS[:2]}, "settings": [
+        s("rm", "Recording Media", ["Rec. Media Settings#1", "Recording Media"], [16, 0], row_menus=["Still", "Movie"], group="Media", row_icons=[None, "Still"]),
+        s("rmm", "Recording Media (Movie)", ["Rec. Media Settings#1", "Recording Media#1"], [16, 1], row_menus=["Movie"], group="Media", row_icons=[None, "Movie"])]}
+    names = {x["key"]: x["name"] for x in mr.Menu(doc).listed("Movie", "Stills")}
+    assert names == {"rm": "Recording Media (Still)", "rmm": "Recording Media (Movie)"}
 
 
 def test_a_copy_in_its_settings_row_sits_in_its_settings_tab_and_group():
