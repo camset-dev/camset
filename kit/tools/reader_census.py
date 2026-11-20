@@ -97,6 +97,8 @@ hold an option drawn grey and as many whose lines hold white ones alone, a quest
 against its own option's proof lines of the same row and start file and the pixels of the band it is drawn on
 (proving.screens.grey_rows, each band named by OCR through camkit.reading's seam), the lit entry apart from the
 others, with how often the reader's list is the one OCR names on the bands and its highlighted entry the lit one.
+"entries.radio" and "entries.compare" ask, on the same frames and judged the same way, the two candidates for lists
+(CANDIDATES: entries.radio.v3, entries.compare.v3), which no kit caller asks.
 
 What --questions decides: a kind's caller moves onto its new question only once, with each reader the owner uses, the
 new question names the proved option on nearly every sampled frame, never less often than the old one, and its wrong
@@ -417,7 +419,7 @@ def third_vote(tally: "Tally", shown: str, who: str, said: str, ocr2, label: str
 # no JSON object), "not asked" (past the reader's --minutes, or after it failed FAIL_RUN times in a row)
 VERDICTS = ("right", "another option", "no option", "no answer", "reader failed", "not asked")
 JUDGED = VERDICTS[:4]
-VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey", "entries")
+VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey", "entries", "entries.radio", "entries.compare")
 # a Claude model asked through the Claude Code command line (--claude-cli MODEL), on the person's own signed-in plan:
 # census-only (CliReader), never a reader a camera run could pick up; one call at a time
 CLI = "claude"                       # the command, found on PATH (CAMSET_CLAUDE_CLI names another)
@@ -818,6 +820,34 @@ CANDIDATES = {
         "out the buttons, such as OK, Enter or Cancel. " + _JSON + '{"boxes": [{"label": "<the label>", "ticked": '
         'true or false, "radios": [{"label": "<the label>", "selected": true or false}]}]}'),
 }
+# Candidates for the whole-list question on lists (2026-11-20), where entries.v2 called 8 in 100 unlit white entries
+# grey: on a list each option has a radio button before it, grey but for the chosen option's orange dot, and the white
+# entries it called grey all had the grey one (none was the chosen option); it also wrote rating stars as hollow ones,
+# so their entries named no option, and on side lists it listed the title as an option. Each keeps entries.v2's JSON
+# and asks rating stars as drawn and the title left out; entries.radio.v3 says the grey radio button means nothing, and
+# entries.compare.v3 judges grey against the white title. Measured by the census's variants "entries.radio" and
+# "entries.compare"; no kit caller asks them (proving.greyed.WHOLE_LIST: lists no).
+_ENTRY_LIST = ("This is a Sony camera screen showing the list of options of one setting, under its title. List every "
+               "option the list draws, from top to bottom, as many as are drawn, and copy each option's text exactly as "
+               "drawn, every letter, digit, sign and space, in its case, leaving out any icon, radio button or check box "
+               "before it and any value written to its right; where it holds rating stars, write each star drawn as "
+               "\u2605, as many as are drawn. The title is not an option: never list it. ")   # BLACK STAR
+_ENTRY_TAIL = ("Say which option is highlighted: it sits on an orange bar or inside an orange box. Leave out the page "
+               "counter and the buttons. "
+               + _JSON + '{"entries": [{"label": "<the text>", "greyed": true or false, "highlighted": true or false}]}')
+CANDIDATES.update({
+    "entries.radio.v3": (
+        _ENTRY_LIST + "Many lists draw a round radio button before each option, grey before every option but the one "
+        "chosen, which has an orange dot: a grey radio button never means the option is greyed out. For each option say "
+        "whether it is greyed out: its letters, never its radio button, drawn grey instead of white, as the camera draws "
+        "an item it will not take; judge the highlighted option's letters the same way. " + _ENTRY_TAIL),
+    "entries.compare.v3": (
+        _ENTRY_LIST + "For each option say whether it is greyed out, judging its letters alone: the title at the top is "
+        "drawn in white, and an option is greyed out only where its letters are clearly darker than the title's, as the "
+        "camera draws an item it will not take; letters as bright as the title's are not greyed out, whatever is drawn "
+        "before them (a grey or an orange radio button, an icon). Judge the highlighted option's letters the same way. "
+        + _ENTRY_TAIL),
+})
 QUESTION_TEXTS = {**vlm.PROMPTS, **CANDIDATES}
 
 
@@ -1006,6 +1036,9 @@ def grey_verdict(answer, item: Item, truth: str, question) -> str:
 # bands, top to bottom) and whether it names the lit one highlighted are counted too. A list's and a side list's frames.
 ENTRY_KINDS = {"list": "list", "sidelist": "side list"}       # the proof's kind -> the census's
 ENTRIES = "entries.v2"
+# the whole-list questions by variant: entries.v2, and the two candidates for lists (CANDIDATES), each measured on the
+# same sampled frames and their same truth
+ENTRY_QUESTIONS = {"entries": ENTRIES, "entries.radio": "entries.radio.v3", "entries.compare": "entries.compare.v3"}
 ENTRY_PARTS = ("lit, grey", "lit, white", "others, grey", "others, white")
 ENTRY_VERDICTS = ("right", "wrong", "no answer", "not listed")
 
@@ -1100,10 +1133,12 @@ def entry_verdicts(answer, item: Item, drawn: list) -> collections.Counter:
     if not isinstance(entries, list):
         c["frames: no list in the answer"] += 1
         entries = []
+    if entries and len(entries) != len(drawn):
+        c["frames: answer length differs"] += 1        # what proving.greyed.Flags takes no flag from, on a side list
     expect = item.extra.get("expect", "label")
     named = [(names(e.get("label"), item.options, expect), e.get("greyed"), e.get("highlighted") is True)
              for e in entries if isinstance(e, dict)]
-    twice = {j for j, n in collections.Counter(j for j, _, _ in drawn).items() if n > 1}
+    twice ={j for j, n in collections.Counter(j for j, _, _ in drawn).items() if n > 1}
     drawn = [(None if j in twice else j, lit, sure) for j, lit, sure in drawn]   # two bands OCR named alike: unread
     for j, lit, sure in drawn:
         if j is None:
@@ -1626,6 +1661,7 @@ def measure(places: list, args) -> dict:
         sys.exit(f"--kinds: some of {', '.join(reading.QUESTIONS)}")
     cache = answers_folder(args.cache, places)
     items, read_only, runs, found_in, entry_all = [], [], 0, [], []
+    entry_variants = [v for v in variants if v in ENTRY_QUESTIONS]      # the whole-list questions asked
     for place in places:
         if not place.is_dir():
             sys.exit(f"{place} is not a folder")
@@ -1649,7 +1685,7 @@ def measure(places: list, args) -> dict:
         reread = {r["frame"]: str(r["reading"]) for r in jsonl.read(run / "readings.jsonl", bad="skip")
                   if r.get("frame") and r.get("reading")}
         items += [it for it in question_items(run, lines, reread) if it.kind in kinds]
-        if "entries" in variants:
+        if entry_variants:
             entry_all += [it for it in entry_items(run, lines) if it.kind in kinds]
     lit = {}
 
@@ -1690,9 +1726,10 @@ def measure(places: list, args) -> dict:
             sampled = {k: [x for x in v if x[0].frame in keep] for k, v in sampled.items()}
         grey_plan = {k: [(it, corrected(it, fixes.get(k) or {}, fixes_left_out), truth, grey_questions(it))
                          for it, truth, _ in v] for k, v in sampled.items() if k in kinds and v}
-    # the whole-list sample (variant "entries"): kind -> [(item, the bands it draws: entry_screen)]
+    # the whole-list sample (variants "entries", "entries.radio", "entries.compare"): kind -> [(item, the bands it draws:
+    # entry_screen)], one sample for every whole-list question asked
     entry_plan, entry_frames = {}, {}
-    if "entries" in variants and entry_all:
+    if entry_variants and entry_all:
         sampled = entry_sample(entry_all, args.per_kind, usable)
         if hosted:
             kept, more = hosted_sample({k: [[it] for it in v] for k, v in sampled.items()})
@@ -1724,7 +1761,8 @@ def measure(places: list, args) -> dict:
             if entry is not None:
                 asks += [(entry[0].frame, text, None) for _, text, _, _ in entry[3]]
     for row in itertools.zip_longest(*entry_plan.values()):
-        asks += [(entry[0].frame, vlm.PROMPTS[ENTRIES], None) for entry in row if entry is not None]
+        asks += [(entry[0].frame, QUESTION_TEXTS[ENTRY_QUESTIONS[v]], None) for entry in row if entry is not None
+                 for v in entry_variants]
     asks = list(dict.fromkeys(asks))
 
     def table():
@@ -1733,7 +1771,7 @@ def measure(places: list, args) -> dict:
     asked, timing, verdicts, cli_calls = {}, {k: collections.defaultdict(dict) for k in kinds}, {}, {}
     grey_scores = {k: collections.defaultdict(lambda: collections.defaultdict(
         lambda: collections.defaultdict(collections.Counter))) for k in grey_plan}
-    entry_scores = {k: collections.defaultdict(collections.Counter) for k in entry_plan}
+    entry_scores = {v: {k: collections.defaultdict(collections.Counter) for k in entry_plan} for v in entry_variants}
     for cfg in cfgs:
         name = str(cfg["name"])
         if vlm.paid(cfg) and not args.dry_run:
@@ -1795,17 +1833,18 @@ def measure(places: list, args) -> dict:
             for key, secs in spent.items():
                 grey_scores[kind][key][name]["seconds"].update(
                     {"asked now": len(secs), "mean s": round(sum(secs) / len(secs), 2), "max s": round(max(secs), 2)})
-        for kind, plan in entry_plan.items():
-            secs = []
-            for it, drawn in plan:
-                ask = (it.frame, vlm.PROMPTS[ENTRIES], None)
-                if ask in took:
-                    secs.append(took[ask])
-                entry_scores[kind][name].update(entry_verdicts(answers.get(ask, NOT_ASKED), it, drawn))
-            if secs:
-                entry_scores[kind][name].update({"seconds: asked now": len(secs),
-                                                 "seconds: mean": round(sum(secs) / len(secs), 2),
-                                                 "seconds: max": round(max(secs), 2)})
+        for v in entry_variants:
+            for kind, plan in entry_plan.items():
+                secs = []
+                for it, drawn in plan:
+                    ask = (it.frame, QUESTION_TEXTS[ENTRY_QUESTIONS[v]], None)
+                    if ask in took:
+                        secs.append(took[ask])
+                    entry_scores[v][kind][name].update(entry_verdicts(answers.get(ask, NOT_ASKED), it, drawn))
+                if secs:
+                    entry_scores[v][kind][name].update({"seconds: asked now": len(secs),
+                                                        "seconds: mean": round(sum(secs) / len(secs), 2),
+                                                        "seconds: max": round(max(secs), 2)})
 
     def plain(t):
         return {k: {q: {r: dict(c) for r, c in v.items()} for q, v in t[k].items()} for k in kinds}
@@ -1820,9 +1859,9 @@ def measure(places: list, args) -> dict:
             "sampled": {k: dict(collections.Counter(truth for _, _, truth, _ in v)) for k, v in grey_plan.items()},
             "scores": {k: {q: {r: {part: dict(c) for part, c in by.items()} for r, by in v.items()}
                            for q, v in grey_scores[k].items()} for k in grey_plan}}
-    if "entries" in variants:
-        out["entries"] = {"question": ENTRIES, "frames": entry_frames,
-                          "scores": {k: {r: dict(c) for r, c in v.items()} for k, v in entry_scores.items()}}
+    for v in entry_variants:
+        out[v] = {"question": ENTRY_QUESTIONS[v], "frames": entry_frames,
+                  "scores": {k: {r: dict(c) for r, c in by.items()} for k, by in entry_scores[v].items()}}
     if hosted:
         out["left out for hosted readers"] = dict(left_out)
     if cli_calls:
@@ -2051,8 +2090,9 @@ def show_questions(out: dict) -> None:
                 print(f"  {q}, {p}: " + ", ".join(f"{k} {v}" for k, v in sorted(c.items())))
     if "grey" in out:
         show_grey(out["grey"])
-    if "entries" in out:
-        show_entries(out["entries"])
+    for v in ENTRY_QUESTIONS:
+        if v in out:
+            show_entries(out[v])
     print(f"\nblack frames left out of the sample: {out['black frames left out']}")
     if out.get("truth fixes left out"):
         print("truth fixes not made, as they would make two options one (--truth): " + ", ".join(
@@ -2142,6 +2182,9 @@ def show_entries(e: dict) -> None:
             print(f"    {r:10s} " + " ".join(f"{x:>16s}" for x in cells) + f" {listed:11d} "
                   f"{percent(c.get('lists: same', 0), lists).strip() + ' of ' + str(lists):>12s} "
                   f"{percent(c.get('highlighted: right', 0), lit).strip() + ' of ' + str(lit):>12s} {failed:7d}")
+            if c.get("frames: answer length differs"):
+                print(f"      answers not as long as the bands drawn (no flag in a run): "
+                      f"{c['frames: answer length differs']} of {lists + c.get('lists: screen unread', 0)} frames")
             if c.get("seconds: asked now"):
                 print(f"      seconds: {c['seconds: asked now']} asked now, mean {c['seconds: mean']}, "
                       f"max {c['seconds: max']}")

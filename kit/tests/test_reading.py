@@ -1154,6 +1154,26 @@ GREY_PROMPTS = {"option.grey": "020ec469740c225b", "dialog.grey": "39b51c3f2eeff
 # the questions measured next (reader census, variants "entries" and "grey"): pinned from the start, so that what is
 # measured is what is pinned
 NEXT_PROMPTS = {"entries.v2": "0e8d5a88822362ca", "carousel.v2.grey2": "23960e8b44fa0768"}
+# the census's candidates for the whole-list question on lists (2026-11-20), pinned as measured
+LIST_CANDIDATES = {"entries.radio.v3": "1a4be4df8c889b40", "entries.compare.v3": "4090e237b3e94e36"}
+
+
+def test_the_whole_list_candidates_are_pinned_and_asked_by_no_kit_caller():
+    """The two wordings for lists stay with the census (CANDIDATES, never camkit.vlm.PROMPTS, so reading.ask cannot
+    ask them), pinned by digest; entries.v2 keeps its own pin; each keeps entries.v2's JSON line, asks the stars as
+    drawn and the title left out."""
+    import hashlib
+
+    import reader_census as rc
+    from proving import greyed
+    for key, digest in LIST_CANDIDATES.items():
+        text = rc.CANDIDATES[key]
+        assert hashlib.sha1(text.encode()).hexdigest()[:16] == digest and key not in vlm.PROMPTS, key
+        assert text.endswith(vlm.PROMPTS["entries.v2"][vlm.PROMPTS["entries.v2"].rfind("Reply with JSON"):]), key
+        assert STAR in text and "The title is not an option" in text, key
+    assert rc.ENTRY_QUESTIONS == {"entries": "entries.v2", "entries.radio": "entries.radio.v3",
+                                  "entries.compare": "entries.compare.v3"}
+    assert "list" not in greyed.WHOLE_LIST
 
 
 def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
@@ -1908,7 +1928,7 @@ def test_the_entries_answer_is_judged_entry_by_entry_the_lit_one_apart():
     c = rc.entry_verdicts(answer, it, drawn)
     assert c == {"lit, grey: wrong": 1, "others, grey: right": 2, "others, grey: no answer": 1,
                  "others, grey: not listed": 1, "entries: sources disagree": 1, "lists: differ": 1,
-                 "highlighted: right": 1}
+                 "highlighted: right": 1, "frames: answer length differs": 1}     # 5 entries for 6 bands
     full = {"entries": [{"label": x, "greyed": True, "highlighted": x == "Still"} for x in COLOR_MODE[:6]]}
     c = rc.entry_verdicts(full, it, drawn)
     assert (c["lists: same"], c["highlighted: wrong"], c["lit, grey: right"]) == (1, 1, 1)
@@ -1918,7 +1938,8 @@ def test_the_entries_answer_is_judged_entry_by_entry_the_lit_one_apart():
     assert unread["lists: screen unread"] == 1 and unread["lit, grey: right"] == 1
     # two bands OCR named alike are unread, and a lit band unread judges no highlight
     alike = rc.entry_verdicts(full, it, [(1, True, "grey"), (1, False, "grey"), (2, False, None)])
-    assert alike == {"others, grey: right": 1, "lists: screen unread": 1, "highlighted: lit band unread": 1}
+    assert alike == {"others, grey: right": 1, "lists: screen unread": 1, "highlighted: lit band unread": 1,
+                     "frames: answer length differs": 1}
 
 
 def side_frame(levels, lit: int):
@@ -2020,6 +2041,16 @@ def test_the_census_measures_the_whole_list_question_entry_by_entry(tmp_path, mo
     c = {k: v for k, v in got["scores"]["side list"]["fake"].items() if not k.startswith("seconds")}
     assert c == {"lit, grey: right": 8, "lit, grey: wrong": 1, "lit, white: right": 2, "others, grey: right": 42,
                  "others, grey: wrong": 5, "others, white: right": 8, "lists: same": 11, "highlighted: right": 11}
+    # the two candidates for lists, on the same frames, judged the same way, beside entries.v2 (from the cache)
+    asked.clear()
+    assert rc.main([str(root), "--questions", "--json", "--variants", "entries,entries.radio,entries.compare",
+                    "--cache", str(tmp_path / "a")]) == 0
+    both = json.loads(capsys.readouterr().out)
+    assert set(asked) == {rc.CANDIDATES["entries.radio.v3"], rc.CANDIDATES["entries.compare.v3"]} and len(asked) == 22
+    for v, key in (("entries", "entries.v2"), ("entries.radio", "entries.radio.v3"),
+                   ("entries.compare", "entries.compare.v3")):
+        assert both[v]["question"] == key and {k: n for k, n in both[v]["scores"]["side list"]["fake"].items()
+                                               if not k.startswith("seconds")} == c, v
     assert rc.main([str(root), "--questions", "--variants", "entries", "--minutes", "0", "--cache",
                     str(tmp_path / "a")]) == 0
     text = capsys.readouterr().out
