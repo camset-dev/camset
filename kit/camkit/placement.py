@@ -644,6 +644,30 @@ def with_hand(hand: dict):
     return lambda s: list(hand[s["key"]]) if s.get("key") in hand else proof_paths(s)
 
 
+def with_modes(paths_of, modes: dict | None):
+    """The paths `paths_of` gives a setting, each whose context names no mode given the shooting modes its proofs were
+    made in by the camera's own files (`modes`: {(key, the row's labels norm()ed): {mode}}, kit/pass2_report.py's
+    silent_modes, the setting's key or its whole record's): the path as it is where one was the top-level menu's
+    (TOP_MODE), and the path with "[<mode> mode]" for each other mode; a path the lookup does not know stays as it is.
+    `paths_of` itself where there is no lookup."""
+    if not modes:
+        return paths_of
+    every = {TOP_MODE} | {m for ms in modes.values() for m in ms}
+
+    def paths(s):
+        out = []
+        for p in paths_of(s):
+            labels = tuple(norm(x) for x in split(p))
+            got = set() if mode_of(p, sorted(every)) else \
+                modes.get((s.get("key"), labels)) or modes.get((str(s.get("key")).split("[")[0], labels)) or set()
+            if not got - {TOP_MODE}:
+                out.append(p)
+                continue
+            out += ([p] if TOP_MODE in got else []) + [f"{p} [{m} mode]" for m in sorted(got - {TOP_MODE})]
+        return out
+    return paths
+
+
 def shown_in(s, m: "Tree", tab: str, g: dict, g_tree: str, groups: dict, t: "Tree") -> str:
     """The definition's name for the camera group `g` (of the menu `m`, named `g_tree` there) that holds a setting's
     row: its own group's (the head of "Shutter/Silent › Target Function Settings") when that is the one, else a group
@@ -1052,7 +1076,7 @@ def place_differs(own: dict, got: dict, s) -> dict:
     return out
 
 
-def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None) -> dict:
+def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None, modes=None) -> dict:
     """Each placed setting's camera menus (camera.menus, `menus`): {key: {"row_menus": [the menus, in their order, whose
     own rows hold its row], "row_places": {menu: its place there}}}, "row_places" only for a menu whose place differs from
     the setting's own (`top`, settings()'s: "row", "row_at", "row_tab", "row_group", "under_option"; the merged
@@ -1068,9 +1092,11 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None)
     from another menu's rows. Records that differ by mode but share one row are then kept to their own mode's menus by
     the Help Guide's items (`guide`, split_by_guide), and one setting's records proved in modes none of them shares by
     their proofs (split_by_proofs). A menu's place is written as what differs from the setting's own
-    (place_differs)."""
+    (place_differs). `modes`: the modes the camera's own files give the proofs whose context names none (with_modes),
+    so such a proof is its mode's own path."""
     hand = hand or {}
-    paths_of = with_hand(hand)
+    proved = with_modes(proof_paths, modes)
+    paths_of = with_modes(with_hand(hand), modes)
     top = settings(doc, tree, boxes, paths_of) if top is None else top
     t = Tree(doc, tree)
     modes = mode_trees(doc, tree)
@@ -1094,10 +1120,10 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None)
         def own(s, own_modes=own_modes, key=key):
             if s["key"] in hand:
                 return list(hand[s["key"]])
-            mine = list(proof_paths(s))
+            mine = list(proved(s))
             for c in s.get("copies") or []:
                 if own_modes & set((by_key.get(c) or {}).get("copy_for") or ()):
-                    mine += proof_paths(by_key[c])
+                    mine += proved(by_key[c])
             said = [mode_of(p, sorted(every)) for p in mine]
             return [p for p, w in zip(mine, said, strict=True) if w in own_modes or (w is None and key is None)]
         alone = {"tabs": tree["tabs"] if key is None else next(x["tabs"] for x in tree["modes"] if x.get("mode") == key)}

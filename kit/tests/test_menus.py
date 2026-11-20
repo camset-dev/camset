@@ -492,11 +492,12 @@ def test_a_menus_place_always_carries_its_row_and_row_at():
         assert not list(v.iter_errors({m: p})), (m, p)
 
 
-def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode(tmp_path, monkeypatch):
-    """Where a proof's context names no mode, its mode is the camera's own: the live-mode record (the camera file's
-    live_mode) in its base download, read once and kept in the camera's cache. A silent line whose base download says
-    Movie is a Movie proof for the report and for placement ("[Movie mode]" in its row); one whose base says Stills, or
-    whose context names a mode, stays as it is; proofs.jsonl is not rewritten."""
+def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode_for_placement_alone(tmp_path, monkeypatch):
+    """Where a proof's context names no mode, placement takes the camera's own: the live-mode record (the camera file's
+    live_mode) in its base download, read once and kept in the camera's cache. A silent proof whose base download says
+    Movie is its record's proof in the Movie menu too, where that menu never read the rows under the row; one whose
+    base says Stills, or whose context names a mode, stays as it is. The report's rows, and so what they credit, stay
+    as the contexts give them, and proofs.jsonl is not rewritten."""
     import pass2_report
     from camkit import camset, live_modes, paths
     key = paths.A1II
@@ -509,22 +510,31 @@ def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode(tmp_path, mo
     for name, mode in (("00001_movie.DAT", "Movie"), ("00002_stills.DAT", "Stills")):
         raw = code[mode].to_bytes(cs.get(section, rid).size, "little", signed=True)
         (run / "dat" / name).write_bytes(camset.with_values(cs, {(section, rid): raw}))
-    line = {"kind": "list", "index": [0], "label": "x", "changes": [], "dat": "00009_after.DAT"}
-    lines = [{**line, "path": ["Time Code Preset"], "base": "00001_movie.DAT"},
-             {**line, "path": ["User Bit Preset"], "base": "00002_stills.DAT"},
-             {**line, "path": ["Time Code Format"], "base": "00001_movie.DAT", "context": "S&Q mode"}]
+    line = {"kind": "list", "index": [0], "label": "x", "dat": "00009_after.DAT"}
+    lines = [{**line, "path": ["Exposure Std. Adjust", "Spot"], "base": "00001_movie.DAT",
+              "changes": [{"key": "global:0x0031", "before": 0, "after": 1}]},
+             {**line, "path": ["Exposure Std. Adjust", "Multi"], "base": "00002_stills.DAT",
+              "changes": [{"key": "global:0x0032", "before": 0, "after": 1}]},
+             {**line, "path": ["Exposure Std. Adjust", "Spot"], "base": "00001_movie.DAT", "context": "S&Q mode",
+              "changes": [{"key": "global:0x0033", "before": 0, "after": 1}]}]
     text = "".join(json.dumps(x) + "\n" for x in lines)
     (run / "proofs.jsonl").write_text(text, encoding="utf-8")
     monkeypatch.setattr(live_modes, "CACHE", tmp_path / "live_mode.json")
-    proofs = pass2_report.report_proofs(run)[0]
-    rows = [pass2_report.row_name(r) for r in proofs]
-    assert rows == ["Time Code Preset [Movie mode]", "User Bit Preset", "Time Code Format [S&Q mode]"]
-    every = ["Stills", "Movie", "S&Q", "Time-lapse"]
-    assert [placement.mode_of(r, every) or placement.TOP_MODE for r in rows] == ["Movie", "Stills", "S&Q"]
-    from writer import copies
-    assert [copies.row_mode(r) for r in rows] == ["Movie", "Stills", "S&Q"]          # the writer reads them alike
-    assert copies.row_mode("ISO [Movie mode (dial set with the menu)]") == "Movie"
+    rows = [pass2_report.row_name(r) for r in pass2_report.report_proofs(run)[0]]
+    assert rows == ["Exposure Std. Adjust > Spot", "Exposure Std. Adjust > Multi", "Exposure Std. Adjust > Spot [S&Q mode]"]
+    modes = pass2_report.silent_modes(run)
+    spot, multi = ("exposurestdadjust", "spot"), ("exposurestdadjust", "multi")
+    assert modes == {("global:0x0031", spot): {"Movie"}, ("global:0x0032", multi): {"Stills"}}
     assert (run / "proofs.jsonl").read_text(encoding="utf-8") == text
     assert len(json.loads((tmp_path / "live_mode.json").read_text(encoding="utf-8"))["codes"]) == 2
     monkeypatch.setattr(camset, "parse", lambda *a, **k: (_ for _ in ()).throw(AssertionError("read again")))
-    assert [pass2_report.row_name(r) for r in pass2_report.report_proofs(run)[0]] == rows          # from the cache
+    assert pass2_report.silent_modes(run) == modes                                         # from the cache
+    d = doc(setting("global:0x0031", "Spot", "Exposure", "Exposure Std. Adjust > Spot"),
+            setting("global:0x0032", "Multi", "Exposure", "Exposure Std. Adjust > Multi"))
+    assert placement.with_modes(placement.proof_paths, modes)(d["settings"][0]) == ["Exposure Std. Adjust > Spot [Movie mode]"]
+    assert by_key(d)["global:0x0031"] == {"row_menus": ["Still"]}                  # Movie never read Spot's row
+    got = placement.by_menu(d, TREE, MENUS, modes=modes)
+    assert got["global:0x0031"] == {"row_menus": ["Still", "Movie"]} and got["global:0x0032"] == {"row_menus": ["Still"]}
+    from writer import copies
+    assert [copies.row_mode(r) for r in rows] == ["Stills", "Stills", "S&Q"]          # the writer reads rows alike
+    assert copies.row_mode("ISO [Movie mode (dial set with the menu)]") == "Movie"
