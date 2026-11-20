@@ -413,9 +413,11 @@ def judge_functions(vals: dict, known: dict) -> tuple:
         s = known.get(v)
         neighbour = any(w != v and same_label(str(t), lab) for w, t in known.items() if t)
         lost = cut_words(s, lab, vals) if s and not neighbour else None
-        if s and close(s, lab) >= 0.6 and not lost:
+        near = bool(s) and close(s, lab) >= 0.6
+        if near and not lost:
             continue
-        kind = "missing" if not s else "wording" if lost else "conflict"
+        # "wording" only where the likeness held too: a reading far from the label stays a conflict, the gate's
+        kind = "missing" if not s else "wording" if lost and near else "conflict"
         notes.append({"value": v, "camera": lab, "schema": s, "kind": kind, "sure": lab in SURE})
         worst = max(worst, kind, key=rank.index)
     return worst, notes

@@ -1814,6 +1814,16 @@ def test_a_reading_that_is_another_values_name_in_the_list_is_no_cut_form(monkey
     assert [n["value"] for n in notes] == [1] and notes[0]["kind"] == "wording" and verdict == "wording"
 
 
+def test_a_reading_far_from_the_schema_label_stays_a_conflict_whatever_words_it_holds(monkeypatch):
+    """The review of 2026-11-20: a reading far from the schema label (likeness under 0.6: "Off" read "Peaking Display
+    Off", 0.3) was a conflict, a gate question; that the schema label is its last word makes it no "wording", which the
+    gate never asks. Made-up labels."""
+    import pass2_report as R
+    monkeypatch.setattr(R, "SURE", {"Zqx Display Off"})
+    verdict, notes = R.judge_functions({"Zqx Display Off": 5}, {5: "Off"})
+    assert R.close("Off", "Zqx Display Off") < 0.6 and [n["kind"] for n in notes] == ["conflict"] and verdict == "conflict"
+
+
 # a made-up report of one row, a KEEP_LABELS record whose label stands against the camera's reading (Proxy Rec.
 # Settings, which the a1 II's accepted file does not list)
 GATE_REPORT = [{"row": "Proxy Rec. Settings", "options": 2, "notices": [],
