@@ -538,3 +538,42 @@ def test_a_proof_whose_context_is_silent_takes_the_cameras_own_mode_for_placemen
     from writer import copies
     assert [copies.row_mode(r) for r in rows] == ["Stills", "Stills", "S&Q"]          # the writer reads rows alike
     assert copies.row_mode("ISO [Movie mode (dial set with the menu)]") == "Movie"
+
+
+def test_a_main_tile_never_shows_an_expert_only_setting_but_a_fractions_parts():
+    """The editor's Compare lists Main's settings among those shown outside Expert mode: a tile's own key (keys,
+    memory_keys) naming an Expert-only setting is refused in one plain sentence; a fraction tile's two parts may be
+    Expert-only (the a1 II's Shutter Speed tile, the shutter speed's numerator and denominator), and the a1 II's own
+    Main tiles stand."""
+    d = {"settings": [{"key": "global:0x0001", "name": "ISO"}, {"key": "set:0x0002", "name": "Shutter speed: numerator", "expert": True},
+                      {"key": "set:0x0003", "name": "Shutter speed: denominator (1/x)", "expert": True}],
+         "camera": {"main_tiles": [{"name": "Stills", "tiles": [
+             {"caption": "ISO", "kind": "keys", "keys": ["global:0x0001"]},
+             {"caption": "Shutter Speed", "kind": "fraction", "numerator_key": "set:0x0002", "denominator_key": "set:0x0003"}]}]}}
+    assert fromdata.main_tile_refusal(d) is None
+    d["camera"]["main_tiles"][0]["tiles"].append({"caption": "Raw", "kind": "live_or_memory", "keys": [], "memory_keys": ["set:0x0002"]})
+    why = fromdata.main_tile_refusal(d)
+    assert "the Stills page's tile 'Raw' shows set:0x0002 (Shutter speed: numerator)" in why and "Expert mode only" in why
+    pub = json.loads((definitions.ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    assert fromdata.main_tile_refusal(pub) is None
+
+
+def test_the_writer_stops_on_a_main_tile_that_shows_an_expert_only_setting(tmp_path, monkeypatch):
+    """Through from_data: a camera file whose Main tile shows an Expert-only setting as its own key stops the write in
+    one plain sentence naming the camera file, the tile and the setting, and what to do."""
+    import shutil
+    import schema_update as S
+    pub = json.loads((definitions.ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    key = definitions.key(pub)
+    data = tmp_path / "data"
+    shutil.copytree(definitions.data_dir(key), data / key)
+    monkeypatch.setattr(definitions, "DATA", data)
+    monkeypatch.setattr(S.help_files, "OWN", data)
+    cam = data / key / f"camera_{key}.json"
+    c = json.loads(cam.read_text(encoding="utf-8"))
+    c["main_tiles"][0]["tiles"].append({"caption": "Numerator", "kind": "keys", "keys": ["set:0x0180@290"]})
+    cam.write_text(json.dumps(c), encoding="utf-8")
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(pub)
+    said = str(e.value.code)
+    assert f"camera_{key}.json" in said and "tile 'Numerator' shows set:0x0180@290" in said and "take the key off the tile" in said

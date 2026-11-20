@@ -300,6 +300,22 @@ def with_menu(doc: dict) -> dict:
     return doc
 
 
+def main_tile_refusal(doc: dict) -> str | None:
+    """Why the camera's Main tiles cannot stand beside the definition's Expert marks, in one plain sentence, or None: a
+    tile's own key (its keys, its memory_keys) is never a setting shown in Expert mode only, for the editor's Compare
+    lists Main's settings among those shown outside Expert mode, and the tile would show what Compare lacks. A fraction
+    tile's two parts (numerator_key, denominator_key) may be: the tile is the plain way to show them."""
+    expert = {s["key"]: s for s in doc.get("settings") or [] if s.get("expert")}
+    for page in (doc.get("camera") or {}).get("main_tiles") or []:
+        for tile in page.get("tiles") or []:
+            for k in list(tile.get("keys") or []) + list(tile.get("memory_keys") or []):
+                if k in expert:
+                    return (f"the {page.get('name')} page's tile {tile.get('caption')!r} shows {k} ({expert[k]['name']}), "
+                            "which the definition shows in Expert mode only, so the editor's Compare would lack it "
+                            "outside Expert mode")
+    return None
+
+
 def with_place(s: dict, place: dict) -> dict:
     """The setting with its place on the camera right after "order", and without one when it has none."""
     out = {}
@@ -344,6 +360,11 @@ def from_data(doc: dict) -> dict:
     by_hand = frozenset(tables.HAND_PLACES)
     doc["settings"] = [with_expert(placed(with_plain_words(with_evidence_apart(with_tidy_note(s)), names)), slots, mirror, by_hand)
                        for s in doc["settings"]]
+    why = main_tile_refusal(doc)
+    if why:
+        raise hand_tables.Refused(f"{paths.shown(definitions.camera_file(definitions.key(doc)))}: {why}. Nothing was "
+                                  "written: take the key off the tile in the camera file, or make the setting one shown "
+                                  "outside Expert mode, then run the command again.")
     return doc
 
 
