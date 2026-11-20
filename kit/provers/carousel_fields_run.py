@@ -68,7 +68,8 @@ from optboxes_run import RETRY_WAIT, clean_name  # noqa: E402
 from prove_run import Failed, enter_any, main_name, option_key, to_shooting  # noqa: E402
 from proving.base import finish_attempt, wait_lock  # noqa: E402
 from proving.commit import after_ok  # noqa: E402
-from proving.screens import box_answer, carousel_text, place, same_place, vlm_option, word_answer  # noqa: E402
+from proving.screens import (box_answer, carousel_text, place, same_place, title_settled, vlm_option,  # noqa: E402
+                             word_answer)
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting, proofs_file,  # noqa: E402
                     prover_session, read_json, scan_position)
 
@@ -139,7 +140,9 @@ class BoxRead(NamedTuple):
 def title_reads(cam, labels: list) -> str | None:
     """The carousel option the title names, one of the map's `labels`: OCR's orange line (proving.screens.carousel_text)
     where it names one plainly (camkit.reading: no doubt, one option named), else the second reader's (vlm_option);
-    None where neither names one."""
+    None where neither names one. Read once the title has settled (proving.screens.title_settled): it redraws after the
+    strip, and a frame just after a Down can show the strip on the next option under the old title."""
+    title_settled(cam)
     t = carousel_text(cam)
     i = reading.choice_of(t, "label", labels)
     if i is None or reading.doubts(t, "label", choices=labels):
@@ -314,15 +317,22 @@ def step(cam, option: str, b: int, count: int, way: str) -> None:
         raise Failed(f"{option}: after {way.title()} on box {b}: {why} ({cam.frame.path.name})")
 
 
-def enter(cam, option: str, labels: list, b: int | None, count: int | None, want: str | None) -> None:
-    """Enter on this row's option itself (b None) or on its box b reading `want`: judged first (option_refused,
-    box_refused with the title read), then by the camera's own Enter guard (LiveCamera)."""
+def enter(cam, option: str, labels: list, b: int | None, count: int | None, want: str | None, pic=None) -> str:
+    """Enter on this row's option itself (b None) or on its box b holding `want` (its picture `pic`, as the walk saw
+    that value): judged first (option_refused; on a box, a fresh frame grabbed, box_refused with the title read, the
+    box's picture and reading on it), then by the camera's own Enter guard (LiveCamera). The fresh frame is the box
+    prover's own: LiveCamera's look before Enter compares screens by their signature, and a dialog's cannot see what its
+    lit box holds (0.3EV lit and 0.5EV lit are one signature on the camera's frames). Returns the frame Enter went on."""
+    if b is not None:
+        cam.refresh("enter-check")
     why = option_refused(cam, option, labels) if b is None else box_refused(cam, option, labels, b, count)
-    if not why and b is not None and key(lit_read(cam, False).text) != key(want):
+    if not why and b is not None and (not same_pic(box_pic(cam, b), pic) or key(lit_read(cam, False).text) != key(want)):
         why = f"box {b} no longer reads {want!r}"
     if why:
         raise Failed(f"{option}: no Enter: {why} ({cam.frame.path.name})")
+    chosen = cam.frame.path.name
     cam.press("enter")
+    return chosen
 
 
 # ------------------------------------------------------------------------------------------------ the look and the walk
@@ -462,8 +472,7 @@ def keep(cam, link, eyes, path, option, labels, look_: Look, b, w: Walk, place_,
     fields = look_.fields(values)
     field = next(f for f in fields if f["label"] == look_.labels[b])
     lab = together(fields)
-    chosen = cam.frame.path.name
-    enter(cam, option, labels, b, len(look_.labels), r.text)
+    chosen = enter(cam, option, labels, b, len(look_.labels), r.text, w.pics[place_])
     got = after_ok(cam, name, label=lab, back=lambda: same_place(place(cam), row), info=False)
     row_frame = cam.frame.path.name
     to_shooting(link, eyes, "the download after OK")

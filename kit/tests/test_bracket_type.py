@@ -381,7 +381,7 @@ class FieldsCam:
     def records(self) -> dict:
         ev, img = self.at[0]
         step, *digits = self.at[2]
-        number = int("".join(b["values"][i] for b, i in zip(FOCUS_BOXES[1:], digits, strict=True)))
+        number = int("".join(b["values"][i] for b, i in zip(self.spec[2][1:], digits, strict=True)))
         return {"global:0x02bf": self.saved, "global:0x13f9": 10 * ev + img + 1, "global:0x9001": ev,
                 "global:0x9002": step, "global:0x9003": number, **self.extra}
 
@@ -893,3 +893,89 @@ def test_the_a1_pass_counts_a_sampled_new_like_record_and_lists_none_of_its_valu
 def definitions_load(target):
     from camkit import definitions
     return definitions.load(target)
+
+
+# ------------------------------------------------------------------------------------- the prover's guards, each pinned
+
+def on_box(cam, opt=0, field=0, edit=(0, 1)):
+    cam.where, cam.opt, cam.field, cam.edit = "dialog", opt, field, list(edit)
+
+
+def test_no_up_or_down_unless_the_box_meant_is_lit(own_runs, monkeypatch):
+    cam = FieldsCam()
+    F, _, _ = fields_world(monkeypatch, own_runs, cam)
+    on_box(cam, field=1)
+    with pytest.raises(F.Failed, match="no Up: box 1 is lit, not box 0"):
+        F.step(cam, "Cont. Bracket", 0, 2, "up")
+    assert cam.keys == []
+
+
+def test_no_enter_on_a_box_whose_title_no_longer_names_the_option(own_runs, monkeypatch):
+    cam = FieldsCam()
+    F, _, _ = fields_world(monkeypatch, own_runs, cam)
+    on_box(cam, edit=(1, 1))
+    monkeypatch.setattr(F, "title_reads", lambda c, labels: "Single Bracket")
+    with pytest.raises(F.Failed, match="no Enter: its title no longer names 'Cont. Bracket'"):
+        F.enter(cam, "Cont. Bracket", OPTIONS, 0, 2, "0.5EV", F.box_pic(cam, 0))
+    assert "enter" not in cam.keys
+
+
+def test_a_box_opening_on_another_value_than_the_last_ok_chose_stops_the_walk(own_runs, monkeypatch, capsys):
+    """After the 0.5EV proof the camera holds 1.0EV (made up): the next visit stops on opening, before any key in the
+    box."""
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.downloaded = lambda tag: tag == "Bracket-Type-0-1" and cam.at[0].__setitem__(0, 3)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--box", "0")
+    assert "box 0 opened on '1.0EV', not '0.5EV', which the last OK chose" in capsys.readouterr().out
+    assert cam.keys[-1] == "right"
+
+
+def test_a_put_back_that_leaves_a_record_changed_stops_the_row(own_runs, monkeypatch, capsys):
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.extra = {"global:0x9009": 0}
+    cam.downloaded = lambda tag: tag == "Bracket-Type-0-0" and cam.extra.__setitem__("global:0x9009", 1)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--box", "0", "--most", "1")
+    assert "box 0 back on '0.3EV', 1 records still differ from the base" in capsys.readouterr().out
+    from camkit.runs import Run
+    assert not (Run("kit2_pass2").dir / "attempts.jsonl").exists(), "the attempt never finished"
+
+
+def test_a_press_that_stood_still_and_then_moved_stops_the_walk(own_runs, monkeypatch, capsys):
+    """The first Up goes unanswered (a fresh look shows it so), the confirming Up moves the box: a press was lost, the
+    walk stops before anything is chosen."""
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.drop = ("up", 1)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--box", "0")
+    assert "box 0 stood still on one Up and moved on the next" in capsys.readouterr().out
+    assert fields_lines() == [] and cam.keys.count("enter") == 1, "the base's Enter alone"
+
+
+def test_the_title_is_read_once_it_has_settled(monkeypatch):
+    """The title redraws after the strip: title_reads waits for it (proving.screens.title_settled) before reading."""
+    import carousel_fields_run as F
+    said = []
+    monkeypatch.setattr(F, "title_settled", lambda cam: said.append("settled"))
+    monkeypatch.setattr(F, "carousel_text", lambda cam: said.append("read") or "Single Bracket")
+    assert F.title_reads(SimpleNamespace(), OPTIONS) == "Single Bracket" and said == ["settled", "read"]
+
+
+def test_enter_judges_the_box_on_a_fresh_frame(own_runs, monkeypatch):
+    """A dialog's signature cannot see what its lit box holds, so LiveCamera's fresh look before Enter passes 0.5EV lit
+    for 0.3EV lit: enter() grabs a fresh frame itself and judges the box's picture and reading on it."""
+    cam = FieldsCam()
+    F, _, _ = fields_world(monkeypatch, own_runs, cam)
+    on_box(cam, edit=(1, 1))
+    want = F.box_pic(cam, 0)
+    cam.edit[0] = 2                           # the box moved on after the walk read it (made up): 0.7EV on the fresh frame
+    with pytest.raises(F.Failed, match=r"no Enter: box 0 no longer reads '0.5EV'"):
+        F.enter(cam, "Cont. Bracket", OPTIONS, 0, 2, "0.5EV", want)
+    assert "enter" not in cam.keys and cam.frame.path.name.endswith("_enter-check.png")
+    cam.edit[0] = 1
+    chosen = F.enter(cam, "Cont. Bracket", OPTIONS, 0, 2, "0.5EV", want)
+    assert cam.keys == ["enter"] and chosen.endswith("_enter-check.png")
