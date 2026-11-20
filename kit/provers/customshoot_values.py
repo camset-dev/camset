@@ -25,17 +25,25 @@ download checks it. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as 
 Set", "Recall Custom hold N", item].
 
 A STOP means no press but cleanup MENU (camkit.link): after a STOP file made before the run or during it, a chain's
-limit or a first Ctrl-C, the put-back presses nothing; the session's restore (the start file uploaded where a record
-differs, checked) and the last download still happen, and customshoot_run.run_end says how it ended: a STOP file there
-before the run, nothing pressed but MENU, exit EXIT_UNRESTORED (a chain stops); a stop during the run, the start file
-back and checked, exit EXIT_INCOMPLETE, and where the run had opened a hold's screen, that the working copy was not put
-back and the command that puts it back:
+limit or a first Ctrl-C (or a STOP during the session's restore), the put-back presses nothing; the session's restore
+(the start file uploaded where a record differs, checked) and the last download still happen, and
+customshoot_run.run_end says how it ended: a STOP file there before the run, nothing sent but what closes a screen
+already open, exit EXIT_UNRESTORED (a chain stops); a stop during the run, the start file back and checked, exit
+EXIT_INCOMPLETE where nothing more is owed, and the working copy judged by the start file's own slots: its record as the
+start file has it, nothing more owed; differing where the start file's fourth slot holds its hold-3 slot's value, so
+opening hold 3 restores it, the command that does that:
 
-    .venv/bin/python -u kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --put-back --scan <the run's scan>
+    .venv/bin/python -u kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --put-back --against <the run's start file> --scan <the run's scan>
+
+differing where another hold's slot holds that value, that hold to open and leave by hand, or that no hold restores it,
+no --put-back offered, exit EXIT_UNRESTORED; differing though the run opened no hold's screen, EXIT_UNRESTORED.
 
 --put-back, alone: that put-back as a run of its own (its start download, hold 3's screen opened and left with MENU,
-its end download compared with its start file, the working copy's record checked to hold hold 3's), a STOP stopping it
-like any run. A restore that does not check out exits EXIT_UNRESTORED, as ever.
+its end download compared with its start file, the working copy's record checked to equal --against's file's). The file
+is one of this camera's downloads whose fourth slot holds its hold-3 slot's value, refused before anything connects
+otherwise; with no --against, the run's own start download stands in only where its copy already holds hold 3's value
+(said), else nothing is pressed and the run asks for --against. A STOP stops it like any run. A restore that does not
+check out exits EXIT_UNRESTORED, as ever.
 
     .venv/bin/python -u kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --hold 1 --follow "Exposure step=0.5EV,0.3EV" --record global:0x0c39
 
@@ -73,7 +81,7 @@ from mode_switch import open_menu, set_row  # noqa: E402   (--follow's live row:
 from prove_run import Failed, to_shooting, vlm_option  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
 from proving.screens import later  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, changes_of, close_screen,  # noqa: E402
+from runner import (add_allow_argument, add_scan_argument, changes_of, close_screen,  # noqa: E402
                     load_scan, proofs_file, prover_session)
 
 POP_Y0, POP_DY = 118, 50                 # the popup's first option centre and pitch
@@ -534,6 +542,10 @@ def main():
     ap.add_argument("--put-back", action="store_true",
                     help="alone: put the holds' working copy back as a run of its own (hold 3's screen opened and left "
                          "with MENU), as a run stopped after it opened a hold's screen says to")
+    ap.add_argument("--against", default=None, type=paths.run_arg, metavar="FILE",
+                    help="with --put-back: the download of this camera whose working copy the camera must end equal to "
+                         "(the stopped run's start file, as its words name it); default: this run's own start download, "
+                         "only where its working copy already holds hold 3's value")
     ap.add_argument("--items", default=None, help="item names, comma-separated (as on the hold's screen)")
     ap.add_argument("--follow", default=None, metavar="ROW=OPTION,OPTION",
                     help="instead of --items: register the hold as it stands with the live list row ROW on each OPTION "
@@ -566,6 +578,9 @@ def main():
                      "was sent to the camera")
         put_back_alone(a)
         return
+    if a.against is not None:
+        sys.exit("--against goes with --put-back alone: it names the file the working copy must end equal to; nothing "
+                 "was sent to the camera")
     if a.hold is None:
         sys.exit("--hold names the hold (1, 2 or 3) whose items --items proves, or that --follow registers; nothing was "
                  "sent to the camera")
@@ -689,44 +704,93 @@ def main():
         last, done = put_back(run, hdmi, cycle, model, a.allow, start, ended, stopped)
     finally:
         hdmi.close()
-    code = run_end(run, s.restored, last, stopped, opened, done, keys, a.scan)
+    code = run_end(run, s.restored, last, stopped, opened, done, keys, a.scan, start)
     if code:
         sys.exit(code)
+
+
+def against_or_exit(path, keys: frozenset) -> Path:
+    """--against's file checked before anything connects: one of this camera's downloads (camkit.provenance), whose
+    working copy's record holds in its fourth slot what its hold-LAST_OPENED slot holds, since opening that hold's
+    screen is all a put-back does and could not bring the copy to any other value. Exits, saying why, otherwise."""
+    from camkit import provenance
+    p = Path(path)
+    try:
+        provenance.check(p)
+    except provenance.NotADownload as e:
+        sys.exit(f"--against: {e}")
+    cs = camset.read(p)
+    for key in sorted(keys):
+        held = [element_of(cs, key, i) for i in range(4)]
+        if None in held or held[3] != held[LAST_OPENED - 1]:
+            sys.exit(f"--against {p.name}: its working copy's fourth slot is not its hold-{LAST_OPENED} slot ({key}), "
+                     f"so opening hold {LAST_OPENED}'s screen cannot restore that state: open by hand the hold whose "
+                     "slot holds what that file's fourth slot holds (the stopped run's words name it). Nothing was sent "
+                     "to the camera")
+    return p
+
+
+def own_start_fits(start: Path, keys: frozenset) -> bool:
+    """Whether a start download's working copy already holds hold LAST_OPENED's value in its fourth slot: then, and only
+    then, it is the state a put-back with no --against compares the end with."""
+    cs = camset.read(start)
+    return all(element_of(cs, k, 3) is not None and element_of(cs, k, 3) == element_of(cs, k, LAST_OPENED - 1)
+               for k in keys)
 
 
 def put_back_alone(a):
     """--put-back: the holds' working copy put back as a run of its own, under --allow "Reg. Custom Shoot Set" like
     the rest: its start download, hold LAST_OPENED's screen opened and left with MENU (cancel_hold, as a run's own
     put-back does), its end download compared with its start file, the working copy's record left out of that count
-    (it is what this run moves, and no settings file sets it back) and checked instead: its fourth slot must hold what
-    hold LAST_OPENED's slot holds. A STOP stops it like any run (run_end)."""
+    (it is what this run moves, and no settings file sets it back) and checked instead: equal to --against's file's
+    (the stopped run's start file, checked before anything connects: against_or_exit). With no --against the run's own
+    start download is that file only where its copy already holds hold LAST_OPENED's value (said); where it does not,
+    nothing is pressed and the run stops asking for --against. A STOP stops it like any run (run_end)."""
     allowed(a.allow, "customshoot_values")
-    cycle, model = load_scan(a.scan)
     run = Run("kit2_pass2")
+    keys = working_copy_keys(run)
+    if not keys:
+        sys.exit("--put-back: no working copy record is named for this camera (customshoot_run.WORKING_COPY): nothing "
+                 "to put back or check. Nothing was sent to the camera")
+    against = against_or_exit(a.against, keys) if a.against is not None else None
+    cycle, model = load_scan(a.scan)
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
-    stopped, keys = [], working_copy_keys(run)
-    done = False
+    stopped, done, ref = [], False, None
     OPENED["hold"] = None
     try:
         with prover_session(run, hdmi, may_open=set(a.allow), say_start=False, exit_unrestored=False,
                             end_why="the settings download after the put-back", expected=keys,
                             note="the start file left records apart (see above)") as s, noted(stopped):
-            cancel_hold(s.cam, s.link, cycle, model, LAST_OPENED)
-            done = True
+            if against is not None:
+                ref = against
+                print(f"comparing the working copy with {against.name} (--against)", flush=True)
+            elif own_start_fits(s.start, keys):
+                ref = s.start
+                print(f"no --against: comparing the working copy with this run's own start download {s.start.name}, "
+                      f"whose fourth slot already holds hold {LAST_OPENED}'s value (opening hold {LAST_OPENED}'s screen "
+                      "should leave it so)", flush=True)
+            else:
+                print(f"no --against, and this camera's working copy does not hold hold {LAST_OPENED}'s value: nothing "
+                      "says which state it must be put back to; nothing pressed", flush=True)
+            if ref is not None:
+                cancel_hold(s.cam, s.link, cycle, model, LAST_OPENED)
+                done = True
     finally:
         hdmi.close()
-    code = run_end(run, s.restored, [], stopped, LAST_OPENED, done, keys, a.scan)
+    if ref is None and not stopped:
+        sys.exit(f"--put-back: name the file it must equal with --against (the stopped run's start file, as its words "
+                 f"give it); the camera is as this run's start download {s.start.name}")
+    after = getattr(s.ending, "after", None)
+    last = [c for c in camset.diff(camset.read(ref), camset.read(after)) if c.key in keys] \
+        if ref is not None and after is not None else []
+    if done and last:
+        print(f"the working copy's record ({', '.join(c.key for c in last)}) does not equal {Path(ref).name}'s",
+              flush=True)
+    code = run_end(run, s.restored, last, stopped, LAST_OPENED, done, keys, a.scan, ref)
     if code:
         sys.exit(code)
-    after = getattr(s.ending, "after", None)
-    for key in sorted(keys):
-        held = camset.read(after) if after is not None else None
-        slots = [element_of(held, key, i) for i in (LAST_OPENED - 1, 3)] if held is not None else [None, None]
-        if slots[0] is None or slots[0] != slots[1]:
-            print(f"the working copy ({key}'s fourth slot) does not hold what hold {LAST_OPENED}'s slot holds", flush=True)
-            sys.exit(EXIT_UNRESTORED)
-        print(f"the working copy ({key}'s fourth slot) holds what hold {LAST_OPENED}'s slot holds", flush=True)
+    print(f"the working copy's record ({', '.join(sorted(keys))}) equals {Path(ref).name}'s: put back", flush=True)
 
 
 if __name__ == "__main__":

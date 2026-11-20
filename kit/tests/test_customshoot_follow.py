@@ -18,7 +18,7 @@ if str(ROOT / "kit" / "provers") not in sys.path:
     sys.path.insert(1, str(ROOT / "kit" / "provers"))
 import customshoot_run as CR  # noqa: E402
 import customshoot_values as V  # noqa: E402
-from camkit import camset, definitions, session  # noqa: E402
+from camkit import camset, definitions, provenance, session  # noqa: E402
 from camkit.link import StopRequested  # noqa: E402
 
 SAMPLE = ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.DAT"
@@ -441,30 +441,46 @@ def test_a_stop_file_there_before_the_run_presses_nothing_and_exits_4_naming_it(
     assert not any(e.startswith("press ") and "(cleanup)" not in e for e in ev)       # nothing pressed but MENU
     assert world["lines"]() == []
     out = capsys.readouterr().out
-    assert f"{left} was there before this run started (an earlier stop): the run pressed nothing but MENU" in out
+    assert (f"{left} was there before this run started (an earlier stop): the run sent nothing but what closes a "
+            "screen already open (cleanup MENU, or OK on a notice that has just refused MENU) and registered nothing"
+            in out)
     assert "back and checked" not in out
 
 
-def test_a_stop_during_the_run_after_a_hold_was_opened_presses_nothing_more_and_says_how_to_put_the_copy_back(
-        world, capsys, monkeypatch):
+
+def test_a_stop_after_a_hold_was_opened_presses_nothing_more_and_owes_nothing_where_the_copy_is_as_the_start(
+        world, capsys):
     """The STOP there from the second set on (a chain's limit, or a first Ctrl-C, which asks the run to stop the same
-    way): the open of the live row's list is refused, the session closes and restores, and the put-back sends no press;
-    the run exits 8 (never 0), saying the start file is back and checked, that the working copy was not put back
-    because the run was told to stop, and the exact command that puts it back (--put-back, with the run's eyes and
-    scan)."""
+    way): the open of the live row's list is refused, the session closes and restores, and the put-back sends no press.
+    The working copy's record is as the start file has it at the end (D1's case: every hold holds the same), so the run
+    exits 8 (never 0), saying the start file is back and checked and that nothing more is owed: no --put-back."""
     from exit_status import EXIT_INCOMPLETE
-    monkeypatch.setenv("CAMSET_EYES", "hdmi")
     world["stop_on"] = "0.3EV"
-    assert exits(lambda: world["go"]("--scan", "kit2_page_scan_1118p")) == EXIT_INCOMPLETE
+    assert exits(world["go"]) == EXIT_INCOMPLETE
     ev = world["events"]
     assert ev[ev.index("refused right") + 1:] == ["close after a stop", *SESSION_END, *NO_PUT_BACK]
     assert [r["label"] for r in world["lines"]()] == ["0.5EV"]
     out = capsys.readouterr().out
     assert "stopped: StopRequested" in out and "the start file is back and checked" in out
     assert (f"the hold's working copy ({COPY_KEY}'s fourth slot, which no settings file sets back) was not put back, "
-            "because the run was told to stop. Put it back with:\n  CAMSET_EYES=hdmi .venv/bin/python -u "
-            "kit/provers/customshoot_values.py --allow 'Reg. Custom Shoot Set' --put-back --scan kit2_page_scan_1118p"
-            in out)
+            "because the run was told to stop, but its record is as the start file has it: nothing more is owed" in out)
+    assert "--put-back" not in out
+
+
+def test_a_stop_after_a_hold_was_opened_gives_put_back_against_the_start_file_where_hold_3_restores_it(
+        world, capsys, monkeypatch):
+    """The copy's record differs at the end and the start file's fourth slot holds what its hold-3 slot holds: opening
+    hold 3 is what restores it, so the words give the exact command, with the run's eyes, scan and start file."""
+    from exit_status import EXIT_INCOMPLETE
+    monkeypatch.setenv("CAMSET_EYES", "hdmi")
+    copies(world, start=[0, 0, 0, 0], end=[0, 0, 0, 2])
+    world["stop_on"] = "0.3EV"
+    assert exits(lambda: world["go"]("--scan", "kit2_page_scan_1118p")) == EXIT_INCOMPLETE
+    out = capsys.readouterr().out
+    assert (f"the hold's working copy ({COPY_KEY}'s fourth slot, which no settings file sets back) was not put back, "
+            "because the run was told to stop; it differs from the start file. Opening hold 3 restores it: put it back "
+            "with:\n  CAMSET_EYES=hdmi .venv/bin/python -u kit/provers/customshoot_values.py --allow 'Reg. Custom "
+            "Shoot Set' --put-back --against kit2_pass2/dat/00001_before.DAT --scan kit2_page_scan_1118p" in out)
 
 
 def test_a_stop_before_any_hold_was_opened_owes_nothing_more(world, capsys):
@@ -477,9 +493,10 @@ def test_a_stop_before_any_hold_was_opened_owes_nothing_more(world, capsys):
     assert "not put back" not in out
 
 
+
 def test_a_stop_during_the_put_back_closes_with_menu_and_says_the_copy_was_not_put_back(world, capsys):
     """A STOP that comes while the put-back presses (its first press refused): closed with cleanup MENU, the last
-    download compared, exit 8 with the words and the command."""
+    download compared, exit 8, the words on the copy (here as the start file has it: nothing more owed)."""
     from exit_status import EXIT_INCOMPLETE
     world["stop_at_cancel"] = True
     assert exits(world["go"]) == EXIT_INCOMPLETE
@@ -487,7 +504,7 @@ def test_a_stop_during_the_put_back_closes_with_menu_and_says_the_copy_was_not_p
     assert ev[ev.index("open hold 3 to cancel"):] == ["open hold 3 to cancel", "refused menu", "close after a stop",
                                                       "to shooting: the last download", "download end"]
     out = capsys.readouterr().out
-    assert "was not put back, because the run was told to stop" in out and "--put-back" in out
+    assert "was not put back, because the run was told to stop, but its record is as the start file has it" in out
 
 
 def test_a_stop_whose_restore_does_not_check_out_exits_4(world, capsys):
@@ -497,21 +514,63 @@ def test_a_stop_whose_restore_does_not_check_out_exits_4(world, capsys):
     assert "back and checked" not in capsys.readouterr().out
 
 
-def test_the_working_copy_still_differing_after_a_stop_is_said_and_after_a_put_back_fails_the_run(world, capsys):
-    """The last download holding another value in the working copy's fourth slot: after a stop, exit 8 and the words say
-    it still differs; with no stop (the put-back done and still differing), exit 4."""
+
+def test_the_working_copy_differing_after_a_put_back_fails_the_run_and_offers_no_put_back(world, capsys):
+    """With no stop the put-back was done and the copy still differs at the end: exit 4, the words say so, and give no
+    --put-back (it has just been done)."""
+    copies(world, start=[0, 0, 0, 0], end=[0, 0, 0, 2])
+    assert exits(world["go"]) == 4
+    out = capsys.readouterr().out
+    assert f"the working copy's record ({COPY_KEY}) still differs from the start file after hold 3's screen was " \
+        "opened and left" in out
+    assert "--put-back" not in out
+
+
+def copies(world, start, end):
+    """Every file of the run with the working copy's record at `start`, the last download's at `end`."""
+    files = world["files"]
+    for tag, f in list(files.items()):
+        cs = camset.read(f)
+        live, held = cs.get(0, LIVE).values()[0], cs.get(0, HELD).values()
+        files[tag] = made(f.parent / f"{f.stem}_c.DAT", live=live, held=held, copy=end if tag == "end" else start)
+
+
+def test_a_start_whose_fourth_slot_was_another_holds_owes_nothing_where_the_copy_is_as_it_was(world, capsys):
+    """The reviewer's case: the start file's fourth slot holds holds 1 and 2's value, not hold 3's; a stop after hold 1
+    was opened leaves the copy as the start file has it (0 records differ): nothing more is owed, no --put-back, which
+    would open hold 3 and move the copy away from the start."""
     from exit_status import EXIT_INCOMPLETE
-    world["files"]["end"] = made(world["files"]["end"].parent / "end_copy.DAT", live=1, held=[1, 1, 1, 1],
-                                 copy=[0, 0, 0, 2])
+    copies(world, start=[2, 2, 0, 2], end=[2, 2, 0, 2])
     world["stop_on"] = "0.3EV"
     assert exits(world["go"]) == EXIT_INCOMPLETE
-    assert "was not put back, because the run was told to stop; it still differs from the start file" in \
-        capsys.readouterr().out
-    world["stop_on"], world["stop"] = None, False
+    out = capsys.readouterr().out
+    assert "nothing more is owed" in out and "--put-back" not in out
+
+
+def test_a_copy_off_that_hold_3_cannot_restore_names_the_hold_to_open_by_hand(world, capsys):
+    """The copy differs and the start file's fourth slot holds what holds 1 and 2 hold, not hold 3: opening hold 1's
+    (or hold 2's) screen and leaving it, by hand, restores it; no --put-back; exit 4 (not on its start file)."""
+    copies(world, start=[2, 2, 0, 2], end=[2, 2, 0, 0])
+    world["stop_on"] = "0.3EV"
     assert exits(world["go"]) == 4
+    out = capsys.readouterr().out
+    assert ("Opening hold 3 would not restore it: the start file's fourth slot holds what hold 1's slot holds (and "
+            "hold 2's). Open Recall Custom hold 1's registration screen (Reg. Custom Shoot Set > Recall Custom hold 1) "
+            "and leave it with MENU, by hand." in out)
+    assert "--put-back" not in out
+
+
+def test_a_copy_off_that_no_hold_restores_says_so(world, capsys):
+    copies(world, start=[1, 2, 0, 3], end=[1, 2, 0, 0])
+    world["stop_on"] = "0.3EV"
+    assert exits(world["go"]) == 4
+    out = capsys.readouterr().out
+    assert "No hold's screen restores it: no hold's slot in the start file holds what its fourth slot holds." in out
+    assert "--put-back" not in out
 
 
 # ---------------------------------------------------------------- --put-back: the working copy put back alone
+
 
 @pytest.mark.parametrize("extra,said", [
     (["--items", "Shoot Mode"], "--put-back is a run of its own"),
@@ -530,6 +589,14 @@ def test_put_back_goes_alone_and_is_refused_before_anything_connects(monkeypatch
         V.main()
 
 
+def test_against_goes_with_put_back_alone(monkeypatch):
+    monkeypatch.setattr(V, "load_scan", lambda scan: (_ for _ in ()).throw(AssertionError("the scan was loaded")))
+    monkeypatch.setattr(sys, "argv", ["customshoot_values", "--allow", "Reg. Custom Shoot Set", "--hold", "1",
+                                      "--items", "ISO", "--against", "x.DAT"])
+    with pytest.raises(SystemExit, match="--against goes with --put-back"):
+        V.main()
+
+
 def test_put_back_needs_the_owners_word_and_a_hold_is_needed_without_it(monkeypatch):
     monkeypatch.setattr(V, "load_scan", lambda scan: (_ for _ in ()).throw(AssertionError("the scan was loaded")))
     monkeypatch.setattr(sys, "argv", ["customshoot_values", "--put-back"])
@@ -542,50 +609,92 @@ def test_put_back_needs_the_owners_word_and_a_hold_is_needed_without_it(monkeypa
 
 @pytest.fixture
 def lone(tmp_path, monkeypatch):
-    """customshoot_values.main --put-back over the made-up session (wire)."""
+    """customshoot_values.main --put-back over the made-up session (wire): its own start download's copy off (fourth
+    slot holding holds 1 and 2's value), the file to compare with (log["ref"], recorded as one of this camera's
+    downloads) holding hold 3's in its fourth slot, and the end download as hold 3's screen leaves it."""
     log = {"events": [], "downloads": [], "finished": [], "checked": [], "closed": 0}
     src = tmp_path / "src"
     files = {"before": made(src / "before.DAT", copy=[2, 2, 0, 2]),
              "after": made(src / "after.DAT", copy=[2, 2, 0, 0])}
     log["files"] = files
+    log["ref"] = made(src / "start_of_the_stopped_run.DAT", copy=[2, 2, 0, 0])
+    provenance.record(log["ref"])
     wire(tmp_path, monkeypatch, files, log)
 
-    def go():
-        monkeypatch.setattr(sys, "argv", ["customshoot_values", "--allow", "Reg. Custom Shoot Set", "--put-back"])
+    def go(*extra):
+        monkeypatch.setattr(sys, "argv", ["customshoot_values", "--allow", "Reg. Custom Shoot Set", "--put-back", *extra])
         V.main()
     log["go"] = go
     return log
 
 
-def test_put_back_opens_hold_3_and_leaves_it_with_menu_in_a_run_of_its_own(lone, capsys):
-    """Its start download, hold 3's screen opened and left with MENU (cancel_hold), its end download compared with the
-    start file, the working copy's record left out of that count (it is what the run moves) and checked instead: its
-    fourth slot now holds what hold 3's slot holds."""
-    assert exits(lone["go"]) == 0
+def test_put_back_against_a_download_opens_hold_3_and_checks_the_copy_equals_that_files(lone, capsys):
+    """--against FILE, a download of this camera whose fourth slot holds its hold-3 slot's value: its start download,
+    hold 3's screen opened and left with MENU (cancel_hold), its end download compared with its start file with the
+    working copy's record left out (it is what the run moves) and checked instead: equal to FILE's."""
+    assert exits(lambda: lone["go"]("--against", str(lone["ref"]))) == 0
     assert lone["events"] == ["session reaches shooting: the start download", "download before",
                               "open hold 3 to cancel", "press menu",
                               "session reaches shooting: the settings download after the put-back", "download after",
                               "restore"]
     assert lone["expected"] == [frozenset({COPY_KEY})]
-    assert f"the working copy ({COPY_KEY}'s fourth slot) holds what hold 3's slot holds" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert f"comparing the working copy with {lone['ref'].name} (--against)" in out
+    assert f"the working copy's record ({COPY_KEY}) equals {lone['ref'].name}'s: put back" in out
 
 
-def test_put_back_whose_copy_does_not_follow_hold_3_exits_4(lone, capsys):
+def test_put_back_refuses_before_anything_connects_a_file_not_downloaded_or_whose_copy_hold_3_cannot_restore(
+        lone, monkeypatch):
+    monkeypatch.setattr(V, "load_scan", lambda scan: (_ for _ in ()).throw(AssertionError("the scan was loaded")))
+    stray = made(lone["ref"].parent / "stray.DAT", live=0, copy=[2, 2, 0, 0])    # never recorded as a download
+    with pytest.raises(SystemExit, match="not a camera download"):
+        lone["go"]("--against", str(stray))
+    off = made(lone["ref"].parent / "off.DAT", copy=[2, 2, 0, 2])
+    provenance.record(off)
+    with pytest.raises(SystemExit, match="fourth slot is not its hold-3 slot"):
+        lone["go"]("--against", str(off))
+    assert lone["events"] == []
+
+
+def test_put_back_whose_copy_does_not_end_as_the_files_exits_4(lone, capsys):
     lone["files"]["after"] = made(lone["files"]["after"].parent / "after_off.DAT", copy=[2, 2, 0, 2])
-    assert exits(lone["go"]) == 4
-    assert f"the working copy ({COPY_KEY}'s fourth slot) does not hold what hold 3's slot holds" in \
-        capsys.readouterr().out
+    assert exits(lambda: lone["go"]("--against", str(lone["ref"]))) == 4
+    assert f"the working copy's record ({COPY_KEY}) does not equal {lone['ref'].name}'s" in capsys.readouterr().out
+
+
+def test_put_back_without_against_takes_its_own_start_only_where_hold_3_holds_its_copy(lone, capsys):
+    """No --against: the run's own start download is the reference only where its fourth slot already holds its hold-3
+    slot's value (opening hold 3 should leave it so), and it says so; where it does not (the copy off, which is when a
+    put-back is wanted), it presses nothing and asks for the file to compare with."""
+    lone["files"]["before"] = made(lone["files"]["before"].parent / "before_ok.DAT", copy=[2, 2, 0, 0])
+    assert exits(lone["go"]) == 0
+    out = capsys.readouterr().out
+    assert "no --against: comparing the working copy with this run's own start download" in out
+    lone["files"]["before"] = made(lone["files"]["before"].parent / "before_off.DAT", copy=[2, 2, 0, 2])
+    lone["events"].clear()
+    with pytest.raises(SystemExit, match="name the file it must equal with --against"):
+        lone["go"]()
+    assert "open hold 3 to cancel" not in lone["events"]
+
+
+
+
 
 
 def test_a_stop_stops_put_back_like_any_run(lone, capsys):
+    """A STOP: its first press refused, the session restored; the copy still off from the file's, which hold 3
+    restores: exit 8 and the command again; a STOP file there before it: exit 4."""
     from exit_status import EXIT_INCOMPLETE
     lone["stop"] = True
-    assert exits(lone["go"]) == EXIT_INCOMPLETE
+    lone["files"]["after"] = lone["files"]["before"]                   # nothing moved
+    assert exits(lambda: lone["go"]("--against", str(lone["ref"]))) == EXIT_INCOMPLETE
     assert "refused menu" in lone["events"]
     out = capsys.readouterr().out
-    assert "was not put back, because the run was told to stop" in out and "--put-back" in out
+    assert "was not put back, because the run was told to stop; it differs from the start file" in out
+    assert f"--put-back --against {lone['ref']}" in out
     lone["run"]._left = [Path("STOP")]
-    assert exits(lone["go"]) == 4
+    assert exits(lambda: lone["go"]("--against", str(lone["ref"]))) == 4
+
 
 
 def test_put_back_that_fails_says_what_failed_not_that_it_was_told_to_stop(lone, capsys, monkeypatch):
@@ -598,7 +707,8 @@ def test_put_back_that_fails_says_what_failed_not_that_it_was_told_to_stop(lone,
         raise V.Failed("Right on hold 3 opened unknown ('x'), not its items")
     monkeypatch.setattr(CR, "cancel_hold", cancel_hold)
     monkeypatch.setattr(V, "cancel_hold", cancel_hold)
-    assert exits(lone["go"]) == EXIT_INCOMPLETE
+    lone["files"]["after"] = lone["files"]["before"]
+    assert exits(lambda: lone["go"]("--against", str(lone["ref"]))) == EXIT_INCOMPLETE
     out = capsys.readouterr().out
     assert "told to stop" not in out
     assert "was not put back, because Failed: Right on hold 3 opened unknown ('x'), not its items" in out
@@ -617,12 +727,13 @@ def test_a_stop_during_the_sessions_restore_counts_as_a_stop(world, capsys, monk
     monkeypatch.setattr(runner.session, "finish", finish_then_stop)
     assert exits(world["go"]) == EXIT_INCOMPLETE                        # the copy as the start file has it
     assert world["events"][-len(NO_PUT_BACK):] == NO_PUT_BACK
+    assert "nothing more is owed" in capsys.readouterr().out
     world["stop"] = False
     world["events"].clear()
-    world["files"]["end"] = made(world["files"]["end"].parent / "end_copy.DAT", live=1, held=[1, 1, 1, 1],
-                                 copy=[0, 0, 0, 2])
+    copies(world, start=[0, 0, 0, 0], end=[0, 0, 0, 2])
     assert exits(world["go"]) == EXIT_INCOMPLETE                        # the copy differs: the words say so
-    assert "because the run was told to stop; it still differs from the start file" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "because the run was told to stop; it differs from the start file" in out and "--put-back --against" in out
 
 
 def test_a_stop_before_any_hold_was_opened_with_the_copy_differing_is_never_nothing_owed(world, capsys):
@@ -732,14 +843,15 @@ def test_the_ticks_run_puts_the_copy_back_and_hands_its_check_the_copy_as_expect
     assert ticks["events"][-len(PUT_BACK):] == PUT_BACK and ticks["expected"] == [frozenset({COPY_KEY})]
 
 
-def test_the_ticks_run_stopped_presses_nothing_more_and_says_how_to_put_the_copy_back(ticks, capsys):
+
+def test_the_ticks_run_stopped_presses_nothing_more_and_says_what_is_owed(ticks, capsys):
     from exit_status import EXIT_INCOMPLETE
     ticks["stop_on_visit"] = 2
     assert exits(ticks["go"]) == EXIT_INCOMPLETE
     assert ticks["events"][-len(NO_PUT_BACK):] == NO_PUT_BACK
     out = capsys.readouterr().out
     assert "the start file is back and checked" in out and "was not put back, because the run was told to stop" in out
-    assert "customshoot_values.py --allow 'Reg. Custom Shoot Set' --put-back --scan kit2_page_scan" in out
+    assert "nothing more is owed" in out
 
 
 def test_the_ticks_run_with_a_stop_file_there_before_it_exits_4_naming_it(ticks, capsys):

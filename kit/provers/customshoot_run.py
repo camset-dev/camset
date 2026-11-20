@@ -23,12 +23,15 @@ record out (prover_session's expected) and the last download checks it.
 
 A STOP means no press but cleanup MENU (camkit.link), here and in customshoot_values.py, which shares put_back and
 run_end: after a STOP file made before the run or during it, a chain's limit or a first Ctrl-C, the put-back presses
-nothing; the restore and the last download still happen. A STOP file there before the run: nothing pressed but MENU,
-exit EXIT_UNRESTORED, the file named (a chain stops). A stop during the run: the start file back and checked, exit
-EXIT_INCOMPLETE, and where the run had opened a hold's screen, that the working copy was not put back because the run
-was told to stop, with the command that puts it back (customshoot_values.py --put-back). A failure or a refusal that
-ends the run: the copy put back, exit EXIT_INCOMPLETE or EXIT_REFUSED. A restore that does not check out:
-EXIT_UNRESTORED, as ever. A notice after Register counts only as the camera's "Registered." alone (registered_said).
+nothing; the restore and the last download still happen. A STOP file there before the run: nothing sent but what
+closes a screen already open, exit EXIT_UNRESTORED, the file named (a chain stops). A stop during the run: the start
+file back and checked, and the working copy judged by the start file's own slots (copy_remedy): as the start file has
+it, nothing more owed, exit EXIT_INCOMPLETE; differing, the command that puts it back (customshoot_values.py --put-back
+--against the start file) only where opening hold 3 restores it, exit EXIT_INCOMPLETE, else the hold to open by hand
+or that none restores it, exit EXIT_UNRESTORED. A failure or a refusal that ends the run: the copy put back, exit
+EXIT_INCOMPLETE or EXIT_REFUSED (a hold that failed part way is incomplete). A restore that
+does not check out: EXIT_UNRESTORED, as ever. A notice after Register counts only as the camera's "Registered." alone
+(registered_said).
 """
 import argparse
 import contextlib
@@ -248,15 +251,56 @@ def told_to_stop(run, stopped: list) -> bool:
     return any(isinstance(e, StopRequested) for e in stopped) or run.stop_requested()
 
 
-def put_back_command(scan) -> str:
+def named_path(p, under=None) -> str:
+    """A run's folder or file as a command line takes it back (paths.run_path): relative to the camera's runs where it
+    is under them (`under`, else the kit's run root), else as camkit.paths shows it."""
+    p, root = Path(p), Path(under) if under is not None else paths.run_root(required=False)
+    if root is not None:
+        try:
+            return Path(p).resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            pass
+    return paths.shown(p)
+
+
+def put_back_command(scan, against=None, under=None) -> str:
     """The command that puts the hold's working copy back as a run of its own (customshoot_values.py --put-back), with
-    the eyes and the page scan this run used: the scan by its folder's name where it is in the camera's runs, as
-    runner.load_scan names it, else by its path."""
+    the eyes and the page scan this run used (the scan by its folder's name in the camera's runs, as runner.load_scan
+    names it) and, as --against, the file whose working copy it must end equal to (the run's start file)."""
     eyes = os.environ.get("CAMSET_EYES")
-    scan, root = Path(scan), paths.run_root(required=False)
-    named = scan.name if root is not None and scan.resolve().parent == root.resolve() else paths.shown(scan)
     return (f"{f'CAMSET_EYES={eyes} ' if eyes else ''}.venv/bin/python -u {PROVER} --allow {ROW!r} --put-back "
-            f"--scan {named}")
+            + (f"--against {named_path(against, under)} " if against is not None else "")
+            + f"--scan {named_path(scan)}")
+
+
+def hold_restores(start_copy: list) -> list:
+    """The holds (1-3) whose screen opened and left puts the working copy back as the start file has it: those whose
+    slot of the working copy's record holds what its fourth slot holds; [] where none does."""
+    if len(start_copy) < 4:
+        return []
+    return [k + 1 for k, v in enumerate(start_copy[:3]) if v == start_copy[3]]
+
+
+def copy_remedy(start_copy: list, scan, start, under, offer: bool = True) -> tuple:
+    """(the words that say how the working copy goes back as the start file has it, the exit status): hold LAST_OPENED
+    restores it (the start file's fourth slot holds its slot's value): the --put-back command against the start file,
+    EXIT_INCOMPLETE, where `offer` (no put-back was done); another hold restores it: open that hold's screen and leave
+    it by hand, EXIT_UNRESTORED (opening hold LAST_OPENED would move the copy away from the start file); none does: so,
+    EXIT_UNRESTORED."""
+    holds = hold_restores(start_copy)
+    if LAST_OPENED in holds and offer:
+        return (f"Opening hold {LAST_OPENED} restores it: put it back with:\n  "
+                f"{put_back_command(scan, start, under)}", EXIT_INCOMPLETE)
+    if LAST_OPENED in holds:
+        return (f"Hold {LAST_OPENED}'s screen was opened and left and the copy did not follow it: look at the camera.",
+                EXIT_UNRESTORED)
+    if holds:
+        k, rest = holds[0], "".join(f" (and hold {x}'s)" for x in holds[1:])
+        return (f"Opening hold {LAST_OPENED} would not restore it: the start file's fourth slot holds what hold {k}'s "
+                f"slot holds{rest}. Open Recall Custom hold {k}'s registration screen ({ROW} > Recall Custom hold {k}) "
+                "and leave it with MENU, by hand.", EXIT_UNRESTORED)
+    return ("No hold's screen restores it: no hold's slot in the start file holds what its fourth slot holds.",
+            EXIT_UNRESTORED)
 
 
 def put_back(run, hdmi, cycle, model, allow, start: Path, ended: float, stopped: list) -> tuple:
@@ -296,49 +340,68 @@ def put_back(run, hdmi, cycle, model, allow, start: Path, ended: float, stopped:
     return last, done
 
 
-def run_end(run, restored: bool, last: list, stopped: list, opened, done: bool, keys: frozenset, scan) -> int:
-    """The exit status of a Recall Custom run once its put-back is over, said in true words:
-    - a STOP file there before the run started (Run._left): the run pressed nothing but MENU; EXIT_UNRESTORED, as it
-      always exited, so a chain stops;
+def run_end(run, restored: bool, last: list, stopped: list, opened, done: bool, keys: frozenset, scan,
+            start=None) -> int:
+    """The exit status of a Recall Custom run once its put-back is over, said in true words. `last`: the records that
+    differ between `start` (the file the camera must be on: the run's start download, or --put-back's --against file)
+    and the last download; the working copy's record (`keys`) is judged by `start`'s slots (copy_remedy).
+    - a STOP file there before the run started (Run._left): the run sent nothing but what closes a screen already open
+      (cleanup MENU, or OK on a notice that has just refused MENU) and registered nothing; EXIT_UNRESTORED, as it always
+      exited, so a chain stops;
     - a restore that did not check out, or records other than the working copy's that differ at the end:
       EXIT_UNRESTORED, as ever;
-    - a stop during the run (in its session or in the put-back): EXIT_INCOMPLETE, the start file back and checked;
-      where this run opened a hold's screen (`opened`: OPENED as the session left it, or the hold --put-back opens)
-      and the copy was not put back, that it was not, why (the stop; or, for --put-back alone, the failure that ended
-      it), and the command that puts it back (put_back_command); where it opened none, that nothing else is owed,
-      unless the working copy's record differs from the start file, which is never nothing owed: EXIT_UNRESTORED. A
-      STOP that came during the session's restore counts as a stop (put_back keeps it). A refusal that ended the run
-      EXIT_REFUSED, any other failure EXIT_INCOMPLETE, the copy put back;
-    - else 0, or EXIT_UNRESTORED when the working copy's record differs after it was put back."""
+    - a stop during the run (in its session, during its restore, or in the put-back): the start file back and checked,
+      and, the copy not put back: where its record is as `start` has it, nothing more is owed, EXIT_INCOMPLETE; where
+      it differs, why it was not put back (the stop; or, for --put-back alone, the failure that ended it) and how it
+      goes back (copy_remedy: the --put-back command only where hold LAST_OPENED restores it, EXIT_INCOMPLETE; another
+      hold to open by hand, or none, EXIT_UNRESTORED); a record that differs though this run opened no hold's screen is
+      never nothing owed, EXIT_UNRESTORED. A refusal that ended the run EXIT_REFUSED, any other failure EXIT_INCOMPLETE,
+      the copy put back;
+    - else 0; EXIT_UNRESTORED when the working copy's record differs after it was put back (how it goes back, no
+      --put-back offered)."""
     stop = next((e for e in stopped if isinstance(e, StopRequested)), None)
     left = getattr(run, "_left", None) or []
     if stop is not None and left:
-        print(f"{left[0]} was there before this run started (an earlier stop): the run pressed nothing but MENU and "
-              "registered nothing. Remove it to run.", flush=True)
+        print(f"{left[0]} was there before this run started (an earlier stop): the run sent nothing but what closes a "
+              "screen already open (cleanup MENU, or OK on a notice that has just refused MENU) and registered nothing. "
+              "Remove it to run.", flush=True)
         return EXIT_UNRESTORED
     others = [c.key for c in last if c.key not in keys]
     if not restored or others:
         return EXIT_UNRESTORED
-    copy = [c.key for c in last if c.key in keys]
-    if stopped:
-        print("the start file is back and checked", flush=True)
-        # why the copy was not put back: a stop, or (--put-back alone) the failure that ended its one session
-        why = "the run was told to stop" if stop is not None else f"{type(stopped[0]).__name__}: {stopped[0]}"
-        if not done and opened is not None:
-            print(f"the hold's working copy ({' '.join(sorted(keys)) or 'its record'}'s fourth slot, which no settings "
-                  f"file sets back) was not put back, because {why}"
-                  f"{'; it still differs from the start file' if copy else ''}. Put it back with:\n"
-                  f"  {put_back_command(scan)}", flush=True)
-        elif not done and copy:
-            print(f"the working copy's record ({', '.join(copy)}) differs from the start file though this run opened no "
-                  "hold's screen: a record that differs is owed", flush=True)
-            return EXIT_UNRESTORED
-        elif not done:
-            print("no hold's screen was opened, so nothing else is owed", flush=True)
-        if stop is None and isinstance(stopped[0], safety.Refused):
-            return EXIT_REFUSED
-        return EXIT_INCOMPLETE
-    return EXIT_UNRESTORED if copy else 0
+    copy = [c for c in last if c.key in keys]
+    named = ", ".join(sorted(keys)) or "its record"
+    under = Path(run.dir).parent
+    if not stopped:
+        if not copy:
+            return 0
+        words, _ = copy_remedy(copy[0].before, scan, start, under, offer=False)
+        print(f"the working copy's record ({copy[0].key}) still differs from the start file after hold {LAST_OPENED}'s "
+              f"screen was opened and left. {words}", flush=True)
+        return EXIT_UNRESTORED
+    print("the start file is back and checked" + (f", all but the working copy's record ({named}, which no settings "
+                                                   "file sets back)" if copy else ""), flush=True)
+    # why the copy was not put back: a stop, or (--put-back alone) the failure that ended its one session
+    why = "the run was told to stop" if stop is not None else f"{type(stopped[0]).__name__}: {stopped[0]}"
+    code = EXIT_REFUSED if stop is None and isinstance(stopped[0], safety.Refused) else EXIT_INCOMPLETE
+    if done:
+        return code
+    if copy and opened is None:
+        print(f"the working copy's record ({named}) differs from the start file though this run opened no hold's "
+              "screen: a record that differs is owed. " + copy_remedy(copy[0].before, scan, start, under)[0],
+              flush=True)
+        return EXIT_UNRESTORED
+    if copy:
+        words, owed = copy_remedy(copy[0].before, scan, start, under)
+        print(f"the hold's working copy ({named}'s fourth slot, which no settings file sets back) was not put back, "
+              f"because {why}; it differs from the start file. {words}", flush=True)
+        return code if owed == EXIT_INCOMPLETE else owed
+    if opened is not None:
+        print(f"the hold's working copy ({named}'s fourth slot, which no settings file sets back) was not put back, "
+              f"because {why}, but its record is as the start file has it: nothing more is owed", flush=True)
+    else:
+        print("no hold's screen was opened, so nothing else is owed", flush=True)
+    return code
 
 
 def main():
@@ -398,7 +461,7 @@ def main():
         last, done = put_back(run, hdmi, cycle, model, a.allow, start, ended, stopped)
     finally:
         hdmi.close()
-    code = run_end(run, s.restored, last, stopped, opened, done, keys, a.scan)
+    code = run_end(run, s.restored, last, stopped, opened, done, keys, a.scan, start)
     if code:
         sys.exit(code)
 
