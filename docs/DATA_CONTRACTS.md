@@ -350,7 +350,8 @@ same work twice. It is generated each time from the sources that already exist, 
 `kit/tools/coverage.py` prints and writes it (`--todo`, `--row`, `--record`, `--proofs`, `--bundles`: its `--help`).
 
 **The looks file.** Of a row, what was done and the option, the latest line wins, except one that did not reach the
-row; `kit/tools/coverage.py --record ... --result retract` withdraws one.
+row, and the records an earlier line saw change stay seen; `kit/tools/coverage.py --record ... --result retract`
+withdraws one.
 
 {{ schema_fields("looks") }}
 

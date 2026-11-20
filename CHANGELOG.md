@@ -166,6 +166,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **The coverage ledger keeps every record a look saw change,** where a later look of the same row, action and option
+  took that look's place: such a record was left "never seen to change". The row's status is still its latest look's.
 - **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from
   `private/lut/`, into user place 16 through Sony's ImportLUTFile, and only where the camera's own Import/Edit table was
   seen to show it empty since the last import** (camlink's new `importlut`, decision 26), prints the settings records it

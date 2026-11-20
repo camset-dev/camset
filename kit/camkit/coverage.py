@@ -51,7 +51,7 @@ row out; drive.py never does. A row with values still to try (values_left) is ne
 settled only while the start file still greys it (its inactive_when, or the blocker's records as they were when the
 look started), a row the kit could not read (a deterministic failure) only while the kit's commit is the look's. Of the
 looks, the latest of a row, what was done and the option wins, but a look that did not reach the row never takes the
-place of one that did. Nothing is settled when the ledger cannot be built (no definition, or no looks file yet: the
+place of one that did, and the records an earlier look saw change stay seen (hidden_changes). Nothing is settled when the ledger cannot be built (no definition, or no looks file yet: the
 first run on a camera) or is stale, and the run says so in one line. A ledger error never breaks a run: each gate says
 it in one line and changes nothing.
 """
@@ -425,6 +425,11 @@ def latest_looks(looks: list) -> list:
     return sorted(out, key=lambda x: x[0])
 
 
+def _look_key(lk: dict) -> tuple:
+    """A look's (row, did, option), the row by its labels compared plain: the key latest_looks keeps one look of."""
+    return tuple(plain(p) for p in lk.get("path") or []), lk.get("did"), plain(lk.get("option") or "")
+
+
 def _last_looks(looks: list) -> tuple:
     """({(row, did, option): (line, look)} the latest look of each, a retraction included, [(line, lap)]). A look that
     did not reach the row (not_reached: an unfinished run, a lost row) never takes the place of an earlier look of the
@@ -434,11 +439,23 @@ def _last_looks(looks: list) -> tuple:
         if lk.get("did") == "lap":
             laps.append((line, lk))
             continue
-        k = (tuple(plain(p) for p in lk.get("path") or []), lk.get("did"), plain(lk.get("option") or ""))
+        k = _look_key(lk)
         if lk.get("result") == "not_reached" and k in last and last[k][1].get("result") != "not_reached":
             continue
         last[k] = (line, lk)
     return last, laps
+
+
+def hidden_changes(looks: list) -> list:
+    """[(line, look)] of the looks that saw records change and that latest_looks leaves out, a later look of the same
+    row, did and option standing in their place: what a look saw change stays seen when a later one changed nothing or
+    other records (the a1 II's Bracket Type looks, all with no option, of which the last, changing 0x13f9, hid the two
+    that changed 0x13f3 and 0x13f5, 2026-11-19). A retraction withdraws its key's looks before it; a lap is no row's."""
+    last, _laps = _last_looks(looks)
+    kept = {line for line, _lk in last.values()}
+    since = {_look_key(lk): line for line, lk in looks if lk.get("did") != "lap" and lk.get("result") == "retract"}
+    return [(line, lk) for line, lk in looks if lk.get("did") != "lap" and line not in kept
+            and lk.get("result") != "retract" and lk.get("records_changed") and line > since.get(_look_key(lk), 0)]
 
 
 def retracted(looks: list) -> list:
@@ -1421,6 +1438,19 @@ def _facts(led: Ledger, src: Sources, by_key: dict) -> Facts:
             f.row(e, "not_reached", fact)
         elif res == "looked":
             f.row(e, "looked", fact)
+    # the records an earlier look saw change, where a later look of its row, did and option took its place above:
+    # leads and the row's changed_in_looks alone, never its status
+    for line, lk in hidden_changes(src.looks):
+        changed = [k for k in lk.get("records_changed") or [] if record_base(k) not in volatile]
+        if not changed or named_placeholder(src, lk.get("path")):
+            continue
+        cite = {"look": line, "run": lk.get("run"), "t": lk.get("t"), "by": lk.get("by"), "kit": lk.get("kit")}
+        for k in changed:
+            f.changed_records.setdefault(record_base(k), []).append(cite)
+        e = _look_entry(led, lk)
+        if e is not None and lk.get("by") != "hand":
+            f.row(e, "changed_before", {**cite, "result": lk.get("result"), "did": lk.get("did"),
+                                        "option": lk.get("option"), "records": changed})
     # crawl outcomes
     crumbs = _crumbs(src)
     for run, line, r in src.crawls:
@@ -1777,12 +1807,13 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
     e["status"] = status
     if cites:
         e["cites"] = cites
-    if fx.get("changed"):
+    seen_change = (fx.get("changed") or []) + (fx.get("changed_before") or [])
+    if seen_change:
         covered = set(records_covered(list(by_key.values()))) if covered is None else covered
-        new = sorted({k for c in fx["changed"] for k in c.get("records") or [] if record_base(k) not in covered})
+        new = sorted({k for c in seen_change for k in c.get("records") or [] if record_base(k) not in covered})
         if new:
             e["changed_in_looks"] = new
-            e.setdefault("cites_changed", fx["changed"])
+            e.setdefault("cites_changed", seen_change)
     if fx.get("looked"):
         e["looked"] = len(fx["looked"])
         opts = [o for c in fx["looked"] for o in c.get("options") or []]

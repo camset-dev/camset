@@ -1503,6 +1503,28 @@ def test_a_look_counts_only_the_records_no_setting_maps(camera):
     assert ("Alpha",) in left and ("Bravo",) not in left
 
 
+def test_a_record_a_look_saw_change_stays_seen_when_a_later_look_of_the_row_takes_its_place(camera, monkeypatch):
+    """The latest look of a row, did and option gives the row its status, but what an earlier one saw change stays
+    seen: the a1 II's Bracket Type looks, all with no option, the last changing 0x13f9 alone, hid the two that changed
+    0x13f3 and 0x13f5, which stayed "never seen to change" (2026-11-19). A retraction still withdraws them."""
+    rec = "global:0x0201"
+    assert {r["key"]: r for r in ledger().records}[rec]["status"] == "unmapped, never seen to change"
+    add_looks(camera, look(["Kilo"], did="choose", result="changed", records_changed=[rec]),
+              look(["Kilo"], did="choose", result="changed", records_changed=["global:0x0200"]),
+              look(["Kilo"], did="choose", result="no_change"))
+    led = ledger()
+    assert {r["key"]: r for r in led.records}[rec]["status"] == "changed, no row attributed"
+    assert row(led, "Kilo")["changed_in_looks"] == ["global:0x0200", rec]
+    assert row(led, "Kilo")["status"] == "tested, no record changes", "the latest look gives the row its status"
+    import coverage as tool
+    monkeypatch.setattr(sys, "argv", ["coverage.py", "--record", "--path", "Shooting > G1 > Kilo", "--did", "choose",
+                                      "--result", "retract"])
+    tool.main()
+    led = ledger()
+    assert {r["key"]: r for r in led.records}[rec]["status"] == "unmapped, never seen to change"
+    assert "changed_in_looks" not in row(led, "Kilo")
+
+
 def test_todo_counts_each_value_once_on_the_row_that_holds_its_setting(camera, monkeypatch, capsys):
     """A value still to try is listed on the row its setting is placed on, never again on each row above it (a
     profile's parameter under Picture Profile > PPn); those rows stay unsettled while a value below them is left, so a
