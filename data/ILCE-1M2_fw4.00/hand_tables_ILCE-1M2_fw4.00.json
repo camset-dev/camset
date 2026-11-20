@@ -148,8 +148,36 @@
     "global:0x0b95": {"name": "WB Color Temp. (C.Temp./Filter, movie)"},
     "global:0x1476": {"name": "Aspect Marker Level", "tab": "Shooting", "group": "Marker Display"},
     "global:0x1479": {
-      "name": "Unknown (beside Aspect Marker Level)",
-      "note": "Not Aspect Marker Level (0x1476), nor another marker type's level, nor Movie mode's Aspect Marker, whose row is one list, Off and the ratios, writing 0x0326: none of them writes it."
+      "name": "Aspect Marker Level (Playback)",
+      "note": "The Playback menu's Aspect Marker Level (Playback Option > Aspect Marker Disp.), 0 to 15; the shooting menu's is 0x1476. Its row is greyed while HDMI Info. Display is On."
+    },
+    "global:0x02bf": {
+      "name": "Bracket Type",
+      "note": "Shooting > Drive Mode > Bracket Settings > Bracket Type. The row opens only with the drive mode dial off \"*\": with the dial on \"*\" the camera answers \"Invalid in the current Drive Mode dial position. Enabled if the Drive Mode dial position is set to a position other than \"*\".\", and with Mode Dial Control Set's Drive Mode Dial on Set with Menu \"This operation or setting not available as follows\", naming Drive Mode Dial: Set with Menu; both so with Drive Mode itself on a bracket too. White Balance Bracket's and DRO Bracket's Lo/Hi are 0x13f3 and 0x13f5, Cont. Bracket's and Single Bracket's step and shots 0x13f9 and 0x13f7, Focus Bracket's Step Width and Number of Shots 0x10ac and 0x10aa."
+    },
+    "global:0x13f3": {
+      "name": "Bracket Type: White Balance Bracket step",
+      "note": "White Balance Bracket's Lo/Hi in Bracket Type (Bracket Settings), the second axis of its option there: a record of its own, not Drive Mode's White Balance Bracket step (0x04ca)."
+    },
+    "global:0x13f5": {
+      "name": "Bracket Type: DRO Bracket step",
+      "note": "DRO Bracket's Lo/Hi in Bracket Type (Bracket Settings), the second axis of its option there: a record of its own, not Drive Mode's DRO Bracket step (0x04cc)."
+    },
+    "global:0x13f9": {
+      "name": "Bracket Type: Cont. Bracket setting",
+      "note": "Cont. Bracket's Exposure Value and Number of Shots in Bracket Type (Bracket Settings), the two fields of its option there, kept together in one code: a record of its own, not Drive Mode's Cont. Bracket setting (0x04c6), whose list names its codes."
+    },
+    "global:0x13f7": {
+      "name": "Bracket Type: Single Bracket setting",
+      "note": "Single Bracket's Exposure Value and Number of Shots in Bracket Type (Bracket Settings), the two fields of its option there, kept together in one code: a record of its own, not Drive Mode's Single Bracket setting (0x04c8), whose list names its codes."
+    },
+    "global:0x0e2a": {
+      "name": "Dial/Wheel (Movie): Separate M mode and other modes",
+      "note": "The Dial/Wheel page's checkbox of the second Custom Key/Dial Set. row, the one with the movie icon; the first row's (stills) is 0x0e29. Ticking it once and unticking it changed no other record."
+    },
+    "global:0x029a": {
+      "name": "Recording Media (Movie)",
+      "note": "The second Recording Media row of Rec. Media Settings, the one with the movie icon. Its list offers Slot 1, Slot 2 and Simult. Recording; the first row, with the camera icon (0x0298), offers Sort Recording besides."
     },
     "global:0x1478": {"name": "Aspect Marker Disp."},
     "global:0x0240": {"name": "Rec Frame Rate (S&Q, XAVC S 4K)"},
@@ -867,8 +895,12 @@
     "set:0x14be": {"like": "set:0x14be", "name": "Custom 3 box: width", "values": [], "note": ""},
     "set:0x1488": {"like": "set:0x1488", "name": "Custom box in use: height", "values": [], "note": ""},
     "set:0x148a": {"like": "set:0x148a", "name": "Custom box in use: width", "values": [], "note": ""},
-    "set:0x148c": {"like": "set:0x148c", "name": "Custom box in use: height x 1000", "values": [], "note": ""},
-    "set:0x148e": {"like": "set:0x148e", "name": "Custom box in use: width x 1000", "values": [], "note": ""},
+    "set:0x148c": {"like": "set:0x148c", "name": "Custom 1 box: height x 1000 (3:2 copy)", "values": [], "note": ""},
+    "set:0x148e": {"like": "set:0x148e", "name": "Custom 1 box: width x 1000 (3:2 copy)", "values": [], "note": ""},
+    "set:0x1490": {"like": "set:0x148c", "name": "Custom 2 box: height x 1000 (3:2 copy)", "values": [], "note": ""},
+    "set:0x1492": {"like": "set:0x148e", "name": "Custom 2 box: width x 1000 (3:2 copy)", "values": [], "note": ""},
+    "set:0x1494": {"like": "set:0x148c", "name": "Custom 3 box: height x 1000 (3:2 copy)", "values": [], "note": ""},
+    "set:0x1496": {"like": "set:0x148e", "name": "Custom 3 box: width x 1000 (3:2 copy)", "values": [], "note": ""},
     "set:0x14b0": {"like": "set:0x14b0", "name": "Custom box in use: height (copy)", "values": [], "note": ""},
     "set:0x14b2": {"like": "set:0x14b2", "name": "Custom box in use: width (copy)", "values": [], "note": ""},
     "set:0x14c0": {"like": "set:0x14c0", "name": "Custom 1 box: default height", "values": [], "note": ""},
@@ -1082,7 +1114,18 @@
     "global:0x12b4": {"like": "global:0x12b7", "name": "Playback Filter Condition: Protect"},
     "global:0x12b5": {"like": "global:0x12b7", "name": "Playback Filter Condition: Voice Memo"},
     "global:0x12c9": {"like": "global:0x12b7", "name": "Playback Filter Condition: FTP Transfer Status"},
-    "global:0x12ca": {"like": "global:0x12b7", "name": "Playback Filter Condition: Smartphone Trans State"}
+    "global:0x12ca": {"like": "global:0x12b7", "name": "Playback Filter Condition: Smartphone Trans State"},
+    "global:0x02bf": {"like": "global:0x02c1", "name": "Bracket Type"},
+    "global:0x13f3": {"like": "global:0x04ca", "name": "Bracket Type: White Balance Bracket step"},
+    "global:0x13f5": {"like": "global:0x04cc", "name": "Bracket Type: DRO Bracket step"},
+    "global:0x13f9": {"like": "global:0x04c6", "name": "Bracket Type: Cont. Bracket setting"},
+    "global:0x13f7": {"like": "global:0x04c8", "name": "Bracket Type: Single Bracket setting"},
+    "global:0x0e2a": {"like": "global:0x0e29", "name": "Dial/Wheel (Movie): Separate M mode and other modes"},
+    "global:0x029a": {"like": "global:0x0298", "name": "Recording Media (Movie)"},
+    "global:0x01de": {"like": "global:0x01ea", "name": "JPEG/HEIF Quality (one slot)"},
+    "global:0x01e0": {"like": "global:0x01ec", "name": "JPEG/HEIF Quality (one slot, copy)"},
+    "global:0x01e2": {"like": "global:0x01ee", "name": "JPEG/HEIF Image Size (one slot)"},
+    "global:0x01e4": {"like": "global:0x01f0", "name": "JPEG/HEIF Image Size (one slot, copy)"}
   },
   "NEW_WHOLE_LABELS": [
     "global:0x1141",
@@ -1414,7 +1457,9 @@
       "values": [[0, "Only Once"], [1, "Repeat"]]
     },
     "global:0x10ac": {"note": "Focus Bracket's Step Width (1-10), stored as the number."},
-    "global:0x10aa": {"note": "Focus Bracket's Number of Shots, stored as the number."},
+    "global:0x10aa": {
+      "note": "Focus Bracket's Number of Shots, stored as the number: three digit boxes in Bracket Type's Focus Bracket (Bracket Settings). Chosen there: 3 to 9, 13 to 93 in tens, 103 and 203; 000 is kept as 2, the lowest. The hundreds box comes round after 2, so up to 299 may be offered, but nothing above 203 was chosen."
+    },
     "global:0x04e5": {
       "note": "The DISP display mode on the monitor: Display All Info 0, No Disp. Info 1, Histogram 2, Level 3 (the SDK's 2-5; For Viewfinder 4 was not offered in Movie mode). A settings file does not restore it.",
       "values": [
@@ -1636,10 +1681,22 @@
       "note": "The width of the Custom box chosen as Focus Area, whichever of the three, its Tracking area's too: the box's own width, 28 to 548. Kept only in the memory sets: a slot holds the sizes it was registered with."
     },
     "set:0x148c": {
-      "note": "0x1488 times 1000, written with it. Kept only in the memory sets: a slot holds the sizes it was registered with."
+      "note": "Custom 1's height times 1000, as the 3:2 picture has it: in the Stills memory sets at Aspect Ratio 3:2 it is 0x14b4 times 1000, and where 0x14b4 holds a taller number, at Aspect Ratio 16:9 and in the Movie and S&Q memory sets read, this keeps the 3:2 one. Kept only in the memory sets: a slot holds the sizes it was registered with."
     },
     "set:0x148e": {
-      "note": "0x148a times 1000, written with it. Kept only in the memory sets: a slot holds the sizes it was registered with."
+      "note": "Custom 1's width times 1000, as the 3:2 picture has it: in the Stills memory sets at Aspect Ratio 3:2 it is 0x14b6 times 1000, and where 0x14b6 holds a wider number, at Aspect Ratio 4:3 and 1:1, this keeps the 3:2 one. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x1490": {
+      "note": "Custom 2's height times 1000, as the 3:2 picture has it: in the Stills memory sets at Aspect Ratio 3:2 it is 0x14b8 times 1000, and where 0x14b8 holds a taller number, at Aspect Ratio 16:9 and in the Movie and S&Q memory sets read, this keeps the 3:2 one. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x1492": {
+      "note": "Custom 2's width times 1000, as the 3:2 picture has it: in the Stills memory sets at Aspect Ratio 3:2 it is 0x14ba times 1000, and where 0x14ba holds a wider number, at Aspect Ratio 4:3 and 1:1, this keeps the 3:2 one. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x1494": {
+      "note": "Custom 3's height times 1000, as the 3:2 picture has it: in the Stills memory sets at Aspect Ratio 3:2 it is 0x14bc times 1000, and where 0x14bc holds a taller number, at Aspect Ratio 16:9 and in the Movie and S&Q memory sets read, this keeps the 3:2 one. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x1496": {
+      "note": "Custom 3's width times 1000, as the 3:2 picture has it: in the Stills memory sets at Aspect Ratio 3:2 it is 0x14be times 1000, and where 0x14be holds a wider number, at Aspect Ratio 4:3 and 1:1, this keeps the 3:2 one. Kept only in the memory sets: a slot holds the sizes it was registered with."
     },
     "set:0x14b0": {
       "note": "A copy of 0x1488, written with it. Kept only in the memory sets: a slot holds the sizes it was registered with."
@@ -1745,6 +1802,22 @@
         [4, "Lossless Comp (S)"],
         [7, "Compressed"]
       ]
+    },
+    "global:0x01de": {
+      "note": "JPEG/HEIF Quality for single-slot recording. With Recording Media on one slot, Image Quality Settings has one column, SLOT 1.",
+      "values": [[0, "Extra fine"], [1, "Fine"], [2, "Standard"], [3, "Light"]]
+    },
+    "global:0x01e0": {
+      "note": "Written with 0x01de, the same value, by every choice of JPEG/HEIF Quality for single-slot recording.",
+      "values": [[0, "Extra fine"], [1, "Fine"], [2, "Standard"], [3, "Light"]]
+    },
+    "global:0x01e2": {
+      "note": "JPEG/HEIF Image Size for single-slot recording. With Recording Media on one slot, Image Quality Settings has one column, SLOT 1.",
+      "values": [[0, "L: 50M"], [1, "M: 21M"], [2, "S: 12M"]]
+    },
+    "global:0x01e4": {
+      "note": "Written with 0x01e2, the same value, by every choice of JPEG/HEIF Image Size for single-slot recording.",
+      "values": [[0, "L: 50M"], [1, "M: 21M"], [2, "S: 12M"]]
     },
     "global:0x01da": {
       "note": "File Format for single-slot recording: RAW 0, RAW & JPEG 1, RAW & HEIF 2, JPEG 3, HEIF 4. The list shows RAW, RAW & JPEG, JPEG with JPEG/HEIF Switch on JPEG, and RAW, RAW & HEIF, HEIF with it on HEIF; the switch writes HEIF 4 here from JPEG. With Recording Media on one slot, Image Quality Settings has one column.",
@@ -2547,7 +2620,9 @@
     ["global:0x13d4", 7, "Self-timer(Cont.)"],
     ["global:0x13bb", 1, "1 / 2 This Image"],
     ["global:0x0284", 1, "9M 4:2:0 10bit"],
-    ["global:0x0284", 3, "6M 4:2:0 8bit (XAVC S HD's setting; only a reset writes it)"]
+    ["global:0x0284", 3, "6M 4:2:0 8bit (XAVC S HD's setting; only a reset writes it)"],
+    ["global:0x02bf", 3, "White Balance Bracket"],
+    ["global:0x02bf", 4, "DRO Bracket"]
   ],
   "PP7_VALUES": [
     ["global:0x052b[6]", 15, "S-Log2 (the first a1's PP7; not offered on this body)"],
@@ -3830,11 +3905,6 @@
       "unknown",
       null,
       "Every menu choice tried left it as it was: Focus Area's every area, in Stills and in Movie mode. What writes it is not known."
-    ],
-    "global:0x1479": [
-      "unknown",
-      null,
-      "Every menu choice tried left it as it was: Aspect Marker Level at several levels and under another marker type, and the Movie menu's Aspect Marker list. What writes it is not known."
     ],
     "global:0x018c@1220": [
       "not_on_camera",

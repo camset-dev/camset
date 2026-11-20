@@ -742,7 +742,7 @@ pub(crate) mod facts_tests {
         let drawn: Vec<(&str, usize)> = lines.iter().filter_map(|l| match l { Line::Row { index, depth, .. } => Some((rows[*index][0].name.as_str(), *depth)), _ => None }).collect();
         assert_eq!(drawn[0], ("Drive Mode", 0));
         assert!(!drawn.iter().any(|(n, _)| n.starts_with("Drive memory")), "the choices of its options are beside them, no rows: {drawn:?}");
-        assert_eq!(drawn.len() + 7, rows.len(), "the group still holds (and counts) its seven choices");
+        assert_eq!(drawn.len() + 9, rows.len(), "the group still holds (and counts) its nine choices: Drive Mode's seven, Bracket Type's two");
         assert!(lines.iter().any(|l| matches!(l, Line::Heading { label, depth: 0, .. } if label == "Cont. Shooting Speed")));
         assert!(!lines.contains(&Line::More), "every Drive Mode setting has its place");
         // the choices of Drive Mode's options, as its detail panel names them

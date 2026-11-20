@@ -450,9 +450,10 @@ def test_no_shipped_proof_lists_the_values_of_a_sample_from_the_held_option():
     """The shipped definition: every proof written from a picker sample stepped from the option the camera held is a
     count (from_start) with no values, linear null, and no value of it is named by a reading, only by the slot its
     picker group proved in full ("derived") or a rule. A rewrite that listed their values again would drop the mark,
-    and the count of marked settings, pinned here, with it."""
+    and the count of marked settings, pinned here, with it. 78, and since 2026-11-19 Bracket Type's Cont. and Single
+    Bracket records (0x13f9, 0x13f7), whose two fields were each walked from what the other held."""
     marked = [s for s in DOC["settings"] if ((s.get("proved") or {}).get("sampled") or {}).get("from_start")]
-    assert len(marked) == 78
+    assert len(marked) == 78 + 2
     for s in marked:
         p = s["proved"]
         assert "values" not in p and p["sampled"]["linear"] is None and p["sampled"]["proofs"] >= 2, s["key"]
@@ -1202,9 +1203,12 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     # - 3 the Zone's place for each way of holding the camera: of each three records a registration writes alike, the
     #   first named for its hold and shown, the other two its copies (COPIES), 2026-11-17
     # + 1 Exposure Comp.'s slider copy (0x13d6), no copy of the stills and movie pair, "(slider copy)", 2026-11-18
-    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3 + 1
-    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3 + 1   # + the live copy
-    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12 - 3 + 1
+    # + 2 the single-slot JPEG/HEIF Quality's and Image Size's copies (0x01e0, 0x01e4), 2026-11-19
+    # + 4 Custom 2's and Custom 3's height and width times 1000 (set:0x1490-0x1496), "(3:2 copy)" as Custom 1's two
+    #   (set:0x148c, 0x148e), which the 78 held while they were taken for the box in use's, 2026-11-19
+    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4
+    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4   # + the live copy
+    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4
     assert {s["key"] for s in DOC["settings"] if s["name"].endswith("copy)")} <= set(flagged)
     assert {s.get("expert") for s in DOC["settings"]} == {True, None}            # true, or no key
     one = next(s for s in DOC["settings"] if s.get("expert"))

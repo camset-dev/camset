@@ -55,6 +55,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's definition takes the afternoon's proofs of 2026-11-19:** Bracket Type and its options' own records
+  (proved with the drive mode dial on BRK), the movie rows of Recording Media and of Dial/Wheel's Separate M mode box,
+  single-slot JPEG/HEIF Quality and Image Size, and Playback's Aspect Marker Level, until now an unknown record. Focus
+  Bracket's Number of Shots takes 2 to 203, and each Custom box's size times 1000 is named as that box's, Custom 1's
+  no longer taken for the box in use.
 - **The a1 II's definition takes the proofs of 2026-11-19:** ISO AUTO's movie Minimum and Maximum are walked in
   Movie mode (ISO 100 to ISO 32000, a Maximum set below the Minimum pulling it down there too), Color Mode is proved
   on each profile with its Gamma on HLG, and My Menu's empty place and the Playback Filter flags' "Never set" are

@@ -879,6 +879,15 @@ def test_the_a1_pass_counts_a_sampled_new_like_record_and_lists_none_of_its_valu
     import test_definitions as D
     report = D.A1_REPORT + [dict(CROSS_ENTRY, records={"global:0x13f9": dict(CROSS_RECORD)})]
     S, target, write = D.a1_run(tmp_path, monkeypatch, report, D.A1_PROOFS + cont_lines())
+    # the committed definition holds 0x13f9 since the proofs of 2026-11-19: taken out of the copy and its evidence, so
+    # the pass lays it out afresh from the entry above
+    from camkit import definitions
+    pub = json.loads(target.read_text(encoding="utf-8"))
+    pub["settings"] = [x for x in pub["settings"] if x["key"] != "global:0x13f9"]
+    target.write_text(json.dumps(pub, indent=1, ensure_ascii=False), encoding="utf-8")
+    ev = json.loads(definitions.evidence_path(target).read_text(encoding="utf-8"))
+    ev["settings"].pop("global:0x13f9", None)
+    definitions.evidence_path(target).write_text(json.dumps(ev, indent=1), encoding="utf-8")
     S._hand()
     monkeypatch.setitem(S.NEW_LIKE, "global:0x13f9", ("global:0x04c6", "Drive memory - continuous bracket setting (BRK)"))
     monkeypatch.setattr(S, "run_start", lambda: D.SAMPLE)

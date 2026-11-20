@@ -197,6 +197,22 @@ enums:
       id: raw_file_type
       doc: 'RAW File Type (one slot) [Shooting > Image Quality/Rec]: 0 Uncompressed, 2 Lossless Comp (L), 3 Lossless
         Comp (M), 4 Lossless Comp (S), 7 Compressed. live settings; 1 of 1 settings on it proved on the camera.'
+    0x01de:
+      id: jpeg_heif_quality
+      doc: 'JPEG/HEIF Quality (one slot) [Shooting > Image Quality/Rec]: 0 Extra fine, 1 Fine, 2 Standard, 3 Light.
+        live settings; 1 of 1 settings on it proved on the camera.'
+    0x01e0:
+      id: jpeg_heif_quality_01e0
+      doc: 'JPEG/HEIF Quality (one slot, copy) [Shooting > Image Quality/Rec]: 0 Extra fine, 1 Fine, 2 Standard,
+        3 Light. live settings; 1 of 1 settings on it proved on the camera.'
+    0x01e2:
+      id: jpeg_heif_image_size
+      doc: 'JPEG/HEIF Image Size (one slot) [Shooting > Image Quality/Rec]: 0 L: 50M, 1 M: 21M, 2 S: 12M. live settings;
+        1 of 1 settings on it proved on the camera.'
+    0x01e4:
+      id: jpeg_heif_image_size_01e4
+      doc: 'JPEG/HEIF Image Size (one slot, copy) [Shooting > Image Quality/Rec]: 0 L: 50M, 1 M: 21M, 2 S: 12M.
+        live settings; 1 of 1 settings on it proved on the camera.'
     0x01e6:
       id: file_format_01e6
       doc: 'File Format (Slot 1) [Shooting > Image Quality/Rec]: 0 RAW, 1 JPEG, 2 HEIF. live settings; 1 of 1 settings
@@ -206,7 +222,7 @@ enums:
       doc: 'RAW File Type (Slot 1) [Shooting > Image Quality/Rec]: 0 Uncompressed, 2 Lossless Comp (L), 3 Lossless
         Comp (M), 4 Lossless Comp (S), 7 Compressed. live settings; 1 of 1 settings on it proved on the camera.'
     0x01ea:
-      id: jpeg_heif_quality
+      id: jpeg_heif_quality_01ea
       doc: 'JPEG/HEIF Quality (Slot 1) [Shooting > Image Quality/Rec]: 0 Extra fine, 1 Fine, 2 Standard, 3 Light.
         live settings; 1 of 1 settings on it proved on the camera.'
     0x01ec:
@@ -214,7 +230,7 @@ enums:
       doc: 'JPEG/HEIF Quality (Slot 1, copy) [Shooting > Image Quality/Rec]: 0 Extra fine, 1 Fine, 2 Standard, 3
         Light. live settings; 1 of 1 settings on it proved on the camera.'
     0x01ee:
-      id: jpeg_heif_image_size
+      id: jpeg_heif_image_size_01ee
       doc: 'JPEG/HEIF Image Size (Slot 1) [Shooting > Image Quality/Rec]: 0 L: 50M, 1 M: 21M, 2 S: 12M. live settings;
         1 of 1 settings on it proved on the camera.'
     0x01f0:
@@ -436,6 +452,10 @@ enums:
       id: recording_media
       doc: 'Recording Media [Shooting > Media]: 0 Slot 1, 1 Slot 2, 2 Simult. Recording, 3 Sort Recording. live
         settings; 1 of 1 settings on it proved on the camera.'
+    0x029a:
+      id: recording_media_029a
+      doc: 'Recording Media (Movie) [Shooting > Media]: 0 Slot 1, 1 Slot 2, 2 Simult. Recording. live settings;
+        1 of 1 settings on it proved on the camera.'
     0x029c:
       id: auto_switch_media_card
       doc: 'Auto Switch Media Card [Shooting > Media]: 0 On, 1 Off. live settings; 1 of 1 settings on it proved
@@ -492,6 +512,10 @@ enums:
       id: self_timer_type
       doc: 'Self-timer Type [Shooting > Drive Mode]: 0 Self-timer (Single), 1 Self-timer (Cont). live settings;
         1 of 1 settings on it proved on the camera.'
+    0x02bf:
+      id: bracket_type
+      doc: 'Bracket Type [Shooting > Drive Mode]: 0 Cont. Bracket, 1 Single Bracket, 2 Focus Bracket, 3 White Balance
+        Bracket, 4 DRO Bracket. live settings; 1 of 1 settings on it proved on the camera.'
     0x02c1:
       id: selftimer_during_bracket
       doc: 'Selftimer during Bracket [Shooting > Drive Mode]: 0 Off, 1 2 Sec, 2 5 Sec, 3 10 Sec. live settings;
@@ -2265,6 +2289,10 @@ enums:
       id: dial_wheel_separate_m_mode_and_other_modes
       doc: 'Dial/Wheel: Separate M mode and other modes [Setup > Operation Customize]: 0 Off (unticked), 1 On (ticked).
         live settings; 1 of 1 settings on it proved on the camera.'
+    0x0e2a:
+      id: dial_wheel_movie_separate_m_mode_and_other_modes
+      doc: 'Dial/Wheel (Movie): Separate M mode and other modes [Setup > Operation Customize]: 0 Off (unticked),
+        1 On (ticked). live settings; 1 of 1 settings on it proved on the camera.'
     0x0e37:
       id: copy_of_screen_reader_speed
       doc: 'copy of Screen Reader Speed (changes with 0x0478) [Setup > Other settings]: 0 Fast 4, 1 Fast 3, 2 Fast
@@ -3647,6 +3675,22 @@ enums:
       doc: 'Self-timer(Cont.): delay and shots [Shooting > Drive Mode]: 0 10 Sec. 3 Img., 1 10 Sec. 5 Img., 2 5
         Sec. 3 Img., 3 5 Sec. 5 Img., 4 2 Sec. 3 Img., 5 2 Sec. 5 Img.. live settings; 1 of 1 settings on it proved
         on the camera.'
+    0x13f3:
+      id: bracket_type_white_balance_bracket_step
+      doc: 'Bracket Type: White Balance Bracket step [Shooting > Drive Mode]: 0 Hi, 1 Lo. live settings; 1 of 1
+        settings on it proved on the camera.'
+    0x13f5:
+      id: bracket_type_dro_bracket_step
+      doc: 'Bracket Type: DRO Bracket step [Shooting > Drive Mode]: 0 Hi, 1 Lo. live settings; 1 of 1 settings on
+        it proved on the camera.'
+    0x13f7:
+      id: bracket_type_single_bracket_setting
+      doc: 'Bracket Type: Single Bracket setting [Shooting > Drive Mode]. live settings; 1 of 1 settings on it proved
+        on the camera.'
+    0x13f9:
+      id: bracket_type_cont_bracket_setting
+      doc: 'Bracket Type: Cont. Bracket setting [Shooting > Drive Mode]. live settings; 1 of 1 settings on it proved
+        on the camera.'
     0x13fd:
       id: drive_mode_limit_single_shooting
       doc: 'Drive Mode Limit: Single Shooting [Shooting > Drive Mode]: 0 Allowed (ticked), 1 Excluded. live settings;
@@ -3719,9 +3763,9 @@ enums:
       doc: 'Aspect Marker Disp. [Playback > Playback Option]: 0 On, 1 Off. live settings; 1 of 1 settings on it
         proved on the camera.'
     0x1479:
-      id: unknown_1479
-      doc: Unknown (beside Aspect Marker Level) [Playback > Playback Option]. live settings; 0 of 1 settings on
-        it proved on the camera.
+      id: aspect_marker_level_1479
+      doc: Aspect Marker Level (Playback) [Playback > Playback Option]. live settings; 1 of 1 settings on it proved
+        on the camera.
     0x1486:
       id: drive_mode_1486
       doc: Drive Mode [Shooting > Drive Mode]. live settings; 1 of 1 settings on it proved on the camera.
@@ -3732,13 +3776,29 @@ enums:
       id: custom_box_in_use_width
       doc: 'Custom box in use: width [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved on the camera.'
     0x148c:
-      id: custom_box_in_use_height_x_1000
-      doc: 'Custom box in use: height x 1000 [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved on
-        the camera.'
+      id: custom_1_box_height_x_1000
+      doc: 'Custom 1 box: height x 1000 (3:2 copy) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved
+        on the camera.'
     0x148e:
-      id: custom_box_in_use_width_x_1000
-      doc: 'Custom box in use: width x 1000 [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved on the
-        camera.'
+      id: custom_1_box_width_x_1000
+      doc: 'Custom 1 box: width x 1000 (3:2 copy) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved
+        on the camera.'
+    0x1490:
+      id: custom_2_box_height_x_1000
+      doc: 'Custom 2 box: height x 1000 (3:2 copy) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved
+        on the camera.'
+    0x1492:
+      id: custom_2_box_width_x_1000
+      doc: 'Custom 2 box: width x 1000 (3:2 copy) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved
+        on the camera.'
+    0x1494:
+      id: custom_3_box_height_x_1000
+      doc: 'Custom 3 box: height x 1000 (3:2 copy) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved
+        on the camera.'
+    0x1496:
+      id: custom_3_box_width_x_1000
+      doc: 'Custom 3 box: width x 1000 (3:2 copy) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved
+        on the camera.'
     0x14b0:
       id: custom_box_in_use_height_14b0
       doc: 'Custom box in use: height (copy) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved on
