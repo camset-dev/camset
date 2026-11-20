@@ -13,10 +13,12 @@ what backs it (kit/writer/proofs.py NAME_SOURCES). The audit takes:
            camkit.reading.QUESTIONS, as kit/tools/reader_census.py names them), or with --all every name
   frame    the proof line that backs the name, as the pass-2 report credits it (kit2_pass2/report.json: a row, a
            record and the label credited with the value; kit/pass2_report.py's report_proofs and rows_of: the latest
-           line of each option, its own run's frame): of several, one whose report source is the definition's, then
-           one whose label is the published name, then the newest frame. Its kind of screen and options come as
-           kit/tools/reader_census.py --questions takes them (question_items), each option's recorded label put as the
-           definition names its value (corrected); a checklist's box is expected in the state its published name says
+           line of each option, its own run's frame; a carousel axis's line by its own label, as the report credits
+           it): of several, a line with its frame on disk that is no carousel's put-back visit, then one whose report
+           source is the definition's, then one whose label is the published name, then the newest frame. Its kind of
+           screen and options come as kit/tools/reader_census.py --questions takes them (question_items), each
+           option's recorded label put as the definition names the value the report credits it with on that record,
+           in any row; a checklist's box is expected in the state its published name says
   asking   each reader (the second and every third one, a paid one only when named, or each --reader) is asked the
            kind's new question (camkit.reading.QUESTIONS), never an old one and never with the options handed over,
            through reader_census.ask_all: answers kept in --cache (by default the census's own folder in the system's
@@ -34,10 +36,11 @@ what backs it (kit/writer/proofs.py NAME_SOURCES). The audit takes:
            and all on another reading (one other option, or one other text alike, the name's own option spelled
            otherwise among them), each picks the option but they spell it apart, or none agree and they differ; with
            one family, "one family" (as published or not), never "all agree"
-Left out, and counted: a name no report line credits, a line of an identity or connection row a network decision
-opened (decision 8), a frame of a run that opened a row an owner decision names (camkit.vlm.NO_READER_MARKER, decision
-9: never read), a frame not on disk, a black frame, a frame the census would take no question from, a radio button's
-name, a checklist name that says no tick state. A frame of a run a --network run marked (camkit.vlm.LOCAL_MARKER) goes
+Left out, and counted: a name the report credits no label with, or whose label has no proof line under it, a value the
+definition names nothing, two values of one record sharing a name, a line of an identity or connection row a network
+decision opened (decision 8), a frame of a run that opened a row an owner decision names (camkit.vlm.NO_READER_MARKER,
+decision 9: never read), a frame not on disk, a black frame, a frame the census would take no question from, a radio
+button's name, a checklist name that says no tick state. A frame of a run a --network run marked (camkit.vlm.LOCAL_MARKER) goes
 to local readers only (camkit.vlm.local_reader), and a hosted reader (reader_census.is_hosted) is sent no frame
 reader_census.hosted_refused refuses.
 
@@ -132,8 +135,9 @@ def credits(report: list) -> dict:
 def option_lines(main: Path, camera: str) -> tuple:
     """(proofs, {row: {label: [(line, after)]}}) of the runs the report reads, as kit/pass2_report.py takes them: every
     proof qualified with its run (report_proofs), the latest line of each option that counts (rows_of), each under the
-    label the report credits it by (name_of, with the run's rows and the camera's menu tree as its main() gives them;
-    a picker's twins told apart). A checklist line is under its box's two labels ("<box>: ticked", "<box>: unticked"),
+    label the report credits it by (a carousel axis's line by its own label, as axis_values credits it; any other by
+    name_of, with the run's rows and the camera's menu tree as its main() gives them, a picker's twins told apart). A
+    checklist line is under its box's two labels ("<box>: ticked", "<box>: unticked"),
     after saying which one its visit wrote; a radio button's under its two buttons' labels, after None."""
     p2.ROW_NAMES.clear()
     p2.MENU_NAMES.clear()
@@ -158,7 +162,10 @@ def option_lines(main: Path, camera: str) -> tuple:
                 for state in ("ticked", "unticked"):
                     out[row][f"{box.get('label')}: {state}"].append((o, state == now))
                 continue
-            out[row][str(twins.get(i) or p2.name_of(o)[0])].append((o, None))
+            # a carousel axis's row credits each line's own label (pass2_report.axis_values), any other row the name
+            # name_of gives it (OCR's reading at OK where it is close to the label: a carousel's)
+            lab = o["label"] if o.get("kind") == "axis" else twins.get(i) or p2.name_of(o)[0]
+            out[row][str(lab)].append((o, None))
     return proofs, out
 
 
@@ -185,17 +192,18 @@ def line_kind(r: dict) -> str | None:
 
 def find_lines(names: list, root: Path, report: list, lines: dict) -> dict:
     """Each name's proof line (Name.line, row, after, frame, kind), or why it has none (Name.why): of the lines the
-    report credits with the value, one whose report source is the definition's, then one whose label is the published
-    name, then the newest frame. Returns {(row, key): {a recorded label of the row, bare: {(the value the report
-    credits it with on that record, its published name)}}}: the row's options as the definition names them."""
+    report credits with the value, a line with its frame on disk that is no carousel's put-back visit first, then one
+    whose report source is the definition's, then one whose label is the published name, then the newest frame.
+    Returns {key: {a recorded label, bare: {(the value the report credits it with on that record, its published
+    name)}}}, over every row of the record: the options as the definition names them."""
     credited = credits(report)
     called = {(n.key, n.value): n.name for n in names if n.name is not None}
-    on_row = collections.defaultdict(lambda: collections.defaultdict(set))
+    on_key = collections.defaultdict(lambda: collections.defaultdict(set))
     for (key, value), got in credited.items():
         for row, lab, _ in got:
             for line, after in lines.get(row, {}).get(lab, ()):
                 if after is None and (key, value) in called:
-                    on_row[(row, key)][rc._bare(line.get("label"))].add((value, called[(key, value)]))
+                    on_key[key][rc._bare(line.get("label"))].add((value, called[(key, value)]))
     for n in names:
         if n.name is None:
             n.why = "the definition lists no name for it"
@@ -205,21 +213,23 @@ def find_lines(names: list, root: Path, report: list, lines: dict) -> dict:
             for line, after in lines.get(row, {}).get(lab, ()):
                 found.append((row, lab, word, line, after))
         if not found:
-            n.why = "no report line credits it"
+            n.why = "a report label with no proof line under it" if (n.key, n.value) in credited \
+                else "the report credits no label with it"
             continue
 
         def rank(c, n=n):
             row, lab, word, line, after = c
             frame = root / own_run(line) / "shots" / frame_name(line)
             try:
-                when = frame.stat().st_mtime if frame_name(line) else 0.0
+                when = frame.stat().st_mtime if frame_name(line) else None
             except OSError:
-                when = 0.0
-            return (reader_source(word) == n.source, after is not None or p2.same_label(lab, n.name), when)
+                when = None
+            return (when is not None and not line.get("final"), reader_source(word) == n.source,
+                    after is not None or p2.same_label(lab, n.name), when or 0.0)
         n.row, _, _, n.line, n.after = max(found, key=rank)
         n.kind = line_kind(n.line)
         n.frame = root / own_run(n.line) / "shots" / frame_name(n.line) if frame_name(n.line) else None
-    return on_row
+    return on_key
 
 
 def in_scope(n: Name, sources, kinds, everything: bool) -> bool:
@@ -228,9 +238,9 @@ def in_scope(n: Name, sources, kinds, everything: bool) -> bool:
 
 # ------------------------------------------------------------------------------------------------ the frames
 
-def items_for(root: Path, proofs: list, names: list, on_row: dict) -> None:
+def items_for(root: Path, proofs: list, names: list, on_key: dict) -> None:
     """Each name's Item as reader_census.question_items takes its proof line (its kind of screen, the row's options),
-    judged against the published name (judged, the row's options named as on_row says), and its question; or why
+    judged against the published name (judged, the row's options named as on_key says), and its question; or why
     there is none. question_items is given every line of the names' runs, so a row's options are all there, and only
     the names' own lines keep their frames, so only they give items (no line its notice: a notice names no value)."""
     live = [n for n in names if n.why is None]
@@ -271,7 +281,7 @@ def items_for(root: Path, proofs: list, names: list, on_row: dict) -> None:
         if dark[n.frame]:
             n.why = "a black frame"
             continue
-        n.item, why = judged(n, got[0], on_row.get((n.row, n.key), {}))
+        n.item, why = judged(n, got[0], on_key.get(n.key, {}))
         if n.item is None:
             n.why = why
             continue
@@ -300,8 +310,9 @@ def tick_state(name) -> bool | None:
 
 def judged(n: Name, item, fixes: dict) -> tuple:
     """(the Item n's readings are judged by, or None, why not): its truth the published name in the kind's own form,
-    its options the row's under their published names where the report credits them on n's record (fixes: {a
-    recorded label, bare: {(value, published name)}}), several recorded readings of one option one option."""
+    its options the row's under the published names the report credits their labels with on n's record, in any row
+    (fixes: {a recorded label, bare: {(value, published name)}}; a label credited with two names stays as recorded),
+    several recorded readings of one option one option."""
     k = n.kind
     if k in LABEL_KINDS:
         def named(o):
@@ -530,9 +541,9 @@ def audit(root: Path, args) -> tuple:
     cfgs = readers_of(args.reader)
     cache = rc.answers_folder(args.cache, [root])
     proofs, lines = option_lines(main, target.stem)
-    on_row = find_lines(names, root, report, lines)
+    on_key = find_lines(names, root, report, lines)
     scope = [n for n in names if in_scope(n, sources, kinds, args.all)]
-    items_for(root, proofs, scope, on_row)
+    items_for(root, proofs, scope, on_key)
     if any(rc.is_hosted(c) for c in cfgs):
         hosted_checks(scope)
     read_only = (root / "_cache" / "vlm", *[Path(c).expanduser() for c in args.census_cache])

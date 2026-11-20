@@ -16,6 +16,7 @@ from camkit import ROOT, reading, runs, safety, vlm  # noqa: E402
 CAMERA = "TEST-CAM_fw9.99"
 LIST = vlm.PROMPTS[reading.QUESTIONS["list"].prompt]
 CHECKLIST = vlm.PROMPTS[reading.QUESTIONS["checklist"].prompt]
+AXIS = vlm.PROMPTS[reading.QUESTIONS["axis"].prompt]
 LOCAL = "http://127.0.0.1:9/v1"
 FAR = "http://203.0.113.7/v1"            # a documentation address: no one's own network, so a hosted reader
 QWEN_A, QWEN_B, GEMMA = "Org/Qwen9-27B-INT4", "Qwen9-27B-4bit", "gemma-9-12b"      # two builds of one model, another
@@ -68,8 +69,15 @@ def camera(top: Path, tmp_path: Path) -> tuple:
               line(["Zqx Other"], 1, "Zqx Off", "00007.png", vlm="Zqx Off"),
               line(["Zqx Ident"], 0, "Zqx Name", "00008.png", network=safety.LIFT_IDENTITY),
               line(["Zqx Gone"], 0, "Zqx Lost", "00009.png")]
+    # a carousel axis: in its own row Zqx Spot: S is proved by the put-back visit alone (its first visit taken over by
+    # it), in a row of a context by a visit whose OCR at OK read "Zqx Spot: 5", which the report credits by its label
+    axis = {"kind": "axis", "option": "Zqx Spot"}
+    lines += [line(["Zqx Area"], 0, "Zqx Spot: S", "00012.png", **axis),
+              line(["Zqx Area"], 1, "Zqx Spot: L", "00010.png", **axis),
+              line(["Zqx Area"], 0, "Zqx Spot: S", "00011.png", final=True, **axis),
+              line(["Zqx Area"], 0, "Zqx Spot: S", "00012.png", shown="Zqx Spot: 5", context="Zqx Ctx = On", **axis)]
     (main / "proofs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in lines), encoding="utf-8")
-    for n in range(1, 9):
+    for n in (1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12):           # 00009.png, Zqx Lost's, is not on disk
         frame(main / "shots" / f"{n:05d}.png", 0 if n == 7 else 60 + n)
     near = proof_run(root, "kit2_zqx_local", [line(["Zqx Local"], 0, "Zqx Near", "00001.png")], vlm.LOCAL_MARKER)
     held = proof_run(root, "kit2_zqx_held", [line(["Zqx Held"], 0, "Zqx Kept", "00001.png")], vlm.NO_READER_MARKER)
@@ -88,6 +96,10 @@ def camera(top: Path, tmp_path: Path) -> tuple:
         {"row": "Zqx Local", "kinds": ["list"], "options": 1, "records": {"global:0x0006": record({"Zqx Near": 0}, "one reader (map)")}},
         {"row": "Zqx Held", "kinds": ["list"], "options": 1, "records": {"global:0x0007": record({"Zqx Kept": 0}, "one reader (map)")}},
         {"row": "Zqx Net", "kinds": ["list"], "options": 1, "records": {"global:0x0008": record({"Zqx Wide": 0}, "one reader (map)")}},
+        {"row": "Zqx Area / Zqx Spot", "kinds": ["axis"], "options": 2,
+         "records": {"global:0x000b": record({"Zqx Spot: S": 0, "Zqx Spot: L": 1}, "carousel")}},
+        {"row": "Zqx Area / Zqx Spot [Zqx Ctx = On]", "kinds": ["axis"], "options": 1,
+         "records": {"global:0x000b": record({"Zqx Spot: S": 0}, "carousel")}},
     ]
     (main / "report.json").write_text(json.dumps(report), encoding="utf-8")
     one = "one reader"
@@ -101,6 +113,7 @@ def camera(top: Path, tmp_path: Path) -> tuple:
         setting("global:0x0007", [[0, "Zqx Kept"]], {"0": one}),
         setting("global:0x0008", [[0, "Zqx Wide"]], {"0": one}),
         setting("global:0x0009", [[0, "Zqx Unproved"]], {"0": one, "1": one}),     # no line; code 1 no name at all
+        setting("global:0x000b", [[0, "S"], [1, "L"]], {"0": one, "1": one}),      # the axis's values alone
     ]}
     definition = tmp_path / "definition" / f"{CAMERA}.json"
     definition.parent.mkdir()
@@ -117,6 +130,8 @@ SAID = {
     ("kit2_pass2", "00006.png"): {"qa": "Zqx On", "gm": "Zqx On"},
     ("kit2_zqx_local", "00001.png"): {"qa": "Zqx Near"},
     ("kit2_net_zqx", "00001.png"): {"qa": "Zqx Wide"},
+    ("kit2_pass2", "00010.png"): {"qa": "Zqx Spot: L"},
+    ("kit2_pass2", "00012.png"): {"qa": "Zqx Spot: S"},
 }
 BOXES = {"qa": True, "qb": True, "gm": False}          # each reader's tick for Zqx Two
 
@@ -169,23 +184,24 @@ def test_the_scope_is_the_sources_and_kinds_asked_for_or_every_name(own_runs, tm
     readers(monkeypatch, root, asked)
     base = ["--json", "--dry-run", "--definition", str(definition), "--cache", str(tmp_path / "answers")]
     _, got = run_audit(base, capsys)
-    # one reader and the vision model: four list names, the identity row's, the lost frame's, three proof runs' and the
-    # unproved setting's two; the checklist's two by their kind
-    assert got["by source"] == {"one reader": 10, "vision model": 1, "schema kept": 2} and got["in scope"] == 13
-    assert got["by kind"] == {"list": 9, "no proof line": 2, "checklist": 2}
-    assert got["left out"] == {"no report line credits it": 1, "the definition lists no name for it": 1,
+    # one reader and the vision model: four list names, the identity row's, the lost frame's, three proof runs', the
+    # unproved setting's two and the axis's two; the checklist's two by their kind
+    assert got["by source"] == {"one reader": 12, "vision model": 1, "schema kept": 2} and got["in scope"] == 15
+    assert got["by kind"] == {"list": 9, "no proof line": 2, "checklist": 2, "axis": 2}
+    assert got["left out"] == {"the report credits no label with it": 1, "the definition lists no name for it": 1,
                                "an identity or connection row (decision 8)": 1, "frame not on disk": 1,
                                "a run no reader reads (decision 9)": 1}
     assert asked == [] and got["dry run"] is True
     a = got["asked"]
-    # the four list frames, the checklist's one frame for its two names, the local-only and the network-named runs'
-    assert a["qa"] == {"would ask": 7, "seconds": a["qa"]["seconds"], "questions": 7}
+    # the four list frames, the checklist's one frame for its two names, the local-only and the network-named runs',
+    # the axis's two (Zqx Spot: S on its context row's visit, never its own row's put-back)
+    assert a["qa"] == {"would ask": 9, "seconds": a["qa"]["seconds"], "questions": 9}
     _, got = run_audit([*base, "--sources", "two readers", "--kinds", ""], capsys)
     assert got["by source"] == {"two readers": 2} and got["left out"] == {"a black frame": 1}
     _, got = run_audit([*base, "--kinds", "checklist", "--sources", ""], capsys)
     assert got["by kind"] == {"checklist": 2} and got["asked"]["qa"]["questions"] == 1
     _, got = run_audit([*base, "--all"], capsys)
-    assert got["in scope"] == got["names"] == 15
+    assert got["in scope"] == got["names"] == 17
     with pytest.raises(SystemExit):
         run_audit([*base, "--sources", "no such source"], capsys)
     with pytest.raises(SystemExit):
@@ -203,12 +219,14 @@ def test_four_verdicts_one_vote_per_family_and_the_ledger_first_on_another_readi
     assert got["families"] == {"qa": "qwen9-27b", "qb": "qwen9-27b", "gm": "gemma-9-12b"}
     v = got["verdicts by source"]
     # Alpha: qa and gm right, qb (qa's model in another build) wrong but no vote of its own; Beta: some; Gamma (the
-    # vision model's): both families on Delta; Delta: apart; the local-only and network-named runs' frames: all agree
-    assert v["one reader"] == {"all agree": 3, "some agree": 1, "none agree, apart": 1}
+    # vision model's): both families on Delta; Delta: apart; the local-only and network-named runs' frames and the
+    # axis's values, read on its whole line, all agree
+    assert v["one reader"] == {"all agree": 5, "some agree": 1, "none agree, apart": 1}
+    assert got["verdicts by kind"]["axis"] == {"all agree": 2}
     assert v["vision model"] == {"none agree, all on another reading": 1}
     # gm reads Zqx Two unticked where the visit ticked it: both its names, Ticked and Not ticked, some agree
     assert v["schema kept"] == {"some agree": 2}
-    assert got["names by families that answered"] == {"2": 8}
+    assert got["names by families that answered"] == {"2": 10}
     ledger = root / label_audit.LEDGER
     lines = [json.loads(x) for x in ledger.read_text(encoding="utf-8").splitlines()]
     assert [d["verdict"] for d in lines] == ["none agree, all on another reading", "none agree, apart", "some agree",
@@ -330,6 +348,33 @@ def test_a_name_published_as_part_of_the_line_drawn_is_named_by_a_reading_that_h
     assert la.within("Zqx Hi Lo", ["Lo", "Hi"]) is None and la.held("Hi", "Zqx Bracket: Hi") == 2
 
 
+def test_the_line_behind_a_name_and_the_options_by_their_names_in_every_row(tmp_path):
+    """Of the lines the report credits with a value, one with its frame on disk that is no carousel's put-back visit
+    comes first, whatever row; each recorded label takes the name the report credits it with on the record in any row;
+    a name with no line says whether the report credits it at all."""
+    import label_audit as la
+    root = tmp_path / CAMERA
+    for f in ("p.png", "v.png", "lo.png"):
+        frame(root / runs.MAIN_RUN / "shots" / f, 70)
+    key = "global:0x0001"
+    final = {"kind": "axis", "label": "Zqx B: Hi", "final": True, "chosen_frame": "p.png"}
+    visit = {"kind": "axis", "label": "Zqx B: Hi", "chosen_frame": "v.png"}
+    gone = {"kind": "axis", "label": "Zqx B: Hi", "chosen_frame": "gone.png"}
+    lo = {"kind": "axis", "label": "Zqx B: Lo", "chosen_frame": "lo.png"}
+    report = [{"row": "A", "records": {key: record({"Zqx B: Hi": 1}, "two readers")}},
+              {"row": "B", "records": {key: record({"Zqx B: Hi": 1, "Zqx B: Mid": 2}, "carousel")}},
+              {"row": "C", "records": {key: record({"Zqx B: Hi": 1, "Zqx B: Lo": 0}, "carousel")}}]
+    lines = {"A": {"Zqx B: Hi": [(final, None)]}, "B": {"Zqx B: Hi": [(gone, None)]},
+             "C": {"Zqx B: Hi": [(visit, None)], "Zqx B: Lo": [(lo, None)]}}
+    names = [la.Name(key, v, name, "one reader") for v, name in ((1, "Hi"), (0, "Lo"), (2, "Mid"), (3, "Max"))]
+    on_key = la.find_lines(names, root, report, lines)
+    hi, low, mid, top = names
+    # the put-back (with a source the definition's) and the visit with no frame on disk lose to row C's visit
+    assert hi.line is visit and hi.row == "C" and low.line is lo
+    assert mid.why == "a report label with no proof line under it" and top.why == "the report credits no label with it"
+    assert on_key[key] == {"Zqx B: Hi": {("1", "Hi")}, "Zqx B: Lo": {("0", "Lo")}}
+
+
 def test_nothing_is_asked_twice_and_the_census_cache_is_used(own_runs, tmp_path, monkeypatch, capsys):
     root, definition = camera(own_runs, tmp_path)
     asked = []
@@ -345,12 +390,12 @@ def test_nothing_is_asked_twice_and_the_census_cache_is_used(own_runs, tmp_path,
         mine = [a for a in asked if a[0] == who]
         assert len(mine) == len(set(mine)), who
     assert ("qa", "kit2_pass2", "00001.png", LIST) not in asked
-    assert got["asked"]["qa"] == {"asked": 6, "from a cache": 1, "seconds": got["asked"]["qa"]["seconds"], "questions": 7}
-    assert {a[3] for a in asked} == {LIST, CHECKLIST}               # the kinds' new questions, never an old one
+    assert got["asked"]["qa"] == {"asked": 8, "from a cache": 1, "seconds": got["asked"]["qa"]["seconds"], "questions": 9}
+    assert {a[3] for a in asked} == {LIST, CHECKLIST, AXIS}             # the kinds' new questions, never an old one
     assert vlm.PROMPTS["option"] not in {a[3] for a in asked}
     n = len(asked)
     _, again = run_audit(args, capsys)
-    assert len(asked) == n and again["asked"]["gm"]["from a cache"] == 7
+    assert len(asked) == n and again["asked"]["gm"]["from a cache"] == 9
     assert again["verdicts by source"] == got["verdicts by source"]
 
 
@@ -372,7 +417,7 @@ def test_hosted_and_local_only_frames_and_no_reader_runs(own_runs, tmp_path, mon
     assert ("kit2_pass2", "00001.png") in far
     assert not {a for a in asked if a[1] == "kit2_zqx_held" or a[2] in ("00007.png", "00008.png")}
     assert got["asked"]["far"]["questions"] == got["asked"]["qa"]["questions"] - 2
-    assert got["names by families that answered"] == {"2": 2, "3": 6}
+    assert got["names by families that answered"] == {"2": 2, "3": 8}
     # with no OCR to judge a frame by, a hosted reader is sent none (fails closed, as the census)
     def no_ocr(frames):
         raise OSError("no OCR")
