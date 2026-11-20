@@ -189,6 +189,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   taken with another, and the pixel reader finds a box's sides where the lit box beside it leaves them. Each box's
   stepping is now judged by the other boxes' pictures before and after it with that box lit, so a camera that carries
   or clamps between boxes still has its number passed over.
+- **Pass 2's report no longer calls a whole grid not one to one where the fields' own walks chose some of its pairs
+  too:** one label writing one value is one option, whatever its index, so Bracket Type's grids count 60 pairs each,
+  not 78, and the writer lists them where it would have marked them disputed.
 - **`carousel_fields_run.py` asks the third readers where OCR's plain reading of the lit box and the second reader's
   are two numbers,** in turn, the second reader's own question, and takes the reading that stands by the kit's one
   counting rule, its proof line keeping every vote with its reader's model ("read_by": "votes"); where none stands the
