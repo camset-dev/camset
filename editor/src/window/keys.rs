@@ -99,13 +99,13 @@ impl App {
 
     /// Collapse all and Expand all by the keys (`KEY_COLLAPSE_ALL`, `KEY_EXPAND_ALL`, `fold_all`), taken before the
     /// arrows move anything (`bar_nav`, `keyboard_nav`), only where something folds (Compare's table, a tab of Edit, the
-    /// exposure page, the record map); a text field with the keyboard keeps them for its text, and an open menu, list or right-click
+    /// exposure page, the record map, the Memories page); a text field with the keyboard keeps them for its text, and an open menu, list or right-click
     /// menu for itself; never with Alt held too, as the page takes them.
     pub(crate) fn fold_keys(&mut self, ctx: &egui::Context) {
         if let Some(id) = self.refocus.take() {
             ctx.memory_mut(|m| m.request_focus(id));
         }
-        let here = matches!(self.mode, Mode::Compare) && !self.compare_records || matches!((self.mode, &self.view), (Mode::Edit, View::Tab(_) | View::Exposure | View::Records));
+        let here = matches!(self.mode, Mode::Compare) && !self.compare_records || matches!((self.mode, &self.view), (Mode::Edit, View::Tab(_) | View::Exposure | View::Records | View::Memories));
         let popup = ctx.memory(|m| m.any_popup_open()) || ctx.is_context_menu_open();
         if self.doc.is_none() || !here || typing(ctx) || popup {
             return;

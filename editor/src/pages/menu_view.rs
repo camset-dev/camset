@@ -618,7 +618,7 @@ impl App {
     /// `KEY_EXPAND_ALL`), the page's alike: in Compare its tabs and groups, as its Collapse all and Expand all have always
     /// done; in a tab of Edit the camera's rows that hold others in the group shown (the group column picks one group at a
     /// time; the Menu's entries are pages, not folds), or a family group's table; on the exposure page its "What decides"
-    /// sections, on the record map its records' bytes (`head_fold`). A row
+    /// sections, on the record map its records' bytes (`head_fold`), on the Memories page its groups (`mem_closed`). A row
     /// chosen that a fold hides gives way to the nearest row still shown, as a click on its heading does, or to none where
     /// every row is under a folded one. The rule: every foldable group of the view in front, as on the page.
     pub(crate) fn fold_all(&mut self, collapse: bool) {
@@ -662,6 +662,15 @@ impl App {
                 }
             }
             (Mode::Edit, View::Exposure | View::Records) => self.head_fold = Some(collapse),
+            // the Memories page's groups, those the search shows
+            (Mode::Edit, View::Memories) => {
+                if collapse {
+                    let groups: Vec<String> = self.matrix_rows_shared(&self.search, None).iter().filter(|r| r.2[0].in_sets).map(|(t, g, _)| format!("{t} > {g}")).collect();
+                    self.mem_closed.extend(groups);
+                } else {
+                    self.mem_closed.clear();
+                }
+            }
             _ => {}
         }
     }

@@ -191,6 +191,8 @@ struct App {
     mm_visible: Option<(usize, usize)>,
     /// Compare view: the tabs (tab, "") and groups (tab, group) folded shut.
     matrix_closed: std::collections::HashSet<(String, String)>,
+    /// The Memories page's groups folded, by "tab > group" (all open to start with, as the page has always been drawn).
+    mem_closed: std::collections::HashSet<String>,
     /// The view in front's own folds (the exposure page's "What decides" sections, a family group's table, the record
     /// map's records), all to fold (true) or all to open (false) the next time it is drawn (`fold_all`); each keeps its
     /// state where a click leaves it (egui's, the record map's).
@@ -378,6 +380,7 @@ impl App {
             mm_rows: Vec::new(),
             mm_visible: None,
             matrix_closed: Default::default(),
+            mem_closed: Default::default(),
             head_fold: None,
             refocus: None,
             target: 0,

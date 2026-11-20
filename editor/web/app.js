@@ -226,7 +226,7 @@ let searchTimer = null;    // the search box's wait for the typing to stop
 /** The Memories page's own view: the search it was opened with (the window's Memories page lists the
  *  rows its search box matches) and whether the file's other memory sets are columns too (null: as
  *  the editor's "all memory columns" preference has it). */
-const memView = { q: "", all: null, only: null };
+const memView = { q: "", all: null, only: null, closed: new Set() };    // closed: the groups folded, by "tab > group"
 /** The "What decides …" lists left open on the Exposure page. */
 const exOpen = new Set();
 
@@ -2121,12 +2121,29 @@ function drawMemories(j) {
       el("button", { class: "small", onclick: () => $("b-clear").click() }, "Show all")));
   }
   if (!j.groups.length) return [...kids, el("p", {}, j.only_diff ? "No memory holds another value than the live settings here." : "No settings match.")];
+  // every group folded or open (`foldAll`), with their keys
+  kids[0].append(foldButtons("Fold every group", "Open every group"));
   const names = new Map(j.cols);
   const body = el("tbody");
   for (const g of j.groups) {
-    body.append(el("tr", {}, el("td", { colspan: 2 + j.cols.length, class: "strong", style: { color: g.color } }, el("span", {}, `${g.tab} > ${g.group}`))));
+    // the group's heading folds or shows its rows, by a click, Enter or Space; the page keeps it while it is open
+    const key = `${g.tab} > ${g.group}`;
+    const name = el("span", { class: "mem-fold", title: "Click to fold or show this group's settings" }, "");
+    const head = el("tr", { class: "mem-head", "data-fold": key }, el("td", { colspan: 2 + j.cols.length, class: "strong", style: { color: g.color } }, name));
+    const rows = [];
+    head._show = () => {
+      const closed = memView.closed.has(key);
+      name.textContent = `${closed ? "⏵" : "⏷"} ${key}`;
+      name.setAttribute("aria-expanded", String(!closed));
+      for (const tr of rows) tr.hidden = closed;
+    };
+    pressable(name, () => {
+      if (memView.closed.has(key)) memView.closed.delete(key); else memView.closed.add(key);
+      head._show();
+    });
+    body.append(head);
     for (const r of g.rows) {
-      body.append(el("tr", {},
+      const tr = el("tr", {},
         el("td", {}, r.name),
         el("td", {}, memValue(r.live, false)),
         ...r.cells.map((c) => el("td", {}, el("span", { class: "mem-cell" },
@@ -2136,8 +2153,11 @@ function drawMemories(j) {
             !c.takes || c.takes[0] ? el("button", { class: "small", title: withNote(c.into_live || "Put this value into the live settings", r.live.copies), "aria-label": c.into_live || "Put this value into the live settings",
               onclick: () => act("memory_copy", { key: r.key, from: c.section, to: 0 }) }, plain("⬅")) : null,
             !c.takes || c.takes[1] ? el("button", { class: "small", title: withNote(c.from_live || `Put the live value into ${names.get(c.section)}`, c.copies), "aria-label": c.from_live || `Put the live value into ${names.get(c.section)}`,
-              onclick: () => act("memory_copy", { key: r.key, from: 0, to: c.section }) }, plain("➡")) : null) : null)))));
+              onclick: () => act("memory_copy", { key: r.key, from: 0, to: c.section }) }, plain("➡")) : null) : null))));
+      rows.push(tr);
+      body.append(tr);
     }
+    head._show();
   }
   kids.push(el("div", { class: "scrollx mem-scroll" }, el("table", { class: "egrid mem" },
     el("thead", {}, el("tr", {}, el("th", {}, "Setting"), el("th", {}, "Live"), ...j.cols.map(([, n]) => el("th", {}, n)))),
@@ -4320,6 +4340,23 @@ function foldAll(collapse) {
     if (held && !$("content").contains(document.activeElement)) {
       const head = $("content").querySelectorAll(".cmp-fold").find((h) => h.dataset.fold === foldKeys(held)[0]);
       if (head) head.focus({ preventScroll: true });
+    }
+    return true;
+  }
+  // the Memories page: every group folded or open; a row with the keyboard that a fold hides gives it to its heading
+  if (pageName() === "memories") {
+    const heads = $("content").querySelectorAll("tr.mem-head");
+    if (!heads.length) return false;
+    const a = document.activeElement;
+    const row = a && a.closest ? a.closest("tr") : null;
+    for (const h of heads) {
+      if (collapse) memView.closed.add(h.dataset.fold); else memView.closed.delete(h.dataset.fold);
+      h._show();
+    }
+    if (row && row.hidden) {
+      let p = row.previousElementSibling;
+      while (p && !p.classList.contains("mem-head")) p = p.previousElementSibling;
+      if (p) p.querySelector(".mem-fold").focus({ preventScroll: true });
     }
     return true;
   }

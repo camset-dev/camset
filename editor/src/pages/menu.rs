@@ -2577,6 +2577,45 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The Memories page's groups fold (all open to start with): every one by the keys as by its Collapse all and Expand
+    /// all, one by a click on its heading or by Space or Enter with the focus on it.
+    #[test]
+    fn the_memories_groups_fold_by_the_keys_the_buttons_and_one_heading() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_memories", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        app.view = View::Memories;
+        let groups: std::collections::HashSet<String> = app.matrix_rows_shared("", None).iter().filter(|r| r.2[0].in_sets).map(|(t, g, _)| format!("{t} > {g}")).collect();
+        let _ = w.run(&mut app, vec![]);
+        assert!(app.mem_closed.is_empty() && groups.len() > 1, "all open to start with");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert_eq!(app.mem_closed, groups, "Collapse all by the keys");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(app.mem_closed.is_empty(), "Expand all by the keys");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert_eq!(app.mem_closed, groups, "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert!(app.mem_closed.is_empty());
+        // one heading, the first drawn: by a click, then by Space with the focus on it
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (id, _, label) = said.iter().find(|(_, r, l)| *r == Role::Label && l.starts_with("⏷ ")).cloned().expect("a heading drawn");
+        let first = label.trim_start_matches("⏷ ").to_string();
+        let click = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Click, target: id, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(click)]);
+        let _ = w.run(&mut app, vec![]);
+        assert!(app.mem_closed.contains(&first) && app.mem_closed.len() == 1, "a click folds that group alone");
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (id, ..) = *said.iter().find(|(_, r, l)| *r == Role::Label && *l == format!("⏵ {first}")).expect("the heading, folded");
+        let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: id, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
+        w.key(&mut app, egui::Key::Space);
+        assert!(app.mem_closed.is_empty(), "Space with the focus on it shows it again");
+        done(&dir, &user);
+    }
+
     /// The reviewer's inventory, B: the record map (Expert mode) folds and shows its records' bytes by the keys as by its
     /// own Collapse all and Expand all: Expand all the multi-byte records listed, Collapse all every one.
     #[test]

@@ -415,6 +415,48 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_the_memories_groups_fold_by_the_keys_the_buttons_and_one_heading(tmp_path):
+    """The Memories page's groups fold (all open to start with): every one by the keys as by its Collapse all and
+    Expand all (the keys in words and as aria-keyshortcuts), one by a click on its heading or Enter on it; the
+    keyboard on a row a fold hides goes to that group's heading."""
+    got = run(tmp_path, """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+const cell = (text, differs) => ({ text, differs, section: 1, takes: [true, true] });
+const r = (key, name) => ({ key, name, live: { text: "a" }, cells: [cell("b", true)] });
+const j = { title: "Memories", intro: "i", buttons: [], editable: true, others: [], cols: [[1, "M1"]], only_diff: false,
+  groups: [{ tab: "Shoot", group: "Drive", color: "#000", rows: [r("k:a", "Alpha"), r("k:b", "Beta")] },
+           { tab: "Focus", group: "AF", color: "#111", rows: [r("k:c", "Gamma")] }] };
+view.mode = "edit"; view.page = "memories"; view.q = "";
+const drawn = drawMemories(j);
+$("content").replaceChildren(...drawn);
+const hidden = () => $("content").querySelectorAll("tr").filter((tr) => !tr.classList.contains("mem-head") && tr.parentElement && tr.parentElement.tagName === "TBODY").map((tr) => tr.hidden);
+const out = { start: hidden() };
+const arrow = $("content").querySelector(".mem-arrows button");
+arrow.focus();
+out.taken = shortcut(key("ArrowUp"));
+out.collapsed = [hidden(), [...memView.closed].sort()];
+out.focus_to_head = document.activeElement.classList.contains("mem-fold") && document.activeElement.textContent === "\u23f5 Shoot > Drive";
+shortcut(key("ArrowDown"));
+out.expanded = [hidden(), memView.closed.size];
+const bs = drawn[0].querySelectorAll(".fold-all button");
+out.buttons = bs.map((b) => [b.textContent, b.getAttribute("aria-keyshortcuts")]);
+bs[0].click(); out.button_collapsed = hidden();
+bs[1].click(); out.button_expanded = hidden();
+const head = $("content").querySelector(".mem-fold");
+head.click(); out.one = [hidden(), head.getAttribute("aria-expanded")];
+head.dispatchEvent({ type: "keydown", key: "Enter", preventDefault() {} }); out.enter = hidden();
+console.log(JSON.stringify(out));
+""")
+    assert got["start"] == [False, False, False] and got["taken"] is True
+    assert got["collapsed"] == [[True, True, True], ["Focus > AF", "Shoot > Drive"]] and got["focus_to_head"] is True
+    assert got["expanded"] == [[False, False, False], 0]
+    assert got["buttons"] == [["Collapse all", "Control+Shift+ArrowUp"], ["Expand all", "Control+Shift+ArrowDown"]]
+    assert got["button_collapsed"] == [True, True, True] and got["button_expanded"] == [False, False, False]
+    assert got["one"] == [[True, True, False], "false"] and got["enter"] == [False, False, False]
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an
