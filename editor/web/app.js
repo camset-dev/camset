@@ -1001,8 +1001,11 @@ function menuSelector() {
     ...s.menus.map((m) => {
       const on = m.name === cur;
       const n = counts ? counts.get(m.name) : undefined;
-      return el("button", { class: "sel" + (on ? " on" : ""), "aria-pressed": String(on), "data-menu": m.name, title: m.title || undefined, onclick: () => pickMenu(m.name) },
-        m.name, n ? el("span", { class: "badge", title: "rows that differ in this menu" }, String(n)) : null);
+      // its hover the definition's words for it, else the selector's, and its badge's the window's words (`data-ctl` names
+      // it, so the focus finds it again when the column is drawn anew)
+      return el("button", { class: "sel" + (on ? " on" : ""), "aria-pressed": String(on), "data-menu": m.name, "data-ctl": "menu:" + m.name,
+        title: m.title || s.menus_hover || undefined, onclick: () => pickMenu(m.name) },
+      m.name, n ? el("span", { class: "badge", title: `rows that differ in the ${m.name} menu` }, String(n)) : null);
     }));
 }
 
@@ -1029,11 +1032,14 @@ function drawSide() {
   // the page shown, unless a search's results are shown over it
   const showing = (page) => !searching && view.page === page;
   // one entry, as the window's selectable label: a mark in its colour (the tabs), how many of its settings are edited
-  const item = ({ label, on, onclick, color, edited, title, badgeTitle }) => el("div", { class: "mi" },
+  // (`ctl` names it for the focus, as its words hold a count)
+  const item = ({ label, on, onclick, color, edited, title, badgeTitle, ctl }) => el("div", { class: "mi" },
     color ? el("span", { class: "mark", style: { background: color } }) : null,
-    el("button", { class: "sel" + (on ? " on" : ""), "aria-current": on ? "page" : null, title, onclick }, label,
+    el("button", { class: "sel" + (on ? " on" : ""), "aria-current": on ? "page" : null, title, onclick, "data-ctl": ctl || null }, label,
       edited ? el("span", { class: "badge", title: badgeTitle || "settings edited in this tab" }, String(edited)) : null));
   const side = $("side"), was = side.dataset.at, left = side.scrollLeft;
+  // the column is drawn anew: the keyboard stays on the button it was on (a menu, an entry), as the window keeps it
+  const mark = focusMark(side);
   side.dataset.at = JSON.stringify([view.page, view.tab, searching, compare, cmp.entry]);
   const mm = s.my_menu;
   // the foot: what the editor knows of this camera, Expert mode only, as the window's side bar has it
@@ -1046,35 +1052,38 @@ function drawSide() {
     ...(s.help_refused || []).map((r) => el("div", { class: "small warn", title: r.text }, `help: ${r.file} not used`))]));
   // Compare's bar: a click filters Compare to that entry; the badge is how many of its rows differ
   const pickEntry = (k) => () => { if (cmp.entry === k) return; cmp.entry = k; cmp.cursor = null; drawSide(); maybeDraw(); };
-  // each as the window's Compare bar draws it: its words, how many rows it lists, a badge of how many differ
+  // each as the window's Compare bar draws it: its words, how many rows it lists, a badge of how many differ (in the
+  // window's words)
   const entries = () => ((cmp.last && cmp.last.entries) || []).map((e) => item({ label: `${e.name}  (${e.count})`,
     color: e.color || (e.key === "main" ? "var(--main-mark)" : null), on: cmp.entry === e.key, onclick: pickEntry(e.key),
-    edited: e.differ, title: e.title || undefined, badgeTitle: "rows that differ here" }));
+    edited: e.differ, title: e.title || undefined, badgeTitle: "rows that differ between the columns", ctl: "entry:" + e.key }));
   side.replaceChildren(...(compare ? [menuSelector(), el("h1", { class: "menu-title" }, "Menu"), ...entries(), el("hr"), foot] : [
     menuSelector(),
     el("h1", { class: "menu-title" }, "Menu"),
-    item({ label: "Main", color: "var(--main-mark)", on: showing("main"), onclick: go("main") }),
+    item({ label: "Main", color: "var(--main-mark)", on: showing("main"), onclick: go("main"), ctl: "page:main" }),
     // My Menu, a tab of its own on the camera, under Main as in the window
     mm ? item({ label: mm.label, color: mm.color, on: showing("mymenu"), onclick: go("mymenu"), edited: mm.edited, title: mm.title,
-      badgeTitle: `places and settings edited in ${mm.name}` }) : null,
+      badgeTitle: `places and settings edited in ${mm.name}`, ctl: "page:mymenu" }) : null,
     ...(s.tab_info || []).map((t) => item({ label: `${t.name}  (${view.only ? t.edited : t.count})`, color: t.color,
-      on: showing("tab") && view.tab === t.name, onclick: go("tab", t.name), edited: t.edited, title: t.title || undefined })),
+      on: showing("tab") && view.tab === t.name, onclick: go("tab", t.name), edited: t.edited, title: t.title || undefined, ctl: "tab:" + t.name })),
     el("hr"),
     searching ? item({ label: `Search results${hits === null ? "" : ` (${hits})`}`, on: true }) : null,
-    s.memories ? item({ label: s.memories, on: showing("memories"), onclick: memOpen,
+    s.memories ? item({ label: s.memories, on: showing("memories"), onclick: memOpen, ctl: "page:memories",
       title: "The memories on the mode dial beside the live settings: recall one into the live settings, or register the live settings into one" }) : null,
-    s.exposure ? item({ label: s.exposure, on: showing("exposure"), onclick: go("exposure"),
+    s.exposure ? item({ label: s.exposure, on: showing("exposure"), onclick: go("exposure"), ctl: "page:exposure",
       title: "Aperture, shutter speed and ISO for the live settings and each memory: who sets each in that exposure mode, and the limits on what the camera may choose" }) : null,
-    item({ label: `All edits (${s.edit_lines ?? s.edits ?? 0})`, on: showing("edits"), onclick: go("edits") }),
+    item({ label: `All edits (${s.edit_lines ?? s.edits ?? 0})`, on: showing("edits"), onclick: go("edits"), ctl: "page:edits" }),
     // the Expert pages stay shown under a search, which filters them
-    expert ? item({ label: "Unmapped records", on: view.page === "unmapped", onclick: go("unmapped") }) : null,
-    expert ? item({ label: "Record map", on: view.page === "records", onclick: go("records"),
+    expert ? item({ label: "Unmapped records", on: view.page === "unmapped", onclick: go("unmapped"), ctl: "page:unmapped" }) : null,
+    expert ? item({ label: "Record map", on: view.page === "records", onclick: go("records"), ctl: "page:records",
       title: "Every record of the set in file order, mapped or not, so an unmapped record can be read next to its neighbours" }) : null,
     el("hr"),
     foot,
   ]).filter(Boolean));
-  // the Menu as a strip (a phone): where it was, or the page now shown brought into view
-  const on = side.querySelector("button.on");
+  focusAgain(side, mark);
+  // the Menu as a strip (a phone): where it was, or the page now shown brought into view (an entry's, not the camera
+  // menu's pressed button, which heads the strip)
+  const on = side.querySelector(".mi button.on");
   if (was === side.dataset.at || !on) side.scrollLeft = left;
   else if (side.scrollWidth > side.clientWidth) side.scrollLeft = Math.max(0, on.offsetLeft - side.offsetLeft - side.clientWidth / 3);
   stripEdges();

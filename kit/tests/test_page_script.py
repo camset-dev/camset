@@ -1886,10 +1886,11 @@ const pressed = () => buttons().map((b) => [b.textContent, b.getAttribute("aria-
 @needs_node
 def test_the_camera_menu_selector_heads_the_menu_column(tmp_path):
     """The camera's menus head the Menu column (the window's selector): a group named by the definition's words, its
-    words seen but not read twice, one button per menu in the definition's order with its hover, the one shown pressed
-    (`aria-pressed`). A click shows that menu: the state is asked for again and each page that lists rows asks in it,
-    and nothing that changes the file is sent; Enter on a button does the same, as the buttons are in the Tab order.
-    Another set picked on the Editing row follows its own menu again. With fewer than two menus there is no selector."""
+    words seen but not read twice, one button per menu in the definition's order with its hover (the selector's where
+    the menu has none of its own, as the window), the one shown pressed (`aria-pressed`). A click shows that menu: the
+    state is asked for again and each page that lists rows asks in it, and nothing that changes the file is sent; Enter
+    on a button does the same, as the buttons are in the Tab order. Another set picked on the Editing row follows its
+    own menu again. With fewer than two menus there is no selector."""
     got = run(tmp_path, MENUS + """
 (async () => {
   const out = {};
@@ -1923,7 +1924,8 @@ def test_the_camera_menu_selector_heads_the_menu_column(tmp_path):
 """)
     assert got["group"] == {"tag": "DIV", "role": "group", "label": "Camera menu", "title": "The camera's menu shows other settings in each shooting mode.",
                             "words": "Camera menu:", "hidden": "true", "first": "Menu"}
-    assert got["before"] == [["Still", "false", ""], ["Movie", "true", "Movies. This file was saved in Movie mode."], ["S&Q", "false", "Slow"]]
+    assert got["before"] == [["Still", "false", "The camera's menu shows other settings in each shooting mode."],
+                             ["Movie", "true", "Movies. This file was saved in Movie mode."], ["S&Q", "false", "Slow"]]
     assert got["after"] == {"menu": "S&Q", "cur": "S&Q", "refreshed": 1, "pressed": ["false", "false", "true"], "sent": 0}
     assert got["asked"] == [["tab", "S&Q"], ["main", "S&Q"], ["tab", "S&Q"], ["mymenu_page", "S&Q"], ["exposure", "S&Q"]]
     assert got["reach"] == [["BUTTON", False, None]] * 3
@@ -1939,7 +1941,9 @@ def test_compare_has_the_menu_column_of_edit(tmp_path):
     many of its rows differ, then the entries the editor sends (All settings, Main, My Menu, the tabs), each with its
     rows and how many differ, the one shown marked; a click shows that entry's rows: the compare is asked for again with
     the entry and the camera's menu, nothing else is sent. The entry the editor showed is the page's next one. Copies
-    from Compare's rows name the entry and the menu."""
+    from Compare's rows name the entry and the menu. As the window draws it: an entry's words say how many rows it lists
+    whatever "Only rows that differ" says, the badges' hovers are the window's ("rows that differ in the Movie menu",
+    "rows that differ between the columns"), and the record map has no Menu column."""
     got = run(tmp_path, MENUS + """
 view.mode = "compare";
 cmp.cols = [["a", 0], ["b", 0]];
@@ -1956,13 +1960,22 @@ maybeDraw = () => { drawn += 1; };
   pageDrawSide();
   out.menus = pressed().map((p) => [p[0], p[1]]);
   out.entries = entries();
+  out.badges = $("side").querySelectorAll(".badge").map((b) => b.title);
   $("side").querySelectorAll(".mi button").find((b) => b.textContent.startsWith("Shooting")).click();
   out.picked = { entry: cmp.entry, drawn, sent: sent.length, on: entries().filter((e) => e[1]).map((e) => e[0]) };
+  cmp.only = true; pageDrawSide();
+  out.onlyDiffer = entries().map((e) => e[0]);
+  cmp.only = null;
   view.menu = "S&Q";
   await pages.compare.load();
   out.body = sentTo("compare")[0];
   await api("copy", cmpWhere({ from: ["a", 0], to: ["a", 3], key: "k:a" }));
   out.where = sentTo("copy")[0];
+  // the record map: no Menu column
+  cmp.records = true; cmpRender(state, state.file);
+  out.records = $("app").classList.contains("cmp-records");
+  cmp.records = false; cmpRender(state, state.file);
+  out.back = $("app").classList.contains("cmp-records");
   // the entry the editor showed (one the menu does not list gives All settings)
   drawCompare = () => [];
   drawCompareAnswer({ ...cmp.last, entry: "all", rows: [] });
@@ -1983,11 +1996,15 @@ maybeDraw = () => { drawn += 1; };
     assert got["menus"] == [["Still", "false"], ["Movie3", "true"], ["S&Q1", "false"]]
     assert [e[0] for e in got["entries"]] == ["All settings  (20)3", "Main  (5)1", "Shooting  (12)2", "Not in the menus  (3)"]
     assert got["entries"][0][1] is True and got["entries"][3][2] == "Settings the file holds that Camset can't place in the camera's menus."
+    assert got["badges"] == ["rows that differ in the Movie menu", "rows that differ in the S&Q menu"] + ["rows that differ between the columns"] * 3
     assert got["picked"] == {"entry": "tab:Shooting", "drawn": 1, "sent": 0, "on": ["Shooting  (12)2"]}
+    assert got["onlyDiffer"] == ["All settings  (20)3", "Main  (5)1", "Shooting  (12)2", "Not in the menus  (3)"], "the rows each lists, as the window"
     assert (got["body"]["entry"], got["body"]["menu"], got["body"]["target"]) == ("tab:Shooting", "S&Q", 0)
     assert "tab" not in got["body"]
     assert got["where"] == {"from": ["a", 0], "to": ["a", 3], "key": "k:a", "entry": "tab:Shooting", "target": 0, "menu": "S&Q"}
     assert got["answered"] == "all"
+    assert (got["records"], got["back"]) == (True, False)
+    assert "#app.cmp-records #side { display: none; }" in PAGE.read_text(encoding="utf-8")
     assert got["columns"] == [["a", 0], ["a", 4]] and got["without"] == [["a", 0]]
 
 
@@ -2159,6 +2176,42 @@ cmp.last = { cols: [{ editable: true, section: 0 }] };
 """)
     assert got["edit"] == ["k:copy", "S&Q", "k:b", "Shoot", "Drive"]
     assert got["page"] == ["k:pp1", "Movie", "k:pp1m", "Shoot", "PP1"]
+
+
+@needs_node
+def test_the_menu_column_keeps_the_keyboard_and_its_place_in_the_strip(tmp_path):
+    """The Menu column drawn anew after a camera menu or a Compare entry is pressed keeps the keyboard on that button
+    (as the window keeps its focus), named by what it is, not its words, which hold a count. On a phone the strip brings
+    the page shown into view, the entry's pressed button, not the camera menu's, which heads the strip."""
+    got = run(tmp_path, MENUS + """
+const out = {};
+pageDrawSide();
+viaKeys(); buttons()[2].focus();
+buttons()[2].click();
+const a = document.activeElement;
+out.menu = { on: a.getAttribute("data-menu"), inSide: $("side").contains(a), pressed: a.getAttribute("aria-pressed") };
+view.mode = "compare";
+cmp.last = { entries: [{ key: "all", name: "All settings", count: 20, differ: 3 }, { key: "tab:Shooting", name: "Shooting", color: "#d64550", count: 12, differ: 2 }],
+  menus: [{ name: "Still", differ: 0 }, { name: "Movie", differ: 3 }, { name: "S&Q", differ: 1 }] };
+maybeDraw = () => {};
+pageDrawSide();
+const shooting = () => $("side").querySelectorAll(".mi button").find((b) => b.textContent.startsWith("Shooting"));
+viaKeys(); shooting().focus(); shooting().click();
+const b = document.activeElement;
+out.entry = { on: b.textContent, inSide: $("side").contains(b), chosen: b.classList.contains("on") };
+// the strip: the entry shown in view (a phone's offsets: the menu buttons at the start, the chosen entry far along)
+Object.defineProperty(__Element.prototype, "offsetLeft", { configurable: true, get() { return this.getAttribute("data-menu") ? 10 : this.classList.contains("on") ? 500 : 0; } });
+const side = $("side");
+side.scrollWidth = 2000; side.clientWidth = 300; side.dataset.at = "elsewhere"; side.dataset.key = "";
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+state.tab_info = [{ name: "Shoot", color: "#123456", count: 3, edited: 0 }];
+pageDrawSide();
+out.scroll = side.scrollLeft;
+console.log(JSON.stringify(out));
+""")
+    assert got["menu"] == {"on": "S&Q", "inSide": True, "pressed": "true"}
+    assert got["entry"] == {"on": "Shooting  (12)2", "inSide": True, "chosen": True}
+    assert got["scroll"] == 400, "the chosen entry brought into view, not the camera menu's pressed button"
 
 
 @needs_node
