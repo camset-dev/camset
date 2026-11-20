@@ -129,6 +129,7 @@ def test_the_a1_iis_rows_that_fit_the_one_kind_and_the_three_a_safety_list_names
     ({"Proxy Settings > Proxies Recording": "Proxy Settings > Recording"}, "less a leading token"),    # 7 characters
     ({"LANIP Address Setting": "IP Address Setting"}, "less a leading token"),              # glued, no space
     ({"Rec > Recording Media (Movie)": "Rec > Other#1"}, "less a leading token"),
+    ({"Rec > Recording Media": "Rec > Recording Media#1"}, "less a leading token"),          # a bare label to its #n
     ({"Px Format": "Format"}, "a safety list names"),                                      # a destructive row
     ({"S Initialize": "Initialize"}, "a safety list names"),                                 # OWNER_NEVER
     ({"A > Px B": "A > Px b"}, "renames the row to itself"),
@@ -372,4 +373,26 @@ def test_an_axis_row_named_after_its_value_loses_the_value_under_either_name(tmp
         {"kind": "table", "path": ["MR ISO", "Picker Row"], "option": "Cell", "opens": "picker"}])
     assert kinds["ISO > ISO AUTO Min. SS"] == "axis" and ("ISO > ISO AUTO Min. SS", "1/250") in axes
     assert pickers == {"ISO > Picker Row / Cell"}
+    row_names.forget()
+
+
+def test_a_lit_bar_is_measured_by_the_label_it_reads_never_by_its_renaming(tmp_path, monkeypatch):
+    """kit/drive.py lit_refused measures what the bar reads past a row by the row's label as read (safety.plain), and
+    compares rows by first_open.key only for seen and the --path's own row: a bar reading exactly "Px Proxy Recording",
+    the older name of the --path's Proxy Recording, is that row, where the renamed label's length made it run on past
+    the row ("ing"); with no table a longer row a seen row's label starts ("Face Priority Frame") still runs on past it
+    (the review of 2026-11-20)."""
+    import drive
+    from camkit import first_open
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    hand_tables(tmp_path / "data")
+    seen = first_open.Seen(opened=first_open._with_parents(first_open.key(("Setup", "Face Priority"))))
+    why, row = drive.lit_refused("Face Priority Frame", ["Setup"], ["Setup", "Other Row"], seen,
+                                 {"Face Priority", "Other Row"}, None, {}, None)
+    assert "runs on past the row" in why and row is None
+    hand_tables(tmp_path / "data", ROW_NAMES={"Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording"})
+    seen = first_open.Seen(opened=first_open._with_parents(first_open.key(("Proxy Settings", "Px Proxy Recording"))))
+    why, row = drive.lit_refused("Px Proxy Recording", ["Proxy Settings"], ["Proxy Settings", "Proxy Recording"], seen,
+                                 {"Px Proxy Recording", "Proxy Recording"}, None, {}, None)
+    assert (why, row) == ("", ("Proxy Settings", "Proxy Recording"))
     row_names.forget()

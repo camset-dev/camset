@@ -82,8 +82,9 @@ def fault(old, new) -> str | None:
     """Why the entry (`old`, `new`: the older path's labels and the camera's) is not the one kind ROW_NAMES holds, or
     None: every label above the last the same in both; the camera's last label the older one with its leading token of
     at most ICON_LEAD characters and the space after it left out ("Px Proxy Recording" -> "Proxy Recording", "S&Q Record
-    Setting" -> "Record Setting"), or the kit's "#n" form of the older label left so, or of the older label less a
-    one-word qualifier in brackets ("Recording Media (Movie)" -> "Recording Media#1"); and no label of either side one
+    Setting" -> "Record Setting"), or the kit's "#n" form of the older label less a one-word qualifier in brackets, the
+    kit's own older name of one of two rows of a label ("Recording Media (Movie)" -> "Recording Media#1"; never a bare
+    label to its "#n", which would take the other row of that label too); and no label of either side one
     the never-open list, the look lap's destructive list, the acts-on-open list or OWNER_NEVER names."""
     old, new = tuple(old), tuple(new)
     got = _FAULTS.get((old, new), False)

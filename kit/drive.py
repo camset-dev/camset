@@ -781,12 +781,13 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
         # on the --path's own page, the bar reads its row but for a space OCR put before a bracket ("Function Ring
         # (Lens)"), and no longer row of the longest-label rule: that row, the words past it judged below as ever
         k = spaced_end(lit, path[-1])
-        spaceless = len(re.sub(r"\s+", "", first_open.key(row)[-1])) if row is not None else -1
+        spaceless = len(re.sub(r"\s+", "", safety.plain(row[-1]))) if row is not None else -1
         if k is not None and len(re.sub(r"\s+", "", safety.plain(path[-1]))) > spaceless:
             row, end = own, k
     why = f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}" if row is None else ""
     if row is not None and not decided:
-        label = first_open.key(row)[-1]
+        # the label as the bar reads it, never an older name's renaming (first_open.key: seen and own-row equality only)
+        label = safety.plain(row[-1])
         rest = safety.plain(lit)[len(label) if end is None else end:].strip()
         if rest and rest not in {safety.plain(v) for v in (values or {}).get(label, ())}:
             why = (f"the lit row reads {lit.strip()!r}, which runs on past the row {row[-1]!r} with words that are no "
@@ -796,7 +797,7 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
         # the navigated row's own reading the bar starts with (icon_reading), the words past it none or a value of it
         head = icon_reading(lit, path[-1], gone_to[0], {*known, *gone_to[1]})
         rest = safety.plain(stop_kept(lit)[len(head):]) if head else ""
-        own_values = {safety.plain(v) for v in (values or {}).get(first_open.key(own)[-1], ())}
+        own_values = {safety.plain(v) for v in (values or {}).get(safety.plain(own[-1]), ())}
         if head and (not rest or rest in own_values):
             row, why = own, ""
         elif icon_behind(lit, path[-1], gone_to[0], {*known, *gone_to[1]}):
@@ -810,7 +811,7 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
     if not decided and bar is not None and len(path) > 1 and list(depth) == list(path[:-1]) \
             and (why or first_open.key(row) != first_open.key(own)) \
             and (row is None or first_open.key(row) == first_open.key(own)
-                 or first_open.key(row)[-1] in {safety.plain(r) for r in bar.readings}) \
+                 or safety.plain(row[-1]) in {safety.plain(r) for r in bar.readings}) \
             and submenu_tied(lit, path[-1], bar):
         # a submenu has no page model: the --path's own row on its own page, its bar tied to it by the page as read
         # live on the bar's own frame (submenu_tied: kit2_fin_look_varsh's "fVar. Shutter Set.", kit2_fin_look_brtype1's
@@ -839,7 +840,7 @@ def in_icon(lit, row) -> bool:
     text, cut = str(lit or "").strip(), behind(lit)
     if row is None or not cut or cut == text:
         return False
-    icon, label = safety.plain(text[:len(text) - len(cut)]), first_open.key(row)[-1]
+    icon, label = safety.plain(text[:len(text) - len(cut)]), safety.plain(row[-1])
     return bool(label) and len(label) <= len(icon) and icon.startswith(label)
 
 
