@@ -31,21 +31,22 @@ MAPPING_WORDS = re.compile(r"\brecord\b|slot memory|numerator|denominator|mirror
                            r"\bthird\b|second record|\bsdk\b", re.I)
 
 
-def expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None) -> bool:
+def expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None, hand: frozenset = frozenset()) -> bool:
     """Shown in Expert mode only: a derived working copy, a flag or an alternate numbering, by its name (the rule the
     editor held until 2026-11-05, decision 20, now the kit's); one of My Menu's places, a live setting of a record
     the camera's My Menu names (`slots`, mymenu_slots), which the editor's My Menu page edits place by place, so the
     raw places are a duplicate there; a field of the memories' live copy (`mirror`, mirror_of: each memory set holds
-    its own, which the editor shows); a setting on no camera row whose name holds a mapping word (MAPPING_WORDS); or a
-    copy named so ("JPEG/HEIF Quality (Slot 1, copy)", which the camera writes with Slot 1's on every choice): the main
-    one is the photographer's, the copy a duplicate."""
+    its own, which the editor shows); a setting on no camera row whose name holds a mapping word (MAPPING_WORDS), a row
+    given by hand (`hand`: the HAND_PLACES keys) counting as none, since a hand place never changes whether a record is
+    shown (it shows under its row in Expert mode only); or a copy named so ("JPEG/HEIF Quality (Slot 1, copy)", which
+    the camera writes with Slot 1's on every choice): the main one is the photographer's, the copy a duplicate."""
     if s.get("area") == "global" and s.get("id") in slots:
         return True
     if re.search(r"\bcopy\)$", s["name"]):
         return True
     if mirror_place(s["key"], mirror or {})[0] is not None:
         return True
-    if "row" not in s and MAPPING_WORDS.search(s["name"]):
+    if ("row" not in s or s.get("key") in hand) and MAPPING_WORDS.search(s["name"]):
         return True
     # how the record's meaning was found ("source") is evidence (camkit.definitions): a definition read without its
     # evidence keeps the mark it has for this last rule
@@ -58,9 +59,9 @@ def mymenu_slots(doc: dict) -> frozenset:
     return frozenset(((doc.get("camera") or {}).get("my_menu") or {}).get("records") or ())
 
 
-def with_expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None) -> dict:
+def with_expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None, hand: frozenset = frozenset()) -> dict:
     """The setting with "expert": true after "in_sets" when expert() says so, and without the key otherwise."""
-    flag = expert(s, slots, mirror)
+    flag = expert(s, slots, mirror, hand)
     out = {}
     for k, v in s.items():
         if k == "expert":
@@ -328,7 +329,8 @@ def from_data(doc: dict) -> dict:
 
     def placed(s):
         return s if found is None else with_place(s, found.get(s["key"], {}))
-    doc["settings"] = [with_expert(placed(with_plain_words(with_evidence_apart(with_tidy_note(s)), names)), slots, mirror)
+    by_hand = frozenset(tables.HAND_PLACES)
+    doc["settings"] = [with_expert(placed(with_plain_words(with_evidence_apart(with_tidy_note(s)), names)), slots, mirror, by_hand)
                        for s in doc["settings"]]
     return doc
 
