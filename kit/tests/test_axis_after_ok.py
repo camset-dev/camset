@@ -261,6 +261,99 @@ def test_with_first_on_manual_center_chosen_after_it_is_proved_whatever_its_reco
     assert [r["label"] for r in out] == ["On: Manual", "On: Center"] and plain.enter_on_box == []
 
 
+# ------------------------------------------------------------------------------------- the eyes of the OSD group
+
+def osd_scope(own_runs, monkeypatch, osd_rows: bool):
+    """The made-up camera's pass 1 folder: a reviewed scope whose OSD group holds Framing Stabilizer, pass 1's map with
+    its carousel and Drive Mode's, and an axes.json with an axis on each, all on pass 1's map; proving.base pointed at
+    them, proving.jobs' OSD settings the test's own (osd_rows: --eyes osd or osd-all)."""
+    import proving.base as base
+    import proving.jobs as J
+    from conftest import TEST_CAMERA
+    from runner import SCOPE_FILE
+    root = own_runs / TEST_CAMERA
+    (root / "kit2_pass1").mkdir(parents=True)
+    (root / "kit2_pass1" / SCOPE_FILE).write_text(json.dumps({"prove": [], "exclude": {OSD_GROUP: [ROW]}}),
+                                                  encoding="utf-8")
+    rows = [{"path": [ROW], "kind": "dialog", "options": [{"index": 0, "label": "On: Center", "frame": "00005_down.png"},
+                                                          {"index": 1, "label": "Off", "frame": "00004_right.png"}]},
+            {"path": ["Drive Mode"], "kind": "dialog",
+             "options": [{"index": 0, "label": "Single Shooting", "frame": "00010_right.png"},
+                         {"index": 1, "label": "Self-timer(Cont.)", "frame": "00011_down.png"}]}]
+    (root / "kit2_pass1" / "map_all.json").write_text(json.dumps({"rows": rows}), encoding="utf-8")
+    (root / "kit2_axes").mkdir()
+    (root / "kit2_axes" / "axes.json").write_text(json.dumps({
+        ROW: {OPTION: {"values": VALUES, "rights": 2, "back": VALUES[0]}},
+        "Drive Mode": {"Self-timer(Cont.)": {"values": ["10 Sec. 3 Img.", "5 Sec. 3 Img."], "rights": 2,
+                                             "back": "10 Sec. 3 Img."}}}), encoding="utf-8")
+    monkeypatch.setattr(base, "AXES", root / "kit2_axes" / "axes.json")
+    monkeypatch.setattr(base, "PASS1", root / "kit2_pass1")
+    monkeypatch.setattr(base, "MAP", root / "kit2_pass1" / "map_all.json")
+    monkeypatch.setattr(J, "OSD_ONLY", set())
+    monkeypatch.setattr(J, "OSD_ROWS", osd_rows)
+    return J
+
+
+def test_with_osd_eyes_an_axis_job_of_the_osd_group_reads_where_its_list_job_reads(own_runs, monkeypatch):
+    """--eyes osd (or osd-all): the reviewed scope's OSD group is read through the camera's own picture whenever the
+    row's screen is open, the axis job of Framing Stabilizer as its list job ({"eyes": "osd"}), whether or not the list
+    jobs were made first; Drive Mode, outside the group, gets no eyes of its own, and without --eyes osd neither does
+    anything (nor is the group's list job made)."""
+    J = osd_scope(own_runs, monkeypatch, osd_rows=True)
+    assert {J.job_key(j): j.get("eyes") for j in J.axis_jobs()} == {JOB_KEY: "osd", DRIVE: None}
+    both = J.jobs() + J.axis_jobs()
+    assert {J.job_key(j): j.get("eyes") for j in both} == {ROW: "osd", "Drive Mode": None, JOB_KEY: "osd", DRIVE: None}
+    J = osd_scope(own_runs / "plain", monkeypatch, osd_rows=False)
+    both = J.jobs() + J.axis_jobs()
+    assert {J.job_key(j): j.get("eyes") for j in both} == {"Drive Mode": None, JOB_KEY: None, DRIVE: None}
+
+
+def session_seams(monkeypatch, cam, title=None):
+    """prove_run.session over `cam` (proof_seams' faking, and the way to the row the scan's): the camera on the menu at
+    the row, the run's OSD eyes a made-up pair named "osd". Returns (prove_run, the link)."""
+    P, link, _ = proof_seams(monkeypatch, cam, title)
+    monkeypatch.setattr(P, "LiveCamera", lambda *a, **k: cam)
+    monkeypatch.setattr(P, "menu_from_shooting", lambda c: None)
+    monkeypatch.setattr(P, "same_position", lambda s, p: s.kind == "menu")
+    monkeypatch.setattr(P, "go_to", lambda c, cycle, model, j, label: 0)
+    monkeypatch.setattr(P, "enter_any", lambda *a, **k: None)
+    monkeypatch.setattr(P, "OsdEyes", lambda link, run: SimpleNamespace(name="osd"))
+    monkeypatch.setattr(P.time, "sleep", lambda s: None)
+    return P, link
+
+
+def one_session(P, cam, link, job) -> tuple:
+    """One session proving `job` from the camera's records now: (its status, the proof lines, the failures)."""
+    out, failures = Lines(), Lines()
+    status = P.session(link, cam.hdmi, None, [{"screen": "known"}], {}, [job], Dat("00001_start.DAT", cam.records()),
+                       out, failures)
+    return status, out, failures
+
+
+RUN_2 = "Framing Stabilizer / On: the carousel never showed one of ['On: Center', 'On: Manual']"
+
+
+def test_the_session_proves_an_osd_group_axis_through_the_cameras_own_picture(own_runs, monkeypatch):
+    """The session over HDMI with the axis job proving_jobs makes for --eyes osd: the proof watches the camera's own
+    picture (OsdEyes) from the row on, never a black HDMI frame, the information screens left with MENU, and the run's
+    eyes are back after the row. The same job without the group's eyes, as proving.jobs made it before, fails as run 2
+    did, its title read off the black frames, nothing chosen."""
+    J = osd_scope(own_runs, monkeypatch, osd_rows=True)
+    (job,) = [j for j in J.axis_jobs() if j["path"] == [ROW]]
+    cam = FramingStabilizer(eyes="hdmi")
+    P, link = session_seams(monkeypatch, cam)
+    status, out, failures = one_session(P, cam, link, job)
+    assert (status, failures) == ("done", [])
+    assert [(r["label"], r["applied"]) for r in out] == [("On: Manual", True), ("On: Center", True)]
+    assert ("hdmi", "dialog", "On") not in cam.seen and ("osd", "dialog", "On") in cam.seen
+    assert cam.hdmi.name == "hdmi" and cam.enter_on_box == []
+    cam = FramingStabilizer(eyes="hdmi")
+    P, link = session_seams(monkeypatch, cam)
+    status, out, failures = one_session(P, cam, link, {k: v for k, v in job.items() if k != "eyes"})
+    assert (status, out, [f["why"] for f in failures]) == ("failed", [], [RUN_2])
+    assert ("hdmi", "dialog", "On") in cam.seen and "enter" not in cam.keys
+
+
 # ------------------------------------------------------------------------------------- the run's own frames
 
 A1 = paths.a1ii_root()
@@ -320,3 +413,65 @@ def test_the_information_screen_after_ok_on_the_runs_own_frames(box_lit, value):
     assert got.notice["text"].startswith("Enables shooting of a movie")
     assert same_place(place(cam), row)
 
+
+class RunFrames(FramingStabilizer):
+    """FramingStabilizer showing the run's own frames for each of its screens, from the eyes it is given: over HDMI (run
+    2) the menu 264791, the carousel on Off 264793 and with On lit the black 264886; through the camera's own picture
+    (runs 1 and 3) the menu 264901 (Off saved) or 264771 (On), the carousel on Off 264903, On: Center 264905 and On:
+    Manual 264910, the information screen's box lit 264769 (after On: Center) or 264911 (On: Manual) and its OK lit
+    264770. Read by the pixel reader; the frames' names go into the proof lines."""
+    NAMES = ("264791_menu.png", "264793_reread.png", "264886_reread.png", "264901_menu.png", "264771_menu.png",
+             "264903_reread.png", "264905_down.png", "264910_reread.png", "264769_enter.png", "264911_enter.png",
+             "264770_down.png")
+
+    def _name(self) -> str:
+        if self.eyes == "hdmi":
+            if self.where == "info":
+                pytest.fail("an information screen over HDMI: the runs hold none")
+            return "264791_menu.png" if self.where == "menu" else \
+                ("264886_reread.png" if self.opt == "On" else "264793_reread.png")
+        if self.where == "menu":
+            return "264771_menu.png" if self.saved == "On" else "264901_menu.png"
+        if self.where == "dialog":
+            return "264903_reread.png" if self.opt == "Off" else ("264905_down.png", "264910_reread.png")[self.value]
+        return "264770_down.png" if self.lit_line == OK else ("264769_enter.png", "264911_enter.png")[self.held]
+
+    def _show(self, tag):
+        from camkit import frames
+        self.n += 1
+        self.frame = frames.load(SHOTS / self._name())
+        self.seen.append((self.eyes, self.where, self.opt if self.where == "dialog" else None))
+
+    def read(self):
+        return screen.read(self.frame)
+
+
+def test_the_black_hdmi_frame_and_the_information_screen_on_the_runs_own_frames(own_runs, monkeypatch):
+    """The session replayed on the run's own frames. Over HDMI the carousel with On lit is a black frame of no known kind
+    (264886_reread.png, where the camera's own picture said "dialog": black_frame_osd), on which the axis job's title
+    reads nothing: the job as proving.jobs made it before fails as run 2 did. The job made for --eyes osd reads the
+    camera's own picture from the row on: it finds On: Center, chooses On: Manual, passes the information screen with
+    Down and MENU (never Enter on its lit box), and ends on Off with the axis back on Center, every frame it read the
+    camera's own."""
+    from camkit.live import dark
+    from proving import screens
+    run_frames(*RunFrames.NAMES)
+    black = Replay("264886_reread.png")
+    assert black.read().kind == "unknown" and dark(black.frame)
+    assert Replay("264905_down.png").read().kind == "dialog"
+    J = osd_scope(own_runs, monkeypatch, osd_rows=True)
+    (job,) = [j for j in J.axis_jobs() if j["path"] == [ROW]]
+    cam = RunFrames(eyes="hdmi")
+    P, link = session_seams(monkeypatch, cam, title=screens.carousel_text)
+    status, out, failures = one_session(P, cam, link, job)
+    assert (status, failures, cam.enter_on_box) == ("done", [], [])
+    assert [(r["label"], r["chosen_frame"], r["final"], r["applied"]) for r in out] == [
+        ("On: Manual", "264910_reread.png", False, True), ("On: Center", "264903_reread.png", True, True)]
+    assert out[0]["notice"]["frame"] == "264911_enter.png" and out[0]["notice"]["left_by"] == "menu"
+    assert said(out)[0][3] == [(OPTION_KEY, 1, 0), (AXIS_KEY, 0, 1)] and said(out)[1][3] == []
+    assert ("hdmi", "dialog", "On") not in cam.seen
+    cam = RunFrames(eyes="hdmi")
+    P, link = session_seams(monkeypatch, cam, title=screens.carousel_text)
+    status, out, failures = one_session(P, cam, link, {k: v for k, v in job.items() if k != "eyes"})
+    assert (status, out, [f["why"] for f in failures]) == ("failed", [], [RUN_2])
+    assert ("hdmi", "dialog", "On") in cam.seen and "enter" not in cam.keys

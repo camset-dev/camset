@@ -72,9 +72,9 @@ Results: runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl, one line per option; frame
 
 --eyes osd and osd-all both add the reviewed scope's OSD group ("could take the menus off HDMI or blank a screen":
 HDMI Resolution, File Format, Rec Frame Rate, Framing Stabilizer, Auto Framing, Select Finder/Monitor ...; jobs.OSD_ROWS)
-to the rows proved. With osd the way to each such row goes over HDMI and only its proofs watch the SDK's OSD image
-(OsdEyes); after the row the run reads HDMI again, where a stopped capture is restarted once and is otherwise an error
-(camkit.frames). With osd-all the whole run, the way to every row included, watches the OSD, and takes the camera's
+to the rows proved. With osd the way to each such row goes over HDMI and only its proofs, a list's or a carousel
+axis's, watch the SDK's OSD image (OsdEyes); after the row the run reads HDMI again, where a stopped capture is
+restarted once and is otherwise an error (camkit.frames). With osd-all the whole run, the way to every row included, watches the OSD, and takes the camera's
 settings at the start as its start file (no --start): for rows after which HDMI may not come back (a change of frame
 rate or resolution), and for another mode's rows after kit/provers/mode_switch.py. It needs a page scan and map made
 through the OSD: OSD frames do not match a scan made over HDMI.

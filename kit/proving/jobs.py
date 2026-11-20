@@ -44,6 +44,8 @@ COUPLED = {"ISO Range Limit"}    # number fields that push each other (lower <= 
 
 OSD_ROWS = False
 OSD_ONLY: set = set()
+# the reviewed scope's group of rows that can take the menus off HDMI or blank a screen (osd_group)
+OSD_GROUP = "could take the menus off HDMI or blank a screen"
 
 # --help-text: no proofs; the camera's own help for each list / dialog row and every option (C4, the
 # trash button, owner-allowed for this alone, 2026-11-01): nothing is chosen
@@ -78,19 +80,33 @@ def scope_rows(scope: dict, map_rows: list) -> tuple:
     return allowed - ask, excluded | ask, approved
 
 
+def scope_file() -> dict:
+    """The reviewed scope; a fresh machine, or a new camera, has none yet (runs/ is not versioned): the template's
+    exclusions."""
+    reviewed = reviewed_scope()
+    return read_json(reviewed if reviewed.exists() else ROOT / "data" / "pass2_scope_template.json")
+
+
+def osd_group(scope: dict) -> set:
+    """The rows of the scope's OSD group (OSD_GROUP), kept in OSD_ONLY, on a run that reads them through the camera's own
+    picture (OSD_ROWS: --eyes osd and osd-all): a job of such a row, a list's or a carousel axis's alike, watches that
+    picture whenever the row's screen is open ({"eyes": "osd"}). None on any other run."""
+    if not OSD_ROWS:
+        return set()
+    OSD_ONLY.update(scope["exclude"].get(OSD_GROUP, []))
+    return OSD_ONLY
+
+
 def jobs(scope_names=None):
     """List rows of the map in the reviewed scope: {"path": [...], "labels": [option labels in order]}."""
-    reviewed = reviewed_scope()
-    # a fresh machine, or a new camera, has no reviewed scope yet (runs/ is not versioned): the template's exclusions
-    scope = read_json(reviewed if reviewed.exists() else ROOT / "data" / "pass2_scope_template.json")
+    scope = scope_file()
     allowed, excluded, approved = scope_rows(scope, read_json(base.MAP)["rows"])
     APPROVED.update(approved)
     if ALLOWED:
         allowed |= {" > ".join(r["path"]) for r in read_json(base.MAP)["rows"] if ALLOWED & set(r["path"])}
     out = {}
     if OSD_ROWS:                                    # seen through the OSD, HDMI can come and go
-        OSD_ONLY.update(scope["exclude"].get("could take the menus off HDMI or blank a screen", []))
-        allowed |= OSD_ONLY
+        allowed |= osd_group(scope)
     if HELP_TEXT:
         # help chooses nothing (C4, OK, MENU): the rows kept from proofs for what choosing them would do
         # (HDMI, monitor, sound, the remote session) are read too, the owner's go-ahead (2026-11-01);
@@ -274,10 +290,13 @@ def axis_jobs(scope_names=None) -> list:
     map the run proves with (base.MAP): on pass 1's map those with no "map", as before; on a run's own map (prove_run
     --map) those its own axis walk wrote (axis_walk --map, "map": base.map_key), so a row a switched state alone opens
     (Bracket Type, the drive mode dial on BRK) is never a job of a run made without it. A row inside a submenu is keyed
-    by its whole path ("Bracket Settings > Bracket Type")."""
+    by its whole path ("Bracket Settings > Bracket Type"). A row of the reviewed scope's OSD group is read through the
+    camera's own picture as its list job is (osd_group: Framing Stabilizer's preview blanks HDMI whenever its On option
+    is lit, and its axis job read its title off the black frame, 2026-11-19)."""
     if not base.AXES.exists():
         return []
     here = None if base.MAP == base.PASS1 / "map_all.json" else base.map_key(base.MAP, base.AXES.parent.parent)
+    osd = osd_group(scope_file()) if OSD_ROWS else set()
     out = []
     for row, opts in read_json(base.AXES).items():
         for opt, info in opts.items():
@@ -285,7 +304,8 @@ def axis_jobs(scope_names=None) -> list:
                 continue
             if len(info["values"]) < 2 or (scope_names and f"{row} / {opt}" not in scope_names and row not in scope_names):
                 continue
-            out.append({"path": row.split(" > "), "kind": "axis", "option": opt, "values": info["values"]})
+            out.append({"path": row.split(" > "), "kind": "axis", "option": opt, "values": info["values"],
+                        **({"eyes": "osd"} if row in osd else {})})
     return out
 
 
