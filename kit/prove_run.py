@@ -536,6 +536,22 @@ def first_values(given: list) -> dict:
     return out
 
 
+def first_eyes_or_exit(todo: list, eyes: str) -> None:
+    """--first on an axis job read through the camera's own picture (a row of the reviewed scope's OSD group, {"eyes":
+    "osd"}) only with --eyes osd-all; with --eyes osd the run stops before anything connects. Such a row ends on the
+    --first value, not the one it opened on, and with --eyes osd the session reads HDMI again after the row, which that
+    state can blank (Framing Stabilizer on On): the row, its proofs all written, would be failed on the scan check. The
+    camera's own picture cannot stand in there for the rest of the session, as --eyes osd walks a page scan made over
+    HDMI, which OSD frames do not match; with osd-all the whole run is through the OSD and its scan."""
+    if eyes == "osd-all":
+        return
+    held = [job_key(j) for j in todo if j["kind"] == "axis" and j.get("eyes") == "osd" and job_key(j) in FIRST]
+    if held:
+        sys.exit(f"--first {', '.join(map(repr, held))}: a row of the reviewed scope's OSD group ends on the --first "
+                 "value, which can blank HDMI, read again after the row with --eyes osd; such a --first needs --eyes "
+                 "osd-all (an OSD page scan and map): nothing was sent to the camera")
+
+
 def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     """One carousel option's second axis: every value (Right/Left the short way round, axes wrap),
     OK, download, diff. The option is found by its title being one of its axis values ("Custom 2"
@@ -967,7 +983,8 @@ def main():
     ap.add_argument("--context", default=None, help="the switched state these proofs are made in (pass 3)")
     ap.add_argument("--first", action="append", default=None, metavar="ROW / OPTION=VALUE",
                     help="an axis job: choose this value first and prove from it, so the value it held is proved too "
-                         "(the run's start file still goes back on at the end)")
+                         "(the run's start file still goes back on at the end); on a row of the scope's OSD group "
+                         "only with --eyes osd-all, as the row ends on this value")
     ap.add_argument("--pp", default=None, help="comma-separated profiles for the PP side lists (default PP1), "
                                                "e.g. PP2,PP3,PP4,PP5,PP6,PP10,PP11")
     ap.add_argument("--wb", action="store_true", help="prove White Balance's fine-tune grids (14 presets x 2 axes)")
@@ -1069,6 +1086,7 @@ def main():
         missing = set(a.rows) - {" > ".join(j["path"]) for j in todo} - {job_key(j) for j in todo}
         if missing:
             sys.exit(f"not provable rows in the scope: {sorted(missing)}")
+    first_eyes_or_exit(todo, a.eyes)
     if a.field is not None:
         todo = only_field_or_exit(todo, a.field, a.rows)
     info_ok_jobs_or_exit(todo, proving.checklists.INFO_OK)

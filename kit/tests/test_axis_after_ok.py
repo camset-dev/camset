@@ -312,6 +312,34 @@ def test_with_osd_eyes_an_axis_job_of_the_osd_group_reads_where_its_list_job_rea
     assert J.axis_jobs({DRIVE}) and "skipping" not in capsys.readouterr().out      # a run that does not name it: no word
 
 
+@pytest.mark.parametrize("eyes, outcome", [
+    ("osd", "needs --eyes osd-all"), ("osd-all", "1 rows to prove, 2 options"),
+    ("hdmi", "not provable rows in the scope")], ids=["osd", "osd-all", "hdmi"])
+def test_first_on_an_osd_group_axis_runs_only_all_through_the_cameras_own_picture(own_runs, monkeypatch, capsys,
+                                                                                   eyes, outcome):
+    """prove_run --rows "Framing Stabilizer / On" --first "...=On: Manual": the row ends on the --first value, not the one
+    it opened on. With --eyes osd the session reads HDMI again after the row, which that state can blank, and would fail
+    a row whose proofs are all written (and the camera's own picture cannot stand in: --eyes osd walks an HDMI page
+    scan); so the run stops before anything connects and says --eyes osd-all, which it takes. On HDMI eyes the job is not
+    made at all."""
+    import prove_run
+    from camkit import models
+    osd_scope(own_runs, monkeypatch, osd_rows=False)
+    monkeypatch.setattr(prove_run.models, "current", lambda root: models.A1II)
+    monkeypatch.setattr(prove_run, "load_scan", lambda scan, **k: ([], {}))
+    monkeypatch.setattr(prove_run, "FIRST", {})
+    monkeypatch.setattr(prove_run, "Link", lambda run: pytest.fail("the link opened"))
+    monkeypatch.setattr(sys, "argv", ["prove_run.py", "--rows", JOB_KEY, "--first", f"{JOB_KEY}=On: Manual", "--list",
+                                      *([] if eyes == "hdmi" else ["--eyes", eyes])])
+    if eyes == "osd-all":
+        prove_run.main()
+        assert outcome in capsys.readouterr().out
+    else:
+        with pytest.raises(SystemExit, match=outcome) as stop:
+            prove_run.main()
+        assert eyes == "hdmi" or "nothing was sent to the camera" in str(stop.value)
+
+
 def session_seams(monkeypatch, cam, title=None):
     """prove_run.session over `cam` (proof_seams' faking, and the way to the row the scan's): the camera on the menu at
     the row, the run's OSD eyes a made-up pair named "osd". Returns (prove_run, the link)."""
