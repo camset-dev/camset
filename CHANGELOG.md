@@ -216,7 +216,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 - **`drive.py` takes a lit row read with its icon glued on, or showing more of a cut label, for the `--path`'s row:**
   "SRegist. Face Priority On" and "In Face Priority in Multi Mr On" no longer stop a run that went to that row. Another
-  row whose label ends alike, or words that are no value of the row, are refused as before.
+  row whose label ends alike or begins inside the icon letters ("S AF Face Priority On"), or words that are no value of
+  the row, are refused.
 - **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a
   grey option where it may, closes the list with MENU and stops, as it does where whether an option is grey cannot be told.
 - **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that
