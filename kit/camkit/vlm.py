@@ -14,8 +14,9 @@ with no camera. Inside a run a missing reader is an ordinary exception (NoReader
 Every question a run asks about a frame goes through ask_role, which takes up a stand-in when the reader playing the
 role will not connect, and says once per reader, on standard error and in the run's events.jsonl, when one first fails
 during the run; it never asks about a black frame (BlackFrame), and after DOWN_AFTER failures in a row it asks a
-role's reader nothing for DOWN_FOR seconds (ReaderDown). The start check says when the second and third readers are
-one model in two builds (one_family), whose answers are one vote. The batch tools that read a whole run's frames afterwards build their readers themselves
+role's reader nothing for DOWN_FOR seconds (ReaderDown). The third role may name several readers, asked in turn where
+OCR and the second differ (voters, each under its own key: voter_key); the start check says when no third reader is of
+another model than the second (one_family), whose answers are then one vote. The batch tools that read a whole run's frames afterwards build their readers themselves
 (make_reader) and get no stand-in: kit/tiebreak.py, kit/pass1_labels.py, kit/page_model.py and kit/help_reads.py;
 kit/tools/reader_census.py --questions, which measures the questions themselves on recorded frames, asks a reader it
 names through ask_named_reader. A --network run (docs/decisions/0008) asks local readers only (LOCAL_ONLY) and marks
@@ -314,17 +315,28 @@ def readers(stop: bool = False, settings: dict | None = None) -> list:
     if why:
         raise (ConfigMissing if stop else NoReader)(
             f"private/config.json: {why}: each reader is an object with a \"name\" of its own, as in \"readers_examples\", "
-            f"and \"roles\" an object giving a role a reader's name, {{\"second\": \"omlx\"}} (docs/QUICKSTART.md, "
-            f"\"Choosing a reader\")")
+            f"and \"roles\" an object giving a role a reader's name, {{\"second\": \"omlx\"}}, the third role one name or "
+            f"a list of names asked in turn, {{\"second\": \"vllm\", \"third\": [\"gemma\", \"glm\"]}} "
+            f"(docs/QUICKSTART.md, \"Choosing a reader\")")
     return listed
 
 
 def malformed(listed, roles=None) -> str:
     """Why private/config.json's "readers" (and "roles") cannot be read as readers ("" when it can): not a list, an
-    entry that is no object, one with no "name", two with the same one, or "roles" that is no object of names. Said by
-    its place in the list, never by what it holds."""
-    if roles is not None and (not isinstance(roles, dict) or not all(isinstance(v, str) for v in roles.values())):
-        return "\"roles\" is not an object giving each role a reader's name"
+    entry that is no object, one with no "name", two with the same one, or "roles" that is no object of names (the third
+    role may take a list of names, asked in turn: one that is empty or names a reader twice is refused). Said by its
+    place in the list, never by what it holds."""
+    if roles is not None and (not isinstance(roles, dict) or not all(
+            isinstance(v, str) or (k == THIRD and isinstance(v, list) and all(isinstance(n, str) for n in v))
+            for k, v in roles.items())):
+        return ("\"roles\" is not an object giving each role a reader's name (the third role: a name, or a list of "
+                "names)")
+    third = roles.get(THIRD) if isinstance(roles, dict) else None
+    if isinstance(third, list) and not third:
+        return "\"roles\" gives the third role an empty list: name a reader in it, or leave \"third\" out"
+    twice = [n for i, n in enumerate(third) if n in third[:i]] if isinstance(third, list) else []
+    if twice:
+        return f"\"roles\" names {twice[0]!r} twice in the third role's list"
     if not isinstance(listed, list):
         return "\"readers\" is not a list"
     names = set()
@@ -710,20 +722,34 @@ def ask_checks(cfgs: list, image: bytes, timeout: float = CHECK_TIMEOUT, roles: 
 
 
 def role_players() -> dict:
-    """{reader name: (the roles it plays)} for the readers private/config.json lists ("second", "third": role); a
-    "roles" entry naming no reader listed is refused there (ConfigMissing), where during a run it would fail every
-    question."""
+    """{reader name: (the roles it plays)} for the readers private/config.json lists ("second", "third": role; each
+    of the third role's readers plays "third", voters); a "roles" entry naming no reader listed is refused there
+    (ConfigMissing), where during a run it would fail every question."""
     players: dict = {}
-    for name in ("second", "third"):
+    for name, find in (("second", lambda: [role("second")]), (THIRD, voters)):
         try:
-            cfg = role(name)
+            found = find()
         except NoReader:
             continue
         except ValueError as e:
             raise ConfigMissing(str(e)) from None
-        players.setdefault(cfg["name"], ())
-        players[cfg["name"]] += (name,)
+        for cfg in found:
+            players.setdefault(cfg["name"], ())
+            if name not in players[cfg["name"]]:
+                players[cfg["name"]] += (name,)
     return players
+
+
+def keyed_players() -> list:
+    """[(role key, the configured reader playing it)] for the second role and each of the third role's readers, in that
+    order (voter_key), the roles that have one; a role naming no reader listed raises ValueError (role_players refuses
+    it first at a run's start)."""
+    out = []
+    with contextlib.suppress(NoReader):
+        out.append(("second", role("second")))
+    with contextlib.suppress(NoReader):
+        out += [(voter_key(k), cfg) for k, cfg in enumerate(voters())]
+    return out
 
 
 def _unasked(r: dict, roles: tuple, why: str) -> Check:
@@ -791,15 +817,17 @@ def verdict(checks: list) -> tuple:
     a reader for the "second" role, the one asked about the screen: its own, unless it did not answer, then the first
     local reader listed that answered (may_stand_in, as stand_in takes one during a run; never a paid one); the
     "third" role gets a stand-in the same way where one answered, and otherwise goes unanswered for the run (ask_role:
-    a run asks it only to break a tie). A paid third reader not asked because a local one answered keeps its role,
-    unchecked."""
+    a run asks it only to break a tie). Where the third role names several readers (several_voters), one that did not
+    answer gets no stand-in: it is skipped for the run (_passed says so) and the others vote. A paid third reader not
+    asked because a local one answered keeps its role, unchecked."""
     listed = readers(stop=True)
     good = [r for r in listed if any(c.name == str(r["name"]) and c.ok for c in checks)]
     stand_ins, why = {}, ""
-    for name in ("second", "third"):
-        own = next((c for c in checks if name in c.roles), None)
+    several = several_voters()
+    for name, cfg in keyed_players():
+        own = next((c for c in checks if c.name == str(cfg["name"])), None)
         not_local = own is not None and not own.asked and own.not_asked == NOT_LOCAL      # a --network run's
-        if own is None or own.ok or (not own.asked and not not_local):
+        if own is None or own.ok or (not own.asked and not not_local) or (name != "second" and several):
             continue
         sub = next((r for r in good if str(r["name"]) != own.name and may_stand_in(r)
                     and (local_reader(r) or not LOCAL_ONLY)), None)
@@ -859,38 +887,64 @@ def _passed(checks: list) -> None:
     for c in checks:
         if c.asked and not c.ok:
             _SKIPPED.add(c.name)
+    players = keyed_players()
     for name, sub in stand_ins.items():
-        own = next(c for c in checks if name in c.roles)
+        own = next(c for c in checks if c.name == str(dict(players)[name]["name"]))
         assign_role(name, sub)
         print(f"reader {own.name!r} {'is not local' if own.not_asked == NOT_LOCAL else 'does not answer'}: "
               f"{sub['name']!r} stands in as the {name} reader for this run", flush=True)
-    for name in ("second", "third"):
-        own = next((c for c in checks if name in c.roles), None)
-        if own is not None and own.name in _SKIPPED and name not in stand_ins:
-            print(f"reader {own.name!r} does not answer and no local reader may stand in: the {name} reader's "
-                  f"questions go unanswered for this run", flush=True)
+    several = several_voters()
+    for name, cfg in players:
+        own = next((c for c in checks if c.name == str(cfg["name"])), None)
+        if own is None or name in stand_ins:
+            continue
+        if name == "second" or not several:
+            if own.name in _SKIPPED:
+                print(f"reader {own.name!r} does not answer and no local reader may stand in: the {name} reader's "
+                      f"questions go unanswered for this run", flush=True)
+            continue
+        if own.name not in _SKIPPED and own.not_asked != NOT_LOCAL:
+            continue
+        left = [str(c["name"]) for k, c in players if k != "second" and str(c["name"]) not in _SKIPPED
+                and not (LOCAL_ONLY and not local_reader(c))]
+        rest = (f"{', '.join(repr(n) for n in left)} vote{'s' if len(left) == 1 else ''} as the third reader"
+                f"{'s' if len(left) > 1 else ''} where OCR and the second reader differ" if left else
+                "no third reader is left to vote where OCR and the second reader differ")
+        print(f"reader {own.name!r} {'is not local' if own.not_asked == NOT_LOCAL else 'does not answer'}: it is "
+              f"skipped as the {said(name)} reader for this run, and {rest}", flush=True)
     same = one_family()
     if same:
         print(f"readers: {same}", flush=True)
     _CHECKED = list(checks)
 
 
-def one_family() -> str:
-    """Plain words for a second and a third reader that are one model in two builds (camkit.reading.model_id: their
-    family), whose answers are one vote and not two (decision 22), or "" where they are two models, one role has no
-    reader, or one's reader is skipped for the run. Said at the start check; it changes no role."""
+def one_family(skipped=None) -> str:
+    """Plain words for a second reader and third readers that are all one model in builds of their own
+    (camkit.reading.model_id: their family), whose answers are one vote (decision 22), or "" where any third reader is
+    another model, or none is left to vote: the role has none, or each is the second reader itself or skipped for the
+    run (skipped: the readers' names, default those the start check skipped). Said at the start check, and by
+    kit/tools/reader_check.py; it changes no role."""
     from . import reading
+    skipped = _SKIPPED if skipped is None else set(skipped)
     try:
-        second, third = playing("second"), playing("third")
+        second = playing("second")
+        voting = [playing(key) for key in voter_keys()]
     except (NoReader, ValueError):
         return ""
-    names = (str(second.get("name")), str(third.get("name")))
+    name = str(second.get("name"))
     family = reading.model_id(second.get("model") or second.get("name"))
-    if names[0] == names[1] or set(names) & _SKIPPED or family != reading.model_id(third.get("model") or third.get("name")):
+    voting = [v for v in voting if str(v.get("name")) not in {name, *skipped}]
+    if name in skipped or not voting or any(reading.model_id(v.get("model") or v.get("name")) != family for v in voting):
         return ""
-    return (f"the second reader {names[0]!r} and the third reader {names[1]!r} are one model, {family}, in two builds: "
-            "their answers are one vote, not two (docs/decisions/0022), so where OCR and the second reader disagree the "
-            "third adds no independent vote; a third reader of another model would (private/config.json \"roles\")")
+    names = ", ".join(repr(str(v.get("name"))) for v in voting)
+    if len(voting) == 1:
+        return (f"the second reader {name!r} and the third reader {names} are one model, {family}, in two builds: "
+                "their answers are one vote, not two (docs/decisions/0022), so where OCR and the second reader disagree "
+                "the third adds no independent vote; a third reader of another model would (private/config.json "
+                "\"roles\")")
+    return (f"the second reader {name!r} and the third readers {names} are one model, {family}, in builds of their own: "
+            "their answers are one vote (docs/decisions/0022), so where OCR and the second reader disagree no third "
+            "reader adds an independent vote; a third reader of another model would (private/config.json \"roles\")")
 
 
 # ------------------------------------------------------------------------------------------------ during a run
@@ -982,9 +1036,17 @@ def black_image(image: bytes) -> bool:
 
 def role(name: str) -> dict:
     """The config entry that plays a role: "second" (the second reading beside OCR, asked on every
-    proof) or "third" (the tie-breaker where OCR and the second disagree). private/config.json "roles"
-    names a reader for each ({"second": "claude"}); without it, the first and second readers listed. No reader for
-    the role raises NoReader, an ordinary exception (see there)."""
+    proof) or "third" (the tie-breaker where OCR and the second disagree), or one of the third role's later readers
+    ("third.2", "third.3": voter_key). private/config.json "roles" names a reader for each ({"second": "claude"}), the
+    third role one or a list of them, asked in turn (voters); without it, the first and second readers listed. No
+    reader for the role raises NoReader, an ordinary exception (see there)."""
+    k = voter_index(name)
+    if k is not None:
+        playing_it = voters()
+        if k >= len(playing_it):
+            raise NoReader(f"private/config.json gives the third role {len(playing_it)} reader"
+                           f"{'s' if len(playing_it) != 1 else ''}: the {said(name)} reader is none of them")
+        return playing_it[k]
     c = _settings()
     listed = readers(settings=c)
     named = (c.get("roles") or {}).get(name)
@@ -994,11 +1056,88 @@ def role(name: str) -> dict:
             raise ValueError(f"private/config.json: \"roles\" gives the {name} role to {named!r}, which no entry of "
                              f"\"readers\" names ({', '.join(repr(r['name']) for r in listed)})")
         return found
-    at = {"second": 0, "third": 1}[name]
+    at = {"second": 0}[name]
     if at >= len(listed):
         raise NoReader(f"private/config.json lists one reader, and the {name} role needs another: add one to "
                        f"\"readers\", or name the reader for it in \"roles\" (docs/QUICKSTART.md, step 3)")
     return listed[at]
+
+
+THIRD = "third"         # the tie-breaker's role, which may name several readers ("voters"), asked in turn
+
+
+def voter_key(k: int) -> str:
+    """The role key the third role's k-th reader (from 0, in the order private/config.json gives them) is asked under,
+    by ask_role and camkit.reading: "third" for the first, as ever, then "third.2", "third.3"... Each key has its own
+    latch, stand-in and memo, so one reader that is down silences no other."""
+    return THIRD if k == 0 else f"{THIRD}.{k + 1}"
+
+
+def voter_index(key) -> int | None:
+    """The place (from 0) in the third role's list of the reader a role key names ("third" 0, "third.2" 1...), or None
+    for a key of no third reader ("second")."""
+    if key == THIRD:
+        return 0
+    m = re.fullmatch(rf"{THIRD}\.([2-9]|[1-9]\d+)", str(key))
+    return int(m.group(1)) - 1 if m else None
+
+
+def said(key: str) -> str:
+    """A role key in words, for "the ... reader": "second", "third", "2nd third", "3rd third"."""
+    k = voter_index(key)
+    if not k:
+        return str(key)
+    n = k + 1
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix} {THIRD}"
+
+
+def voters() -> list:
+    """The config entries that play the third role, in the order they are asked where OCR and the second reader differ
+    (camkit.reading's third vote, kit/tiebreak.py): those private/config.json "roles" gives it, one name or a list of
+    names ({"third": ["gemma", "glm"]}); without it, the second reader listed, alone. None raises NoReader (one reader
+    listed), a name no entry of "readers" has ValueError, as role does. Each is asked under its own key (voter_key);
+    a vote counts once per model family (camkit.reading.tally), so a reader of the second's family adds none."""
+    c = _settings()
+    listed = readers(settings=c)
+    named = (c.get("roles") or {}).get(THIRD)
+    if not named:
+        return [role_by_place(listed)]
+    out = []
+    for n in [named] if isinstance(named, str) else named:
+        found = next((r for r in listed if r["name"] == n), None)
+        if found is None:
+            raise ValueError(f"private/config.json: \"roles\" gives the {THIRD} role to {n!r}, which no entry of "
+                             f"\"readers\" names ({', '.join(repr(r['name']) for r in listed)})")
+        out.append(found)
+    return out
+
+
+def role_by_place(listed: list) -> dict:
+    """The third role's reader when private/config.json "roles" gives it none: the second reader listed (NoReader when
+    one is listed)."""
+    if len(listed) < 2:
+        raise NoReader(f"private/config.json lists one reader, and the {THIRD} role needs another: add one to "
+                       f"\"readers\", or name the reader for it in \"roles\" (docs/QUICKSTART.md, step 3)")
+    return listed[1]
+
+
+def voter_keys() -> list:
+    """The role keys of the third role's readers, in the order they are asked (voter_key); [] when it has none."""
+    try:
+        return [voter_key(k) for k in range(len(voters()))]
+    except NoReader:
+        return []
+
+
+def several_voters() -> bool:
+    """Whether private/config.json gives the third role more than one reader: then one that does not answer is skipped
+    for the run, no stand-in taking its place (the others vote; one standing in would be a reader already voting),
+    where a lone third reader keeps the stand-in rule it always had."""
+    try:
+        return len(voters()) > 1
+    except (NoReader, ValueError):
+        return False
 
 
 _STANDING_IN: dict = {}        # role -> the reader config standing in for one that would not connect, or given it
@@ -1084,7 +1223,7 @@ def local_only(cfg: dict, name: str | None = None) -> None:
     """NoReader, before anything is sent: while HELD (an identity screen open), for every reader; while LOCAL_ONLY (a
     --network run, or a tool reading a run folder one marked: local_only_runs), for a reader that is not local
     (local_reader). name: the role asked, for the words."""
-    what = f"the {name} reader's question goes unanswered" if name else "it is not asked"
+    what = f"the {said(name)} reader's question goes unanswered" if name else "it is not asked"
     if HELD:
         raise NoReader(f"no reader is asked while {HELD} (docs/decisions/0008), so {what}")
     if LOCAL_ONLY and not local_reader(cfg):
@@ -1177,8 +1316,9 @@ def local_only_runs(*places) -> list:
 
 
 def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
-    """The answer of the reader playing a role ("second", "third"); when it will not connect, the next configured
-    reader that answers takes the role for the rest of the run (stand_in): the remote server was off, 2026-11-06.
+    """The answer of the reader playing a role ("second", "third", or a later third reader: "third.2", voter_key);
+    when it will not connect, the next configured reader that answers takes the role for the rest of the run
+    (stand_in): the remote server was off, 2026-11-06. One of several third readers gets none (several_voters).
     Every question a run asks about a frame comes here (proving.screens.ask_second, camkit.live's reader_label and
     submenu_labels, camkit.reading.ask); the batch tools the module docstring names are the exception. A reader that
     fails is said once in the run (failing); the failure goes on to the caller as before. A role whose reader did not
@@ -1190,10 +1330,11 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     counted), and a role whose reader failed DOWN_AFTER times in a row, stand-in included, is not asked for DOWN_FOR
     seconds (ReaderDown, the latch: reader_down), a timeout counting as a failure like any other."""
     if black_image(image):
-        raise BlackFrame(f"a black frame: no reader is asked about one, so the {name} reader's question goes unanswered")
+        raise BlackFrame(f"a black frame: no reader is asked about one, so the {said(name)} reader's question goes "
+                         "unanswered")
     if reader_down(name):
-        raise ReaderDown(f"the {name} reader did not answer just before ({DOWN_AFTER} failures in a row): it is asked "
-                         f"again after a pause of {DOWN_FOR:g} s, and this question goes unanswered")
+        raise ReaderDown(f"the {said(name)} reader did not answer just before ({DOWN_AFTER} failures in a row): it is "
+                         f"asked again after a pause of {DOWN_FOR:g} s, and this question goes unanswered")
     try:
         answer = _ask_role(name, image, prompt, timeout)
     except NoReader:
@@ -1222,7 +1363,7 @@ def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     local_only(cfg, name)
     if str(cfg.get("name")) in _SKIPPED:
         raise NoReader(f"reader {cfg.get('name')!r} did not answer the run's start check, and no reader stands in for "
-                       f"it: the {name} reader's questions go unanswered for this run")
+                       f"it: the {said(name)} reader's questions go unanswered for this run")
     t = time.monotonic()
     try:
         reader = make_reader(cfg, timeout=timeout)
@@ -1233,7 +1374,9 @@ def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     except Exception as e:
         asked(name, cfg, t, False)
         failing(cfg, e, timeout)
-        if not isinstance(e, urllib.error.URLError) or standing_in(name) is not None or stand_in(name, role(name)) is None:
+        # one of several third readers gets no stand-in: the one taking its place would be a reader already voting
+        if (not isinstance(e, urllib.error.URLError) or standing_in(name) is not None
+                or (voter_index(name) is not None and several_voters()) or stand_in(name, role(name)) is None):
             raise
     cfg = playing(name)
     local_only(cfg, name)

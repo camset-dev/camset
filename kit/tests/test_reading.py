@@ -874,6 +874,65 @@ def test_the_third_vote_is_the_second_ocr_engine_then_a_reader_of_another_model(
     assert eyes.asked[-1] == "third option" and t.votes[-1].source == "reader:other-model"
 
 
+def test_the_third_roles_readers_vote_in_turn_until_a_reading_stands(eyes):
+    """The third role may name several readers ("third", then "third.2": camkit.vlm.voter_key), asked in turn where
+    OCR and the reader stay apart, each only while no reading stands: four voices (OCR, the second, two third readers),
+    one vote per model family. One of the second's own model is not asked; one that does not answer is passed over;
+    with no majority the reading is refused, never guessed."""
+    labels = ["Lo", "Mid", "Hi"]
+    eyes.models.update({"third": "gemma-4", "third.2": "glm-4.6v"})
+    said = {}
+    for role in ("third", "third.2"):
+        eyes.answer("option", lambda image, role=role: said[(role, image)], role=role)
+    eyes.answer("option", {"selected": "Hi"})
+
+    def reading_of(n, gemma, glm):
+        f = eyes.frame(f"{n:05d}_down.png")
+        eyes.see(f, "Lo", box=CAROUSEL.box)
+        image = f.path.read_bytes()
+        said[("third", image)] = gemma if isinstance(gemma, BaseException) else {"selected": gemma}
+        said[("third.2", image)] = glm if isinstance(glm, BaseException) else {"selected": glm}
+        eyes.asked.clear()
+        return reading.read(f, CAROUSEL, "label", "proof", choices=labels)
+    r = reading_of(70, "Lo", "Hi")                         # the first third reader settles it: the next is not asked
+    assert (r.text, r.by, r.agreed, eyes.asked) == ("Lo", "votes", ["ocr", "third"], ["option", "third option"])
+    r = reading_of(71, "Mid", "Lo")                        # one each: the next third reader asked, and it settles it
+    assert (r.text, r.by, r.agreed, r.raw["third.2"]) == ("Lo", "votes", ["ocr", "third.2"], "Lo")
+    assert eyes.asked == ["option", "third option", "third.2 option"]
+    assert [v.source for v in r.votes] == ["ocr:apple", "reader:fake-model", "reader:gemma-4", "reader:glm-4.6v"]
+    assert r.evidence()["third.2"] == "Lo" and r.evidence()["third"] == "Mid" and "Mid" in r.texts()
+    r = reading_of(72, "Mid", "Hi")                        # two of four name Hi, nothing else as often
+    assert (r.text, r.by, r.agreed) == ("Hi", "votes", ["reader", "third.2"])
+    r = reading_of(73, "Mid", "Max")                       # Max names no option: no majority, refused
+    assert r.refused.startswith(reading.DISAGREE) and r.choice is None
+    r = reading_of(74, vlm.NoReader("down"), "Lo")         # a third reader with no answer: the next one votes
+    assert (r.text, r.by, r.agreed) == ("Lo", "votes", ["ocr", "third.2"])
+    eyes.models["third"] = " Fake-Model "                  # the second's own model: never asked, the next one is
+    r = reading_of(75, "Hi", "Lo")
+    assert (r.text, r.agreed) == ("Lo", ["ocr", "third.2"]) and eyes.asked == ["option", "third.2 option"]
+    eyes.models["third.2"] = "fake-model"                  # every third reader of the second's model: refused
+    r = reading_of(76, "Hi", "Hi")
+    assert r.refused.startswith(reading.DISAGREE) and eyes.asked == ["option"]
+
+
+def test_a_guard_asks_the_third_roles_readers_in_turn_for_a_lone_readers_reading(eyes):
+    """A guard where OCR read nothing: the reader's reading needs a second, independent vote, and each reader of the
+    third role is asked in turn for it; every reading they gave is judged (texts), and two that differ refuse."""
+    bar = (140, 212, 560, 252)
+    eyes.models.update({"third": "gemma-4", "third.2": "glm-4.6v"})
+    eyes.answer("menu", {"rows": [{"label": "Movie", "highlighted": True}]})
+    eyes.answer("menu", vlm.NoReader("down"), role="third")
+    eyes.answer("menu", {"rows": [{"label": "Movie", "highlighted": True}]}, role="third.2")
+    f = eyes.frame("00080_down.png", bar=bar)
+    r = reading.read(f, reading.LIT_ROW, "label", "guard")
+    assert (r.text, r.by, r.refused, r.agreed) == ("Movie", "votes", "", ["reader", "third.2"])
+    assert eyes.asked == ["menu", "third menu", "third.2 menu"]
+    eyes.answer("menu", {"rows": [{"label": "Format", "highlighted": True}]}, role="third.2")
+    g = eyes.frame("00081_down.png", bar=bar)
+    s = reading.read(g, reading.LIT_ROW, "label", "guard")
+    assert s.refused.startswith(reading.DISAGREE) and "Format" in s.texts() and eyes.asked[-1] == "third.2 menu"
+
+
 def test_an_ocr_reading_that_names_no_option_is_never_settled_by_the_reader_alone(eyes):
     """Where OCR read something that names no option, the reader's option does not stand alone: on the a1 II's proofs
     it was now and then another option (a neighbouring row, a button), where OCR had read nothing never."""
@@ -1468,6 +1527,24 @@ class FailingReader:
     def answer(self, image: bytes, prompt: str, waits=None):
         self.asked.append(prompt)
         raise urllib.error.HTTPError("http://127.0.0.1:9/v1", 507, "Insufficient Storage", {}, None)
+
+
+def test_the_census_asks_the_second_reader_and_each_third_one_by_default(tmp_path, monkeypatch, capsys):
+    """--questions with no --reader: the second reader and every reader of the third role, one or several, in that
+    order; a reader that plays no role, or a paid one, only when named."""
+    import reader_census
+    from camkit import vlm
+    root = questions_run(tmp_path)
+    lan = {"url": "http://127.0.0.1:9/v1", "model": "m", "parallel": 1}
+    listed = [{"name": n, **lan} for n in ("vllm", "omlx", "gemma", "glm")]
+    paid = {"name": "openai", **lan, "api_key_env": "CAMSET_TEST_READER_KEY"}
+    monkeypatch.setattr(vlm, "CACHE", None)
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, **kw: QuestionsReader(root / "kit2_pass2" / "shots", []))
+    for roles, want in ((None, ["vllm", "omlx"]), ({"second": "vllm", "third": ["gemma", "glm"]}, ["vllm", "gemma", "glm"]),
+                        ({"second": "vllm", "third": ["openai", "glm"]}, ["vllm", "glm"])):
+        monkeypatch.setattr(vlm, "config", lambda roles=roles: {"readers": [*listed, paid], **({"roles": roles} if roles else {})})
+        assert reader_census.main([str(root), "--questions", "--json", "--dry-run", "--cache", str(tmp_path / "a")]) == 0
+        assert json.loads(capsys.readouterr().out)["readers"] == want, roles
 
 
 def census_config(monkeypatch, reader):

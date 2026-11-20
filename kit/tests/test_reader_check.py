@@ -338,6 +338,142 @@ def test_a_reader_failing_during_the_run_is_said_once_and_logged(world, tmp_path
             assert leak not in text, (leak, text)
 
 
+# ---------------------------------------------------------------------------------------------- several third readers
+
+def voters_world(write, monkeypatch, glm_port=8012, *more):
+    """The owner's form of 2026-11-19: a Qwen second reader, and two third readers of other families, asked in turn."""
+    monkeypatch.setitem(ANSWERS, 8012, {"text": "MENU 42"})
+    write([local("vllm", 8001, "ggml-org/Qwen3.8-27B-Q4_K_M"), local("gemma", 8006, "ggml-org/gemma-4-26B-A4B-it-Q4_0"),
+           local("glm", glm_port, "ggml-org/GLM-4.6V-Flash-Q4_K_M"), *more],
+          roles={"second": "vllm", "third": ["gemma", "glm"]})
+
+
+def test_the_third_role_may_name_several_readers_each_asked_and_shown_in_its_turn(world, monkeypatch, capsys):
+    """"roles": {"third": [...]}: each reader named plays the third role, in the order given (voters, each under its
+    own key: "third", "third.2"); each is asked at the start; the tool shows each in its turn. Three families, three
+    votes: no word about one family."""
+    import reader_check
+    write, sent = world
+    voters_world(write, monkeypatch)
+    assert [r["name"] for r in vlm.voters()] == ["gemma", "glm"] and vlm.voter_keys() == ["third", "third.2"]
+    assert vlm.role("third")["name"] == "gemma" and vlm.role("third.2")["name"] == "glm"
+    assert vlm.role_players() == {"vllm": ("second",), "gemma": ("third",), "glm": ("third",)}
+    with pytest.raises(vlm.NoReader, match="gives the third role 2 readers: the 3rd third reader is none of them"):
+        vlm.role("third.3")
+    assert [vlm.said(k) for k in ("second", "third", "third.2", "third.3", "third.11")] == [
+        "second", "third", "2nd third", "3rd third", "11th third"]
+    checks = vlm.check_readers()
+    said = capsys.readouterr().out
+    assert [c.ok for c in checks] == [True, True, True] and ports(sent) == [8001, 8006, 8012]
+    assert "'gemma' (third reader) answered" in said and "'glm' (third reader) answered" in said
+    assert "one model" not in said and vlm.standing_in("third") is None and vlm.standing_in("third.2") is None
+    vlm.forget()
+    assert reader_check.main([]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert next(x for x in out if x.split()[:1] == ["gemma"]).split()[3:5] == ["third", "answered"]
+    assert next(x for x in out if x.split()[:1] == ["glm"]).split()[3:6] == ["2nd", "third", "answered"]
+    assert out[-1] == "3 of 3 readers asked answered: a camera run would start."
+
+
+def test_one_of_several_third_readers_that_does_not_answer_is_skipped_and_the_others_vote(world, monkeypatch, capsys):
+    """Where the third role names several readers, one that does not answer the start check is skipped for the run and
+    said so, no stand-in taking its place (one would be a reader already voting, or one the config gave no vote), and
+    is asked nothing during the run; the others keep their turn. With every one of them silent, that is said too. A
+    third role of one reader, a list of one included, keeps its stand-in rule."""
+    import reader_check
+    write, sent = world
+    voters_world(write, monkeypatch, 8002, local("omlx", 8005, "spare"))
+    monkeypatch.setitem(ANSWERS, 8005, {"text": "MENU 42"})
+    vlm.check_readers()
+    said = capsys.readouterr().out
+    assert ("reader 'glm' does not answer: it is skipped as the 2nd third reader for this run, and 'gemma' votes as "
+            "the third reader where OCR and the second reader differ") in said
+    assert vlm.standing_in("third.2") is None and "glm" in vlm._SKIPPED and "stands in" not in said
+    sent.clear()
+    with pytest.raises(vlm.NoReader, match="'glm' did not answer the run's start check.*the 2nd third reader's"):
+        vlm.ask_role("third.2", b"a frame", "prompt", 25)
+    assert sent == [] and vlm.playing("third")["name"] == "gemma"
+    vlm.forget()
+    assert reader_check.main([]) == 0
+    assert capsys.readouterr().out.splitlines()[-1] == ("3 of 4 readers asked answered: a camera run would start; "
+                                                        "'glm' would be skipped as the 2nd third reader.")
+    vlm.forget()
+    write([local("vllm", 8001, "q"), local("gemma", 8002, "g"), local("glm", 8003, "z")],
+          roles={"second": "vllm", "third": ["gemma", "glm"]})
+    vlm.check_readers()
+    said = capsys.readouterr().out
+    assert said.count("no third reader is left to vote where OCR and the second reader differ") == 2
+    vlm.forget()
+    write([local("vllm", 8001, "q"), local("glm", 8002, "z"), local("omlx", 8006, "spare")],
+          roles={"second": "vllm", "third": ["glm"]})
+    vlm.check_readers()                                    # as ever: the first local reader that answered
+    assert "reader 'glm' does not answer: 'vllm' stands in as the third reader for this run" in capsys.readouterr().out
+
+
+def test_one_of_several_third_readers_failing_during_the_run_takes_no_stand_in(world, monkeypatch):
+    """A third reader of several that will not connect during the run: its question fails to its caller as any reader's
+    does, and no reader is brought in for it; a lone third reader's failure takes a stand-in as it always did."""
+    write, _ = world
+    brought = []
+    monkeypatch.setattr(vlm, "stand_in", lambda name, failed: brought.append(name))
+    voters_world(write, monkeypatch, 8003)
+    with pytest.raises(urllib.error.URLError):
+        vlm.ask_role("third.2", b"a frame", "prompt", 5)
+    assert brought == []
+    write([local("vllm", 8001), local("glm", 8003)], roles={"second": "vllm", "third": "glm"})
+    with pytest.raises(urllib.error.URLError):
+        vlm.ask_role("third", b"a frame", "prompt", 5)
+    assert brought == ["third"]
+
+
+def test_one_family_is_said_only_where_no_third_reader_is_of_another_model(world, monkeypatch, capsys):
+    """The start check's sentence about one model in two builds: said where every third reader left to vote is of the
+    second's family, never where any one is another model; a third reader that is skipped, or is the second reader
+    itself, is left out. reader_check says it too."""
+    import reader_check
+    write, _ = world
+    qwen = [local("vllm", 8001, "RedHatAI/Qwen3.8-27B-INT4"), local("omlx", 8006, "Qwen3.8-27B-4bit")]
+    write([*qwen, local("gemma", 8005, "gemma-4-26b-a4b-it")], roles={"third": ["omlx", "gemma"]})
+    assert vlm.one_family() == "" and vlm.one_family(skipped={"vllm"}) == ""
+    assert vlm.one_family(skipped={"gemma"}).startswith(
+        "the second reader 'vllm' and the third reader 'omlx' are one model, qwen3.8-27b, in two builds: their answers "
+        "are one vote, not two")
+    write([*qwen, local("mlx", 8005, "mlx-community/Qwen3.8-27B-8bit")], roles={"third": ["omlx", "mlx"]})
+    assert vlm.one_family().startswith("the second reader 'vllm' and the third readers 'omlx', 'mlx' are one model, "
+                                       "qwen3.8-27b, in builds of their own: their answers are one vote")
+    write(qwen, roles={"third": ["vllm"]})                 # the second reader itself: no third reader to speak of
+    assert vlm.one_family() == ""
+    write(qwen)                                            # today's form, no "roles": as it always was
+    assert vlm.one_family().startswith("the second reader 'vllm' and the third reader 'omlx' are one model")
+    assert reader_check.main([]) == 0
+    assert "readers: the second reader 'vllm' and the third reader 'omlx' are one model" in capsys.readouterr().out
+
+
+def test_the_third_roles_list_is_read_and_refused_plainly(world):
+    """The third role takes one name or a list of names; an empty list, a name given twice, a list that is not names,
+    a list for the second role, or a name no reader has, stop a run at its start with one plain sentence. Today's
+    forms read as ever: one name, or none (the second reader listed)."""
+    write, _ = world
+    two = [local("vllm", 8001), local("omlx", 8006)]
+    for roles, why in (({"third": []}, "\"roles\" gives the third role an empty list"),
+                       ({"third": ["omlx", "omlx"]}, "\"roles\" names 'omlx' twice in the third role's list"),
+                       ({"third": ["omlx", 3]}, "\"roles\" is not an object giving each role a reader's name"),
+                       ({"second": ["vllm"]}, "\"roles\" is not an object giving each role a reader's name")):
+        write(two, roles=roles)
+        with pytest.raises(camkit.ConfigMissing) as stop:
+            vlm.check_readers()
+        assert str(stop.value).startswith(f"private/config.json: {why}"), str(stop.value)
+        assert "\"third\": [\"gemma\", \"glm\"]" in str(stop.value)
+    write(two, roles={"third": ["omlx", "nobody"]})
+    with pytest.raises(camkit.ConfigMissing, match="gives the third role to 'nobody', which no entry"):
+        vlm.check_readers()
+    for roles in (None, {"third": "omlx"}, {"third": ["omlx"]}, {"second": "omlx", "third": "vllm"}):
+        write(two, roles=roles)
+        assert len(vlm.voters()) == 1 and not vlm.several_voters()
+    write(two, roles={"second": "omlx", "third": "vllm"})
+    assert vlm.voters()[0]["name"] == "vllm" and vlm.role("third")["name"] == "vllm"
+
+
 # ---------------------------------------------------------------------------------------------- what is printed
 
 def test_no_address_key_or_folder_is_printed(world):

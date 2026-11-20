@@ -31,6 +31,7 @@
     }
   ],
   "_comment": "\"readers_examples\" is not read by the kit: copy the entries you choose into \"readers\" (docs/QUICKSTART.md, \"Choosing a reader\"). \"vllm\" and \"omlx\" are the two this project used (a server on the network and one on the Mac itself), at example addresses: put your own server's in \"url\"; Ollama, OpenAI and Gemini are untested here, and their \"model\" is a placeholder for a vision model that server or service offers. \"api_key_env\" names the environment variable holding a hosted service's key; the key itself never goes in this file.",
+  "_roles": "\"roles\" (optional) names the reader of each role by its \"name\": {\"second\": \"vllm\", \"third\": [\"gemma\", \"glm\"]}. The second reader reads beside OCR; the third breaks ties where they differ, and may be a list of readers of other models, asked in turn until two independent votes name one option. Without \"roles\", the first reader listed is the second and the next the third (docs/QUICKSTART.md, step 3).",
   "readers_examples": [
     {
       "name": "vllm",

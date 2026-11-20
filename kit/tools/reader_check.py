@@ -13,8 +13,11 @@ tool says so first; one with no role is never asked by a run. --all asks every r
 Nothing is cached: every reader is asked afresh, every time.
 
 It prints, per reader listed: its name, kind and model (the model the server says answered beside it, when that is
-another id), the roles it plays, and whether it answered, how long it took, or the error (the HTTP status and the
-server's own short message, "HTTP 507 Insufficient Storage: ..."); then whether a camera run would start. Addresses and
+another id), the roles it plays (where the third role names several readers, each in its turn: "third", "2nd third"),
+and whether it answered, how long it took, or the error (the HTTP status and the server's own short message, "HTTP 507
+Insufficient Storage: ..."); then, where no third reader that answered is of another model than the second, that it
+adds no independent vote (camkit.vlm.one_family); then whether a camera run would start, and which third readers it
+would skip. Addresses and
 keys are taken out of all it prints (camkit.vlm.scrub), and a model id that is a path shows its last part. It opens no
 camera link, needs no camera, and writes nothing under runs/.
 
@@ -40,8 +43,11 @@ FAILED = 6                  # the exit status when the check itself failed, a fa
 MODES = {"all": "all", "local": "never"}        # --all, --local: vlm.start_check's ask_paid
 
 
-def table(checks: list) -> list:
-    """One line per reader: name, kind, model (and the server's, where it names another), roles, and what came of it."""
+def table(checks: list, keys: dict | None = None) -> list:
+    """One line per reader: name, kind, model (and the server's, where it names another), roles, and what came of it.
+    keys: {reader name: its role key in the third role} where that role names several readers, each then shown in its
+    turn ("third", "2nd third": vlm.said)."""
+    keys = keys or {}
     rows = [("reader", "kind", "model", "roles", "result")]
     for c in checks:
         if not c.asked:
@@ -52,7 +58,8 @@ def table(checks: list) -> list:
             took = f" after {c.seconds:.1f} s" if c.seconds is not None else ""
             result = f"NO ANSWER{took}: {c.error}"
         model = (c.model or "-") + (f" (server: {c.served})" if c.served else "")
-        rows.append((c.name, c.kind + (", paid" if c.paid else ""), model, ", ".join(c.roles) or "-", result))
+        roles = [vlm.said(keys[c.name]) if r == vlm.THIRD and c.name in keys else r for r in c.roles]
+        rows.append((c.name, c.kind + (", paid" if c.paid else ""), model, ", ".join(roles) or "-", result))
     widths = [max(len(r[i]) for r in rows) for i in range(4)]
     return ["  " + "  ".join(r[i].ljust(widths[i]) for i in range(4)) + "  " + r[4] for r in rows]
 
@@ -97,7 +104,11 @@ def main(argv=None) -> int:
     except Exception as e:       # noqa: BLE001 - the tool's own fault: said as itself, scrubbed, never as the config's
         print(f"reader_check failed: {type(e).__name__}: {vlm.scrub(e)}", flush=True)
         return FAILED
-    print("\n".join(table(checks)), flush=True)
+    try:                            # the third role's readers in their turn, where it names several
+        keys = {str(cfg["name"]): k for k, cfg in vlm.keyed_players() if k != "second"} if vlm.several_voters() else {}
+    except (vlm.NoReader, ValueError):
+        keys = {}
+    print("\n".join(table(checks, keys)), flush=True)
     asked = [c for c in checks if c.asked]
     answered = [c for c in asked if c.ok]
     unasked_second = next((c for c in checks if "second" in c.roles and not c.asked), None)
@@ -111,6 +122,11 @@ def main(argv=None) -> int:
               "\"Choosing a reader\").", flush=True)
         return 1
     subs = "".join(f"; {sub['name']!r} would stand in as the {name} reader" for name, sub in stand_ins.items())
+    subs += "".join(f"; {name!r} would be skipped as the {vlm.said(k)} reader" for name, k in keys.items()
+                    if any(c.name == name and c.asked and not c.ok for c in checks))
+    same = vlm.one_family(skipped={c.name for c in checks if c.asked and not c.ok})
+    if same:
+        print(f"readers: {same}", flush=True)
     note = (f"; the second reader, {unasked_second.name!r}, is paid and not asked with --local: a run asks it at its "
             "start, a local reader that answered standing in if it does not answer" if unasked_second else "")
     print(f"{len(answered)} of {len(asked)} readers asked answered: a camera run would start{subs}{note}.", flush=True)

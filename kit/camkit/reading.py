@@ -33,8 +33,9 @@ how two readings are compared, by the kind of thing read, is agree()'s docstring
      - OCR and the reader name different things (or OCR's reading names no option and the reader's does): a fresh
        frame, and both asked again, where a plain OCR reading is one more vote and never ends the disagreement in
        OCR's favour; still apart, a third vote, independent of the first two (the second OCR engine, the site's own
-       check, then a reader of another model, the "third" role); the reading stands only when two of the votes name the
-       same expected option and nothing else is named as often, else it is refused naming every reading.
+       check, then a reader of another model, the "third" role, which may name several asked in turn until a reading
+       stands); the reading stands only when two of the votes name the same expected option and nothing else is named
+       as often, else it is refused naming every reading.
      - A vote counts once per source: one OCR engine is one vote whatever name it goes by (engine_of), and two readers
        of one model are one vote (tally). The reader does not win a disagreement by itself: measured on the first
        camera's proofs, where OCR's reading named no option the reader's option was sometimes another one, where OCR
@@ -705,7 +706,8 @@ def agree(a, b, expect: str, choices=()) -> bool:
 @dataclass(frozen=True)
 class Vote:
     """One eye's reading of a place. eye: "ocr" (the OCR engine configured), "ocr2" (the second OCR engine, where one
-    is installed), "reader" (the "second" reader), "third" (the "third" reader, of another model), "check" (a site's
+    is installed), "reader" (the "second" reader), "third" (the "third" reader, of another model; "third.2"... the
+    third role's later readers, camkit.vlm.voter_key), "check" (a site's
     own check that is no reader); source: what read it, "ocr:<engine>", "reader:<model>" or "check:site"; text: as read
     (None: asked, and no answer), but where read() finds a row an OCR engine's label reading without the icon it read
     in front of it (icon_left_out; Reading.raw keeps it as read); frame: the file name of the frame it was read on."""
@@ -895,6 +897,7 @@ def region(kind: str, box: tuple | None = None, k: int | None = None, field: str
 
 STAKES = ("guard", "press", "proof", "find", "note")
 TIMEOUTS = {"guard": 25.0, "press": 25.0, "proof": 25.0, "find": 15.0}   # s the reader gets, by what rides on it
+MAX_THIRD = 16                           # the third role's readers looked for at most (a guard against a fake that names endless ones)
 
 _MEMO: dict = {}                         # (role, the frame's SHA-1, the question) -> (answer, name, model)
 
@@ -1051,7 +1054,8 @@ def model_id(model) -> str:
 class Reading:
     """One reading by the rule. text: canonical, the reader's where OCR was doubted; choice: the index into the options
     expected, None when refused or when it names none; by: "both", "ocr", "reader", "votes" (two or more independent
-    votes, tally) or "none"; raw: {"ocr", "ocr2", "reader", and "second" and "third" once asked} as read on the last
+    votes, tally) or "none"; raw: {"ocr", "ocr2", "reader", and "second" and "third" (and "third.2"... for the
+    third role's later readers) once asked} as read on the last
     frame (None: not asked, or no answer); doubts: doubts() of OCR's reading on the last frame, with "apart before"
     where an earlier frame was read apart; reader: the configured name of the reader that answered (a stand-in's
     included); refused: "" or why the reading cannot be trusted at its stakes; frame: the last frame's file name;
@@ -1077,7 +1081,7 @@ class Reading:
         """What a proof line carries of this reading ("eyes"): which eyes voted on which frame, with what, and which
         agreed."""
         out = {"by": self.by, "ocr": self.raw.get("ocr"), "reader": self.raw.get("reader")}
-        for k in ("ocr2", "second", "third"):
+        for k in ("ocr2", "second", *(k for k in self.raw if vlm.voter_index(k) is not None)):
             if self.raw.get(k) is not None:
                 out[k] = self.raw[k]
         if self.reader:
@@ -1094,7 +1098,7 @@ class Reading:
         """Every reading a guard judges: each eye's on every frame read, as read, and canonical beside it, never
         canonical alone (a cleaning can hide a slip a guard would see in the raw reading); each once. Any one refusing
         refuses."""
-        got = [v.text for v in self.votes if v.eye in ("ocr", "ocr2", "reader", "third")]
+        got = [v.text for v in self.votes if v.eye in ("ocr", "ocr2", "reader") or vlm.voter_index(v.eye) is not None]
         return list(dict.fromkeys(t for s in got if s for t in (s, canonical(s)) if t))
 
 
@@ -1162,16 +1166,27 @@ def _once(frame, where: Region, expect: str, stakes: str, choices: tuple, second
         votes.append(Vote("reader", f"reader:{model_id(asked.model or asked.name)}", said, name))
     canon = canonical(judged)
 
-    def third_reader():
-        """The reader of the "third" role, when one is configured whose model is not, as configured, the second's
-        (asked as before 2026-11-18; its vote is counted by family, model_id, so one of the second's family adds none)."""
-        model = _reader_model("third")
+    def third_reader(key: str = vlm.THIRD):
+        """One reader of the "third" role (key: "third", then "third.2"... in the order private/config.json gives them,
+        camkit.vlm.voter_key), when one is configured whose model is not, as configured, the second's (asked as before
+        2026-11-18; its vote is counted by family, model_id, so one of the second's family adds none). Its vote's eye
+        and its raw reading's key are the role key."""
+        model = _reader_model(key)
         second = str(asked.model or asked.name or "unknown").strip().casefold() if asking else None
         if model is None or str(model).strip().casefold() == second:
             return
-        got = ask(frame, where.prompt, TIMEOUTS[stakes], role="third")
-        raw["third"] = _picked(where, got.answer)
-        votes.append(Vote("third", f"reader:{model_id(got.model or model)}", raw["third"], name))
+        got = ask(frame, where.prompt, TIMEOUTS[stakes], role=key)
+        raw[key] = _picked(where, got.answer)
+        votes.append(Vote(key, f"reader:{model_id(got.model or model)}", raw[key], name))
+
+    def third_readers():
+        """The keys of the third role's readers, in turn, while each has a reader (_reader_model); at most
+        MAX_THIRD."""
+        for k in range(MAX_THIRD):
+            key = vlm.voter_key(k)
+            if _reader_model(key) is None:
+                return
+            yield key
 
     def check():
         """The site's own check, one more vote: independent of this frame's OCR text and of the readers."""
@@ -1182,11 +1197,15 @@ def _once(frame, where: Region, expect: str, stakes: str, choices: tuple, second
 
     def third_vote():
         """The votes asked after OCR and the reader, one after another until two independent votes name one
-        option: the second OCR engine, the site's check, then a reader of another model."""
-        for more in (read_ocr2, check, third_reader):
+        option: the second OCR engine, the site's check, then each reader of the third role in turn."""
+        for more in (read_ocr2, check):
             if tally(votes, expect, choices)[0] is not None:
                 return
             more()
+        for key in third_readers():
+            if tally(votes, expect, choices)[0] is not None:
+                return
+            third_reader(key)
 
     def settled():
         win, _ = tally(votes, expect, choices)
@@ -1217,9 +1236,11 @@ def _once(frame, where: Region, expect: str, stakes: str, choices: tuple, second
             return out(canon, "both" if said else "ocr")
         if (text := settled()) is None:                   # OCR read nothing: the reader needs a second vote
             check()
-            if (text := settled()) is None:
-                third_reader()
-                text = settled()
+            for key in third_readers():
+                if settled() is not None:
+                    break
+                third_reader(key)
+            text = settled()
         if at_odds():
             return out(canonical(said), "none", apart())
         if text is None:

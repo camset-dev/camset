@@ -19,7 +19,9 @@ plain reading: Latin letters, digits and the camera's own signs, four characters
 option. On anything else, and always on a frame a press or a proof rides on, the reader is asked first, before any
 press, proof line, guess or failure. Where OCR read nothing, the reader's one option stands, never alone for a press or
 a guard; where they differ, a fresh frame and a third, independent vote follow, and a reading stands only where two
-independent votes name the same option, else the row stops (one engine or model is one vote). A guard refuses whenever
+independent votes name the same option, else the row stops (one engine or model is one vote). The third vote is the
+second OCR engine, a site's own check, then the "third" role's readers, which may be several models asked in turn
+(`private/config.json` `"roles"`). A guard refuses whenever
 two eyes differ, and no vote settles that. Without a reader a doubt fails the row.
 
 "The reader wins" was rejected: on the first camera's proofs, where OCR's reading named no option the reader's was

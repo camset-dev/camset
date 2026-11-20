@@ -43,7 +43,7 @@ Creative Look parameter, its scale's ends and its look, the white balance grid, 
 option the screen draws with the same text as another of its row, a checklist longer than a screenful, a frame with
 no menu up), --per-kind frames chosen the same way every time (half where the proof's own second reading named
 something else than the option proved, half where it named it; a smaller sample is the start of a larger), each
-reader named (--reader; by default the second and third readers, a paid one only when named) is asked the questions
+reader named (--reader; by default the second reader and each third one, a paid one only when named) is asked the questions
 the kit asks there today ("old: option", "old: fields", "old: notice"), the kind's new question ("new"), and the new
 one with the options expected there handed over ("new + options") or with every option but the one the file proved
 ("new + decoy": a reader that picks from the list rather than read the screen names another option there, the wrong
@@ -1298,9 +1298,10 @@ def measure(places: list, args) -> dict:
         cfgs = []                        # the Claude readers alone, unless --reader names others beside them
     else:
         names_ = []
-        for role in ("second", "third"):
-            with contextlib.suppress(vlm.NoReader):
-                names_.append(vlm.role(role)["name"])
+        with contextlib.suppress(vlm.NoReader):
+            names_.append(vlm.role("second")["name"])
+        with contextlib.suppress(vlm.NoReader):         # every reader of the third role, one or several
+            names_ += [r["name"] for r in vlm.voters()]
         cfgs = [r for r in listed if r["name"] in dict.fromkeys(names_) and not vlm.paid(r)]
     cfgs += [c for c in claude if c["name"] not in {str(r["name"]) for r in cfgs}]
     if not cfgs:
@@ -1721,7 +1722,7 @@ def main(argv=None) -> int:
                                                             "sample of proof frames, and judge each answer against "
                                                             "the option the proof's file proved")
     q.add_argument("--reader", action="append", default=[], help="a reader to ask, by its name in private/config.json "
-                                                                 "(repeatable; default: the second and third readers, "
+                                                                 "(repeatable; default: the second reader and each third one, "
                                                                  "a paid one only when named)")
     q.add_argument("--per-kind", type=int, default=None,
                    help=f"frames sampled per kind of screen (default {DEFAULTS['per_kind']})")
