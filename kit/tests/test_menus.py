@@ -973,3 +973,27 @@ def test_a_menu_whose_walk_read_a_row_as_a_list_holds_the_rows_its_options_name(
     got = placement.by_menu(copy.deepcopy(d), trees(rows_too), menus)
     assert got["global:0x0001"] == {"row_menus": ["Still"]} and got["global:0x0002"] == {"row_menus": ["Still"]}   # the rows decide
     assert got["global:0x0003"]["row_menus"] == ["Still", "Movie"]
+
+def test_the_writer_stops_on_records_of_one_row_with_overlapping_menus(tmp_path, monkeypatch):
+    """Through from_data: two records of one name in one place, one placed by its proofs (in the Still menu alone: Movie
+    and S&Q never read the rows under Exposure Std. Adjust) and one by a row given by hand (in every menu with the top
+    row), would show the row twice in the Still menu: the write stops, naming both records."""
+    import schema_update as S
+    key = "TEST_fw1.00"
+    data = tmp_path / "data"
+    (data / key).mkdir(parents=True)
+    camera = {"model": "TEST", **CAMERA, "main_tiles": [{"name": "Stills", "tiles": []}, {"name": "Movie", "tiles": []}]}
+    (data / key / f"camera_{key}.json").write_text(json.dumps(camera), encoding="utf-8")
+    (data / key / f"hand_tables_{key}.json").write_text(json.dumps({"camera": key, "MENUS": MENUS, "HAND_PLACES": {
+        "global:0x0041": {"row": "Shooting > Exposure Std. Adjust > Spot"}}}), encoding="utf-8")
+    tree = tmp_path / "tree.json"
+    tree.write_text(json.dumps(TREE), encoding="utf-8")
+    monkeypatch.setattr(definitions, "DATA", data)
+    monkeypatch.setattr(S.help_files, "OWN", data)
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda k: tree)
+    monkeypatch.setattr(fromdata, "box_orders", lambda k: {})
+    d = doc(setting("global:0x0040", "Spot", "Exposure", "Exposure Std. Adjust > Spot"), setting("global:0x0041", "Spot", "Exposure"))
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(d)
+    said = str(e.value.code)
+    assert "global:0x0040 and global:0x0041 (Spot) are one row in the editor" in said and "twice" in said
