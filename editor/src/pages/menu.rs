@@ -691,10 +691,10 @@ impl App {
             self.rows_cache.borrow_mut().clear();
             // the setting chosen stays chosen, in the group that shows it in this layout
             let chosen = self.item_key.as_ref().and_then(|k| self.schema.settings.iter().find(|s| &s.key == k));
-            if let Some((g, v)) = chosen.filter(|s| self.item.as_ref() == Some(&s.name)).map(|s| (self.shown_group_of(s), self.view_of(s))) {
-                self.group = Some(g);
+            if let Some((g, v, s)) = chosen.filter(|s| self.item.as_ref() == Some(&s.name)).map(|s| (self.shown_group_of(s), self.view_of(s), s.clone())) {
                 // and on the page that shows it in this layout (in or out of the entry for what the menus do not hold)
-                if matches!(self.view, View::Tab(_)) { self.view = v; }
+                let view = matches!(self.view, View::Tab(_)).then_some(v);
+                self.select(view, Some(g), Some((&s.name, &s.key)));
             }
         }
     }
@@ -748,12 +748,31 @@ impl App {
         let Some(s) = self.schema.settings.iter().find(|s| s.key == key).cloned() else { return };
         self.mode = Mode::Edit;
         self.switch_menu_for(&s);
-        self.view = self.view_of(&s);
-        self.group = Some(self.shown_group_of(&s));
-        self.item = None;
-        self.item_key = None;
-        self.sub_focus = None;
+        self.select(Some(self.view_of(&s)), Some(self.shown_group_of(&s)), None);
         self.focus = Focus::Items;
+    }
+
+    /// Choose a row in the window, the one way every site chooses or clears one (a jump, a click on a row or a group,
+    /// the arrow keys, My Menu's page, a menu picked, another set edited): the page `view` (None: the page shown
+    /// stays), the group `group`, and the row `row` by its name and key together (None: no row chosen), no option's
+    /// box marked. The name and the key then always name one row, which is what `follow_selection` acts on.
+    pub(crate) fn select(&mut self, view: Option<View>, group: Option<String>, row: Option<(&str, &str)>) {
+        if let Some(v) = view {
+            self.view = v;
+        }
+        self.group = group;
+        (self.item, self.item_key) = row.map_or((None, None), |(n, k)| (Some(n.to_string()), Some(k.to_string())));
+        self.sub_focus = None;
+    }
+
+    /// The row camera menu `menu` shows for the definition's setting `s` (or a copy of it) in set `target`, where that
+    /// menu lists the setting's row (`menus_of`), as it lays it out (`listed_record`; outside Expert mode the row of the
+    /// setting, whichever record it shows there). None where the menu does not list it. Where a picked menu, another
+    /// set edited or Compare's Open in Edit keeps the row chosen.
+    pub(crate) fn row_in_menu(&self, s: &Setting, target: usize, menu: &str) -> Option<Setting> {
+        let d = self.def_of(s);
+        let row = if self.prefs.expert { d } else { self.main_of(d).unwrap_or(d) };
+        self.menus_of(d).iter().any(|m| m == menu).then(|| self.listed_record(row, target, menu))
     }
 
     /// The pages `s`'s options open on the camera (`menu_rows::pages`: Picture Profile's PP1…), in the set edited; of a
@@ -780,10 +799,8 @@ impl App {
     pub(crate) fn go_to(&mut self, s: &Setting) {
         self.switch_menu_for(s);
         let shown = match self.menu_shown() { Some(m) => self.listed_record(s, self.target, &m), None => s.clone() };
-        self.view = self.shown_view(View::Tab(self.entry_here(&shown)));
-        self.group = Some(self.group_here(&shown));
-        self.item = Some(shown.name.clone());
-        self.item_key = Some(shown.key.clone());          // of two rows of one name, this one (`pick_row`)
+        // of two rows of one name, this one (`pick_row`)
+        self.select(Some(self.shown_view(View::Tab(self.entry_here(&shown)))), Some(self.group_here(&shown)), Some((&shown.name, &shown.key)));
         self.focus = Focus::Items;
     }
 
@@ -820,20 +837,16 @@ impl App {
         if self.menu.as_ref().is_none_or(|c| c.target != self.target || c.opened != opened) {
             let Some(m) = self.opening_menu(self.target) else { return };
             self.menu = Some(MenuChoice { name: m.clone(), target: self.target, opened });
-            match chosen.filter(|s| self.jump_place(s, self.target, Some(&m)).0.as_deref() == Some(m.as_str())) {
-                Some(s) => {
-                    let shown = self.listed_record(&s, self.target, &m);
-                    (self.item, self.item_key) = (Some(shown.name.clone()), Some(shown.key.clone()));
-                }
-                None => (self.item, self.item_key, self.sub_focus) = (None, None, None),
-            }
+            let row = chosen.and_then(|s| self.row_in_menu(&s, self.target, &m));
+            self.select(None, self.group.clone(), row.as_ref().map(|r| (r.name.as_str(), r.key.as_str())));
             return;
         }
         if !matches!(self.view, View::Tab(_)) {
             return;
         }
         let Some(s) = chosen else { return };
-        // a row chosen without its key (a jump that set the row's name alone): that row stays, the key is stale
+        // only a row whose name is one its key's setting takes: a name set without its key (no site does: `select`)
+        // stays, and the stale key goes
         if !self.item.as_ref().is_some_and(|i| self.titles_of(&s).contains(i)) {
             self.item_key = None;
             return;
@@ -845,12 +858,7 @@ impl App {
             return;
         }
         self.switch_menu_for(&s);
-        self.item = Some(shown.name.clone());
-        self.item_key = Some(shown.key.clone());
-        if matches!(self.view, View::Tab(_)) {
-            self.view = self.shown_view(View::Tab(self.entry_here(&shown)));
-            self.group = Some(self.group_here(&shown));
-        }
+        self.select(Some(self.shown_view(View::Tab(self.entry_here(&shown)))), Some(self.group_here(&shown)), Some((&shown.name, &shown.key)));
     }
 
     // --- the camera's menus (`camera.menus`): the one the Menu shows, what it lists, which record a row shows ---
@@ -901,27 +909,20 @@ impl App {
         }
         let chosen = self.item_key.as_ref().and_then(|k| self.index_of_key(k)).map(|i| self.schema.settings[i].clone());
         self.menu = Some(MenuChoice { name: name.to_string(), target: self.target, opened: self.doc.as_ref().map_or(0, |d| d.opened) });
-        let shown = chosen.filter(|s| self.jump_place(s, self.target, Some(name)).0.as_deref() == Some(name)).map(|s| self.listed_record(&s, self.target, name));
-        match shown {
+        match chosen.and_then(|s| self.row_in_menu(&s, self.target, name)) {
             Some(e) => {
-                self.item = Some(e.name.clone());
-                self.item_key = Some(e.key.clone());
-                if matches!(self.view, View::Tab(_)) {
-                    self.view = self.shown_view(View::Tab(self.entry_here(&e)));
-                    self.group = Some(self.group_here(&e));
-                }
+                let (view, group) = if matches!(self.view, View::Tab(_)) { (Some(self.shown_view(View::Tab(self.entry_here(&e)))), Some(self.group_here(&e))) } else { (None, self.group.clone()) };
+                self.select(view, group, Some((&e.name, &e.key)));
             }
             None => {
-                self.item = None;
-                self.item_key = None;
-                self.sub_focus = None;
+                let mut page = (None, self.group.clone());
                 if let View::Tab(t) = &self.view {
                     if !self.side_bar_lists_in(self.target, Some(name), t, "", false) {
                         let first = self.menu_tabs().into_iter().find(|t| self.side_bar_lists_in(self.target, Some(name), t, "", false));
-                        self.view = View::Tab(first.unwrap_or_default());
-                        self.group = None;
+                        page = (Some(View::Tab(first.unwrap_or_default())), None);
                     }
                 }
+                self.select(page.0, page.1, None);
             }
         }
     }
@@ -2209,16 +2210,67 @@ pub(crate) mod facts_tests {
         /// The window settled (two frames), then a click on the one control of `role` whose words are `name`, then
         /// settled again.
         fn click(&mut self, app: &mut App, role: egui::accesskit::Role, name: &str) {
+            self.click_where(app, &[role], |l| l == name, name);
+        }
+
+        /// `click` on the one control of one of `roles` whose words `fits` (`what` names it in a failure).
+        fn click_where(&mut self, app: &mut App, roles: &[egui::accesskit::Role], fits: impl Fn(&str) -> bool, what: &str) {
             let _ = self.run(app, vec![]);
             let said = self.run(app, vec![]);
-            let hit: Vec<egui::accesskit::NodeId> = said.iter().filter(|(_, r, l)| *r == role && l == name).map(|(id, ..)| *id).collect();
-            assert_eq!(hit.len(), 1, "{name}: {said:?}");
+            let hit: Vec<egui::accesskit::NodeId> = said.iter().filter(|(_, r, l)| roles.contains(r) && fits(l)).map(|(id, ..)| *id).collect();
+            assert_eq!(hit.len(), 1, "{what}: {said:?}");
             let click = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Click, target: hit[0], data: None };
             let _ = self.run(app, vec![egui::Event::AccessKitActionRequest(click)]);
             // a header opening takes a few frames to show what it holds
             for _ in 0..6 {
                 let _ = self.run(app, vec![]);
             }
+        }
+
+        /// An arrow key pressed, then the window settled.
+        fn key(&mut self, app: &mut App, key: egui::Key) {
+            let _ = self.run(app, vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
+            let _ = self.run(app, vec![]);
+            let _ = self.run(app, vec![]);
+        }
+    }
+
+    /// Integration review finding 1: with a row chosen, Up/Down in the groups column move to the next group, with menus
+    /// as without ("JPEG/HEIF Switch" chosen, Left, Down: the group after Image Quality/Rec); a row picked on the My Menu
+    /// page and then a click on Setup in the Menu opens Setup; and a menu picked with a row chosen keeps that row where
+    /// the menu lists it (ISO in Still, then Movie: its ISO row, the movie copy's).
+    #[test]
+    fn a_row_chosen_never_takes_the_selection_back() {
+        use egui::accesskit::Role;
+        for menus in [None, Some(crate::test_support::stub_menus as fn(&mut serde_json::Value))] {
+            let (mut app, dir, user) = sample_app("menus_select", menus);
+            let mut w = Win::new();
+            let jpeg = setting(&app, "global:0x01d8");
+            app.go_to(&jpeg);
+            let View::Tab(tab) = app.view.clone() else { panic!() };
+            let groups: Vec<String> = app.tab_groups(&tab).into_iter().map(|(n, _, _)| n).collect();
+            let at = groups.iter().position(|g| Some(g) == app.group.as_ref()).unwrap();
+            w.key(&mut app, egui::Key::ArrowLeft);
+            assert!(app.focus == Focus::Groups);
+            w.key(&mut app, egui::Key::ArrowDown);
+            assert_eq!((app.view.clone(), app.group.clone()), (View::Tab(tab.clone()), Some(groups[at + 1].clone())), "menus: {}", menus.is_some());
+            // My Menu's page, a row of its own picked there, then Setup
+            let iso = setting(&app, "global:0x0334");
+            app.go_to(&iso);
+            app.view = View::MyMenu;
+            w.click_where(&mut app, &[Role::Button, Role::Link, Role::Label], |l| l == "Display From My Menu", "Display From My Menu");
+            assert_eq!(app.item.as_deref(), Some("Display From My Menu"));
+            w.click_where(&mut app, &[Role::Button], |l| l.starts_with("Setup  ("), "Setup");
+            assert_eq!(app.view, View::Tab("Setup".into()), "menus: {}", menus.is_some());
+            if menus.is_some() {
+                app.set_menu("Still");
+                app.go_to(&iso);
+                app.set_menu("Movie");
+                let _ = w.run(&mut app, vec![]);
+                let row = app.listed_record(&iso, 0, "Movie");
+                assert_eq!((app.menu_shown().as_deref(), app.item.clone(), app.item_key.clone()), (Some("Movie"), Some(row.name), Some(row.key)), "the row stays chosen in Movie's menu");
+            }
+            done(&dir, &user);
         }
     }
 

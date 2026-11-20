@@ -634,12 +634,9 @@ impl App {
         self.mode = Mode::Edit;
         self.target = if section == 0 || s.in_sets { section } else { 0 };
         // Edit in the menu Compare showed, on the setting's row there, where that menu lists it
-        let d = self.def_of(s);
-        let main = self.main_of(d).unwrap_or(d).clone();
-        match menu.filter(|m| self.menus_of(&main).contains(m)) {
-            Some(m) => {
+        match menu.and_then(|m| self.row_in_menu(s, self.target, &m).map(|row| (m, row))) {
+            Some((m, row)) => {
                 self.set_menu(&m);
-                let row = self.listed_record(&main, self.target, &m);
                 self.go_to(&row);
             }
             None => self.go_to(s),

@@ -476,7 +476,7 @@ impl App {
         }
         // the settings of My Menu's own tab, by group, as the camera lists them after its pages
         let groups = self.mymenu_groups();
-        let mut pick: Option<(String, String)> = None;
+        let mut pick: Option<(String, Setting)> = None;
         if !groups.is_empty() {
             ui.add_space(12.0);
             ui.separator();
@@ -498,7 +498,7 @@ impl App {
                             r.scroll_to_me(Some(egui::Align::Center));
                             ui.data_mut(|d| d.insert_temp(scrolled, key));
                         }
-                        if r.clicked() { pick = Some((group.clone(), s.name.clone())); }
+                        if r.clicked() { pick = Some((group.clone(), s.clone())); }
                         // a setting kept in several records changes in all of them, as in its tab (`apply`)
                         self.compact_editor_in(ui, 0, s, editable, &mut actions);
                         if edited && ui.small_button("Revert").clicked() {
@@ -524,8 +524,8 @@ impl App {
                 Err(why) => self.status = why,
             }
         }
-        if let Some((g, i)) = pick {
-            (self.group, self.item) = (Some(g), Some(i));
+        if let Some((g, s)) = pick {
+            self.select(None, Some(g), Some((&s.name, &s.key)));
         }
         if let Some(s) = go {
             self.open_in_menu(&s);

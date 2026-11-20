@@ -236,13 +236,15 @@ impl App {
         let Some(key) = step_in(keys.len(), pos, step).map(|i| keys[i].clone()) else { return };
         match self.mode {
             Mode::Edit => {
-                self.view = match key {
+                let view = match key {
                     BarKey::Main => View::Main,
                     BarKey::MyMenu => View::MyMenu,
                     BarKey::Tab(t) => View::Tab(t),
                     BarKey::All => return,
                 };
-                self.group = None;
+                // the row chosen stays chosen, as after a click on the entry
+                let (item, key) = (self.item.clone(), self.item_key.clone());
+                self.select(Some(view), None, item.as_deref().zip(key.as_deref()));
             }
             Mode::Compare => {
                 self.compare_entry = key;
@@ -294,8 +296,7 @@ impl App {
         }
         // keep the selection valid after a tab switch, a search or a filter
         if !self.group.as_ref().is_some_and(|g| groups.iter().any(|(n, _, _)| n == g)) {
-            self.group = Some(groups[0].0.clone());
-            self.item = None;
+            self.select(None, Some(groups[0].0.clone()), None);
         }
         let gi = groups.iter().position(|(n, _, _)| Some(n) == self.group.as_ref()).unwrap_or(0);
         let (gname, family, rows) = &groups[gi];
@@ -306,16 +307,15 @@ impl App {
             // a sub-choice shown beside its owner's option, opened from elsewhere, opens its owner's row, its box marked
             if let Some(i) = Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref()).filter(|i| !menu_rows::order(&lines).contains(i)) {
                 if let Some(o) = menu_rows::beside_owner(rows.iter().map(|r| &r[0]), &rows[i][0]) {
+                    self.select(None, self.group.clone(), Some((&o.name, &o.key)));
                     self.sub_focus = Some(rows[i][0].key.clone());
                     self.sub_scroll.set(true);
-                    self.item = Some(o.name.clone());
-                    self.item_key = Some(o.key.clone());
                 }
             }
             match Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref()) {
                 None => {
-                    self.item = menu_rows::order(&lines).first().map(|&i| rows[i][0].name.clone());
-                    self.item_key = None;
+                    let first = menu_rows::order(&lines).first().map(|&i| &rows[i][0]);
+                    self.select(None, self.group.clone(), first.map(|s| (s.name.as_str(), s.key.as_str())));
                 }
                 // a jump to a row a folded row of the camera hides unfolds it
                 Some(i) => {
@@ -337,9 +337,7 @@ impl App {
             let (up, down) = ui.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown)));
             let to = if down && pos + 1 < shown.len() { Some(shown[pos + 1]) } else if up && pos > 0 { Some(shown[pos - 1]) } else { None };
             if let Some(i) = to {
-                self.item = Some(rows[i][0].name.clone());
-                self.item_key = Some(rows[i][0].key.clone());
-                self.sub_focus = None;
+                self.select(None, self.group.clone(), Some((&rows[i][0].name, &rows[i][0].key)));
                 moved = true;
             }
         }
@@ -524,9 +522,7 @@ impl App {
                 });
             });
             if let Some((name, key)) = pick_item {
-                self.item = Some(name);
-                self.item_key = Some(key);
-                self.sub_focus = None;
+                self.select(None, self.group.clone(), Some((&name, &key)));
             }
             if let Some(path) = fold {
                 let key = fold_key(&path);
@@ -539,8 +535,7 @@ impl App {
                     if let Some(at) = at.filter(|&a| hidden[a]) {
                         let near = shown.iter().find(|(a, _)| *a > at).or(shown.iter().rev().find(|(a, _)| *a < at));
                         if let Some(&(_, i)) = near {
-                            self.item = Some(rows[i][0].name.clone());
-                            self.item_key = Some(rows[i][0].key.clone());
+                            self.select(None, self.group.clone(), Some((&rows[i][0].name, &rows[i][0].key)));
                         }
                     }
                 }
@@ -550,10 +545,7 @@ impl App {
             }
         }
         if let Some(g) = pick_group {
-            self.group = Some(g);
-            self.item = None;
-            self.item_key = None;
-            self.sub_focus = None;
+            self.select(None, Some(g), None);
             self.focus = Focus::Groups;
         }
         actions

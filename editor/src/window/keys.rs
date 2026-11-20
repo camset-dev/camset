@@ -63,9 +63,8 @@ impl App {
         }
         let groups: Vec<String> = self.tab_groups(&tab).into_iter().map(|(n, _, _)| n).collect();
         let pos = groups.iter().position(|g| Some(g) == self.group.as_ref()).unwrap_or(0);
-        if let Some(g) = step_in(groups.len(), pos, step).and_then(|i| groups.get(i)) {
-            self.group = Some(g.clone());
-            self.item = None;
+        if let Some(g) = step_in(groups.len(), pos, step).and_then(|i| groups.get(i)).cloned() {
+            self.select(None, Some(g), None);
         }
     }
 
@@ -161,10 +160,7 @@ impl App {
             self.menu = Some(MenuChoice { name: m, target: self.target, opened: self.doc.as_ref().map_or(0, |d| d.opened) });
         }
         self.status = format!("Edit {} of {n}: {}", k + 1, self.schema.settings.iter().find(|s| s.key == key).map_or(name.clone(), |s| s.name.clone()));
-        self.view = self.shown_view(View::Tab(tab));
-        self.group = Some(group);
-        self.item = Some(name);
-        self.item_key = Some(key);
+        self.select(Some(self.shown_view(View::Tab(tab))), Some(group), Some((&name, &key)));
         self.focus = Focus::Items;
     }
 }

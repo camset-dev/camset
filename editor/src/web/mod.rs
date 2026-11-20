@@ -1245,11 +1245,8 @@ impl App {
     /// (`open_in_edit_from_compare`): where that menu lists the setting's row, that row there (`open_key` where it shows
     /// another record than `s`), else where a jump to `s` lands (`web_place`).
     fn compare_place(&self, s: &Setting, target: usize, menu: Option<&str>) -> serde_json::Map<String, Value> {
-        let d = self.def_of(s);
-        let main = self.main_of(d).unwrap_or(d);
-        match menu.filter(|m| self.menus_of(main).iter().any(|x| x == m)) {
-            Some(m) => {
-                let row = self.listed_record(main, target, m);
+        match menu.and_then(|m| self.row_in_menu(s, target, m).map(|row| (m, row))) {
+            Some((m, row)) => {
                 let mut out = self.web_place(&row, target, Some(m));
                 if row.key != s.key {
                     out.insert("open_key".into(), json!(row.key));
