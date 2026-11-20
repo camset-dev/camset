@@ -188,6 +188,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`customshoot_values.py --follow ROW=OPTION,OPTION --record KEY` registers a Recall Custom hold as it stands with a
+  live list row on each option in turn, in one session,** for a record the hold writes from a setting its screen does
+  not show (the a1 II's lead: 0x0c39 and the Exposure step). Each Register writes a "registration mirror" proof line, applied
+  only where the hold's element of the record changed to the option's code.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.
