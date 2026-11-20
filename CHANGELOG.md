@@ -189,10 +189,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 ### The mapping kit
 
 - **A stopped Recall Custom run (`customshoot_values.py`, `customshoot_run.py`) presses nothing more but MENU:** its
-  start file goes back and is checked, it exits 8 (4 for a STOP file left before it, which it names), and where it had
-  opened a hold's screen it says the holds' working copy was not put back and gives `customshoot_values.py --put-back`,
-  which does that alone. A notice after Register counts only as the camera's "Registered." alone, and the coverage
-  ledger no longer reads a registration mirror line not applied as a refusal.
+  start file goes back and is checked, it exits 8 (4 for a STOP file left before it, which it names, or a working copy
+  only a hand can put back), it gives `customshoot_values.py --put-back --against <its start file>` only where opening
+  hold 3 restores the copy, and a hold that failed part way now exits 8 where it exited 0. A notice after Register
+  counts only as the camera's "Registered." alone, and the coverage ledger no longer reads a registration mirror line
+  not applied as a refusal.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.
