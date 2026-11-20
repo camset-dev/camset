@@ -189,6 +189,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **A carousel option's lit box holding a long value is seen as lit,** where the pixel reader took only a box 60 %
   orange or more and "2 Images (+)" or "2 Images (-)" over HDMI leaves 58-60 % (Bracket Type's grid stopped at its first
   Down so): a box under that whose outline is whole now counts too.
+- **A row's label is read to the right of the icon the camera draws before it** (a light box with letters in it, or
+  a solid mark, found by its pixels and painted over for OCR), in the page model and on a crawl's submenu rows, and
+  the row's `icon` says what was left out, or why the label stayed as read where that cannot be told. The a1 II's
+  scans now name S&Q Settings, ISO and IP Address Setting without a label read by eye, and the crawls Record Setting
+  where the reader read the S&Q box into it.
 - **`drive.py` and `crawl_run.py` start and end through the kit's one session, as the provers do,** and a test fails
   any runner that downloads its start file or uploads a file outside it but the few it names with why. With HDMI eyes
   and a working feed, their check after putting the start file back reconnects once the camera is back from its restart,
