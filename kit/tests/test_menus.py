@@ -12,6 +12,8 @@ import pytest
 from camkit import definitions, placement
 from writer import fromdata, hand_tables
 
+import check_public
+
 
 def row(label, *kids, options=(), state="", why=""):
     return {"label": label, "state": state, "why": why, "options": list(options), "children": list(kids)}
@@ -258,3 +260,24 @@ def test_without_the_menus_table_the_places_are_todays(tmp_path, monkeypatch):
     placed = fromdata.with_place(d["settings"][0], with_menus["global:0x0001"])
     at = list(placed).index("order")
     assert list(placed)[at + 1:at + 4] == ["row", "row_at", "row_menus"]
+
+
+def test_check_public_refuses_what_a_menu_must_never_say():
+    """camera.menus and each setting's row_menus and row_places hold names and places only: a row's state, an option
+    list, a page counter or one of My Menu's item pages there is refused, as is a menu name no camera menu has."""
+    d = {**doc(), "camera": {"menus": MENUS, "text": {}}, "settings": [
+        {"key": "global:0x0001", "row": ["Drive Mode"], "row_at": [2], "row_menus": ["Still", "Movie"],
+         "row_places": {"Movie": {"row": ["Drive Mode"], "row_at": [1]}}}]}
+    assert check_public.menu_problems(d) == []
+    bad = copy.deepcopy(d)
+    bad["camera"]["menus"][0]["state"] = "walked"
+    s = bad["settings"][0]
+    s["row_menus"].append("Night")
+    s["row_places"]["Movie"].update(options=["Off", "On"], state="greyed")
+    s["row_places"]["Still"] = {"row": ["38/63"], "row_at": [0], "row_group": "My Menu1"}
+    got = "\n".join(check_public.menu_problems(bad))
+    for words in ("camera.menus[0] holds 'state'", "row_menus names 'Night'", "holds 'options'", "holds 'state'",
+                  "'38/63' is a page counter", "'My Menu1' is one of My Menu's item pages"):
+        assert words in got, words
+    assert check_public.menu_problems({**doc(), "settings": [{"key": "k", "row_menus": ["Still"]}]}) == \
+        ["k: row_menus or row_places without camera.menus", "k: row_menus names 'Still', no camera menu"]

@@ -55,6 +55,8 @@ Contents (text files, and the ASCII strings in binary ones):
   file it is checked by), and a definition whose "model" is not its layout's is refused.
 - Each definition is lean (camkit.definitions.evidence_in_public): none of the mapping's evidence (how, when, in which
   run or from which state a thing was proved), which stays in the mapper's private/evidence/ (docs/decisions/0016).
+  Its camera menus (camera.menus, each setting's row_menus and row_places) hold names and places only (menu_problems):
+  no row's state, no option list read off a carousel, no My Menu item page, no page counter.
 - So is every camera's data folder, data/<model>_fw<fw>/ (camkit.datafiles.evidence_in_public): no menu tree, no
   accepted file and no record shapes there (private whole), no coverage ledger's looks file, nor its public form,
   printed and never kept (docs/decisions/0023), no run's folder (runs/, or Windows' runs\\), kit2_ run name, ISO date
@@ -819,12 +821,57 @@ def data_problems() -> list:
     return out
 
 
+MENU_FIELDS = ("name", "modes", "main_tiles", "hover")                      # a camera menu (camera.menus)
+MENU_PLACE = ("row", "row_at", "row_tab", "row_group", "under_option")       # a place in a menu (row_places)
+PAGE_COUNTER = re.compile(r"^\s*\d+\s*/\s*\d+\s*$")                       # "38/63": moves with the camera's state
+
+
+def menu_problems(doc: dict) -> list:
+    """Each place a definition's camera menus say more than names and places (decision 16): a camera menu or a place in
+    a menu holding a field it does not have (a row's state, an option list read off a carousel, a page), a row_menus or
+    row_places name no camera menu has, a label that is a page counter ("38/63", which moves with My Menu's pages), or a
+    tab, group or row that is one of My Menu's item pages (camera.text.my_menu_name and a number: what the owner put
+    there)."""
+    cam = doc.get("camera") or {}
+    menus = cam.get("menus")
+    mine = re.escape(((cam.get("text") or {}).get("my_menu_name")) or "My Menu")
+    item_page = re.compile(rf"^\s*{mine}\s*\d+\s*$", re.I)
+    out, names = [], set()
+    for i, m in enumerate(menus or []):
+        if not isinstance(m, dict):
+            out.append(f"camera.menus[{i}] is no menu")
+            continue
+        out += [f"camera.menus[{i}] holds {f!r}" for f in m if f not in MENU_FIELDS]
+        names.add(m.get("name"))
+
+    def labels(where, *texts):
+        return [f"{where}: {x!r} is a page counter" for x in texts if isinstance(x, str) and PAGE_COUNTER.match(x)] + \
+            [f"{where}: {x!r} is one of My Menu's item pages" for x in texts if isinstance(x, str) and item_page.match(x)]
+    for s in doc.get("settings") or []:
+        k = s.get("key")
+        if ("row_menus" in s or "row_places" in s) and menus is None:
+            out.append(f"{k}: row_menus or row_places without camera.menus")
+        out += [f"{k}: row_menus names {n!r}, no camera menu" for n in s.get("row_menus") or [] if n not in names]
+        out += labels(f"{k}: row", *(s.get("row") or []), s.get("row_tab"), s.get("row_group"))
+        for n, place in (s.get("row_places") or {}).items():
+            where = f"{k}: row_places[{n!r}]"
+            if n not in names or n not in (s.get("row_menus") or []):
+                out.append(f"{where}: no camera menu of the setting's row_menus")
+            if not isinstance(place, dict):
+                out.append(f"{where} is no place")
+                continue
+            out += [f"{where} holds {f!r}" for f in place if f not in MENU_PLACE]
+            out += [f"{where}: row holds {x!r}, not a label" for x in place.get("row") or [] if not isinstance(x, str)]
+            out += labels(where, *(place.get("row") or []), place.get("row_tab"), place.get("row_group"), place.get("under_option"))
+    return out
+
+
 def lean_problems() -> list:
     """Each definition that carries the mapping's evidence (definitions.evidence_in_public), place by place (the first
     five of each, and how many in all)."""
     out = []
     for p, doc in definition_files():
-        found = definitions.evidence_in_public(doc, p.read_text(encoding="utf-8"))
+        found = definitions.evidence_in_public(doc, p.read_text(encoding="utf-8")) + menu_problems(doc)
         rel = p.relative_to(ROOT).as_posix()
         out += [f"{rel}: carries evidence ({why}); kit/schema_update.py --write keeps it in private/evidence/"
                 for why in found[:5]]
@@ -883,7 +930,7 @@ def blob_problems(path: str, text: str) -> list:
             doc = json.loads(text)
         except ValueError:
             return []
-        return definitions.evidence_in_public(doc, text)[:5] if isinstance(doc, dict) else []
+        return (definitions.evidence_in_public(doc, text) + menu_problems(doc))[:5] if isinstance(doc, dict) else []
     return []
 
 
