@@ -516,8 +516,55 @@ def test_a_sampled_record_every_value_of_which_a_line_chose_is_proved(capsys):
     proved = {}
     assert proofs.walked_whole(report, by_row, sampled, by_key, proved) == []
     assert set(sampled) == set(by_key), "4 written only by field 1's line, 0x0003's 4 not credited: still samples"
+    # no line of either field changed nothing: no unwritten value is a held option's (writer.proofs.still_rows)
+    assert proofs.walked_whole(report, by_row, sampled, by_key, proved, proofs.still_rows(lines, set(), report)) == []
     lines.append(line(0, 2, "global:0x0001", 4))              # a later run chose it too
     by_row = proofs.written_by_row(lines, set())
     assert proofs.walked_whole(report, by_row, sampled, by_key, proved) == ["global:0x0001"]
     assert proved == {"global:0x0001": {2, 3, 4}} and set(sampled) == {"global:0x0002", "global:0x0003"}
     assert "global:0x0001" in capsys.readouterr().out
+
+
+def test_a_walk_that_chose_the_held_option_too_is_proved_whole(capsys):
+    """Playback's Aspect Marker Level (2026-11-19): every level 0 to 15 chosen, fifteen seen written from the
+    sixteenth, the one the camera held, chosen last with nothing to show; filed as a sample (a range, numbers), it was
+    never walked whole, and its public proof listed every value beside "sampled": {"linear": null}. The row's one
+    credited value no counted line wrote is chosen where a counted line of the row chose an option and changed nothing
+    at all (writer.proofs.still_rows): the record is proved, its names its readers', none "sampled". Two such values
+    (two sessions' starts), a row whose unwritten value only a refused line or a line that wrote another record left,
+    or a row sampled from the held option, stay unchosen. Made-up records and lines."""
+    from writer import proofs
+    k, row = "global:0x0001", "Level [ctx]"
+    by_key = {k: {"key": k, "name": "Level", "values": [[v, str(v)] for v in range(4)]}}
+
+    def report(**more):
+        return [{"row": row, "records": {k: {"proved": {str(v): v for v in range(4)},
+                                             "names": {str(v): "two readers" for v in range(4)}, **more}}}]
+
+    def line(v, changed=True, applied=True, key=k):
+        return {"path": ["Level"], "kind": "list", "index": v, "label": str(v), "applied": applied, "context": "ctx",
+                "dat": f"{v}.DAT", "base": "start.DAT", "changes": [{"key": key, "before": 3, "after": v}] if changed else []}
+
+    def walked(lines, rep, readers=None):
+        sampled = {k: {"proofs": 4, "linear": None}}
+        proved, by_row = {}, proofs.written_by_row(lines, set())
+        return proofs.walked_whole(rep, by_row, sampled, by_key, proved, proofs.still_rows(lines, set(), rep), readers), \
+            proved, sampled
+    lines = [line(0), line(1), line(2), line(3, changed=False)]                   # 3 held, chosen last
+    assert proofs.written_by_row(lines, set())[row][k] == {0, 1, 2} and proofs.still_rows(lines, set(), report()) == {row}
+    assert proofs.walked_whole(report(), proofs.written_by_row(lines, set()), {k: {}}, by_key, {}) == [], \
+        "without the still rows, as before"
+    readers = {k: {}}
+    got, proved, sampled = walked(lines, report(), readers)
+    assert got == [k] and proved == {k: {0, 1, 2, 3}} and not sampled
+    assert readers[k] == {v: "two readers" for v in range(4)} and "walked whole" in capsys.readouterr().out
+    s = {**by_key[k], "proved": {"values": [0, 1, 2, 3], "names": {str(v): "sampled" for v in range(4)}}}
+    proofs.with_names(s, {}, {}, {})          # an old "sampled" on a value a proof chose is not kept
+    assert s["proved"]["names"] == {str(v): "one reader" for v in range(4)}
+    assert definitions.lean_proof(s["proved"]) == {"values": [0, 1, 2, 3]}
+    for stays, rep in (([line(0), line(1), line(2, changed=False), line(3, changed=False)], report()),   # two unwritten
+                       ([line(0), line(1), line(2), line(3, applied=False, changed=False)], report()),   # refused
+                       ([line(0), line(1), line(2), line(3, key="global:0x0009")], report()),            # another's
+                       (lines, report(sampled_from_start=True))):
+        got, proved, sampled = walked(stays, rep)
+        assert got == [] and k in sampled, stays

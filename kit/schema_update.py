@@ -15,8 +15,9 @@ Per record proved on the camera (kit2_pass2/report.json in the camera's runs/<mo
   proved        {"run", "date", "values": [...], "menu": [row paths]}. Number records get
                 "sampled": {"proofs", "linear"} and no values: each sample changes one digit of the
                 camera's own setting, so the stored numbers would give that setting away; but one every value
-                of which a counted line of its own rows chose and saw written, whatever later sampled runs did,
-                is proved with its values (walked_whole: none is left to give anything away). Of the proof the
+                of which a counted line of its own rows chose and saw written (or chose as the option the camera
+                held, still_rows), whatever later sampled runs did, is proved with its values and its readers' names
+                (walked_whole: none is left to give anything away). Of the proof the
                 definition held before, only a value a counted proof line still wrote stays beside the report's,
                 and is listed ("kept"); never an old menu row or count (kept_proof). That is the whole proof, as
                 the kit holds it and the private evidence file keeps it; the public definition holds neither the run
@@ -164,7 +165,7 @@ from writer.fromdata import (BUTTON_WORD, EXPERT_WORDS, MAPPING_WORDS, PLACE_KEY
 from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis_value_rows,  # noqa: E402,F401
                            box_numbers, disputed_out, kept_proof, mixed, note_readers, one_slot_table, print_kept,
                            reader_source, with_drawn, sampled_scale, scaled_numbers, shown, menu_row, with_allowances, written_values,
-                           with_in_sets_proved, without_set_twins, walked_whole, written_by_row,
+                           with_in_sets_proved, without_set_twins, still_rows, walked_whole, written_by_row,
                            with_menu_rows, with_names, with_option_trees, with_scales, with_shown_as, without_held,
                            without_observed, without_written_with)
 from writer.offered import check_video_systems, cut_to_walks, not_offered_marks, with_video_systems  # noqa: E402
@@ -1033,6 +1034,7 @@ def main():
     # beside the report's (kept_proof); an old menu row never is; and each row's own, which says a sampled record walked
     # whole by some run (walked_whole)
     by_row = written_by_row(all_proofs, cut_short, {e["row"] for e in report})
+    still = still_rows(all_proofs, cut_short, report)      # rows whose walk chose the held option too (walked_whole)
     written = written_values(all_proofs, cut_short, by_row=by_row)
     for e in report:
         row = re.sub(r" \[field \d+\]$", "", e["row"])
@@ -1380,7 +1382,7 @@ def main():
                | {b["label"] for b in by_key[k].get("menu_blocked") or []} for k in proved}
     print(f"one table: {one_slot_table(doc, proved, derived, changed, refused)} values named afresh from another slot "
           "of their array")
-    walked_whole(report, by_row, sampled, by_key, proved)    # a sample every value of which some line chose: proved
+    walked_whole(report, by_row, sampled, by_key, proved, still, readers)    # every value some line chose: proved
     kept_old = {}                      # the old values each proof keeps that this report did not credit (kept_proof)
     by_lines = by_lines_of(FRAME_PROOFS)
     for k in proved:

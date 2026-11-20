@@ -216,24 +216,45 @@ def kept_proof(old: dict | None, new: dict, gone: frozenset = frozenset(), writt
     return out, said
 
 
-def written_by_row(proofs: list, skip: set, reported=None) -> dict:
-    """{the report's row (pass2_report.row_name): {key: the values that row's own counted lines wrote to it}}: each
-    line not cut short (skip, as pass2_report.report_proofs gives it), not left out as made where the camera stood
-    (stood_on, `reported` the rows of the report the writer reads), not of a row sampled from the option the camera
-    held (sampled_from_start: its values are a count, never listed, decision 16), applied and planned, each change to a
-    record or an array's slot (element_changes) but one carried over from the option before (carried_over)."""
+def _counted(proofs: list, skip: set, reported=None):
+    """(line, its changes, which of them it carried over) of each proof line a row's own count takes: not cut short
+    (skip, as pass2_report.report_proofs gives it), not left out as made where the camera stood (stood_on, `reported`
+    the rows of the report the writer reads), not of a row sampled from the option the camera held (sampled_from_start:
+    its values are a count, never listed, decision 16), applied and planned; its changes each change to a record or an
+    array's slot (element_changes), and the keys of those carried over from the option before (carried_over)."""
     left = set(skip) | stood_on(proofs, skip, reported)
     carried = {(c["dat"], c["key"]) for c in carried_over(proofs, left)}
     from_start = {name for name, opts in rows_of(None, proofs, left).items() if sampled_from_start(opts)}
-    out = collections.defaultdict(lambda: collections.defaultdict(set))
     for i, r in enumerate(proofs):
         if i in left or r.get("applied") is False or r.get("planned") is False or row_name(r) in from_start:
             continue
         slots = element_changes(r) if "changes" in r or r.get("proof") == "display" else []
-        for c in list(r.get("changes") or []) + slots:
-            if (r.get("dat"), c.get("key")) not in carried and isinstance(c.get("after"), (int, str)):
+        changes = list(r.get("changes") or []) + slots
+        yield r, changes, {c.get("key") for c in changes if (r.get("dat"), c.get("key")) in carried}
+
+
+def written_by_row(proofs: list, skip: set, reported=None) -> dict:
+    """{the report's row (pass2_report.row_name): {key: the values that row's own counted lines wrote to it}}: each
+    line _counted takes, each of its changes to a value but one carried over from the option before."""
+    out = collections.defaultdict(lambda: collections.defaultdict(set))
+    for r, changes, carried in _counted(proofs, skip, reported):
+        for c in changes:
+            if c.get("key") not in carried and isinstance(c.get("after"), (int, str)):
                 out[row_name(r)][c["key"]].add(c["after"])
     return {row: dict(keys) for row, keys in out.items()}
+
+
+def still_rows(proofs: list, skip: set, report: list) -> frozenset:
+    """The report's rows one of whose counted lines (_counted) chose an option, the camera keeping it (applied true),
+    and changed nothing at all, no record and no slot: a walk's visit to the option the camera held as it began, whose
+    value nothing shows written (walked_whole). A line that changed another record (an option that wrote elsewhere) is
+    none, and a line with no diff ("changes" missing) says nothing."""
+    rows = {e["row"] for e in report}
+    out = set()
+    for r, changes, _ in _counted(proofs, skip, rows):
+        if row_name(r) in rows and r.get("applied") is True and isinstance(r.get("changes"), list) and not changes:
+            out.add(row_name(r))
+    return frozenset(out)
 
 
 def written_values(proofs: list, skip: set, reported=None, by_row: dict = None) -> dict:
@@ -246,20 +267,30 @@ def written_values(proofs: list, skip: set, reported=None, by_row: dict = None) 
     return dict(out)
 
 
-def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved: dict) -> list:
-    """The records a writer files as samples (`sampled`: a number field's, a box's, a grid's, a scale's) of which every
-    value the setting lists some line chose and saw written: a value one of the report's rows naming the record
-    credits (its "proved") that a counted line of that very row wrote to it (`by_row`, written_by_row), whatever a
-    later sampled run of the row did. Such a record is no sample: it is proved, each value listed (`proved`), and
-    taken out of `sampled`; none of its values is left that no line chose, so the list says nothing of the camera's
-    own setting (docs/decisions/0016). A record with a value no line chose stays a sample (review 2026-11-18: ISO
-    Range Limit, walked whole in one run and sampled again in later ones). Returns their keys, each printed."""
+def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved: dict, still=frozenset(),
+                 readers: dict | None = None) -> list:
+    """The records a writer files as samples (`sampled`: a number field's, a box's, a grid's, a scale's, a list of
+    numbers with a range) of which every value the setting lists some line chose: a value one of the report's rows
+    naming the record credits (its "proved") that a counted line of that very row wrote to it (`by_row`,
+    written_by_row), whatever a later sampled run of the row did; and the one value the row credits that none of its
+    counted lines wrote, where a counted line of the row chose an option and changed nothing at all (`still`,
+    still_rows): the option the camera held when the walk began, which a walk chooses as it chooses the others and no
+    change can show (Playback's Aspect Marker Level, 2026-11-19: fifteen levels written from the sixteenth, which the
+    camera held, chosen last). Two or more such values in a row (two sessions, two starts) stay unchosen. Such a record
+    is no sample: it is proved, each value listed (`proved`), and taken out of `sampled`; none of its values is left
+    that no line chose, so the list says nothing of the camera's own setting (docs/decisions/0016). A record with a
+    value no line chose stays a sample (review 2026-11-18: ISO Range Limit, walked whole in one run and sampled again in
+    later ones). With `readers` (note_readers'), each such record's names take its rows' readings, as a list's do.
+    Returns their keys, each printed."""
     chose = collections.defaultdict(set)
     for e in report:
         for k, r in e["records"].items():
             if k in sampled:
                 credited = {v for v in (r.get("proved") or {}).values() if isinstance(v, (int, str))}
-                chose[k] |= set((by_row.get(e["row"]) or {}).get(k, ())) & credited
+                wrote = set((by_row.get(e["row"]) or {}).get(k, ())) & credited
+                held = credited - wrote
+                chose[k] |= wrote | (held if len(held) == 1 and e["row"] in still and not r.get("sampled_from_start")
+                                     else set())
     out = []
     for k in sorted(sampled):
         codes = {v for v, _ in (by_key.get(k) or {}).get("values") or []}
@@ -267,8 +298,11 @@ def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved
             proved[k] = set(proved.get(k, ())) | codes
             del sampled[k]
             out.append(k)
-            print(f"  walked whole  {k} {by_key[k]['name'][:44]}: each of its {len(codes)} values chosen and seen "
-                  "written; proved, no longer a sample")
+            for e in report if readers is not None else ():
+                if k in e["records"]:
+                    note_readers(readers, k, e["records"][k])
+            print(f"  walked whole  {k} {by_key[k]['name'][:44]}: each of its {len(codes)} values chosen; proved, no "
+                  "longer a sample")
     return out
 
 
@@ -334,7 +368,9 @@ def with_names(s: dict, readers: dict, over: dict, derived: dict) -> None:
     value a rule or a hand table named this run, or a sampled scale's, as such. Nothing when the setting has no proof. A
     rule's or a table's word the definition said before (RULE_SOURCES) is never kept: this run's rules and tables say
     it again or nothing does (docs/decisions/0025). Nor is a source that is no longer one ("held", docs/decisions/0016),
-    nor an old reading of a value a picker's sample from the held option proved (its proof now a count, "from_start")."""
+    nor an old reading of a value a picker's sample from the held option proved (its proof now a count, "from_start"),
+    nor an old "sampled" on a value a proof chose, which no sample put between others (a scale walked whole since:
+    walked_whole)."""
     p = s.get("proved")
     if not p:
         return
@@ -346,7 +382,8 @@ def with_names(s: dict, readers: dict, over: dict, derived: dict) -> None:
     out = {}
     for v in sorted(seen | {v for v, _ in s.get("values") or [] if not isinstance(v, (list, dict))}, key=value_order):
         if v in seen:
-            src = over.get(v) or readers.get(v) or old.get(str(v)) or derived.get(v) or "one reader"
+            src = over.get(v) or readers.get(v) or (old.get(str(v)) if old.get(str(v)) != "sampled" else None) \
+                or derived.get(v) or "one reader"
         else:
             src = over.get(v) or derived.get(v) or ("sampled" if line else None) \
                 or (old.get(str(v)) if old.get(str(v)) in ("sampled", "schema kept") else None)
