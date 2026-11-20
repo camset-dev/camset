@@ -2043,7 +2043,7 @@ function drawChanges(list) {
     el("thead", {}, el("tr", {}, el("th", {}, "Where"), el("th", {}, "Setting"), el("th", {}, "Was"), el("th", {}, "Now"), el("th", {}, ""))),
     el("tbody", {}, ...list.map((c) => el("tr", {},
       el("td", {}, c.where), el("td", {}, c.name), el("td", {}, sameNumber(c.was)), el("td", { class: "now" }, sameNumber(c.now)),
-      el("td", {}, el("button", { class: "small", onclick: () => (c.key ? act("revert", { target: c.section, key: c.key }) : act("revert_record", { section: c.section, id: c.id })) }, "Revert")))))))];
+      el("td", {}, el("button", { class: "small", title: c.revert_words || undefined, onclick: () => (c.key ? act("revert", { target: c.section, key: c.key }) : act("revert_record", { section: c.section, id: c.id })) }, "Revert")))))))];
 }
 
 // --- Memories ---
@@ -4044,7 +4044,7 @@ function drawHistory() {
         el("thead", {}, el("tr", {}, ...["#", "Setting", "Before", "After", ""].map((x) => el("th", {}, x)))),
         el("tbody", {}, ...h.steps.map((x) => el("tr", {},
           el("td", {}, String(x.step + 1)), el("td", {}, x.name), el("td", {}, x.before), el("td", { class: "hist-after" }, x.after),
-          el("td", {}, x.revert === false ? null : el("button", { class: "small", title: "Put this setting back to its value before this edit",
+          el("td", {}, x.revert === false ? null : el("button", { class: "small", title: x.revert_words || "Put this setting back to its value before this edit",
             onclick: () => act("revert_history", { step: x.step, section: x.section, id: x.id, key: x.key }) }, "Revert")))))))];
   }
   fillWindow("history", "Edit history", ...body);

@@ -17,6 +17,10 @@ pub(crate) struct Backup {
 /// setting (its key, the first of its records; None for bytes no setting covers), the places it covers (the setting's
 /// slot and those of its other records that changed with it, `Setting::twin_of`; the whole record for bytes no setting
 /// covers), its name as a list names it (`setting_words`) and its value before and after in its own words.
+/// The key of the one line in which, outside Expert mode, the places of My Menu an edit changed are listed
+/// (`App::edit_lines`): its Revert puts back all of My Menu, never one place alone.
+pub(crate) const MYMENU_LINE: &str = "mymenu:places";
+
 #[derive(Clone, Debug)]
 pub(crate) struct EditLine {
     pub(crate) si: usize,
@@ -58,7 +62,7 @@ impl EditLine {
 /// (the current file for the last step), by where their records are kept, the number of steps, for the last step the
 /// current file's state (`Doc::rev`), and whether the raw numbers are shown. A snapshot is never changed once kept;
 /// the current file is, by every edit, a drag joined to its step included, so lines with the same key are still right.
-pub(crate) type HistKey = (usize, usize, usize, u64, bool);
+pub(crate) type HistKey = (usize, usize, usize, u64, bool, bool);
 
 impl App {
     /// Every kept copy, newest first: originals, and the camera's settings at each read and around each write.
@@ -145,7 +149,8 @@ impl App {
                             ui.label(&line.name);
                             ui.label(&line.before);
                             ui.label(RichText::new(&line.after).color(tone::edit(ui.visuals())));
-                            if ui.add_enabled(self.editable(), egui::Button::new("Revert").small()).on_hover_text("Put this setting back to its value before this edit; later edits stay").on_disabled_hover_text("View only: this file cannot be edited, so nothing is reverted.").clicked() {
+                            let words = self.edit_line_revert_words(line, true).unwrap_or_else(|| "Put this setting back to its value before this edit; later edits stay".to_string());
+                            if ui.add_enabled(self.editable(), egui::Button::new("Revert").small()).on_hover_text(words).on_disabled_hover_text("View only: this file cannot be edited, so nothing is reverted.").clicked() {
                                 actions.extend(line.put_back(before, &doc.edited));
                             }
                             ui.end_row();
@@ -175,7 +180,7 @@ impl App {
         // records, the same number of steps): its state (`Doc::rev`) tells one value from the next
         let now = if i + 1 < self.undo.len() { 0 } else { self.doc.as_ref().map_or(0, |d| d.rev) };
         // the raw numbers beside the names (`show_raw`) change the lines too
-        let key: HistKey = (before.sections.as_ptr() as usize, after.sections.as_ptr() as usize, self.undo.len(), now, self.show_raw);
+        let key: HistKey = (before.sections.as_ptr() as usize, after.sections.as_ptr() as usize, self.undo.len(), now, self.show_raw, self.prefs.expert);
         let mut cache = self.history_cache.borrow_mut();
         cache.truncate(self.undo.len());
         if let Some((k, lines)) = cache.get(i) {
@@ -186,7 +191,7 @@ impl App {
             l
         }).collect();
         let lines = std::rc::Rc::new(lines);
-        if cache.len() <= i { cache.resize_with(i + 1, || ((0, 0, 0, 0, false), Default::default())); }
+        if cache.len() <= i { cache.resize_with(i + 1, || ((0, 0, 0, 0, false, false), Default::default())); }
         cache[i] = (key, lines.clone());
         lines
     }
@@ -315,13 +320,110 @@ impl App {
             }
             i += 1;
         }
+        // outside Expert mode the places of My Menu an edit changed are one line, listing them, whose Revert puts back
+        // every place (`MYMENU_LINE`): a whole My Menu the file or the editor held, never one place alone, which could
+        // leave an item twice or a place empty before a filled one, a list no camera writes
+        if !self.prefs.expert && self.has_mymenu_page() {
+            let place = |l: &EditLine| l.si == 0 && l.key.as_deref().and_then(|k| self.index_of_key(k)).is_some_and(|at| self.is_mymenu_place(&self.schema.settings[at]));
+            if let Some(first) = out.iter().position(place) {
+                let changed: Vec<EditLine> = out.iter().filter(|l| place(l)).cloned().collect();
+                out.retain(|l| !place(l));
+                let n = changed.len();
+                let list = |f: &dyn Fn(&EditLine) -> &str| changed.iter().map(|l| format!("{}: {}", l.name, f(l))).collect::<Vec<_>>().join("; ");
+                let line = EditLine {
+                    si: 0, id: changed[0].id, key: Some(MYMENU_LINE.to_string()),
+                    slots: self.schema.settings.iter().filter(|s| self.is_mymenu_place(s)).map(|s| s.slot()).collect(),
+                    name: format!("{}: {n} item{} changed", self.schema.camera.text.my_menu_name(), if n == 1 { "" } else { "s" }),
+                    before: list(&|l| &l.before), after: list(&|l| &l.after),
+                };
+                out.insert(first.min(out.len()), line);
+            }
+        }
         out
+    }
+
+    /// What a Revert of list line `l` does, said before the press where it is not the plain one: My Menu's line
+    /// (`MYMENU_LINE`) puts back all of My Menu, as the file was opened (All edits) or as it was before that edit
+    /// (`history`: its later changes too). None for any other line.
+    pub(crate) fn edit_line_revert_words(&self, l: &EditLine, history: bool) -> Option<String> {
+        if l.key.as_deref() != Some(MYMENU_LINE) {
+            return None;
+        }
+        let name = self.schema.camera.text.my_menu_name();
+        Some(if history {
+            format!("Put all of {name} back as it was before this edit: its later changes go back too, so no item stands twice and no place is left empty before a filled one")
+        } else {
+            self.mymenu_revert_all().0
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Follow-up 1: outside Expert mode the places of My Menu an edit changed are one line in All edits and in History
+    /// ("My Menu: N items changed", listing them), whose Revert puts back all of My Menu: as the file was opened (All
+    /// edits), or as it was before that step (History: My Menu's later changes go back too), so no item stands twice and
+    /// no place is left empty before a filled one, which one place put back alone would leave (three items added, each
+    /// its own step, then the first taken out: the page packs up; place 1 alone back as opened, or step 1's place
+    /// alone back, leaves a gap). The page the same by the line's key; Expert mode one line per place, as before.
+    #[test]
+    fn my_menus_places_revert_as_one_list() {
+        use crate::web::tests::answer;
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        let mm = app.schema.camera.my_menu.clone().unwrap();
+        let opened = app.mymenu_pages().unwrap();
+        assert!(opened[0].iter().all(|&c| c == mm.empty), "the sample's first page is empty");
+        let codes: Vec<i64> = app.mymenu_items().iter().map(|x| x.code).filter(|&c| app.mymenu_find(c).is_none()).take(3).collect();
+        for &c in &codes {
+            let (acts, _) = app.mymenu_add(c).unwrap();
+            app.last_edit = None;
+            app.apply(acts);
+        }
+        let (acts, _) = app.mymenu_remove(codes[0]).unwrap();
+        app.last_edit = None;
+        app.apply(acts);
+        let now = app.mymenu_pages().unwrap();
+        assert_eq!((now[0][0], now[0][1], now[0][2]), (codes[1], codes[2], mm.empty), "packed");
+        assert_eq!(app.undo.len(), 4, "four steps");
+        let places = |lines: &[EditLine]| lines.iter().filter(|l| l.slots.iter().any(|s| mm.records.contains(&s.0))).cloned().collect::<Vec<_>>();
+        let gap = |pages: &[Vec<i64>]| pages.iter().any(|p| p.windows(2).any(|w| w[0] == mm.empty && w[1] != mm.empty));
+        // All edits: one line, its Revert all of My Menu as the file was opened
+        let doc = app.doc.as_ref().unwrap();
+        let all = places(&app.edit_lines(&doc.original, &doc.edited));
+        assert_eq!(all.len(), 1, "one line for My Menu");
+        assert!(all[0].name.starts_with("My Menu: 2 items changed"), "{}", all[0].name);
+        assert_eq!(all[0].key.as_deref(), Some(MYMENU_LINE));
+        assert!(app.edit_line_revert_words(&all[0], false).is_some_and(|w| w.contains("as the file was opened")));
+        app.apply(all[0].slots.iter().map(|&slot| Action::Revert(0, slot)).collect());
+        assert_eq!(app.mymenu_pages().unwrap(), opened);
+        app.undo();
+        // History: step 0's line puts back all of My Menu as it was before step 0 (later changes too), no gap
+        let doc = app.doc.as_ref().unwrap();
+        let line = places(&app.history_lines(0, &doc.edited))[0].clone();
+        assert!(line.name.starts_with("My Menu: 1 item changed") && app.edit_line_revert_words(&line, true).is_some_and(|w| w.contains("later changes")), "{}", line.name);
+        let acts = line.put_back(&app.undo[0], &doc.edited);
+        app.history_revert(acts);
+        assert!(app.mymenu_pages().unwrap() == opened && !gap(&app.mymenu_pages().unwrap()));
+        app.undo();
+        // the page: All edits' line by its key, and History's by step, record and key
+        let j: serde_json::Value = serde_json::from_slice(&answer(&mut app, "changes", serde_json::json!({})).body).unwrap();
+        let row = j["changes"].as_array().unwrap().iter().find(|c| c["key"] == MYMENU_LINE).cloned().expect("the page's line");
+        assert!(row["revert_words"].as_str().is_some_and(|w| w.contains("as the file was opened")), "{row}");
+        assert_eq!(answer(&mut app, "revert", serde_json::json!({ "target": 0, "key": MYMENU_LINE })).status, 200);
+        assert_eq!(app.mymenu_pages().unwrap(), opened, "the page's All edits");
+        app.undo();
+        let r = answer(&mut app, "revert_history", serde_json::json!({ "step": 0, "section": 0, "id": line.id, "key": MYMENU_LINE }));
+        assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+        assert_eq!(app.mymenu_pages().unwrap(), opened, "the page's History");
+        app.undo();
+        // Expert mode: one line per place, as before
+        app.prefs.expert = true;
+        let doc = app.doc.as_ref().unwrap();
+        assert_eq!(places(&app.edit_lines(&doc.original, &doc.edited)).len(), 2, "Expert mode: a line per place");
+    }
 
     /// Two settings kept in one record (PP1's and PP3's Black Level, elements of 0x04e9, each with its stills and movie
     /// copies): every list of edits names each setting by its own name with its value in words, never the record by

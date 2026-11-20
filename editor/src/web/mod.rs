@@ -225,6 +225,18 @@ impl App {
             "tab" => WebReply::json(self.web_tab(target, menu, body["tab"].as_str(), body["q"].as_str().unwrap_or(""))),
             "main" => WebReply::json(self.web_main(target, body["set"].as_u64().unwrap_or(0) as usize, menu)),
             "set" => self.web_set(target, &body, &from),
+            // All edits' line of My Menu (`MYMENU_LINE`): all of My Menu back as the file was opened, as the window's
+            "revert" if body["key"].as_str() == Some(MYMENU_LINE) && !self.prefs.expert => {
+                if !self.editable() {
+                    return WebReply::error(409, &self.view_only_why(true));
+                }
+                let (words, acts) = self.mymenu_revert_all();
+                if let Some(why) = self.apply(acts) {
+                    return WebReply::error(409, &why);
+                }
+                self.status = self.with_moved(format!("{words} {from}"));
+                WebReply::json(json!({ "ok": true }))
+            }
             "revert" => {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
                 // as the window's Revert: a copy in step with its setting takes the setting and its other copies back
@@ -1805,6 +1817,7 @@ impl App {
         let Some(doc) = &self.doc else { return json!({ "changes": [] }) };
         let changes: Vec<Value> = self.edit_lines(&doc.original, &doc.edited).into_iter().map(|l| json!({
             "section": l.si, "id": l.id, "key": l.key, "where": self.schema.camera.target_name(l.si), "name": l.name, "was": l.before, "now": l.after,
+            "revert_words": self.edit_line_revert_words(&l, false),
         })).collect();
         json!({ "changes": changes })
     }
@@ -3094,7 +3107,7 @@ impl App {
             // setting by setting, as the window's History lists them (`edit_lines`), a Revert putting back that setting alone
             for l in self.edit_lines(before, after) {
                 steps.push(json!({ "step": i, "section": l.si, "id": l.id, "key": l.key, "name": self.placed_name(l.si, &l.name), "before": l.before, "after": l.after,
-                    "revert": self.editable() }));
+                    "revert": self.editable(), "revert_words": self.edit_line_revert_words(&l, true) }));
             }
         }
         json!({ "steps": steps })

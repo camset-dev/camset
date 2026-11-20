@@ -62,8 +62,10 @@ impl App {
                 ui.label(&l.before);
                 ui.label(RichText::new(&l.after).color(tone::edit(ui.visuals())));
                 // this setting back as the file was last opened or saved, its other records with it; another setting
-                // kept in the same record keeps its edit
-                if ui.small_button("Revert").clicked() {
+                // kept in the same record keeps its edit; My Menu's line all of My Menu, and it says so
+                let r = ui.small_button("Revert");
+                let r = match self.edit_line_revert_words(&l, false) { Some(w) => r.on_hover_text(w), None => r };
+                if r.clicked() {
                     actions.extend(l.slots.iter().map(|&slot| Action::Revert(l.si, slot)));
                 }
                 ui.end_row();
