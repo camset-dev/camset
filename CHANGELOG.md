@@ -180,6 +180,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`carousel_fields_run.py` asks the third readers where OCR's plain reading of the lit box and the second reader's
+  are two numbers,** in turn, the second reader's own question, and takes the reading that stands by the kit's one
+  counting rule, its proof line keeping every vote with its reader's model ("read_by": "votes"); where none stands the
+  row stops as before (OCR read a bullet for the minus sign of "2 Images (-)" on about one HDMI frame in twenty).
 - **A carousel option's lit box holding a long value is seen as lit,** where the pixel reader took only a box 60 %
   orange or more and "2 Images (+)" or "2 Images (-)" over HDMI leaves 58-60 % (Bracket Type's grid stopped at its first
   Down so): a box under that whose outline is whole now counts too.
