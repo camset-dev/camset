@@ -182,8 +182,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   is back after the saving notice,** about 2.1 s where 4.5 s stood; with no notice seen, in Movie or S&Q, and over USB,
   it is still 4.5 s.
 - **`kit/provers/carousel_fields_run.py` proves a carousel option's own fields one value a download** (Bracket Type's
-  Cont., Single and Focus Bracket, with the drive mode dial on BRK), and the report credits a record both fields write
-  with both together ("0.5 EV 3 Img.") and one written by one field with that field's value.
+  Cont., Single and Focus Bracket, with the drive mode dial on BRK), a value the camera does not keep written as asked
+  and kept, crediting nothing. The report credits a record with both fields together ("0.5 EV 3 Img.") unless every
+  field's walk finished and only one moved it, and the definition counts such a record's proofs and names it from its
+  sibling's list, never from the values proved, which would tell the pair held.
 - **`kit/axis_walk.py --map` walks a run's own map, and `kit/prove_run.py --map` proves the axes it walked there**
   (Bracket Type's Lo/Hi); a run on pass 1's map never takes them, and a row inside a submenu is keyed by its whole path.
 - **The pixel reader tells a carousel option's lit field from the option lit:** a dialog gives the lit box's index
