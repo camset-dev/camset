@@ -1091,7 +1091,8 @@ impl App {
     /// hold (`menus_of`), a setting the camera keeps a copy of per shooting mode as the record `bind` picks
     /// (`row_record`) at the setting's place under its name, and outside Expert mode none of those copies as rows of
     /// their own; a setting placed nowhere where `menus_of` lists it. Outside Expert mode a row alone on its place in
-    /// the camera's menu (no other setting there but the choices of its options) is titled by its place's last label, as
+    /// the camera's menu (no other setting of its area there, but the choices of its options and Expert mode's) is
+    /// titled by its place's last label, as
     /// the camera draws it; the setting's full name is `full_name`. The definition's order. Worked out once per
     /// definition, menu, `bind` and Expert mode.
     pub(crate) fn listed(&self, menu: &str, bind: &Bind) -> std::rc::Rc<Listed> {
@@ -1136,13 +1137,14 @@ impl App {
             }
         }
         if !expert {
-            // a row alone on its place in the camera's menu, titled as the camera draws it
-            let place = |s: &Setting| (s.row.clone(), s.row_at.clone(), menu_rows::camera_tab(s).to_string(), menu_rows::camera_group(s).to_string());
-            let mut on: std::collections::HashMap<(Vec<String>, Vec<i64>, String, String), usize> = Default::default();
-            for s in rows.iter().filter(|s| s.placed() && s.under_option.is_none()) {
+            // a row alone on its place in the camera's menu (among the live settings', or one memory set's, that are
+            // not Expert mode's), titled as the camera draws it
+            let place = |s: &Setting| (s.area.clone(), s.row.clone(), s.row_at.clone(), menu_rows::camera_tab(s).to_string(), menu_rows::camera_group(s).to_string());
+            let mut on: std::collections::HashMap<(String, Vec<String>, Vec<i64>, String, String), usize> = Default::default();
+            for s in rows.iter().filter(|s| s.placed() && s.under_option.is_none() && !Self::expert_only(s)) {
                 *on.entry(place(s)).or_default() += 1;
             }
-            for s in rows.iter_mut().filter(|s| s.placed() && s.under_option.is_none() && !s.on_page()) {
+            for s in rows.iter_mut().filter(|s| s.placed() && s.under_option.is_none() && !s.on_page() && !Self::expert_only(s)) {
                 if on.get(&place(s)) == Some(&1) {
                     if let Some(label) = s.row.last().filter(|l| !l.is_empty()) {
                         s.name = label.clone();

@@ -1,7 +1,9 @@
 """The editor's Menu "As on the camera", from a definition alone: a copy of editor/src/menu_rows.rs (a group's rows,
 from each setting's place in its definition: row, row_at, under_option, row_tab, row_group and row_mode, which
 camkit.placement writes) and of the parts of editor/src/pages/menu.rs that choose the Menu's entries and a tab's groups
-(menu_tabs, entry_of, off_menu_in, tab_groups, and group_key from menu_rows.rs). The definition viewer
+(menu_tabs, entry_of, off_menu_in, tab_groups, and group_key from menu_rows.rs), and, where the definition lists the
+camera's menus (camera.menus), what one of them lists (listed: row_menus, row_places, a row's record and title). The
+definition viewer
 (kit/tools/proof_viewer.py --public) draws its menu with it, so a page built from public files alone shows the tabs,
 groups and rows the editor shows. The editor is the reference: a change to its layout is made here too
 (kit/tests/test_menu_rows.py holds its own cases, copied, and compares the a1 II's default Menu with the one a test of
@@ -26,6 +28,45 @@ def norm(s) -> str:
 def placed(s) -> bool:
     """Whether the definition places the setting on a row of the camera's menu (row, with a sort key as long)."""
     return bool(s.get("row")) and len(s["row"]) == len(s.get("row_at") or [])
+
+
+def place_in(s, menu: str) -> dict:
+    """The setting as camera menu `menu` lays it out (Setting::place_in): row_places[menu] before the top-level place,
+    field by field, no other mode's menu named (row_mode), that menu alone in row_menus, marked shown_in."""
+    if s.get("shown_in") == menu:
+        return dict(s)
+    p = dict(s)
+    for k, v in ((s.get("row_places") or {}).get(menu) or {}).items():
+        if k in ("row", "row_at", "row_tab", "row_group", "under_option") and v is not None:
+            p[k] = v
+    p.pop("row_mode", None)
+    p.update(row_menus=[menu], row_places={}, shown_in=menu)
+    return p
+
+
+def placed_anywhere(s) -> bool:
+    """Placed on a row of any of the camera's menus: its own row, or one of row_places (Setting::placed_anywhere)."""
+    return placed(s) or any(placed(place_in(s, m)) for m in s.get("row_places") or {})
+
+
+def menu_list(doc: dict) -> list:
+    """The camera's menus the editor shows one at a time (Camera::menu_list): all where the definition lists two or
+    more, none otherwise."""
+    menus = (doc.get("camera") or {}).get("menus") or []
+    return list(menus) if len(menus) >= 2 else []
+
+
+def menus_of(doc: dict, s) -> list:
+    """The menus whose rows hold the setting (Camera::menus_of): its row_menus that name one, else row_mode's menu,
+    else the first; and those its row_places place it in; in the menus' order. None placed nowhere, or without menus."""
+    names = [m["name"] for m in menu_list(doc)]
+    if not names or not placed_anywhere(s):
+        return []
+    out = [n for n in s.get("row_menus") or [] if n in names]
+    if not out and placed(s):
+        out = [s["row_mode"]] if s.get("row_mode") in names else [names[0]]
+    out += [m for m in s.get("row_places") or {} if m in names and placed(place_in(s, m)) and m not in out]
+    return [n for n in names if n in out]
 
 
 def page_prefix(s) -> int | None:
@@ -252,16 +293,101 @@ class Menu:
         self.camera = any(placed(s) for s in doc["settings"])
         self.placed_groups = collections.defaultdict(set)
         for s in doc["settings"]:
-            if placed(s):
-                self.placed_groups[camera_tab(s)].add(camera_group(s))
+            # its own place, and each one menu gives it (row_places)
+            for p in [s] + [place_in(s, m) for m in s.get("row_places") or {}]:
+                if placed(p):
+                    self.placed_groups[camera_tab(p)].add(camera_group(p))
+        # the camera's menus, shown one at a time (App::menus): as on the camera only
+        self.menus = menu_list(doc) if self.camera else []
+        self.by_key = {s["key"]: s for s in doc["settings"]}
+        self._groups = {}
 
     def family(self, s):
         return next((f for f in self.families if (s.get("group") or "").startswith(f["prefix"])), None)
 
     def off_menu(self, s) -> bool:
-        """A setting of a tab the definition lists on no row of the camera, whose group has none on one either."""
-        return (self.camera and not placed(s) and s.get("tab") in self.tabs and not (self.has_my_menu and s.get("tab") == self.my_menu)
+        """A setting of a tab the definition lists on no row of the camera (in none of its menus), whose group has
+        none on one either."""
+        return (self.camera and not placed_anywhere(s) and s.get("tab") in self.tabs and not (self.has_my_menu and s.get("tab") == self.my_menu)
                 and self.family(s) is None and (s.get("group") or "") not in self.placed_groups.get(s.get("tab"), ()))
+
+    # ------------------------------------------------------------ one of the camera's menus (pages/menu.rs, listed)
+
+    def main_of(self, s):
+        """The setting a copy copies (copy_of), when the definition names it."""
+        return self.by_key.get(s.get("copy_of")) if s.get("copy_of") else None
+
+    def copy_for_menu(self, s, menu: str):
+        """The setting's one copy whose copy_for meets the menu's modes (App::copy_for_menu); None for none or two."""
+        m = next((x for x in self.menus if x["name"] == menu), None)
+        if m is None:
+            return None
+        hits = [self.by_key[k] for k in s.get("copies") or [] if k in self.by_key and set(self.by_key[k].get("copy_for") or []) & set(m.get("modes") or [])]
+        return hits[0] if len(hits) == 1 else None
+
+    def row_record(self, s, menu: str, mode: str | None):
+        """The record s's row shows in the menu for a set saved in `mode` (App::row_record, Bind::Set): the setting
+        itself where the mode is one of the menu's or not known, else its copy for the menu; itself without one."""
+        c = self.copy_for_menu(s, menu)
+        m = next((x for x in self.menus if x["name"] == menu), {})
+        return c if c is not None and mode is not None and mode not in (m.get("modes") or []) else s
+
+    def menu_groups(self, menu: str) -> set:
+        """The (tab, group) of every row the menu places a setting on, as on the camera and the setting's own."""
+        if menu not in self._groups:
+            out = set()
+            for s in self.doc["settings"]:
+                if s.get("copy_of") is None and placed_anywhere(s) and menu in menus_of(self.doc, s):
+                    p = place_in(s, menu)
+                    if placed(p):
+                        out |= {(camera_tab(p), camera_group(p)), (s.get("tab"), s.get("group"))}
+            self._groups[menu] = out
+        return self._groups[menu]
+
+    def menus_listing(self, s) -> list:
+        """The menus that list the setting (App::menus_of): placed, the menus that place it; a copy, its setting's;
+        placed nowhere, the menus whose rows hold a setting of its group, else every menu."""
+        if not self.menus:
+            return []
+        s = self.main_of(s) or s
+        if placed_anywhere(s):
+            return menus_of(self.doc, s)
+        holding = [m["name"] for m in self.menus if (s.get("tab"), s.get("group")) in self.menu_groups(m["name"])]
+        return holding or [m["name"] for m in self.menus]
+
+    def listed(self, menu: str, mode: str | None = None, expert: bool = False) -> list:
+        """Every setting the menu lists, as it lays each out (App::listed with Bind::Set(mode), mode being the shooting
+        mode the live settings were saved in): a setting the camera keeps a copy of per mode as the record its row
+        shows, at the setting's place under its name, and but in Expert mode none of those copies as rows of their own;
+        but in Expert mode a row alone on its place (of its area, but the choices of its options and Expert mode's)
+        titled by its place's last label. The definition's order; the caller filters what the Menu lists (shown)."""
+        rows = []
+        for s in self.doc["settings"]:
+            if menu not in self.menus_listing(s):
+                continue
+            main = self.main_of(s)
+            if main is not None and not expert and self.copy_for_menu(main, menu) is not None:
+                continue
+            p = place_in(s, menu)
+            rec = s if expert else self.row_record(s, menu, mode)
+            if rec is not s:
+                b = place_in(rec, menu)
+                for k in ("name", "row", "row_at", "row_tab", "row_group", "under_option"):
+                    if p.get(k) is None:
+                        b.pop(k, None)
+                    else:
+                        b[k] = p[k]
+                p = b
+            rows.append(p)
+        if not expert:
+            def key(s):
+                return (s.get("area"), tuple(s["row"]), tuple(s["row_at"]), camera_tab(s), camera_group(s))
+            alone = [s for s in rows if placed(s) and s.get("under_option") is None and not s.get("expert")]
+            count = collections.Counter(key(s) for s in alone)
+            for s in alone:
+                if not on_page(s) and count[key(s)] == 1 and s["row"][-1]:
+                    s["name"] = s["row"][-1]
+        return rows
 
     def layout_tab(self, s) -> str:
         return camera_tab(s) if self.camera and self.family(s) is None else s.get("tab") or ""
@@ -284,15 +410,15 @@ class Menu:
         tab = self.layout_tab(s)
         return tab if (self.has_my_menu and tab == self.my_menu) or tab in self.tabs or tab == self.off else OTHER_TAB
 
-    def entries(self, settings: list = None) -> list:
+    def entries(self, settings: list = None, in_menu: bool = False) -> list:
         """[(entry, its settings)]: the Menu's entries in order, for `settings` (shown(); by default every setting of the
         definition): the definition's tabs (My Menu's left out when it has a page of its own), Other, the entry for
         what the menus do not hold (as on the camera only), then My Menu's own tab; each only when it holds a setting,
-        but the definition's tabs."""
+        but the definition's tabs, which in one of the camera's menus (`in_menu`, settings from `listed`) too."""
         mine = collections.defaultdict(list)
         for s in self.doc["settings"] if settings is None else settings:
             mine[self.entry_of(s)].append(s)
-        names = [t for t in self.tabs if not (self.has_my_menu and t == self.my_menu) and t not in (OTHER_TAB, self.off)]
+        names = [t for t in self.tabs if not (self.has_my_menu and t == self.my_menu) and t not in (OTHER_TAB, self.off) and (not in_menu or mine.get(t))]
         names += [t for t in (OTHER_TAB, self.off) + ((self.my_menu,) if self.has_my_menu else ()) if mine.get(t)]
         return [(t, mine.get(t, [])) for t in names]
 

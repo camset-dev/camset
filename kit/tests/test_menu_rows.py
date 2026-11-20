@@ -124,6 +124,50 @@ def test_a_page_under_an_option():
     assert lines[0] == head("P1", 0, ["P1"]) and lines[-1] == row(7, 1)
 
 
+MENUS = [{"name": "Still", "modes": ["Stills"]}, {"name": "Movie", "modes": ["Movie"]}, {"name": "S&Q", "modes": ["S&Q", "Time-lapse"]}]
+
+
+def test_a_setting_in_the_cameras_menus():
+    """editor/src/schema.rs's a_setting_in_the_cameras_menus: the menus that hold a setting's row, and the setting as a
+    menu lays it out."""
+    doc = {"camera": {"menus": MENUS}, "settings": []}
+    audio = s("a", "Audio", ["Audio"], [5], row_mode="Movie",
+              row_places={"S&Q": {"row": ["Audio Settings", "Audio"], "row_at": [3, 0], "row_group": "Sound"}})
+    assert mr.menus_of(doc, s("n", "Audio", ["Audio"], [5], row_menus=["Movie", "S&Q", "Gone"])) == ["Movie", "S&Q"]
+    assert mr.menus_of(doc, audio) == ["Movie", "S&Q"]
+    assert mr.menus_of(doc, s("p", "Audio", ["Audio"], [5])) == ["Still"]
+    assert mr.menus_of(doc, s("u", "Audio", [], [])) == []
+    p = mr.place_in(audio, "S&Q")
+    assert (p["row"], p["row_at"], p.get("row_group"), p.get("row_tab"), p.get("row_mode")) == (["Audio Settings", "Audio"], [3, 0], "Sound", None, None)
+    assert (p["row_menus"], p["shown_in"], mr.place_in(p, "S&Q")["row"]) == (["S&Q"], "S&Q", p["row"])
+    assert mr.place_in(audio, "Movie")["row"] == ["Audio"] and "row_mode" not in mr.place_in(audio, "Movie")
+    a, b = s("a", "Audio", ["Audio"], [5], row_menus=["Still"]), s("b", "Audio", ["Audio"], [5], row_menus=["Movie"])
+    assert not mr.same_row(a, b) and not mr.links_with(a, b)
+    assert mr.menu_list({"camera": {"menus": MENUS[:1]}}) == []
+
+
+def test_what_one_menu_lists():
+    """App::listed: the rows a menu holds; a setting the camera keeps a copy of per mode as its copy for the menu, in a
+    menu not of the mode the file was saved in, under the setting's name; its copies no rows; a row alone on its place
+    titled as the camera draws it; a setting placed nowhere with its group. Expert mode: every record a row, by name."""
+    doc = {"tabs": ["Shooting"], "camera": {"menus": MENUS[:2]}, "settings": [
+        s("iso", "ISO", ["ISO"], [2], row_menus=["Still", "Movie"], copies=["iso_s", "iso_m"], group="Exposure"),
+        s("iso_s", "ISO (stills)", ["ISO"], [2], copy_of="iso", copy_for=["Stills"], group="Exposure"),
+        s("iso_m", "ISO (movie)", ["ISO"], [2], copy_of="iso", copy_for=["Movie", "S&Q"], group="Exposure"),
+        s("ss", "SteadyShot", ["SteadyShot"], [5], row_menus=["Still"], group="Stabilization"),
+        s("ssm", "SteadyShot (Movie)", ["SteadyShot"], [5], row_menus=["Movie"], group="Stabilization"),
+        s("loose", "Loose", [], [], group="Stabilization")]}
+    menu = mr.Menu(doc)
+    rows = lambda m, mode=None, expert=False: [(x["key"], x["name"]) for x in menu.listed(m, mode, expert)]          # noqa: E731
+    assert rows("Movie", "Stills") == [("iso_m", "ISO"), ("ssm", "SteadyShot"), ("loose", "Loose")]
+    assert rows("Still", "Stills") == [("iso", "ISO"), ("ss", "SteadyShot"), ("loose", "Loose")]
+    assert rows("Still", "Movie")[0] == ("iso_s", "ISO") and rows("Movie", None)[0] == ("iso", "ISO")
+    assert rows("Movie", "Stills", True) == [("iso", "ISO"), ("iso_s", "ISO (stills)"), ("iso_m", "ISO (movie)"), ("ssm", "SteadyShot (Movie)"), ("loose", "Loose")]
+    listed = menu.listed("Movie", "Stills")
+    assert [e for e, _ in menu.entries(listed, in_menu=True)] == ["Shooting"]
+    assert all(x["row_menus"] == ["Movie"] for x in listed)
+
+
 def test_a_row_without_its_own_setting_is_a_heading_and_nothing_placed_is_the_flat_list():
     assert mr.lay_out(rows(s("c", "Speed", ["Drive Mode"], [26], "Continuous Shooting"))) == [head("Drive Mode", 0, ["Drive Mode"]), row(0, 1)]
     assert mr.lay_out(rows(s("a", "A", [], []), s("b", "B", [], []))) == [row(0, 0), row(1, 0)]
