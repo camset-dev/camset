@@ -14,63 +14,115 @@ impl App {
         r.on_hover_text(hover);
     }
 
+    /// A small count of rows that differ in a pill, Compare's: the pale amber of a value that differs, so it is not
+    /// taken for a count of edits.
+    fn diff_badge(ui: &mut egui::Ui, text: String, hover: &str) {
+        // dark text: the amber is light in both themes
+        let fill = tone::differs_mark(ui.visuals());
+        let r = egui::Frame::new().fill(fill).corner_radius(8.0).inner_margin(egui::Margin::symmetric(6, 1))
+            .show(ui, |ui| { ui.label(RichText::new(text).small().strong().color(Color32::BLACK)); }).response;
+        r.on_hover_text(hover);
+    }
+
+    /// The camera's menus to pick one of (`menus`: two or more in the definition, the rows as on the camera), at the
+    /// head of the Menu, Edit's and Compare's alike: the definition's words before them (`text.menus_label`, its hover
+    /// `text.menus_hover`), then one button per menu in the definition's order, labelled from it, the menu shown
+    /// pressed, each with its hover (`menu_hover`: the file's own mode says so). In Compare (`differences`) each says
+    /// how many rows differ in it. A click shows that menu and changes nothing in the file (`set_menu`). Nothing
+    /// without menus.
+    fn menu_selector(&mut self, ui: &mut egui::Ui, differences: Option<Vec<usize>>) {
+        let menus: Vec<(String, String)> = self.menus().iter().map(|m| (m.name.clone(), self.menu_hover(&m.name))).collect();
+        if menus.is_empty() {
+            return;
+        }
+        let (label, hover) = (self.schema.camera.text.menus_label().to_string(), self.schema.camera.text.menus_hover().to_string());
+        ui.label(RichText::new(label).strong()).on_hover_text(&hover);
+        let now = self.menu_shown();
+        let mut pick = None;
+        ui.horizontal_wrapped(|ui| {
+            for (i, (name, tip)) in menus.iter().enumerate() {
+                // named by its label, its pressed state told to screen readers (a selectable button)
+                let r = ui.selectable_label(now.as_deref() == Some(name.as_str()), name).on_hover_text(if tip.is_empty() { &hover } else { tip });
+                if r.clicked() {
+                    pick = Some(name.clone());
+                }
+                if let Some(&n) = differences.as_ref().and_then(|d| d.get(i)).filter(|n| **n > 0) {
+                    Self::diff_badge(ui, n.to_string(), &format!("rows that differ in the {name} menu"));
+                }
+            }
+        });
+        if let Some(m) = pick {
+            self.set_menu(&m);
+            self.diff_cursor = None;
+        }
+        ui.add_space(4.0);
+    }
+
+    /// One entry of the Menu (`BarEntry`), Edit's or Compare's: its colour mark (Main's in the strong text colour, none
+    /// for All settings), its words `text`, chosen or not, underlined while the arrow keys move in the Menu, its hover,
+    /// and its badge (Compare's `diff`: the rows that differ; Edit's: the settings edited, `badge_hover`). True when
+    /// clicked.
+    fn bar_entry_ui(ui: &mut egui::Ui, e: &BarEntry, text: String, (selected, underline): (bool, bool), diff: bool, badge_hover: &str) -> bool {
+        ui.horizontal(|ui| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 20.0), egui::Sense::hover());
+            let mark = match (&e.key, e.color) {
+                (BarKey::All, _) => None,
+                (_, Some(c)) => Some(c),
+                (_, None) => Some(ui.visuals().strong_text_color()),
+            };
+            if let Some(c) = mark {
+                ui.painter().rect_filled(rect, 2.0, c);
+            }
+            let text = if underline { RichText::new(text).underline() } else { RichText::new(text) };
+            let r = ui.selectable_label(selected, text);
+            let r = match &e.hover { Some(h) => r.on_hover_text(h), None => r };
+            if e.badge > 0 {
+                if diff { Self::diff_badge(ui, e.badge.to_string(), badge_hover) } else { Self::badge(ui, e.badge.to_string(), badge_hover) }
+            }
+            r.clicked()
+        }).inner
+    }
+
+    /// Whether Edit shows the page of the Menu's entry `key`.
+    fn shows_entry(&self, key: &BarKey) -> bool {
+        match key {
+            BarKey::Main => self.view == View::Main,
+            BarKey::MyMenu => self.view == View::MyMenu,
+            BarKey::Tab(t) => self.view == View::Tab(t.clone()),
+            BarKey::All => false,
+        }
+    }
+
+    /// Edit's Menu: the camera's menus to pick one of (`menu_selector`), then the entries of the menu shown
+    /// (`edit_entries`: Main, My Menu, the tabs with how many settings each lists, Other and what the menus do not hold,
+    /// each with its edits), then the pages beside them (the search's results, the memories, the exposure page, All
+    /// edits, and Expert mode's).
     pub(crate) fn side_bar(&mut self, ui: &mut egui::Ui) {
         ui.heading("Menu");
         ui.add_space(4.0);
-        // the camera's Main page, when its definition has one (`main_tiles`), by its name (`text.main_title`)
-        if self.schema.camera.main_tiles.as_ref().is_some_and(|t| !t.0.is_empty()) {
-            let title = self.schema.camera.text.main_title().to_string();
-            ui.horizontal(|ui| {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 20.0), egui::Sense::hover());
-                ui.painter().rect_filled(rect, 2.0, ui.visuals().strong_text_color());
-                if ui.selectable_label(self.view == View::Main, title).clicked() {
-                    self.view = View::Main;
-                }
-            });
-        }
-        // My Menu, a tab of its own on the camera, when the definition has it (`camera.my_menu`), by its name
-        // (`text.my_menu_name`), with how many places hold an item and the edits to it
-        if self.has_mymenu_page() {
-            let name = self.schema.camera.text.my_menu_name().to_string();
-            let ((text, hover), edited) = (self.mymenu_entry_words(), self.mymenu_edits());
-            ui.horizontal(|ui| {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 20.0), egui::Sense::hover());
-                ui.painter().rect_filled(rect, 2.0, tab_color(&self.schema.camera, &name));
-                if ui.selectable_label(self.view == View::MyMenu, text).on_hover_text(hover).clicked() {
-                    self.view = View::MyMenu;
-                }
-                if edited > 0 {
-                    Self::badge(ui, edited.to_string(), &format!("places and settings edited in {name}"));
-                }
-            });
-        }
-        let tabs = self.menu_tabs();
-        let focused = self.focus == Focus::Tabs && matches!(self.view, View::Tab(_));
-        let off = self.schema.camera.text.off_menu_name().to_string();
-        for tab in &tabs {
-            if !self.side_bar_lists(tab) {
-                continue;
+        self.menu_selector(ui, None);
+        let menu = self.menu_shown();
+        let entries = self.edit_entries(self.target, menu.as_deref(), &self.search, self.only_changed);
+        let focused = self.focus == Focus::Tabs;
+        let my_menu = self.schema.camera.text.my_menu_name().to_string();
+        let mut go = None;
+        for e in &entries {
+            let selected = self.shows_entry(&e.key);
+            // a tab says how many settings it lists; Main says nothing, My Menu's words say it
+            let text = match (&e.key, e.count) { (BarKey::Tab(_), Some(n)) => format!("{}  ({n})", e.label), _ => e.label.clone() };
+            let hover = if e.key == BarKey::MyMenu { format!("places and settings edited in {my_menu}") } else { "settings edited in this tab".to_string() };
+            if Self::bar_entry_ui(ui, e, text, (selected, selected && focused), false, &hover) {
+                go = Some(e.key.clone());
             }
-            let n = self.visible_count(Some(tab));
-            let edited = self.counts(Some(tab));
-            let selected = self.view == View::Tab(tab.clone());
-            ui.horizontal(|ui| {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 20.0), egui::Sense::hover());
-                ui.painter().rect_filled(rect, 2.0, tab_color(&self.schema.camera, tab));
-                let mut text = RichText::new(format!("{tab}  ({n})"));
-                if selected && focused {
-                    text = text.underline();
-                }
-                let r = ui.selectable_label(selected, text);
-                let r = if *tab == off { r.on_hover_text(Self::off_menu_hover()) } else { r };
-                if r.clicked() {
-                    self.view = View::Tab(tab.clone());
-                    self.focus = Focus::Groups;
-                }
-                if edited > 0 {
-                    Self::badge(ui, edited.to_string(), "settings edited in this tab");
-                }
-            });
+        }
+        match go {
+            Some(BarKey::Main) => self.view = View::Main,
+            Some(BarKey::MyMenu) => self.view = View::MyMenu,
+            Some(BarKey::Tab(t)) => {
+                self.view = View::Tab(t);
+                self.focus = Focus::Groups;
+            }
+            Some(BarKey::All) | None => {}
         }
         ui.separator();
         if !self.search.trim().is_empty() {
@@ -105,6 +157,96 @@ impl App {
             ui.separator();
             ui.label(RichText::new(format!("{} known settings", self.schema.settings.len())).small().color(tone::weak(ui.visuals())))
                 .on_hover_text("The settings the editor can name for this camera. Where they come from: ⚙ Settings > Camera support & web page");
+        }
+    }
+
+    /// Compare's Menu, the same as Edit's: the camera's menus to pick one of, each with how many rows differ in it, then
+    /// "All settings" and Edit's entries in the menu shown (`compare_bar`), each with how many rows it lists and how many
+    /// of them differ between the columns. A click shows that entry's rows (`compare_tab`); an entry the menu no longer
+    /// lists gives way to All settings.
+    pub(crate) fn compare_side_bar(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Menu");
+        ui.add_space(4.0);
+        let (differences, entries) = {
+            let cols = self.cols.clone();
+            // a row's standing worked out once a frame, whichever entries and menus list it
+            let seen: std::cell::RefCell<std::collections::HashMap<String, bool>> = Default::default();
+            let differs = |s: &Setting| {
+                if let Some(&d) = seen.borrow().get(&s.key) {
+                    return d;
+                }
+                let d = self.row_differs(&cols, s);
+                seen.borrow_mut().insert(s.key.clone(), d);
+                d
+            };
+            let differences = (cols.len() >= 2 && !self.menus().is_empty()).then(|| self.menu_differences(&self.search, &differs));
+            (differences, self.compare_bar(self.compare_menu().as_deref(), &self.search, &differs))
+        };
+        self.menu_selector(ui, differences);
+        if !entries.iter().any(|e| e.key == self.compare_key()) {
+            self.compare_tab = None;
+        }
+        let focused = self.focus == Focus::Tabs;
+        let mut go = None;
+        for e in &entries {
+            let selected = e.key == self.compare_key();
+            let text = format!("{}  ({})", e.label, e.count.unwrap_or_default());
+            if Self::bar_entry_ui(ui, e, text, (selected, selected && focused), true, "rows that differ between the columns") {
+                go = Some(e.key.clone());
+            }
+        }
+        if let Some(k) = go {
+            self.compare_tab = self.bar_key_name(&k);
+            self.diff_cursor = None;
+            self.focus = Focus::Tabs;
+        }
+    }
+
+    /// Up and Down while the arrow keys move in the Menu (`Focus::Tabs`, Left from the groups in Edit, a click on an
+    /// entry in Compare): the previous or next of the Menu's own entries (`bar_keys`: Main, My Menu, the tabs, Other and
+    /// what the menus do not hold; in Compare All settings first), the keys taken so the columns' keys do not move too.
+    /// Only plain arrows: Alt with them steps through Compare's differences.
+    pub(crate) fn bar_nav(&mut self, ctx: &egui::Context) {
+        if self.doc.is_none() || self.focus != Focus::Tabs || ctx.wants_keyboard_input() || ctx.memory(|m| m.any_popup_open()) {
+            return;
+        }
+        let menu = self.menu_shown();
+        let (keys, now) = match self.mode {
+            Mode::Edit => {
+                let now = match &self.view {
+                    View::Main => BarKey::Main,
+                    View::MyMenu => BarKey::MyMenu,
+                    View::Tab(t) => BarKey::Tab(t.clone()),
+                    _ => return,
+                };
+                (self.bar_keys(false, self.target, menu.as_deref(), &self.search, self.only_changed), now)
+            }
+            Mode::Compare if !self.compare_records => (self.bar_keys(true, 0, menu.as_deref(), &self.search, false), self.compare_key()),
+            Mode::Compare => return,
+        };
+        let Some(pos) = keys.iter().position(|k| *k == now) else { return };
+        let arrow = |k: egui::Key| move |e: &egui::Event| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if *key == k && modifiers.is_none());
+        let (up, down) = ctx.input_mut(|i| {
+            let (up, down) = (i.events.iter().any(arrow(egui::Key::ArrowUp)), i.events.iter().any(arrow(egui::Key::ArrowDown)));
+            i.events.retain(|e| !arrow(egui::Key::ArrowUp)(e) && !arrow(egui::Key::ArrowDown)(e));
+            (up, down)
+        });
+        let step = if down { 1 } else if up { -1 } else { return };
+        let Some(key) = step_in(keys.len(), pos, step).map(|i| keys[i].clone()) else { return };
+        match self.mode {
+            Mode::Edit => {
+                self.view = match key {
+                    BarKey::Main => View::Main,
+                    BarKey::MyMenu => View::MyMenu,
+                    BarKey::Tab(t) => View::Tab(t),
+                    BarKey::All => return,
+                };
+                self.group = None;
+            }
+            Mode::Compare => {
+                self.compare_tab = self.bar_key_name(&key);
+                self.diff_cursor = None;
+            }
         }
     }
 
@@ -441,13 +583,505 @@ impl App {
             }
         });
         if let Some(s) = go {
-            self.view = self.view_of(&s);
-            self.group = Some(self.shown_group_of(&s));
-            self.item = Some(s.name.clone());
-            self.item_key = Some(s.key.clone());
-            self.focus = Focus::Items;
+            // as every jump: the camera's menu that shows it (this one if it does, else the file's, else the first)
+            self.go_to(&s);
             self.search.clear();
         }
         my_actions
+    }
+}
+
+/// The camera's menus in the window (the definition's `camera.menus`, stubbed onto the sample's in memory): the
+/// selector, the Menu's entries in Edit and in Compare, Compare's rows per menu, the "Editing:" row, the Main page's
+/// tiles, the detail panel's name, the jumps and the arrow keys in the Menu; and without menus, the window as before.
+#[cfg(test)]
+mod menus_window_tests {
+    use super::*;
+    use crate::test_support::{done, sample_app, stub_menus, stub_menus_and_a_place, texts, SAMPLE_BYTES};
+    use eframe::App as _;
+    use egui::accesskit::{Action as Ak, ActionRequest, NodeId, Role, Toggled};
+
+    /// What a screen reader is told of each control and label: its node, role, name (a label's words) and pressed
+    /// state.
+    type Said = Vec<(NodeId, Role, String, Option<Toggled>)>;
+
+    /// The window run frame by frame, as a screen reader is told it.
+    struct Window {
+        ctx: egui::Context,
+        frame: eframe::Frame,
+    }
+
+    impl Window {
+        fn new() -> Self {
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            Window { ctx, frame: eframe::Frame::_new_kittest() }
+        }
+
+        /// One frame with `events`: the texts it draws and what it tells a screen reader.
+        fn run(&mut self, app: &mut App, events: Vec<egui::Event>) -> (Vec<String>, Said) {
+            let frame = &mut self.frame;
+            let out = self.ctx.run(egui::RawInput { events, ..Default::default() }, |ctx| app.update(ctx, frame));
+            let said = out.platform_output.accesskit_update
+                .map(|t| t.nodes.iter().filter_map(|(id, n)| n.label().or(n.value()).map(|l| (*id, n.role(), l.to_string(), n.toggled()))).collect())
+                .unwrap_or_default();
+            (texts(&out.shapes), said)
+        }
+
+        /// Two frames, the window settled: the second's.
+        fn settle(&mut self, app: &mut App) -> (Vec<String>, Said) {
+            let _ = self.run(app, vec![]);
+            self.run(app, vec![])
+        }
+
+        /// A screen reader's click on the one control of `role` named `name`, then the window settled.
+        fn click(&mut self, app: &mut App, said: &Said, role: Role, name: &str) -> (Vec<String>, Said) {
+            let hit: Vec<NodeId> = said.iter().filter(|(_, r, l, _)| *r == role && l == name).map(|(id, ..)| *id).collect();
+            assert_eq!(hit.len(), 1, "{name}: {said:?}");
+            let _ = self.run(app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: hit[0], data: None })]);
+            self.settle(app)
+        }
+
+        /// An arrow key, plain or with Alt, then a frame more.
+        fn key(&mut self, app: &mut App, key: egui::Key, alt: bool) {
+            let modifiers = if alt { egui::Modifiers::ALT } else { egui::Modifiers::NONE };
+            let _ = self.run(app, vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }]);
+            let _ = self.run(app, vec![]);
+        }
+    }
+
+    /// The pressed state of each button named `name`.
+    fn buttons(said: &Said, name: &str) -> Vec<Option<Toggled>> {
+        said.iter().filter(|(_, r, l, _)| *r == Role::Button && l == name).map(|(.., t)| *t).collect()
+    }
+
+    /// Whether `got` holds `want` in that order, other texts between them.
+    fn in_order(got: &[String], want: &[String]) -> bool {
+        let mut at = 0;
+        want.iter().all(|w| match got[at..].iter().position(|g| g == w) {
+            Some(p) => {
+                at += p + 1;
+                true
+            }
+            None => false,
+        })
+    }
+
+    /// Setting `s` given another value than file A's live settings hold, in file `c`'s.
+    fn other_value(app: &App, c: &mut CamSet, s: &Setting) {
+        let cur = app.col_value(Col::a(0), s).unwrap();
+        let v = s.values.iter().map(|(v, _)| *v).find(|v| *v != cur).or_else(|| s.range.map(|(lo, hi)| if cur < hi { cur + 1 } else { lo })).unwrap();
+        c.sections[0].get_mut(s.id).unwrap().put(s.index, v).unwrap();
+    }
+
+    /// A row's names: its entry, group and records' keys.
+    fn names(rows: &[Row]) -> Vec<(String, String, Vec<String>)> {
+        rows.iter().map(|r| (r.0.clone(), r.1.clone(), r.2.iter().map(|s| s.key.clone()).collect())).collect()
+    }
+
+    /// The live record of the shooting mode a file was saved in, and the number it holds for a mode of menu `menu`.
+    fn saved_in(app: &App, menu: &str) -> (Setting, i64) {
+        let lm = app.schema.camera.live_mode.clone().unwrap();
+        let modes = app.menu_named(menu).unwrap().modes.clone();
+        let code = lm.modes.iter().find(|(_, m)| modes.contains(m)).map(|(c, _)| c.parse::<i64>().unwrap()).unwrap();
+        (app.schema.settings.iter().find(|s| s.key == lm.key).unwrap().clone(), code)
+    }
+
+    /// The ISO setting, which the camera keeps a copy of per shooting mode, the menu the sample opens on, another menu
+    /// whose rows show its copy, and that copy.
+    fn iso_and_its_copy(app: &App) -> (Setting, String, String, Setting) {
+        let iso = app.schema.settings.iter().find(|s| s.key == "global:0x0334").unwrap().clone();
+        let own = app.menu_shown().unwrap();
+        let other = app.menus().iter().map(|m| m.name.clone()).find(|m| *m != own && app.copy_for_menu(&iso, m).is_some()).unwrap();
+        let copy = app.copy_for_menu(&iso, &other).unwrap().clone();
+        (iso, own, other, copy)
+    }
+
+    /// Without menus in the definition the window is as before: no selector, Edit's Menu the same entries with the same
+    /// words, Compare's rows the ones it always had (All settings) and no list of tabs, its left bar's entries Edit's
+    /// with All settings first, a tab's rows those of All settings Edit lists under it.
+    #[test]
+    fn without_menus_the_window_is_as_before() {
+        let (mut app, dir, user) = sample_app("e2_none", None);
+        assert!(app.menus().is_empty() && app.menu_shown().is_none());
+        app.view = View::Tab(app.menu_tabs()[0].clone());
+        let mut w = Window::new();
+        let (drawn, _) = w.settle(&mut app);
+        let label = app.schema.camera.text.menus_label().to_string();
+        assert!(!drawn.contains(&label), "no selector");
+        // the Menu's words as before: Main, My Menu, then each tab with how many settings it lists
+        let mut want = vec![app.schema.camera.text.main_title().to_string(), app.mymenu_entry_words().0];
+        want.extend(app.menu_tabs().into_iter().filter(|t| app.side_bar_lists(t)).map(|t| format!("{t}  ({})", app.visible_count(Some(&t)))));
+        assert!(in_order(&drawn, &want), "{want:?} in {drawn:?}");
+        let edit = app.bar_keys(false, 0, None, "", false);
+        // Compare: file B with one value changed, two columns
+        let rows = app.build_matrix_rows("", None);
+        let changed = rows.iter().map(|r| r.2[0].clone()).find(|s| s.scalar && s.values.len() >= 2 && app.col_value(Col::a(0), s).is_some()).unwrap();
+        let mut b = app.doc.as_ref().unwrap().original.clone();
+        other_value(&app, &mut b, &changed);
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::b(0)], false);
+        let (drawn, said) = w.settle(&mut app);
+        assert!(!drawn.contains(&label), "no selector");
+        assert!(!said.iter().any(|(_, r, l, _)| *r == Role::ComboBox || l == "Tab compared"), "no list of tabs: the Menu picks");
+        assert_eq!(names(&app.matrix_rows()), names(&rows), "All settings: the rows Compare always had");
+        assert_eq!(names(&app.matrix_rows_for("", None)), names(&rows));
+        assert_eq!(app.mm_rows.len(), rows.len());
+        let cols = app.cols.clone();
+        let entries = app.compare_bar(None, "", &|s| app.row_differs(&cols, s));
+        assert_eq!(entries.iter().map(|e| e.key.clone()).collect::<Vec<_>>(), [vec![BarKey::All], edit.clone()].concat(), "Edit's entries, All settings first");
+        assert!(drawn.contains(&format!("{ALL_SETTINGS}  ({})", rows.len())), "{drawn:?}");
+        assert!(entries[0].badge >= 1, "the row that differs");
+        // a tab's rows: those of All settings Edit lists under it, under its name; each of them under one entry only
+        let all: Vec<String> = rows.iter().map(|r| r.2[0].key.clone()).collect();
+        let mut seen = std::collections::HashSet::new();
+        for k in &edit {
+            let BarKey::Tab(t) = k else { continue };
+            for r in app.compare_rows(None, k, "").iter() {
+                assert!(r.0 == *t && all.contains(&r.2[0].key) && seen.insert(r.2[0].key.clone()), "{t}: {}", r.2[0].name);
+            }
+        }
+        done(&dir, &user);
+    }
+
+    fn two_menus(v: &mut serde_json::Value) {
+        stub_menus(v);
+        v["camera"]["menus"] = serde_json::json!([{ "name": "Photo", "modes": ["Stills"] }, { "name": "Video", "modes": ["Movie", "S&Q", "Time-lapse"] }]);
+        v["camera"]["text"]["menus_label"] = serde_json::json!("Shooting mode:");
+    }
+
+    fn four_menus(v: &mut serde_json::Value) {
+        stub_menus(v);
+        v["camera"]["menus"] = serde_json::json!([
+            { "name": "Still", "modes": ["Stills"] }, { "name": "Movie", "modes": ["Movie"] },
+            { "name": "S&Q", "modes": ["S&Q"] }, { "name": "Interval", "modes": ["Time-lapse"] },
+        ]);
+    }
+
+    /// Two menus and four draw two and four buttons, in the definition's order and labelled from it, after the
+    /// definition's words (or the editor's own), in Edit and in Compare; each a button named by its label and telling
+    /// a screen reader whether it is pressed, the menu shown alone pressed.
+    #[test]
+    fn two_and_four_menus_draw_a_button_each() {
+        // (the test's tag, the menus stubbed on, their names, the words before their buttons)
+        type Case<'a> = (&'a str, fn(&mut serde_json::Value), &'a [&'a str], &'a str);
+        let cases: [Case; 2] = [
+            ("e2_two", two_menus, &["Photo", "Video"], "Shooting mode:"),
+            ("e2_four", four_menus, &["Still", "Movie", "S&Q", "Interval"], "Camera menu:"),
+        ];
+        for (tag, stub, want, label) in cases {
+            let (mut app, dir, user) = sample_app(tag, Some(stub));
+            assert_eq!(app.menus().iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), want);
+            app.view = View::Tab(app.menu_tabs()[0].clone());
+            let mut w = Window::new();
+            for mode in [Mode::Edit, Mode::Compare] {
+                app.mode = mode;
+                let (drawn, said) = w.settle(&mut app);
+                let section = if mode == Mode::Edit { "Edit" } else { "Compare" };
+                assert!(said.iter().any(|(_, r, l, _)| *r == Role::Label && l == label), "{section}: the words before the buttons: {said:?}");
+                let shown = app.menu_shown().unwrap();
+                for n in want {
+                    let pressed = if *n == shown { Toggled::True } else { Toggled::False };
+                    assert_eq!(buttons(&said, n), vec![Some(pressed)], "{section}: {n}: {said:?}");
+                }
+                let order: Vec<String> = std::iter::once(label).chain(want.iter().copied()).map(str::to_string).collect();
+                assert!(in_order(&drawn, &order), "{section}: {order:?} in {drawn:?}");
+            }
+            done(&dir, &user);
+        }
+    }
+
+    /// The selector opens on the menu of the mode the file was saved in, whose button says so on hover; a click shows
+    /// another menu, in Edit and in Compare, and changes no byte of the file; a file saved in another mode opens on
+    /// that mode's menu.
+    #[test]
+    fn the_menu_opens_on_the_files_mode_and_a_click_changes_no_byte() {
+        let (mut app, dir, user) = sample_app("e2_open", Some(stub_menus));
+        let mode = app.set_mode(0).expect("the sample says the mode it was saved in");
+        let own = app.menus().iter().find(|m| m.modes.contains(&mode)).unwrap().name.clone();
+        let other = app.menus().iter().map(|m| m.name.clone()).find(|m| *m != own).unwrap();
+        assert_eq!(app.menu_shown().as_deref(), Some(own.as_str()));
+        assert!(app.menu_hover(&own).contains(&format!("This file was saved in {mode} mode.")), "{}", app.menu_hover(&own));
+        assert!(!app.menu_hover(&other).contains("This file was saved in"));
+        let before = app.doc.as_ref().unwrap().edited.to_bytes();
+        let mut w = Window::new();
+        let (_, said) = w.settle(&mut app);
+        assert_eq!(buttons(&said, &own), vec![Some(Toggled::True)]);
+        let (_, said) = w.click(&mut app, &said, Role::Button, &other);
+        assert_eq!(app.menu_shown().as_deref(), Some(other.as_str()));
+        assert_eq!((buttons(&said, &other), buttons(&said, &own)), (vec![Some(Toggled::True)], vec![Some(Toggled::False)]));
+        // the same in Compare, one choice for both
+        app.mode = Mode::Compare;
+        let (_, said) = w.settle(&mut app);
+        assert_eq!(buttons(&said, &other), vec![Some(Toggled::True)], "Compare follows the menu chosen");
+        let _ = w.click(&mut app, &said, Role::Button, &own);
+        assert_eq!(app.menu_shown().as_deref(), Some(own.as_str()));
+        let doc = app.doc.as_ref().unwrap();
+        assert!(doc.edited.to_bytes() == before && doc.changes().is_empty() && app.undo.is_empty(), "a menu picked changes no byte of the file");
+        // a file saved in the other menu's mode opens on that menu
+        let (rec, code) = saved_in(&app, &other);
+        let mut c = test_parse(SAMPLE_BYTES).unwrap();
+        c.sections[0].get_mut(rec.id).unwrap().put(rec.index, code).unwrap();
+        let f = dir.join("CAMSET02.DAT");
+        std::fs::write(&f, c.to_bytes()).unwrap();
+        app.mode = Mode::Edit;
+        app.open(f);
+        let (_, said) = w.settle(&mut app);
+        assert_eq!(app.menu_shown().as_deref(), Some(other.as_str()));
+        assert_eq!(buttons(&said, &other), vec![Some(Toggled::True)]);
+        done(&dir, &user);
+    }
+
+    /// Compare's left bar is Edit's: All settings, then Edit's entries in the menu shown, each with how many rows it
+    /// lists and, as its badge, how many of them differ; the menu's button counts its differences too. A click on an
+    /// entry shows its rows alone, in the camera's layout of that menu; each menu lists the rows its own layout has.
+    #[test]
+    fn compare_has_edits_entries_with_the_rows_that_differ() {
+        let (mut app, dir, user) = sample_app("e2_cmp", Some(stub_menus_and_a_place));
+        let menu = app.menu_shown().unwrap();
+        let edit = app.bar_keys(false, 0, Some(&menu), "", false);
+        let tab = edit.iter().find(|k| matches!(k, BarKey::Tab(_))).unwrap().clone();
+        // file B: one value changed, of a row of the first tab Compare lists in this menu
+        let first = app.compare_rows(Some(&menu), &tab, "").iter().map(|r| r.2[0].clone()).find(|s| s.scalar && s.values.len() >= 2 && app.col_value(Col::a(0), s).is_some()).unwrap();
+        let mut b = app.doc.as_ref().unwrap().original.clone();
+        other_value(&app, &mut b, &first);
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::b(0)], false);
+        let mut w = Window::new();
+        let (drawn, said) = w.settle(&mut app);
+        let cols = app.cols.clone();
+        let label = {
+            let differs = |s: &Setting| app.row_differs(&cols, s);
+            let entries = app.compare_bar(Some(&menu), "", &differs);
+            assert_eq!(entries.iter().map(|e| e.key.clone()).collect::<Vec<_>>(), [vec![BarKey::All], edit.clone()].concat(), "Edit's entries, All settings first");
+            for e in &entries {
+                let rows = app.compare_rows(Some(&menu), &e.key, "");
+                assert_eq!((e.count, e.badge), (Some(rows.len()), rows.iter().filter(|r| differs(&r.2[0])).count()), "{}", e.label);
+                assert!(drawn.contains(&format!("{}  ({})", e.label, rows.len())), "{} drawn: {drawn:?}", e.label);
+            }
+            let badge = |k: &BarKey| entries.iter().find(|e| e.key == *k).unwrap().badge;
+            assert!(badge(&BarKey::All) >= 1 && badge(&tab) >= 1, "the row that differs counts on All settings and on its tab");
+            let at = app.menus().iter().position(|m| m.name == menu).unwrap();
+            assert!(app.menu_differences("", &differs)[at] >= 1, "and on its menu's button");
+            entries.iter().find(|e| e.key == tab).map(|e| format!("{}  ({})", e.label, e.count.unwrap())).unwrap()
+        };
+        // a click on the tab: its rows alone, as the camera's layout of this menu has them
+        let _ = w.click(&mut app, &said, Role::Button, &label);
+        assert_eq!(app.compare_key(), tab);
+        let BarKey::Tab(t) = &tab else { unreachable!() };
+        let rows = app.compare_rows(Some(&menu), &tab, "");
+        assert_eq!(names(&app.matrix_rows()), names(&rows));
+        assert!(rows.iter().all(|r| r.0 == *t) && app.mm_rows.len() == rows.len());
+        // each menu its own rows: a row of Movie mode's menus only, placed in S&Q's otherwise than in Movie's
+        let lists = |m: &str| app.compare_rows(Some(m), &BarKey::All, "").iter().any(|r| r.2.iter().any(|s| s.key == "global:0x02e9"));
+        let modes_menus: Vec<String> = app.menus().iter().map(|m| m.name.clone()).collect();
+        assert_eq!(modes_menus.iter().map(|m| lists(m)).collect::<Vec<_>>(), [false, true, true], "{modes_menus:?}");
+        // an entry the menu shown no longer lists gives way to All settings
+        app.compare_tab = Some("A tab of no menu".into());
+        let _ = w.settle(&mut app);
+        assert_eq!(app.compare_key(), BarKey::All);
+        done(&dir, &user);
+    }
+
+    /// Two files saved in different modes are compared like for like in each menu: a row of a setting the camera keeps
+    /// a copy of per mode is read, in both columns, from the record for the menu shown, whatever mode each file was
+    /// saved in.
+    #[test]
+    fn files_saved_in_different_modes_compare_like_for_like() {
+        let (mut app, dir, user) = sample_app("e2_like", Some(stub_menus));
+        let (iso, own, other, copy) = iso_and_its_copy(&app);
+        // file B saved in the other menu's mode, its ISO other than file A's, its copy for that menu as file A's
+        let (rec, code) = saved_in(&app, &other);
+        let mut b = app.doc.as_ref().unwrap().original.clone();
+        b.sections[0].get_mut(rec.id).unwrap().put(rec.index, code).unwrap();
+        other_value(&app, &mut b, &iso);
+        app.compare = Some((PathBuf::from("B.DAT"), b.clone()));
+        let cols = vec![Col::a(0), Col::b(0)];
+        let row_of = |app: &App, m: &str| -> Row {
+            let bound = app.row_record(&iso, m, &Bind::Menu).key.clone();
+            app.compare_rows(Some(m), &BarKey::All, "").iter().find(|r| r.2[0].key == bound).cloned().unwrap()
+        };
+        // in the other menu both columns are read from its copy: the files agree there
+        let r = row_of(&app, &other);
+        assert_eq!(r.2[0].key, copy.key);
+        assert!(!app.compare_rows(Some(&other), &BarKey::All, "").iter().any(|r| r.2[0].key == iso.key), "the setting itself is no row there");
+        assert!(!app.row_differs(&cols, &r.2[0]), "like for like: {} agrees", r.2[0].name);
+        // in the file's own menu, from the record for that menu: the setting itself differs
+        let r = row_of(&app, &own);
+        assert_eq!(app.row_differs(&cols, &r.2[0]), r.2[0].key == iso.key);
+        // the copy for the other menu changed in file B: they differ there now
+        other_value(&app, &mut b, &copy);
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        assert!(app.row_differs(&cols, &row_of(&app, &other).2[0]));
+        // the window draws that menu's rows so: the copy's row, in both columns
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, cols, true);
+        app.set_menu(&other);
+        let mut w = Window::new();
+        let _ = w.settle(&mut app);
+        assert!(app.matrix_rows().iter().any(|r| r.2[0].key == copy.key));
+        done(&dir, &user);
+    }
+
+    /// The "Editing:" row offers the live settings and the memory sets of the menu shown, outside Expert mode: Movie's
+    /// memories in the Movie menu, not the dial's; the set edited stays offered in another menu; Expert mode and a
+    /// definition without menus as before.
+    #[test]
+    fn the_menus_memory_sets_are_offered_outside_expert() {
+        let (mut app, dir, user) = sample_app("e2_sets", Some(stub_menus));
+        assert!(!app.prefs.expert);
+        let movie: Vec<usize> = (1..app.n_sections()).filter(|&s| app.schema.camera.memory_mode(s) == Some("Movie")).collect();
+        assert!(!movie.is_empty());
+        app.set_menu("Movie");
+        assert_eq!(app.editing_sets(), [vec![0], movie.clone()].concat());
+        let mut w = Window::new();
+        let (_, said) = w.settle(&mut app);
+        for &s in &movie {
+            assert_eq!(buttons(&said, &app.schema.camera.target_name(s)).len(), 1, "{}: {said:?}", app.schema.camera.target_name(s));
+        }
+        for s in app.dial_sets() {
+            assert!(buttons(&said, &app.schema.camera.target_name(s)).is_empty(), "not in the Movie menu: {}", app.schema.camera.target_name(s));
+        }
+        let name = app.schema.camera.target_name(movie[0]);
+        let _ = w.click(&mut app, &said, Role::Button, &name);
+        assert_eq!((app.target, app.menu_shown().as_deref()), (movie[0], Some("Movie")));
+        // another menu while a Movie memory is edited: its sets, and the one edited
+        app.set_menu("Still");
+        let offered = app.editing_sets();
+        assert!(offered.contains(&movie[0]) && app.menu_sets(Some("Still")).iter().all(|s| offered.contains(s)), "{offered:?}");
+        // Expert mode: the live settings and the dial's memories as buttons, the others in their list, as before
+        app.prefs.expert = true;
+        assert_eq!(app.editing_sets(), [vec![0], app.dial_sets()].concat());
+        done(&dir, &user);
+        let (app, dir, user) = sample_app("e2_sets_none", None);
+        assert_eq!(app.editing_sets(), [vec![0], app.dial_sets()].concat(), "without menus as before");
+        done(&dir, &user);
+    }
+
+    /// The Main page shows the tiles of the menu shown, where the definition ties a tile set to it, without its own
+    /// buttons to pick a set; without menus, its buttons as before.
+    #[test]
+    fn main_shows_the_tiles_of_the_menu_shown() {
+        let (mut app, dir, user) = sample_app("e2_main", Some(stub_menus));
+        let sets = app.schema.camera.main_tiles.clone().unwrap().0;
+        app.view = View::Main;
+        let mut w = Window::new();
+        for m in app.menus().to_vec() {
+            app.set_menu(&m.name);
+            let at = sets.iter().position(|s| Some(&s.name) == m.main_tiles.as_ref()).unwrap();
+            assert_eq!(app.main_tile_set(), (at, false));
+            let (_, said) = w.settle(&mut app);
+            assert!(buttons(&said, &sets[0].name).is_empty(), "{}: no buttons of the Main page's own: {said:?}", m.name);
+            // a tile only this set has
+            let only = sets[at].tiles.iter().map(|t| t.caption.clone()).find(|c| sets.iter().enumerate().all(|(i, s)| i == at || s.tiles.iter().all(|t| t.caption != *c)));
+            if let Some(c) = only {
+                assert!(said.iter().any(|(_, r, l, _)| *r == Role::Button && l.starts_with(&format!("{c}: "))), "{}: {c}: {said:?}", m.name);
+            }
+        }
+        done(&dir, &user);
+        let (mut app, dir, user) = sample_app("e2_main_none", None);
+        app.view = View::Main;
+        assert_eq!(app.main_tile_set(), (0, true));
+        let (_, said) = Window::new().settle(&mut app);
+        assert_eq!(buttons(&said, &sets[0].name).len(), 1, "without menus, the Main page's own buttons");
+        done(&dir, &user);
+    }
+
+    /// Where a menu titles a row as the camera draws it, the detail panel names the setting in full.
+    #[test]
+    fn the_detail_panel_names_the_setting_in_full() {
+        let (mut app, dir, user) = sample_app("e2_detail", Some(stub_menus));
+        let (iso, _, other, copy) = iso_and_its_copy(&app);
+        app.set_menu(&other);
+        app.go_to(&iso);
+        let title = app.item.clone().unwrap();
+        assert!(title != copy.name, "the row titled as the camera draws it: {title}");
+        let (drawn, _) = Window::new().settle(&mut app);
+        assert!(drawn.contains(&title) && drawn.contains(&copy.name), "{title} and {} in {drawn:?}", copy.name);
+        done(&dir, &user);
+    }
+
+    /// Compare's Open in Edit opens the setting in the menu Compare shows, and ← Back to Compare comes back to its row;
+    /// a search's result opens the menu that shows it.
+    #[test]
+    fn jumps_open_the_menu_that_shows_the_setting() {
+        let (mut app, dir, user) = sample_app("e2_jumps", Some(stub_menus));
+        let (_, _, other, copy) = iso_and_its_copy(&app);
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::a(1)], false);
+        app.set_menu(&other);
+        let row = app.compare_rows(Some(&other), &BarKey::All, "").iter().find(|r| r.2[0].key == copy.key).cloned().unwrap();
+        app.open_in_edit_from_compare(&row.2[0], 0);
+        assert!(app.mode == Mode::Edit);
+        assert_eq!((app.menu_shown().as_deref(), app.item_key.as_deref()), (Some(other.as_str()), Some(copy.key.as_str())));
+        assert_eq!(app.from_compare.as_ref().map(|f| f.row.clone()), Some((row.0.clone(), copy.key.clone())));
+        let mut w = Window::new();
+        let _ = w.settle(&mut app);
+        assert!(app.from_compare.is_some(), "Edit shows the setting it was given");
+        app.back_to_compare();
+        let _ = w.settle(&mut app);
+        let at = app.compare_rows(Some(&other), &BarKey::All, "").iter().position(|r| r.2[0].key == copy.key);
+        assert!(app.mode == Mode::Compare && app.diff_cursor == at, "back on its row");
+        // the search: a setting only Movie mode's menus list, from Still's, opens the menu of the file's mode or the
+        // first that lists it
+        app.mode = Mode::Edit;
+        app.set_menu("Still");
+        let tc = app.schema.settings.iter().filter(|s| s.group == "TC/UB" && s.placed() && s.area == "global" && !s.expert)
+            .find(|s| app.search_hits_in(0, Some("Still"), &s.name).iter().filter(|(h, _)| h.name == s.name).count() == 1).unwrap().clone();
+        let to = app.search_hits_in(0, Some("Still"), &tc.name).into_iter().find(|(h, _)| h.key == tc.key).and_then(|(_, m)| m).unwrap();
+        assert_ne!(to, "Still");
+        (app.search, app.view) = (tc.name.clone(), View::Search);
+        let (_, said) = w.settle(&mut app);
+        // (egui tells a screen reader its link as the label it lays out)
+        let _ = w.click(&mut app, &said, Role::Label, &tc.name);
+        assert_eq!(app.menu_shown(), Some(to));
+        assert!(app.search.is_empty() && matches!(app.view, View::Tab(_)));
+        done(&dir, &user);
+    }
+
+    /// Up and Down, while the arrow keys move in the Menu, step through its own entries: Main, My Menu, every tab,
+    /// Other and what the menus do not hold, with menus or without; in Compare All settings first, the arrows with Alt
+    /// left to the differences.
+    #[test]
+    fn up_and_down_step_through_the_bars_own_entries() {
+        for (tag, stub) in [("e2_keys", None), ("e2_keys_menus", Some(stub_menus as fn(&mut serde_json::Value)))] {
+            let (mut app, dir, user) = sample_app(tag, stub);
+            let menu = app.menu_shown();
+            let keys = app.bar_keys(false, 0, menu.as_deref(), "", false);
+            let off = BarKey::Tab(app.schema.camera.text.off_menu_name().to_string());
+            assert!(keys[0] == BarKey::Main && keys[1] == BarKey::MyMenu && keys.last() == Some(&off), "{tag}: {keys:?}");
+            let entry = |app: &App| match &app.view {
+                View::Main => BarKey::Main,
+                View::MyMenu => BarKey::MyMenu,
+                View::Tab(t) => BarKey::Tab(t.clone()),
+                _ => BarKey::All,
+            };
+            (app.view, app.focus) = (View::Main, Focus::Tabs);
+            let mut w = Window::new();
+            let _ = w.settle(&mut app);
+            for k in &keys[1..] {
+                w.key(&mut app, egui::Key::ArrowDown, false);
+                assert_eq!(entry(&app), *k, "{tag}");
+            }
+            w.key(&mut app, egui::Key::ArrowDown, false);
+            assert_eq!(entry(&app), off, "{tag}: the last stays");
+            for k in keys[..keys.len() - 1].iter().rev() {
+                w.key(&mut app, egui::Key::ArrowUp, false);
+                assert_eq!(entry(&app), *k, "{tag}");
+            }
+            assert!(app.focus == Focus::Tabs);
+            // Compare: a click on an entry, then the arrows
+            (app.mode, app.cols) = (Mode::Compare, vec![Col::a(0), Col::a(1)]);
+            let (_, said) = w.settle(&mut app);
+            let ckeys = app.bar_keys(true, 0, menu.as_deref(), "", false);
+            let all = format!("{ALL_SETTINGS}  ({})", app.compare_rows(menu.as_deref(), &BarKey::All, "").len());
+            let _ = w.click(&mut app, &said, Role::Button, &all);
+            assert!(app.compare_key() == BarKey::All && app.focus == Focus::Tabs);
+            w.key(&mut app, egui::Key::ArrowDown, false);
+            assert_eq!(app.compare_key(), ckeys[1], "{tag}");
+            w.key(&mut app, egui::Key::ArrowDown, true);
+            assert_eq!(app.compare_key(), ckeys[1], "{tag}: Alt+Down is the next difference");
+            w.key(&mut app, egui::Key::ArrowUp, false);
+            assert_eq!(app.compare_key(), BarKey::All, "{tag}");
+            done(&dir, &user);
+        }
     }
 }

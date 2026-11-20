@@ -37,7 +37,8 @@ impl Col {
 }
 
 /// Compare's "Open in Edit": where it put Edit (the page, group and setting shown, and the set edited) and the
-/// Compare row it came from (tab, setting key). Edit offers "← Back to Compare" while it still shows that setting.
+/// Compare row it came from (the Menu entry or tab it is under, setting key). Edit offers "← Back to Compare" while it
+/// still shows that setting.
 pub(crate) struct FromCompare {
     pub(crate) view: View,
     pub(crate) group: Option<String>,
@@ -125,16 +126,17 @@ pub(crate) struct RowInfo {
     pub(crate) mark: RowMark,
 }
 
-/// A row of the compare matrix: (tab, group, the linked settings that store it).
+/// A row of the compare matrix: (the Menu entry or tab it is under, group, the linked settings that store it).
 pub(crate) type Row = (String, String, Vec<Setting>);
 
 /// What a list of compare rows was worked out from: the camera definition (its generation), the search in
-/// lower case, the tab, Expert mode, and whether the rows are laid out as on the camera (which records a row holds,
-/// `same_row`).
-pub(crate) type RowsKey = (u64, String, Option<String>, bool, bool);
+/// lower case, the camera's menu (None: as before menus), the Menu entry, Expert mode, and whether the rows are laid
+/// out as on the camera (which records a row holds, `same_row`).
+pub(crate) type RowsKey = (u64, String, Option<String>, BarKey, bool, bool);
 
-/// How many lists of compare rows are kept (the window's, and a few the web page asks for).
-const ROWS_KEPT: usize = 4;
+/// How many lists of compare rows are kept: every entry of the Menu in the menu shown, each menu's whole list for its
+/// button's count, and a few the web page asks for.
+const ROWS_KEPT: usize = 48;
 
 impl App {
     /// Columns kept to the `n` sections a file holds, without doubles.
@@ -473,34 +475,129 @@ impl App {
         out
     }
 
-    /// Settings as rows, grouped like the camera menu: (tab, group, linked records), for the
-    /// window's search and tab filter (the views use `matrix_rows_shared`; the tests compare with it).
+    /// The window's Compare rows: those of its Menu entry (`compare_key`) in the camera's menu it shows
+    /// (`compare_menu`), for its search (the view uses `compare_rows`; the tests compare with it).
     #[cfg(test)]
     pub(crate) fn matrix_rows(&self) -> Vec<(String, String, Vec<Setting>)> {
-        self.matrix_rows_for(&self.search, self.compare_tab.as_deref())
+        (*self.compare_rows(self.compare_menu().as_deref(), &self.compare_key(), &self.search)).clone()
     }
 
-    /// The compare matrix's rows for a search `q` (empty: every setting) and a tab (None: every
-    /// tab), so a view other than the window's (the web page) gets them for its own filters.
+    /// The compare rows as before menus (no camera menu) for a search `q` (empty: every setting) and a Menu entry named
+    /// `tab` (None: every setting; `bar_key_named`): what the Memories page, a recall, the page's copy and its tests
+    /// build on, whatever menu the window shows.
     pub(crate) fn matrix_rows_for(&self, q: &str, tab: Option<&str>) -> Vec<(String, String, Vec<Setting>)> {
         (*self.matrix_rows_shared(q, tab)).clone()
     }
 
-    /// The compare matrix's rows (`matrix_rows_for`) without a copy: kept for the definition, search, tab and
-    /// Expert mode they were worked out for, so a frame does not work them out again.
+    /// `matrix_rows_for` without a copy (`compare_rows` with no camera menu).
     pub(crate) fn matrix_rows_shared(&self, q: &str, tab: Option<&str>) -> std::rc::Rc<Vec<Row>> {
-        let key: RowsKey = (self.schema_gen, q.to_lowercase(), tab.map(str::to_string), self.prefs.expert, self.camera_layout());
+        self.compare_rows(None, &self.bar_key_named(tab), q)
+    }
+
+    /// The camera's menu Compare shows: the one the Menu shows (`menu_shown`), one choice for Edit and Compare; None
+    /// without menus.
+    pub(crate) fn compare_menu(&self) -> Option<String> {
+        self.menu_shown()
+    }
+
+    /// The Menu entry named `name` as the bar labels it (None or empty: All settings): the Main page's title, My Menu's
+    /// name, or a tab, Other or the entry for what the camera's menus do not hold by its name. The window keeps
+    /// Compare's entry by that name (`compare_tab`), and the page names one so.
+    pub(crate) fn bar_key_named(&self, name: Option<&str>) -> BarKey {
+        let main = self.schema.camera.main_tiles.as_ref().is_some_and(|t| !t.0.is_empty());
+        match name.filter(|n| !n.is_empty()) {
+            None => BarKey::All,
+            Some(n) if main && n == self.schema.camera.text.main_title() => BarKey::Main,
+            Some(n) if self.has_mymenu_page() && n == self.schema.camera.text.my_menu_name() => BarKey::MyMenu,
+            Some(n) => BarKey::Tab(n.to_string()),
+        }
+    }
+
+    /// The name a Menu entry goes by (`bar_key_named` the other way): None for All settings.
+    pub(crate) fn bar_key_name(&self, key: &BarKey) -> Option<String> {
+        match key {
+            BarKey::All => None,
+            BarKey::Main => Some(self.schema.camera.text.main_title().to_string()),
+            BarKey::MyMenu => Some(self.schema.camera.text.my_menu_name().to_string()),
+            BarKey::Tab(t) => Some(t.clone()),
+        }
+    }
+
+    /// The window's Compare entry (`compare_tab`, by name).
+    pub(crate) fn compare_key(&self) -> BarKey {
+        self.bar_key_named(self.compare_tab.as_deref())
+    }
+
+    /// Compare's rows of Menu entry `entry` in the camera's menu `menu`, for the search `q`, the window's and the page's
+    /// alike. In a menu (one of `menus`), as Edit shows that entry there (`entry_rows`): its groups and rows in the
+    /// camera's layout and order in that menu, each row bound to the record for that menu, so files saved in different
+    /// modes are compared like for like. Without one, as before menus: All settings is the rows Compare always had
+    /// (`build_matrix_rows`), a tab, Other or the entry for what the menus do not hold those of them Edit lists under it
+    /// (its tab as laid out, `menu_entry_of`, or `off_menu`), under its name; Main and My Menu as `entry_rows` gives
+    /// them. Kept for what they were worked out for (`RowsKey`), so a frame does not work them out again.
+    pub(crate) fn compare_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> std::rc::Rc<Vec<Row>> {
+        let menu = menu.filter(|m| self.menu_named(m).is_some());
+        let key: RowsKey = (self.schema_gen, q.to_lowercase(), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout());
         if let Some((_, rows)) = self.rows_cache.borrow().iter().find(|(k, _)| *k == key) {
             return rows.clone();
         }
-        let rows = std::rc::Rc::new(self.build_matrix_rows(&key.1, tab));
+        let off = self.schema.camera.text.off_menu_name();
+        let under = |s: &Setting, t: &str| if self.off_menu(s) { off == t } else { self.menu_entry_of(self.layout_tab(s)) == t };
+        let rows = match (menu, entry) {
+            (Some(m), e) => self.entry_rows(Some(m), e, &key.1),
+            (None, BarKey::All) => self.build_matrix_rows(&key.1, None),
+            (None, BarKey::Tab(t)) => self.compare_rows(None, &BarKey::All, q).iter()
+                .filter(|r| under(&r.2[0], t))
+                .map(|(_, g, linked)| (t.clone(), g.clone(), linked.clone()))
+                .collect(),
+            (None, e) => self.entry_rows(None, e, &key.1),
+        };
+        let rows = std::rc::Rc::new(rows);
         let mut cache = self.rows_cache.borrow_mut();
         if cache.len() >= ROWS_KEPT { cache.remove(0); }
         cache.push((key, rows.clone()));
         rows
     }
 
-    /// Work out the compare matrix's rows: the live settings matching `q` (lower case) in `tab`, in menu order, one row
+    /// Whether a row differs between the columns `cols` (the first the baseline): a later column that keeps the setting
+    /// holds another value (`RowInfo::differs`).
+    pub(crate) fn row_differs(&self, cols: &[Col], s: &Setting) -> bool {
+        let Some(&base) = cols.first() else { return false };
+        let b = self.col_value(base, s);
+        cols[1..].iter().any(|c| (c.section == 0 || s.in_sets) && self.col_value(*c, s) != b)
+    }
+
+    /// Compare's entries of the Menu in the camera's menu `menu`, for the search `q`, the window's and the page's
+    /// alike: "All settings", then Main, My Menu, the tabs, Other and the entry for what the menus do not hold as Edit
+    /// lists them (`bar_keys`), each with how many rows it lists (`compare_rows`) and as its badge how many of them
+    /// differ (`differs`, given a row's leading record).
+    pub(crate) fn compare_bar(&self, menu: Option<&str>, q: &str, differs: &dyn Fn(&Setting) -> bool) -> Vec<BarEntry> {
+        let menu = menu.filter(|m| self.menu_named(m).is_some());
+        let off = self.schema.camera.text.off_menu_name();
+        self.bar_keys(true, 0, menu, q, false).into_iter().map(|key| {
+            let rows = self.compare_rows(menu, &key, q);
+            let (count, badge) = (Some(rows.len()), rows.iter().filter(|r| differs(&r.2[0])).count());
+            let (label, color, hover) = match &key {
+                BarKey::All => (ALL_SETTINGS.to_string(), None, None),
+                BarKey::Main => (self.schema.camera.text.main_title().to_string(), None, None),
+                BarKey::MyMenu => {
+                    let name = self.schema.camera.text.my_menu_name();
+                    (name.to_string(), Some(tab_color(&self.schema.camera, name)), None)
+                }
+                BarKey::Tab(t) => (t.clone(), Some(tab_color(&self.schema.camera, t)), (t == off).then(|| Self::off_menu_hover().to_string())),
+            };
+            BarEntry { key, label, color, hover, count, badge }
+        }).collect()
+    }
+
+    /// How many rows differ in each of the camera's menus (`menus`, in their order), every setting it lists with the
+    /// search `q` (`compare_rows` of All settings): the counts the menu buttons show in Compare.
+    pub(crate) fn menu_differences(&self, q: &str, differs: &dyn Fn(&Setting) -> bool) -> Vec<usize> {
+        self.menus().iter().map(|m| self.compare_rows(Some(&m.name), &BarKey::All, q).iter().filter(|r| differs(&r.2[0])).count()).collect()
+    }
+
+    /// Work out the compare matrix's rows as before menus: the live settings matching `q` (lower case) in `tab` (its own
+    /// tab; None: every tab), in menu order, one row
     /// per setting as the Edit page has it (`same_row`): the records the editor writes together are one row, whole
     /// whatever the search or the tab leaves out, so a copy takes them all, as Edit's and the page's changes do; each
     /// Picture Profile's parameter is a row of its own under its profile's group, and a copy the camera keeps of a
@@ -545,22 +642,25 @@ impl App {
     }
 
     /// Compare's "Open in Edit": Edit on the setting `s` in `section` of file A (the live settings when that section
-    /// does not keep it), its menu opened as the search's results open one (tab, the group as Edit shows it, a family
-    /// by its title, and the setting), with "← Back to Compare" to the row it came from. Only edited is turned off when
-    /// it would hide the setting.
+    /// does not keep it), opened as every jump opens one (`go_to`: the camera's menu Compare shows where it lists the
+    /// setting, its page, the group as Edit shows it, a family by its title, and its row), with "← Back to Compare" to
+    /// the row it came from. Only edited is turned off when it would hide the setting.
     pub(crate) fn open_in_edit_from_compare(&mut self, s: &Setting, section: usize) {
-        let group = self.shown_group_of(s);          // as Edit shows it, in the layout in use
+        let menu = self.compare_menu();
+        // the Compare row it came from, by its entry's name (a tab, Main, My Menu…) and the setting's key
+        let row = self.compare_rows(menu.as_deref(), &self.compare_key(), &self.search).iter()
+            .find(|r| r.2.iter().any(|x| x.key == s.key)).map_or_else(|| s.tab.clone(), |r| r.0.clone());
         self.mode = Mode::Edit;
         self.target = if section == 0 || s.in_sets { section } else { 0 };
-        self.view = self.view_of(s);          // the page that shows it: its tab's, My Menu's own, Other for a tab the definition does not list, or the entry for what the menus do not hold
-        self.group = Some(group);
-        self.item = Some(s.name.clone());
-        self.item_key = Some(s.key.clone());          // of two rows of one name, this one (`pick_row`)
-        self.focus = Focus::Items;
+        // Edit in the menu Compare showed, which the jump keeps where it lists the setting
+        if let Some(m) = &menu {
+            self.set_menu(m);
+        }
+        self.go_to(s);
         if self.only_changed && !self.changed(s) {
             self.only_changed = false;
         }
-        self.from_compare = Some(FromCompare { view: self.view.clone(), group: self.group.clone(), item: self.item.clone(), target: self.target, row: (s.tab.clone(), s.key.clone()) });
+        self.from_compare = Some(FromCompare { view: self.view.clone(), group: self.group.clone(), item: self.item.clone(), target: self.target, row: (row, s.key.clone()) });
         self.status = format!("{} opened in Edit, in {}. ← Back to Compare returns to its row.", s.name, self.schema.camera.target_name(self.target));
     }
 

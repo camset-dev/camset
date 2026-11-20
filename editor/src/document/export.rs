@@ -42,10 +42,17 @@ impl App {
         }
     }
 
-    /// The CSV export and its number of rows. `compare`: the columns (the first is the baseline), only the rows that
-    /// differ, raw values beside the labels; else the settings of set `target`. `q` is a search as the search box
-    /// takes it, `tab` the compare's tab filter, `only_changed` Edit mode's Only edited.
+    /// The CSV export and its number of rows, Compare's in the camera's menu the window shows (`csv_text_in`).
     pub(crate) fn csv_text(&self, compare: Option<(&[Col], bool, bool)>, target: usize, q: &str, tab: Option<&str>, only_changed: bool) -> (String, usize) {
+        self.csv_text_in(self.compare_menu().as_deref(), compare, target, q, tab, only_changed)
+    }
+
+    /// The CSV export and its number of rows. `compare`: the columns (the first is the baseline), only the rows that
+    /// differ, raw values beside the labels, the rows of Compare's Menu entry named `tab` (None: All settings) in the
+    /// camera's menu `menu` as Compare shows them (`compare_rows`): its Tab column the entry or tab a row is under, its
+    /// Group the group, Setting the row's title, each value the record the row shows in that menu. Else the settings of
+    /// set `target`. `q` is a search as the search box takes it, `only_changed` Edit mode's Only edited.
+    pub(crate) fn csv_text_in(&self, menu: Option<&str>, compare: Option<(&[Col], bool, bool)>, target: usize, q: &str, tab: Option<&str>, only_changed: bool) -> (String, usize) {
         let Some(doc) = &self.doc else { return (String::new(), 0) };
         let quote = csv_cell;
         let mut lines: Vec<String> = Vec::new();
@@ -60,14 +67,14 @@ impl App {
             }
             head.extend(cols.iter().map(|c| quote(&self.col_name_with_file(*c))));
             lines.push(head.join(","));
-            for (tab, group, linked) in self.matrix_rows_for(q, tab) {
+            for (tab, group, linked) in self.compare_rows(menu, &self.bar_key_named(tab), q).iter() {
                 let s = &linked[0];
                 let b = self.col_value(base, s);
                 let differs = cols[1..].iter().any(|c| (c.section == 0 || s.in_sets) && self.col_value(*c, s) != b);
                 if only_diff && !differs {
                     continue;
                 }
-                let mut row = vec![quote(&tab), quote(&group), quote(&s.name)];
+                let mut row = vec![quote(tab), quote(group), quote(&s.name)];
                 if expert {
                     row.push(format!("0x{:04x}", s.id));
                 }

@@ -352,7 +352,8 @@ impl App {
     pub(crate) fn detail_panel(&self, ui: &mut egui::Ui, tab: &str, group: &str, linked: &[Setting], editable: bool, actions: &mut Vec<Action>) {
         let s = &linked[0];
         ui.label(RichText::new(format!("{tab} > {group}")).small().color(tab_ink(ui.visuals(), &self.schema.camera, tab)));
-        ui.heading(&s.name);
+        // the setting's full name, where a camera menu titles its row as the camera draws it ("SteadyShot")
+        ui.heading(self.full_name(s));
         if !s.help.is_empty() {
             ui.label(RichText::new(&s.help)).on_hover_text(self.help_hover(s.help_from_file, &self.schema.help_src));
         }
@@ -719,12 +720,22 @@ impl App {
     }
 
     /// The settings shown beside `s`'s options in the detail panel (`menu_rows::sub_choices`), with their option, from
-    /// its camera group in the set being edited; none unless `s` is its row's own setting.
-    pub(crate) fn beside(&self, s: &Setting) -> Vec<(&Setting, String)> {
-        if !menu_rows::is_own(s) {
-            return Vec::new();
-        }
-        menu_rows::sub_choices(s, self.settings_in(self.target, Some(self.layout_tab(s))).filter(|o| menu_rows::camera_group(o) == menu_rows::camera_group(s)))
+    /// its camera group in the set being edited, and of a row a camera menu laid out (`shown_in`) as that menu lays
+    /// them out (`beside_in`); none unless `s` is its row's own setting.
+    pub(crate) fn beside(&self, s: &Setting) -> Vec<(Setting, String)> {
+        self.beside_in(self.target, s.shown_in.as_deref(), s)
+    }
+
+    /// The settings of `s`'s camera group in the set being edited, as the camera menu that laid `s` out lists them
+    /// (`settings_in_menu`), or as before menus: where the detail panel finds the records of a choice shown beside an
+    /// option.
+    fn camera_group_of(&self, s: &Setting) -> Vec<Setting> {
+        let tab = self.layout_tab(s).to_string();
+        let among: Vec<Setting> = match s.shown_in.as_deref().filter(|m| self.menu_named(m).is_some()) {
+            Some(m) => self.settings_in_menu(self.target, m, Some(&tab)),
+            None => self.settings_in(self.target, Some(&tab)).cloned().collect(),
+        };
+        among.into_iter().filter(|o| menu_rows::camera_group(o) == menu_rows::camera_group(s)).collect()
     }
 
     /// Under a setting's options in the detail panel: which of its options have a choice of their own on the camera,
@@ -740,7 +751,7 @@ impl App {
             return;
         }
         let Some(doc) = &self.doc else { return };
-        let group: Vec<&Setting> = self.settings_in(self.target, Some(self.layout_tab(s))).filter(|o| menu_rows::camera_group(o) == menu_rows::camera_group(s)).collect();
+        let group = self.camera_group_of(s);
         let mut options: Vec<&str> = subs.iter().map(|(_, o)| o.as_str()).collect();
         options.dedup();
         ui.add_space(6.0);
@@ -752,7 +763,7 @@ impl App {
         // the chosen option's, and any other edited or opened from elsewhere, so an edit is never out of sight
         for (sub, option) in subs.iter().filter(|(x, o)| Some(o.as_str()) == now || self.changed(x) || self.sub_focus.as_ref() == Some(&x.key)) {
             // every record of that setting, as its own row has them
-            let linked: Vec<Setting> = group.iter().filter(|o| o.links_with(sub)).map(|o| (*o).clone()).collect();
+            let linked: Vec<Setting> = group.iter().filter(|o| o.links_with(sub)).cloned().collect();
             let (sv, so) = (doc.value(self.target, sub.slot()), doc.original_value(self.target, sub.slot()));
             let focused = self.sub_focus.as_ref() == Some(&sub.key);
             let mut frame = egui::Frame::new().fill(tone::boxed(ui.visuals())).inner_margin(8.0).corner_radius(4.0);

@@ -191,7 +191,7 @@ struct App {
     target: usize,
     mode: Mode,
     view: View,
-    /// Compare mode: show only this tab (None = all tabs).
+    /// Compare mode: the Menu's entry shown, by its name (`bar_key_named`: a tab, Main, My Menu…; None = All settings).
     compare_tab: Option<String>,
     /// The camera's menu the window shows, as last picked (`set_menu`, a jump) for a set and an opening of the file;
     /// None, or picked for another, the one the set edited opens on (`menu_shown`).
@@ -627,6 +627,8 @@ impl eframe::App for App {
             if undo { self.undo(); }
             if redo { self.redo(); }
         }
+        // Up and Down through the Menu's own entries, before the columns' keys (`bar_nav`)
+        self.bar_nav(ctx);
         self.keyboard_nav(ctx);
         // compare view: F3 / Shift+F3 (also Alt+Down / Alt+Up) step through the differences
         if self.mode == Mode::Compare && !ctx.wants_keyboard_input() {
@@ -733,8 +735,12 @@ impl eframe::App for App {
                 });
             });
         });
-        if self.mode == Mode::Edit && self.doc.is_some() {
-            egui::SidePanel::left("tabs").resizable(true).default_width(190.0).show(ctx, |ui| self.side_bar(ui));
+        // the Menu on the left, Edit's and Compare's (not beside Compare's record map)
+        if self.doc.is_some() && (self.mode == Mode::Edit || !self.compare_records) {
+            egui::SidePanel::left("tabs").resizable(true).default_width(190.0).show(ctx, |ui| match self.mode {
+                Mode::Edit => self.side_bar(ui),
+                Mode::Compare => self.compare_side_bar(ui),
+            });
         }
         if self.mode == Mode::Compare && !self.compare_records && self.doc.is_some() && self.cols.len() >= 2 {
             egui::SidePanel::right("minimap").resizable(false).exact_width(20.0).show_separator_line(false)

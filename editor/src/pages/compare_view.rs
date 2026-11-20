@@ -110,12 +110,14 @@ impl App {
             }
         });
         if let Some(s) = jump {
+            // as every jump: in the camera's menu Compare shows where it lists the setting (`go_to`)
+            let menu = self.compare_menu();
             self.mode = Mode::Edit;
             self.target = base.section;
-            self.view = self.view_of(&s);
-            self.group = Some(self.shown_group_of(&s));
-            self.item = Some(s.name.clone());
-            self.focus = Focus::Items;
+            if let Some(m) = &menu {
+                self.set_menu(m);
+            }
+            self.go_to(&s);
         }
         actions
     }
@@ -240,7 +242,8 @@ impl App {
         if self.editable() && !self.dial_sets().is_empty() {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("Whole sets:").strong());
-                let every = self.whole_set_note(!self.search.trim().is_empty() || self.compare_tab.is_some());
+                // narrowed by the search, an entry of the Menu, or one of the camera's menus
+                let every = self.whole_set_note(!self.search.trim().is_empty() || self.compare_tab.is_some() || self.compare_menu().is_some());
                 for section in self.dial_sets() {
                     let m = Col::a(section);
                     let live = Col::a(0);
@@ -269,7 +272,8 @@ impl App {
             return actions;
         }
         let cols = self.cols.clone();
-        let rows = self.matrix_rows_shared(&self.search, self.compare_tab.as_deref());
+        // the rows of the Menu's entry chosen, in the camera's menu shown, each bound to the record for that menu
+        let rows = self.compare_rows(self.compare_menu().as_deref(), &self.compare_key(), &self.search);
         let editable = self.editable();
         let three = self.three_cols();
         // each row's values and standing, worked out once a frame for the counts, the filters, the change map and the cells
@@ -767,6 +771,17 @@ pub(crate) mod screen_reader_tests {
         let said = spoken(&mut app);
         assert!(has(&said, Role::Button, "Smaller text") && has(&said, Role::Button, "Larger text"), "{said:?}");
         assert!(said.iter().all(|(_, l)| !l.trim().is_empty()));
+        // the camera's menus, where the definition lists them: a button per menu by its name, in Edit and in Compare
+        // (their pressed state: `menus_window_tests`)
+        let (mut app, dir, user) = crate::test_support::sample_app("named_menus", Some(crate::test_support::stub_menus));
+        for mode in [Mode::Edit, Mode::Compare] {
+            app.mode = mode;
+            let said = spoken(&mut app);
+            for m in app.menus().to_vec() {
+                assert!(has(&said, Role::Button, &m.name), "{}: {said:?}", m.name);
+            }
+        }
+        crate::test_support::done(&dir, &user);
     }
 
     /// The status bar names the editor and its short version at its right end, on the welcome page (the only version
