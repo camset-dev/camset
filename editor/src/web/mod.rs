@@ -2267,12 +2267,10 @@ impl App {
         let (live, memory) = (Col::a(0), Col::a(m));
         let (src, dst) = if recall { (memory, live) } else { (live, memory) };
         let q = body["q"].as_str().unwrap_or("").trim();
-        let rows = if body["shown"].as_bool() == Some(true) && body["entry"].is_string() {
+        // the rows the page's Compare shows: its entry of the Menu (All settings where it names none) in its menu
+        let rows = if body["shown"].as_bool() == Some(true) {
             let menu = self.web_menu(body, body["target"].as_u64().unwrap_or(0) as usize);
             self.compare_rows(menu.as_deref(), &Self::web_entry(body), q).iter().filter(|r| r.2[0].in_sets).cloned().collect()
-        } else if body["shown"].as_bool() == Some(true) {
-            let tab = body["tab"].as_str().filter(|t| !t.is_empty());
-            self.matrix_rows_for(q, tab).into_iter().filter(|r| r.2[0].in_sets).collect()
         } else {
             self.memory_rows()
         };
@@ -2761,8 +2759,8 @@ impl App {
     }
 
     /// Export CSV: Edit mode's set with the page's search and Only edited, or (`compare`) the columns the page's
-    /// Compare shows, its search and tab, only the rows that differ and the raw values as asked; named as the
-    /// window names it.
+    /// Compare shows, its search and its entry of the Menu in its camera's menu, only the rows that differ and the raw
+    /// values as asked; named as the window names it.
     fn web_csv(&mut self, target: usize, q: &str, body: &Value, from: &str) -> WebReply {
         let compare = body["compare"].as_bool().unwrap_or(false);
         let cols: Vec<Col> = match body["cols"].as_array() {
@@ -2778,8 +2776,8 @@ impl App {
         }
         let (only_diff, raw) = (body["only_diff"].as_bool().unwrap_or(self.matrix_only_diff), self.prefs.expert && body["raw"].as_bool().unwrap_or(self.show_raw));
         // the rows the page's Compare shows, as the window exports its own (`csv_text_in`): its entry of the Menu
-        // (`entry`; an older page's `tab`, a tab's entry) in its camera's menu (`menu`)
-        let entry = match body["tab"].as_str().filter(|t| !t.is_empty()) { Some(t) => BarKey::Tab(t.to_string()), None => Self::web_entry(body) };
+        // (`entry`) in its camera's menu (`menu`)
+        let entry = Self::web_entry(body);
         let menu = self.web_menu(body, target);
         let only = !compare && body["only"].as_bool().unwrap_or(false);
         let (text, n) = self.csv_text_in(menu.as_deref(), compare.then_some((cols.as_slice(), only_diff, raw)), target, q, &entry, only);
@@ -3358,7 +3356,7 @@ pub(crate) mod tests {
 
     /// The compare page's rows are the window's: the rows that differ, the baseline's counts, the
     /// arrows into file A, and the search and the Menu column's entries (`entry_rows`, as the window's Compare bar has
-    /// them: `compare_entries`); columns of files not open are refused.
+    /// them: `compare_bar`); columns of files not open are refused.
     #[test]
     fn compare_rows_as_the_window_has_them() {
         let mut app = App::new(vec![], Prefs::default());
@@ -6099,13 +6097,12 @@ mod safety_tests {
         let mut app = App::new(vec![], Prefs::default());
         app.open_sample();
         let m = app.dial_sets()[0];
-        let tab = app.memory_rows()[0].0.clone();
         let differ = |app: &App| app.memory_rows().iter().flat_map(|r| r.2.clone())
             .filter(|l| app.shape_ok_in(l, 0) && app.shape_ok_in(l, m) && app.locked_why(l, 0).is_none() && app.col_value(Col::a(0), l) != app.col_value(Col::a(m), l)).count();
         assert!(differ(&app) > 0, "Memory 1 differs from the live settings in the sample");
-        let r = json_of(&request(&mut app, "recall", json!({ "memory": m, "shown": true, "q": "no such setting anywhere", "tab": tab }), None));
+        let r = json_of(&request(&mut app, "recall", json!({ "memory": m, "shown": true, "q": "no such setting anywhere" }), None));
         assert_eq!(r["n"], 0, "asked for the rows shown, and none are");
-        let r = json_of(&request(&mut app, "recall", json!({ "memory": m, "q": "no such setting anywhere", "tab": tab }), None));
+        let r = json_of(&request(&mut app, "recall", json!({ "memory": m, "q": "no such setting anywhere" }), None));
         assert!(r["n"].as_u64().unwrap() > 0);
         assert_eq!(differ(&app), 0, "the whole memory recalled");
     }
