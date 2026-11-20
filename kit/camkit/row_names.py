@@ -18,7 +18,6 @@ Recording Media#1", camkit.placement.nth); every label above the last the same, 
 safety list names. A table is read once a process, before a run opens its link (table), and one that holds anything
 else is refused in plain words. A camera whose file holds no ROW_NAMES, or no file, has every name as it is."""
 import json
-import os
 import re
 
 from . import safety
@@ -33,32 +32,27 @@ _NTH = re.compile(r"(.*\S)#(\d+)")                  # the kit's "#n" form of a l
 _QUALIFIED = re.compile(r"(.*\S) \(([A-Za-z]+)\)")  # the kit's own older name of one of two rows: "Recording Media (Movie)"
 # the safety lists no side of an entry may hold a label of
 _LISTS = ("never_open", "look_destructive", "acts_on_open", "owner_never_listed")
-_TABLES: dict = {}       # (camera, file) -> its table, read once a process
-_CAMERA: dict = {}
-_RENAMED: dict = {}      # (camera, labels) -> renamed's answer
+_TABLES: dict = {}       # the camera asked (None: the one the kit works on) -> its table, read once a process
+_RENAMED: dict = {}      # (the table's id, labels) -> renamed's answer
 _FAULTS: dict = {}
 
 
 def forget() -> None:
-    """Every table, camera and answer kept, dropped: the next call reads them again (a test that rewrites a file)."""
-    for d in (_TABLES, _CAMERA, _RENAMED, _FAULTS):
+    """Every table and answer kept, dropped: the next call reads them again (a test that rewrites a file or names
+    another camera: kit/tests/conftest.py's own_runs)."""
+    for d in (_TABLES, _RENAMED, _FAULTS):
         d.clear()
 
 
 def _camera(camera):
-    """The camera named, else the one the kit works on (camkit.paths.camera), worked out once for each camera the
-    environment names, config and runs' folder: a row's name is compared often."""
+    """The camera named, else the one the kit works on (camkit.paths.camera); None where nothing names one."""
     if camera:
         return camera
     from . import paths
-    state = (os.environ.get(paths.ENV), str(paths._pkg().CONFIG), os.environ.get("CAMSET_RUNS"))
-    if _CAMERA.get("state") != state:
-        try:
-            got = (paths.camera() or (None,))[0]
-        except Exception:                   # no camera named, or one the config does not list: no table
-            got = None
-        _CAMERA.update(state=state, camera=got)
-    return _CAMERA["camera"]
+    try:
+        return (paths.camera() or (None,))[0]
+    except Exception:                       # no camera named, or one the config does not list: no table
+        return None
 
 
 def labels(path) -> tuple:
@@ -140,32 +134,38 @@ def read(entries, where="ROW_NAMES") -> dict:
 
 
 def table(camera: str | None = None) -> dict:
-    """read()'s table of the camera `camera` (by default the one the kit works on), read once a process (a run reads
-    it before its link opens, so a table refused, or half saved, stops it there); {} for a camera with no file or no
-    ROW_NAMES."""
-    camera = _camera(camera)
+    """read()'s table of the camera `camera` (by default the one the kit works on), read once a process and never again
+    (a run reads it as it starts, before its link opens, through camkit.first_open.seen_record, so a table refused, or
+    half saved, stops it there and never in the middle of a run); {} for a camera with no file or no ROW_NAMES."""
+    got = _TABLES.get(camera)
+    if got is None:
+        got = _TABLES[camera] = _load(_camera(camera))
+    return got
+
+
+def _load(camera) -> dict:
+    """The camera's table read from its hand tables file (read), {} where it has none."""
     if not camera:
         return {}
     from . import datafiles
     p = datafiles.hand_tables_file(camera)
-    k = (camera, str(p))
-    if k not in _TABLES:
-        try:
-            raw = p.read_text(encoding="utf-8-sig")
-        except OSError:
-            raw = None
-        _TABLES[k] = read(json.loads(raw).get(TABLE) or {}, p) if raw is not None else {}
-    return _TABLES[k]
+    try:
+        raw = p.read_text(encoding="utf-8-sig")
+    except OSError:
+        return {}
+    return read(json.loads(raw).get(TABLE) or {}, p)
 
 
 def renamed(path, camera: str | None = None) -> tuple:
     """The path's labels (a tuple, a list or a name: labels()) as the camera draws them: the older path it starts with
     put as the camera's (table), the labels after it kept; as they are where it starts with none. An entry is applied
     only where it is the one kind (fault), whatever handed the table in."""
+    names = _TABLES.get(camera)
+    if names is None:
+        names = table(camera)
+    if not names:                   # no table, as on every camera so far: the path as it is, at once
+        return tuple(path) if isinstance(path, (tuple, list)) else labels(path)
     got = labels(path)
-    names = table(camera)
-    if not names:
-        return got
     k = (id(names), got)            # the table kept in _TABLES for the process, so its id names it
     if k not in _RENAMED:
         out, key = got, _key(got)

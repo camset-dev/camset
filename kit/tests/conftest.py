@@ -34,6 +34,10 @@ def own_runs(tmp_path_factory, monkeypatch):
     cov = sys.modules.get("camkit.coverage")
     if cov is not None:
         cov.forget()
+    # and no camera's ROW_NAMES a test read kept for the next (camkit.row_names reads a table once a process)
+    names = sys.modules.get("camkit.row_names")
+    if names is not None:
+        names.forget()
     return top
 
 
