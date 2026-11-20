@@ -955,6 +955,34 @@ def test_one_family_on_two_sides_casts_no_vote_and_is_never_asked_twice(eyes):
     assert reading.family_voted([*asked_second[:1], V("reader", "reader:qwen3.8-27b", "Hi")], "Qwen3.8-27B-4bit")
 
 
+def test_a_reading_neither_ocr_nor_the_second_reader_gave_never_stands_on_later_votes_alone(eyes):
+    """A group that holds neither OCR's vote nor the second reader's never stands, whatever later votes back it: two
+    third readers, or the second OCR engine and the site's check (which b3afe42 let stand); the reading is refused
+    naming every reading, as a disagreement is. On the a1 II's pass-1 lines, 7 of the 10 readings two third readers
+    alone carried were wrong (2026-11-19). A later vote beside OCR or the second reader still settles a reading."""
+    V = reading.Vote
+    labels = ["Lo", "Mid", "Hi"]
+    assert reading.tally([V("ocr", "ocr:apple", "Lo"), V("reader", "reader:qwen", "Hi"), V("third", "reader:gemma", "Mid"),
+                          V("third.2", "reader:glm", "Mid")], "label", labels) == (None, ())
+    assert reading.tally([V("ocr", "ocr:apple", "Lo"), V("reader", "reader:qwen", "Hi"), V("ocr2", "ocr:rapidocr", "Mid"),
+                          V("check", "check:site", "Mid")], "label", labels) == (None, ())
+    assert reading.tally([V("ocr", "ocr:apple", "Lo"), V("ocr2", "ocr:rapidocr", "Lo")], "label", labels)[1] == ("ocr", "ocr2")
+    eyes.models.update({"third": "gemma-4", "third.2": "glm-4.6v"})
+    eyes.answer("option", {"selected": "Hi"})
+    eyes.answer("option", {"selected": "Mid"}, role="third")
+    eyes.answer("option", {"selected": "Mid"}, role="third.2")
+    f = eyes.frame("00095_down.png")
+    eyes.see(f, "Lo", box=CAROUSEL.box)
+    r = reading.read(f, CAROUSEL, "label", "proof", choices=labels)
+    assert r.refused == f"{reading.DISAGREE}: ocr 'Lo', reader 'Hi', third 'Mid', third.2 'Mid'" and r.choice is None
+    eyes.second = "rapidocr"
+    g = eyes.frame("00096_down.png")
+    eyes.see(g, "Lo", box=CAROUSEL.box)
+    eyes.see(g, "Mid", box=CAROUSEL.box, eng="rapidocr")
+    s = reading.read(g, CAROUSEL, "label", "proof", choices=labels, second=lambda frame: "Mid")
+    assert s.refused.startswith(reading.DISAGREE) and "check 'Mid'" in s.refused and s.choice is None
+
+
 def test_a_guard_asks_no_further_third_reader_once_a_reading_stands(eyes):
     """A guard's lone reading settled by the first third reader: the next is not asked (each only while no reading
     stands)."""

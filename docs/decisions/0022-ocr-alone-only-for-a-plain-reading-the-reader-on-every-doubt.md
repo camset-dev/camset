@@ -39,4 +39,7 @@ no reader answers or an OCR engine is unknown.
 
 Since 2026-11-19 one model in two builds that read two things casts no vote, and a third reader of a model that has read
 the frame is not asked: a reading no longer stands on OCR and a third reader against the second reader's own other
-build, and a third role given only another build of the second's model adds no vote at all.
+build, and a third role given only another build of the second's model adds no vote at all. Nor does a reading
+neither OCR nor the second reader gave ever stand on later votes alone (the second OCR engine, a site's check, the
+third readers): it is refused, and in pass 1's map it goes to review. On the a1 II's own pass-1 lines, 7 of the 10
+readings two third readers alone carried were wrong (2026-11-19).

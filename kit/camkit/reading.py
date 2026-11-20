@@ -34,8 +34,9 @@ how two readings are compared, by the kind of thing read, is agree()'s docstring
        frame, and both asked again, where a plain OCR reading is one more vote and never ends the disagreement in
        OCR's favour; still apart, a third vote, independent of the first two (the second OCR engine, the site's own
        check, then a reader of another model, the "third" role, which may name several asked in turn until a reading
-       stands); the reading stands only when two of the votes name the same expected option and nothing else is named
-       as often, else it is refused naming every reading.
+       stands); the reading stands only when two of the votes name the same expected option, one of them OCR's or the
+       second reader's, and nothing else is named as often, else it is refused naming every reading (a reading neither
+       of the first two gave never stands on later votes alone: tally, FIRST_TWO).
      - A vote counts once per source: one OCR engine is one vote whatever name it goes by (engine_of), and two readers
        of one model are one vote, none where they read two things (tally), so a third reader of a family that has read
        the frame is not asked (family_voted). The reader does not win a disagreement by itself: measured on the first
@@ -727,12 +728,19 @@ def tally(votes, expect: str, choices=()) -> tuple:
     together only as a group whose every two members agree (agree, with the same choices: the one predicate, so a
     reading tally keeps is one agree takes); agree is not transitive for codes ("PPB" agrees with "PP8" and "PPb", which
     do not agree), so a reading two contradicting votes each lean to stands for neither. With choices a vote that names
-    none of them backs nothing."""
+    none of them backs nothing. A group that holds neither OCR's vote nor the second reader's (FIRST_TWO) never stands,
+    whatever later votes back it (the second OCR engine, the site's check, the third readers): on the a1 II's own pass-1
+    lines, 7 of the 10 readings two third readers alone carried were wrong (2026-11-19, decision 22)."""
     choices = tuple(str(o) for o in choices or ())
     said = [v for v in votes if v.text and canonical(v.text)]
     group = standing(said, lambda a, b: agree(a.text, b.text, expect, choices), lambda v: v.source,
                      (lambda v: choice_of(v.text, expect, choices) is not None) if choices else None)
-    return (group[0], tuple(w.eye for w in group)) if group else (None, ())
+    if not group or not any(w.eye in FIRST_TWO for w in group):
+        return None, ()
+    return group[0], tuple(w.eye for w in group)
+
+
+FIRST_TWO = ("ocr", "reader")            # the eyes of the first two votes, OCR's and the second reader's (Vote.eye)
 
 
 def family_voted(votes, model) -> bool:
