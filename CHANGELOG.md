@@ -63,6 +63,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the docs and the ledger's public form, the mapping found no menu row that changes such a record, so it does not know
   what the record holds, and a change to it is unproved and at your own risk. Which unmapped records never changed
   stays in the mapper's private ledger, never listed or counted in a public file (decision 27).
+- **The a1 II's definition proves Bracket Type's Cont. Bracket and Single Bracket whole,** each of their 60 choices
+  and no longer a sample. Six rows take the names the camera draws (Proxy Recording, Proxy File Format, Proxy Rec.
+  Settings, with Shutter Button, S&Q's Record Setting and the movie Recording Media row), and two value names are
+  corrected to "Disp Specified Time Img." and "FTP Trans. (This Img.)".
 - **The a1 II's definition takes the evening's proofs of 2026-11-19:** S&Q's Record Setting for XAVC HS 4K at 24p and
   120p and XAVC S HD at 30p, 24p and 120p, each a record of its own (the two named before for every rate are the 60p
   ones), and Framing Stabilizer's On: Center or On: Manual, the row greyed while Touch Operation is Off. A record that

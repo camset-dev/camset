@@ -1487,7 +1487,7 @@
     },
     "global:0x10ac": {"note": "Focus Bracket's Step Width (1-10), stored as the number."},
     "global:0x10aa": {
-      "note": "Focus Bracket's Number of Shots, stored as the number: three digit boxes in Bracket Type's Focus Bracket (Bracket Settings). Chosen there: 3 to 9, 13 to 93 in tens, 103 and 203; 000 is kept as 2, the lowest. The hundreds box comes round after 2, so up to 299 may be offered, but nothing above 203 was chosen."
+      "note": "Focus Bracket's Number of Shots, stored as the number: three digit boxes in Bracket Type's Focus Bracket (Bracket Settings). Chosen there: 3 to 9, 13 to 93 in tens, 103 and 203; 000 is kept as 2, the lowest. The hundreds box comes round after 2, so up to 299 may be offered."
     },
     "global:0x04e5": {
       "note": "The DISP display mode on the monitor: Display All Info 0, No Disp. Info 1, Histogram 2, Level 3 (the SDK's 2-5; For Viewfinder 4 was not offered in Movie mode). A settings file does not restore it.",
@@ -2651,7 +2651,37 @@
     ["global:0x0284", 1, "9M 4:2:0 10bit"],
     ["global:0x0284", 3, "6M 4:2:0 8bit (XAVC S HD's setting; only a reset writes it)"],
     ["global:0x02bf", 3, "White Balance Bracket"],
-    ["global:0x02bf", 4, "DRO Bracket"]
+    ["global:0x02bf", 4, "DRO Bracket"],
+    ["global:0x043a", 358, "Disp Specified Time Img."],
+    ["global:0x043b", 358, "Disp Specified Time Img."],
+    ["global:0x043c", 358, "Disp Specified Time Img."],
+    ["global:0x043d", 358, "Disp Specified Time Img."],
+    ["global:0x043e", 358, "Disp Specified Time Img."],
+    ["global:0x0441", 358, "Disp Specified Time Img."],
+    ["global:0x0442", 358, "Disp Specified Time Img."],
+    ["global:0x0444", 358, "Disp Specified Time Img."],
+    ["global:0x1244", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[0]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[1]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[2]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[3]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[4]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[5]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[6]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[7]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[8]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[9]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[10]", 358, "Disp Specified Time Img."],
+    ["global:0x12e7[11]", 358, "Disp Specified Time Img."],
+    ["global:0x043a", 881, "FTP Trans. (This Img.)"],
+    ["global:0x043b", 881, "FTP Trans. (This Img.)"],
+    ["global:0x043c", 881, "FTP Trans. (This Img.)"],
+    ["global:0x043d", 881, "FTP Trans. (This Img.)"],
+    ["global:0x043e", 881, "FTP Trans. (This Img.)"],
+    ["global:0x0441", 881, "FTP Trans. (This Img.)"],
+    ["global:0x0442", 881, "FTP Trans. (This Img.)"],
+    ["global:0x0444", 881, "FTP Trans. (This Img.)"],
+    ["global:0x1244", 881, "FTP Trans. (This Img.)"]
   ],
   "PP7_VALUES": [
     ["global:0x052b[6]", 15, "S-Log2 (the first a1's PP7; not offered on this body)"],
@@ -4036,9 +4066,15 @@
     "Recording Media Slot \\d+": "Recording Media on one slot",
     "Recording Media (?:Sort|Simult\\.) Recording": "Recording Media on both slots",
     "S&Q mode \\((?:Time-lapse|S&Q Motion)\\)": "S&Q mode",
-    "Switch V/H AF Area Off, (?:Spot size|Custom slot) last left: [^\\]]*": "Switch V/H AF Area Off",
-    "Recording Media \\(Movie\\)": "Recording Media#1",
-    "S&Q Settings > S&Q Record Setting": "S&Q Settings > Record Setting"
+    "Switch V/H AF Area Off, (?:Spot size|Custom slot) last left: [^\\]]*": "Switch V/H AF Area Off"
   },
-  "ORIENTED": "\\[Switch V/H AF Area = [^,\\]]+, camera (level|grip down|grip up)(?:, Vertical Display (?:On|Off))?\\]$"
+  "ORIENTED": "\\[Switch V/H AF Area = [^,\\]]+, camera (level|grip down|grip up)(?:, Vertical Display (?:On|Off))?\\]$",
+  "ROW_NAMES": {
+    "S with Shutter Button": "with Shutter Button",
+    "Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording",
+    "Proxy Settings > Px Proxy Rec. Settings": "Proxy Settings > Proxy Rec. Settings",
+    "Proxy Settings > Px Proxy File Format": "Proxy Settings > Proxy File Format",
+    "S&Q Settings > S&Q Record Setting": "S&Q Settings > Record Setting",
+    "Rec. Media Settings > Recording Media (Movie)": "Rec. Media Settings > Recording Media#1"
+  }
 }

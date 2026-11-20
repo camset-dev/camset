@@ -1436,7 +1436,7 @@ def test_no_never_open_row_of_the_definition_escapes_with_its_words_run_together
 # whole)
 ORDINARY_RUN_TOGETHER = ["Av/Tv Rotate", "Bird: Detailed Settings", "Crop Level", "Delete confirm.",
                          "Delete pressing twice", "File Format", "File Name Format", "Pre-Capture Settings",
-                         "Px Proxy File Format", "Rating Set(Custom Key)", "Time Code Format", "Time Code Preset",
+                         "Proxy File Format", "Rating Set(Custom Key)", "Time Code Format", "Time Code Preset",
                          "User Bit Preset", "Zoom Ring Rotate", "Drive Mode", "Focus Area"]
 
 
