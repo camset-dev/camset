@@ -22,8 +22,10 @@ runs/<model>_fw<fw>/ (the run kit2_greyrow unless --run names another), one a ro
 file, the outcome, whether the row's one Right is spent ("spent") and went out ("right"), the guide's and the notice's
 words and frames (Sony's text and the camera's state: they stay in runs/, decision 13), and the blocker the notice names
 (camkit.coverage.blocker_of: the row label, never its value), which a data pass takes to the hand tables'
-inactive_when with the start file's record of that row (docs/REMAPPING_PLAYBOOK.md, Phase 3). A row whose Right is
-spent in this run folder, mode and context gets none again: a new --context (another state) or --run asks again.
+inactive_when with the start file's record of that row (docs/REMAPPING_PLAYBOOK.md, Phase 3). A row is the row the kit
+finds (row_keys: its labels folded as camkit.first_open folds them, and the row the page scan leads to), so a row named
+twice, spelled or read otherwise, is asked once; a row whose Right is spent in this run folder, mode and context (each
+compared folded) gets none again: another --context (another state) or --run asks again.
 """
 import argparse
 import json
@@ -32,7 +34,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import first_open, jsonl  # noqa: E402
+from camkit import first_open, jsonl, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to, target_of  # noqa: E402
@@ -61,14 +63,46 @@ def row_paths(rows) -> list:
     return out
 
 
-def row_key(mode: str, context: str, path) -> tuple:
-    return (str(mode or ""), str(context or ""), tuple(str(x) for x in path))
+def row_keys(cycle, model, path) -> tuple:
+    """The keys a row's one Right is spent under, as the kit finds the row: its labels folded as camkit.first_open.Seen
+    folds them (proving.greyrow.label_key), and, where the page scan leads to it, the row crawl_run.target_of goes to
+    (its page's key and its slot) with the submenu labels folded, so two spellings or two readings of one row are one
+    row."""
+    keys = [greyrow.label_key(path)]
+    j = target_of(cycle, model, path[0])[0] if cycle else None
+    if j is not None:
+        keys.append(("row", cycle[j]["page"], cycle[j]["row"], *first_open.key(path[1:])))
+    return tuple(keys)
+
+
+def same_words(a, b) -> bool:
+    """Two modes or two contexts compared folded (safety.plain): "Touch Off" is "touch  off"."""
+    return safety.plain(str(a or "")) == safety.plain(str(b or ""))
 
 
 def spent_rows(path: Path, mode: str, context: str) -> set:
-    """The rows whose one Right is spent in the run's lines file for this mode and context (their row_key)."""
-    return {row_key(x.get("mode"), x.get("context"), x.get("path") or ()) for x in jsonl.read(path, bad="skip")
-            if x.get("spent") and x.get("mode") == mode and (x.get("context") or "") == (context or "")}
+    """The keys of the rows whose one Right is spent in the run's lines file for this mode and context, each compared
+    folded (same_words): each line's "keys", or its path's label_key where a line holds none."""
+    out = set()
+    for x in jsonl.read(path, bad="skip"):
+        if x.get("spent") and same_words(x.get("mode"), mode) and same_words(x.get("context"), context):
+            keys = x.get("keys") or [greyrow.label_key(x.get("path") or ())]
+            out |= {tuple(k) for k in keys if isinstance(k, list | tuple)}
+    return out
+
+
+def distinct_rows(cycle, model, rows, say=_say) -> list:
+    """[(path, its row_keys)] for each row named, in the order given, a row whose keys meet an earlier row's (the same
+    row spelled or read otherwise) left out and said."""
+    out, had = [], set()
+    for path in rows:
+        keys = row_keys(cycle, model, path)
+        if any(k in had for k in keys):
+            say(f"{' > '.join(path)}: the same row as one named before it, asked once")
+            continue
+        had.update(keys)
+        out.append((path, keys))
+    return out
 
 
 def stored_reason(cycle, model, path) -> str | None:
@@ -104,7 +138,7 @@ def reach(cam, cycle, model, path) -> None:
     enter_any(cam, path, 0)
 
 
-def one_row(cam, cycle, model, path, seen, tried: set, key, labels, say=_say) -> dict:
+def one_row(cam, cycle, model, path, seen, tried: set, keys, labels, say=_say) -> dict:
     """The row's line: passed over before anything is pressed where the kit may not open or reach it (proving.greyrow.
     closed), else reached and asked (proving.greyrow.ask_why); a row that fails, or is not reached, says why."""
     name = " > ".join(path)
@@ -119,7 +153,7 @@ def one_row(cam, cycle, model, path, seen, tried: set, key, labels, say=_say) ->
         say(f"{name}: not reached: {e}")
         return {"path": path, "right": False, "outcome": NOT_REACHED, "why": str(e)}
     try:
-        return greyrow.ask_why(cam, path, seen=seen, tried=tried, key=key, stored=stored, labels=labels, say=say)
+        return greyrow.ask_why(cam, path, seen=seen, tried=tried, keys=keys, stored=stored, labels=labels, say=say)
     except greyrow.RowFailed as e:
         say(f"{name}: failed: {e}")
         return e.line
@@ -143,6 +177,7 @@ def main():
     if not rows:
         ap.error("--row: at least one row")
     cycle, model = load_scan(in_mode(a.scan, a.in_mode))
+    rows = distinct_rows(cycle, model, rows)
     run = Run(a.run)
     out_path = run.dir / LINES
     tried = spent_rows(out_path, a.in_mode, a.context)
@@ -151,18 +186,18 @@ def main():
     hdmi = eyes_from_config(run)
     with open(out_path, "a", encoding="utf-8", newline="\n") as out, \
             prover_session(run, hdmi, reach=this_body_first(run.root.name)) as s:
-        def write(line: dict, key) -> None:
+        def write(line: dict, keys) -> None:
             out.write(json.dumps({"t": round(time.time(), 3), "mode": a.in_mode, "context": a.context,
-                                  "start": s.start.name, **line, "spent": key in tried}) + "\n")
+                                  "start": s.start.name, **line, "keys": [list(k) for k in keys],
+                                  "spent": any(k in tried for k in keys)}) + "\n")
             out.flush()
-        for path in rows:
-            key = row_key(a.in_mode, a.context, path)
+        for path, keys in rows:
             try:
-                line = one_row(s.cam, cycle, model, path, seen, tried, key, labels)
+                line = one_row(s.cam, cycle, model, path, seen, tried, keys, labels)
             except Exception as e:      # a STOP, a refused press, a lost link: the line, then the session's close
-                write({"path": path, "right": None, "outcome": STOPPED, "why": f"{type(e).__name__}: {e}"}, key)
+                write({"path": path, "right": None, "outcome": STOPPED, "why": f"{type(e).__name__}: {e}"}, keys)
                 raise
-            write(line, key)
+            write(line, keys)
             close_screen(s.cam, s.link)         # MENU back to the shooting screen, for the next row's MENU
 
 

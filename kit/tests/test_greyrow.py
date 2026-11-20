@@ -21,6 +21,7 @@ from proving import greyrow  # noqa: E402
 RUNS = paths.a1ii_root()
 DISABLED = "Sets how the function works. This function is currently disabled."
 REFUSAL = "This operation or setting not available as follows Touch Operation Off"
+FS = ("labels", "framing stabilizer")     # the key Framing Stabilizer's one Right is spent under
 
 
 class Seen:
@@ -133,7 +134,7 @@ def test_help_first_then_one_right_then_the_notice_left_with_menu(monkeypatch):
     assert cam.keys == ["c4", "right", "menu"] and guides == ["Framing Stabilizer"]
     assert (line["outcome"], line["right"], line["blocker"]) == (greyrow.NOTICE, True, {"row": "Touch Operation"})
     assert line["after"]["left_by"] == "menu" and line["notice"]["text"] == REFUSAL and line["help"]["text"] == DISABLED
-    assert "Off" not in json.dumps(line["blocker"]) and tried == {("Framing Stabilizer",)}
+    assert "Off" not in json.dumps(line["blocker"]) and tried == {FS}
     assert any("one Right, to read the camera's notice, not to choose" in s for s in said)
 
 
@@ -192,6 +193,19 @@ def test_never_twice_on_a_row_in_the_run(monkeypatch):
     cam.where, cam.keys = "row", []
     again, said, tried = ask(cam, tried=tried)
     assert (again["outcome"], again["right"], cam.keys) == (greyrow.TRIED, False, ["c4"])
+
+
+@pytest.mark.parametrize("spelled", ["framing stabilizer", "Framing  Stabilizer", " FRAMING STABILIZER "])
+def test_one_row_spelled_another_way_is_the_same_row_and_gets_no_second_right(monkeypatch, spelled):
+    """The row's key is its labels folded as camkit.first_open.Seen folds them, the way the kit finds the row: another
+    spelling of one row is that row, its Right spent."""
+    cam = GreyCam()
+    world(monkeypatch, cam)
+    line, said, tried = ask(cam)
+    cam.where, cam.keys = "row", []
+    again, said, tried = ask(cam, path=[spelled], tried=tried)
+    assert (again["outcome"], again["right"], cam.keys) == (greyrow.TRIED, False, ["c4"]) and tried == {FS}
+    assert greyrow.label_key([spelled]) == FS
 
 
 @pytest.mark.parametrize("text", [
@@ -274,7 +288,7 @@ def test_the_cameras_own_refusal_of_the_right_is_said_and_spent(monkeypatch):
         GreyCam.press(cam, key, **kw)
     monkeypatch.setattr(cam, "press", press)
     line, said, tried = ask(cam)
-    assert (line["outcome"], line["right"], tried) == (greyrow.REFUSED, False, {("Framing Stabilizer",)})
+    assert (line["outcome"], line["right"], tried) == (greyrow.REFUSED, False, {FS})
 
 
 def test_a_row_no_longer_lit_or_grey_after_help_gets_no_right(monkeypatch):

@@ -21,7 +21,8 @@ For one row, the cursor on it on a menu or submenu page, in this order, each ste
      written with a refusal's words, REASON_WORDS); the kit may open the row as it would if it were white (closed and
      open_refused: never-open, what acts as it opens, a format, delete or reset, a row this body has not been seen to
      open, whose first open is the crawl's procedure alone, camkit.first_open); no Right went on this row before in the
-     run (`tried`, spent before the press, whatever follows); the lit row still the row and still drawn grey.
+     run, however it was spelled (`tried`, by the row's keys, its labels folded: label_key; spent before the press,
+     whatever follows); the lit row still the row and still drawn grey.
      camkit.live judges the Right as every opening press (the never-open check on the bar read just then).
   5. After the Right (after_right): a notice that asks nothing is read and left by camkit.live.leave_notice (MENU
      first; its OK only where the camera refuses MENU and OK is plainly its only button); a screen that asks (its text a
@@ -38,7 +39,7 @@ import re
 
 import numpy as np
 
-from camkit import coverage, safety, screen
+from camkit import coverage, first_open, safety, screen
 from camkit.live import leave_notice, lit_text, text_of
 from camkit.screen import same_state
 
@@ -182,15 +183,23 @@ def open_refused(path, lit: str, seen, stored=None) -> str:
     return ""
 
 
-def ask_why(cam, path, *, seen, tried: set, key=None, stored=None, labels=(), say=_say) -> dict:
+def label_key(path) -> tuple:
+    """The key a row's one Right is spent under by its labels: each folded as camkit.first_open.Seen folds them
+    (first_open.key: safety.plain), so "framing  stabilizer" is Framing Stabilizer."""
+    return ("labels", *first_open.key(path))
+
+
+def ask_why(cam, path, *, seen, tried: set, keys=None, stored=None, labels=(), say=_say) -> dict:
     """The module's procedure on the row at `path` under the cursor; returns the row's line (outcome, right, grey,
-    help, after, notice, blocker, why). seen: camkit.first_open.Seen (seen, unseen); tried: the run's rows a Right went
-    on (`key`, by default the path), which this adds to before the press; stored: the page model's never-open reason of
-    its top-level row; labels: the row labels the kit knows (runner.known_labels), for the blocker. Raises RowFailed
-    (its line) where the row fails; a STOP, a refusal other than the lit row's and a lost link go up as raised."""
+    help, after, notice, blocker, why). seen: camkit.first_open.Seen (seen, unseen); tried: the keys of the run's rows
+    whose Right is spent; keys: the row's (by default its label_key; kit/provers/greyrow_run.py adds the row the page
+    scan leads to), spent where any is in `tried`, all added to it before the press; stored: the page model's never-open
+    reason of its top-level row; labels: the row labels the kit knows (runner.known_labels), for the blocker. Raises
+    RowFailed (its line) where the row fails; a STOP, a refusal other than the lit row's and a lost link go up as
+    raised."""
     path = [str(x) for x in path]
     name, label = " > ".join(path), path[-1]
-    key = tuple(path) if key is None else key
+    keys = (label_key(path),) if keys is None else tuple(keys)
     line = {"path": path, "right": False}
 
     def failed(why: str):
@@ -235,14 +244,14 @@ def ask_why(cam, path, *, seen, tried: set, key=None, stored=None, labels=(), sa
     if refused:
         say(f"{name}: its Help gives no reason; no Right: {refused}")
         return {**line, "outcome": HELP_ONLY, "why": refused}
-    if key in tried:
+    if any(k in tried for k in keys):
         say(f"{name}: its Help gives no reason; a Right went on this row before in the run: no second")
         return {**line, "outcome": TRIED}
     grey, measure = row_grey(cam)
     if not on_row(cam, label) or grey is not True:
         say(f"{name}: after its Help the lit row is not the grey row any more ({cam.frame.path.name}): no Right")
         return {**line, "outcome": MOVED}
-    tried.add(key)                              # spent before the press: never a second, whatever follows
+    tried.update(keys)                          # spent before the press: never a second, whatever follows
     say(f"{name}: its Help gives no reason: one Right, to read the camera's notice, not to choose")
     try:
         cam.press("right")
