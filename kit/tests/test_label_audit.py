@@ -303,8 +303,20 @@ def test_all_agree_needs_two_families():
 def test_a_checklist_name_is_judged_by_the_state_its_box_shows():
     import label_audit as la
     import reader_census as rc
-    assert [la.tick_state(t) for t in ("Ticked", "Not ticked", "On", "Off", "Included in DISP cycle", "Not included",
-                                       "Unticked", "")] == [True, False, True, False, True, False, False, None]
+    # the report's own rule (pass2_report.TICKED, UNTICKED); a name neither says is left out
+    said = {"Ticked": True, "Not ticked": False, "On": True, "Off": False, "Included in DISP cycle": True,
+            "Not included": False, "Excluded": False, "Registered": True, "Not registered": False,
+            "Allowed (ticked)": True, "None": None, "Unit": None, "Underwater": None, "Normal": None, "": None}
+    assert {t: la.tick_state(t) for t in said} == said
+    n = la.Name("k", 0, "Zqx Unit", "schema kept")
+    n.kind, n.after, n.line = "checklist", True, {"label": "Zqx Two"}
+    item = rc.Item("checklist", Path("f.png"), [("Zqx Two", True)], ["Zqx One", "Zqx Two"], extra={"label": "Zqx Two"})
+    assert la.judged(n, item, {}) == (None, "a checklist name that says no tick state")
+    # an answer whose boxes are no list (a string naming the box) says no state: no answer, never right
+    n.name = "Not ticked"
+    n.item, _ = la.judged(n, item, {})
+    assert la.reading_of(n, {"boxes": "Zqx Two"})[0] == "no answer"
+    assert la.reading_of(n, {"boxes": [{"label": "Zqx Two", "ticked": True}]})[0] == "another option"
     n = la.Name("k", 0, "Not ticked", "schema kept")
     n.kind, n.after, n.line = "checklist", False, {"label": "Zqx Two"}
     item = rc.Item("checklist", Path("f.png"), [("Zqx Two", True)], ["Zqx One", "Zqx Two"], extra={"label": "Zqx Two"})

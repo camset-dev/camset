@@ -86,7 +86,6 @@ LABEL_KINDS = {"list", "scale", "side list", "table picker", "carousel", "axis",
 VERDICTS = ("none agree, all on another reading", "picks the option, spelled otherwise", "none agree, apart",
             "some agree", "one family, not as published", "one family, spelled as published", "all agree", "not read")
 LISTED = VERDICTS[:5]                                   # the verdicts the private file lists, in this order
-NOT_TICKED = re.compile(r"(?:not|no|off)\b|un")       # how a checklist value's name for an unticked box begins (folded)
 DEFAULTS = {"minutes": 60.0, "timeout": 60.0}
 
 
@@ -302,10 +301,13 @@ def no_item(r: dict) -> str:
 
 
 def tick_state(name) -> bool | None:
-    """Whether a checklist value's name says its box is ticked ("Ticked", "On", "Included in DISP cycle") or not ("Not
-    ticked", "Off", "Not included", "Unticked"): a name that starts with a no says not; None for no name."""
-    t = re.sub(r"\s+", " ", str(name or "")).strip().lower()
-    return None if not t else not NOT_TICKED.match(t)
+    """Whether a checklist value's name says its box is ticked or not, by the report's own rule (pass2_report.TICKED
+    and UNTICKED, as judge_ticks reads the schema's words: "Allowed (ticked)", "Registered", "Included in DISP cycle"
+    ticked; "Excluded", "Not ticked", "Off" not); None for a name neither says ("None", "Unit"), left out."""
+    t = str(name or "")
+    if p2.UNTICKED.search(t):
+        return False
+    return True if p2.TICKED.search(t) else None
 
 
 def judged(n: Name, item, fixes: dict) -> tuple:
@@ -468,8 +470,9 @@ def reading_of(n: Name, got) -> tuple:
     "no answer". A star count, a number, a white balance readout and a checklist box's state are judged as the census
     judges them, which is exact."""
     value = rc.NEW_PICK.get(n.kind, rc._selected)(got, n.item)
-    if value is None or (isinstance(value, str) and not value.strip()) or (isinstance(value, list) and not value):
-        return "no answer", value, None
+    if value is None or (isinstance(value, str) and not value.strip()) or (isinstance(value, list) and not value) \
+            or (n.kind == "checklist" and not isinstance(value, list)):
+        return "no answer", value, None          # a checklist's answer is its list of boxes, each with its state
     if n.kind not in LABEL_KINDS:
         verdict = rc.judge(n.item, value)
         if verdict in ("right", "no answer"):
