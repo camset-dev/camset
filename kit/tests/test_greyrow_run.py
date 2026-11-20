@@ -86,6 +86,37 @@ def test_an_older_and_a_newer_name_of_one_row_are_one_row_for_the_runner(own_run
         row_names.forget()
 
 
+def test_a_table_added_between_two_runs_leaves_the_row_no_second_right(own_runs, tmp_path, monkeypatch):
+    """Run 1, no table: the row's Right spent under its older name, the line's keys written so. Then the ROW_NAMES entry
+    is added; run 2 in the same folder, mode and context asks by the camera's name, the records holding the row under
+    it: "right already pressed", since every earlier line's path is keyed again under the table in force now."""
+    from camkit import datafiles, definitions, row_names
+    from conftest import TEST_CAMERA
+    older, camera = ["Proxy Settings", "Px Proxy Recording"], ["Proxy Settings", "Proxy Recording"]
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    p = datafiles.hand_tables_file(TEST_CAMERA)
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+    def table(**names):
+        p.write_text(json.dumps({"camera": TEST_CAMERA, **names}), encoding="utf-8")
+        row_names.forget()
+    table()
+    cam = T.GreyCam(label=older[-1])
+    T.world(monkeypatch, cam)
+    monkeypatch.setattr(G, "stored_reason", lambda cycle, model, path: None)
+    monkeypatch.setattr(G, "reach", lambda c, cycle, model, path: setattr(c, "where", "row"))
+    run_main(monkeypatch, [" > ".join(older)], None, real_one_row=True, cam=cam)
+    assert cam.keys.count("right") == 1 and lines_written()[0]["keys"] == [["labels", "proxy settings",
+                                                                             "px proxy recording"]]
+    table(ROW_NAMES={" > ".join(older): " > ".join(camera)})
+    try:
+        cam.where, cam.keys, cam.label, cam.lit = "row", [], camera[-1], camera[-1]
+        lines, asked, closed = run_main(monkeypatch, [" > ".join(camera)], None, real_one_row=True, cam=cam)
+        assert "right" not in cam.keys and lines[-1]["outcome"] == greyrow.TRIED, (cam.keys, lines[-1])
+    finally:
+        row_names.forget()
+
+
 def test_a_row_the_kit_may_not_open_is_passed_over_before_anything_is_pressed(monkeypatch):
     monkeypatch.setattr(G, "stored_reason", lambda cycle, model, path: None)
     monkeypatch.setattr(G, "reach", lambda *a: pytest.fail("reached a row the kit may not open"))

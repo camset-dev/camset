@@ -92,13 +92,16 @@ def same_words(a, b) -> bool:
 
 def spent_rows(path: Path, mode: str, context: str) -> set:
     """The keys of the rows whose one Right is spent in the run's lines file for this mode and context, each compared
-    folded (same_words): each line's "keys", or its path's label_key where a line holds none."""
+    folded (same_words): each line's "keys" as written, and its path's label_key computed now, under the camera's
+    ROW_NAMES as it stands (first_open.key renames it), so a table added since an earlier run leaves no row a second
+    Right under its camera's name."""
     out = set()
     for x in jsonl.read(path, bad="skip"):
         if x.get("spent") and x.get("kind") != greyrow.LOOK and same_words(x.get("mode"), mode) \
                 and same_words(x.get("context"), context):
-            keys = x.get("keys") or [greyrow.label_key(x.get("path") or ())]
-            out |= {tuple(k) for k in keys if isinstance(k, list | tuple)}
+            out |= {tuple(k) for k in x.get("keys") or () if isinstance(k, list | tuple)}
+            if isinstance(x.get("path"), list) and x["path"]:
+                out.add(greyrow.label_key(x["path"]))
     return out
 
 
