@@ -51,7 +51,8 @@ pick handing it options can cause), through camkit.vlm.ask_named_reader. Each an
 proof's file proved: right, another option, no option, or no answer (it holds no reading there), which make the right
 rate; "reader failed" (an HTTP error, a timeout, a refusal, an answer that is no JSON object) and "not asked" (the
 reader's --minutes passed, or it failed FAIL_RUN times in a row and was asked nothing more) are counted apart, and
-each reader's failures by their reason (the server's words or the kit's, never what an answer held: ask_all). The
+each reader's failures by their reason (an HTTP status and its reason phrase, never a server's body, or the kit's
+words; never what an answer held: ask_all, failure_reason). The
 answers are kept in --cache (by default a folder in the system's temporary folder); the camera's own answers' cache is
 looked in and never written; an answer already kept and usable is taken whatever the time (--minutes 0: those alone).
 A notice's and a title's truth is the text the run recorded, not a proof. --per-kind, --variants, --minutes and
@@ -125,6 +126,7 @@ the owner's runs, so it stays out of commits, issues and the docs unless the own
 import argparse
 import collections
 import contextlib
+import http
 import io
 import ipaddress
 import itertools
@@ -134,6 +136,7 @@ import re
 import sys
 import tempfile
 import threading
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
@@ -1569,9 +1572,21 @@ def ask_cli(reader: CliReader, image: bytes, prompt: str, cache, read_only=(), a
 
 
 def failure_reason(e: BaseException, timeout: float | None = None) -> str:
-    """Why a question to a reader failed, in words fit for the counts: camkit.vlm.failure's (scrubbed: an HTTP status
-    and the server's short message, a timeout, a refused connection, else the exception), with every path and file name
-    in them taken out (PATH_WORD, FILE_WORD), so that no frame's or file's name is printed (decision 16)."""
+    """Why a question to a reader failed, in words fit for the counts: an HTTP failure by its status and reason phrase
+    alone ("HTTP 503 Service Unavailable"), never the server's body, which can echo the request and so the start of a
+    question with a list's labels (camkit.vlm.failure passes it on, for kit/tools/reader_check.py, whose question is the
+    kit's fixed test picture); any other by camkit.vlm.failure's words (a timeout, a refused connection, else the
+    exception), with every path and file name in them taken out (PATH_WORD, FILE_WORD), so that no frame's or file's
+    name is printed (decision 16)."""
+    if isinstance(e, urllib.error.HTTPError):
+        return vlm.scrub(f"HTTP {e.code} {e.reason}".rstrip())
+    status = getattr(e, "status_code", None)              # the Anthropic SDK's errors
+    if isinstance(status, int):
+        try:
+            phrase = http.HTTPStatus(status).phrase
+        except ValueError:
+            phrase = ""
+        return f"HTTP {status} {phrase}".rstrip()
     return FILE_WORD.sub("<file>", PATH_WORD.sub("<path>", vlm.failure(e, timeout)))
 
 

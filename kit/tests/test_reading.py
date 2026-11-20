@@ -2280,6 +2280,24 @@ def test_a_bulk_job_says_why_each_reader_failed_by_count_and_never_what_it_read(
     assert reader_census.asked_lines({"calm": {"asked": 3, "seconds": 1}}) == ["asked: calm: asked 3, seconds 1"]
 
 
+def test_a_bulk_jobs_failure_reason_says_an_http_error_by_its_status_alone():
+    """The review of 2026-11-20: a server's error body can echo the request, and so the start of a census question
+    with a list's labels: the bulk tools say an HTTP failure by its status and reason phrase alone, never by the body
+    camkit.vlm.failure passes on (which reader_check.py, asking the kit's fixed test picture, keeps saying)."""
+    import reader_census as rc
+    body = io.BytesIO(json.dumps({"error": {"message": "invalid request: This is a Sony camera menu screen. "
+                                                       "Options: Zqx Alpha, Zqx Beta"}}).encode())
+    e = urllib.error.HTTPError("http://127.0.0.1:9/v1", 400, "Bad Request", {}, body)
+    assert rc.failure_reason(e, 7) == "HTTP 400 Bad Request"
+    body.seek(0)
+    assert "Zqx Alpha" in vlm.failure(urllib.error.HTTPError("http://127.0.0.1:9/v1", 400, "Bad Request", {}, body))
+
+    class SdkError(Exception):                  # the Anthropic SDK's errors: a status code and a message
+        status_code, message = 503, "upstream said: This is a Sony camera menu screen. Zqx Gamma"
+    assert rc.failure_reason(SdkError("Zqx Gamma"), 7) == "HTTP 503 Service Unavailable"
+    assert rc.failure_reason(TimeoutError("timed out"), 7) == "no answer within 7 s (timed out)"
+
+
 def test_the_failed_in_a_row_line_names_the_last_reason(tmp_path, monkeypatch):
     """A reader stopped after a run of failures is said once, with the last failure's reason: a server that went from
     short of memory to refusing connections says the refusal."""
