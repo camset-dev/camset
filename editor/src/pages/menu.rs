@@ -221,14 +221,17 @@ impl App {
         s.expert
     }
 
-    /// The name, group or a value label holds `q` (lower case).
     /// The search as every answer takes it, the window's and the page's: trimmed and in lower case, once.
     pub(crate) fn query(q: &str) -> String {
         q.trim().to_lowercase()
     }
 
+    /// The name, group or a value label holds `q` (lower case), or each of its words is in the setting's row as drawn
+    /// (`menu_rows::drawn_row`, its labels with their words), so "Custom Key Still" finds the settings under the row the
+    /// camera draws as "Custom Key/Dial Set." with a stills icon.
     pub(crate) fn matches_query(s: &Setting, q: &str) -> bool {
         s.name.to_lowercase().contains(q) || s.group.to_lowercase().contains(q) || s.values.iter().any(|(_, l)| l.to_lowercase().contains(q))
+            || (s.placed() && { let row = menu_rows::drawn_row(s).to_lowercase(); q.split_whitespace().all(|w| row.contains(w)) && !q.trim().is_empty() })
     }
 
     /// The Menu entry that shows the settings of `tab`: a tab the definition lists is its own entry, My Menu's tab
@@ -1167,7 +1170,7 @@ impl App {
             } else {
                 // the copy's record at the setting's place, in its tab and group, under its name
                 let mut b = rec.place_in(menu);
-                (b.name, b.tab, b.group, b.row, b.row_at, b.row_tab, b.row_group, b.under_option) = (p.name, p.tab, p.group, p.row, p.row_at, p.row_tab, p.row_group, p.under_option);
+                (b.name, b.tab, b.group, b.row, b.row_at, b.row_icons, b.row_tab, b.row_group, b.under_option) = (p.name, p.tab, p.group, p.row, p.row_at, p.row_icons, p.row_tab, p.row_group, p.under_option);
                 b
             };
             row_of.insert(s.key.clone(), rows.len());
@@ -1193,7 +1196,7 @@ impl App {
                 *on.entry(place(s)).or_default() += 1;
             }
             let titles: Vec<Option<String>> = rows.iter().map(|s| {
-                (counted(s) && !s.on_page() && on.get(&place(s)) == Some(&1)).then(|| s.row.last().map(|l| menu_rows::drawn(l).to_string()).filter(|l| !l.is_empty())).flatten()
+                (counted(s) && !s.on_page() && on.get(&place(s)) == Some(&1)).then(|| s.row.last().map(|l| menu_rows::with_words(l, s.row_words(s.row.len() - 1))).filter(|l| !l.is_empty())).flatten()
             }).collect();
             let mut alike: std::collections::HashMap<(HeadKey, String), usize> = Default::default();
             for (s, t) in rows.iter().zip(&titles).filter(|(s, _)| counted(s)) {
@@ -2625,6 +2628,56 @@ pub(crate) mod facts_tests {
         let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
         w.key(&mut app, egui::Key::Space);
         assert!(app.mem_closed.is_empty(), "Space with the focus on it shows it again");
+        done(&dir, &user);
+    }
+
+    /// Rows the camera tells apart by an icon alone (`row_icons`, stubbed as the next data pass gives them) draw its words
+    /// wherever a row level is drawn or said: Edit's headings and a screen reader's name for them, a row's title in a
+    /// menu, its place on hover, the page's layout and places, Compare's titles in the window and on the page; a search
+    /// finds a heading by its drawn name. What rows are stays on `row` and `row_at`: the headings' paths keep the labels.
+    #[test]
+    fn rows_told_apart_by_an_icon_draw_its_words_everywhere() {
+        use crate::web::tests::answer;
+        let (mut app, dir, user) = sample_app("row_icons", Some(crate::test_support::row_icons_stub));
+        let (_, _, rows) = app.tab_groups("Setup").into_iter().find(|(g, _, _)| g == "Operation Customize").unwrap();
+        let lines = app.group_lines(&rows);
+        let heads: Vec<(String, Vec<String>)> = lines.iter().filter_map(|l| match l { Line::Heading { label, depth: 0, path } => Some((label.clone(), path.clone())), _ => None }).collect();
+        for (h, label) in [("Custom Key/Dial Set. (Still)", "Custom Key/Dial Set."), ("Custom Key/Dial Set. (Movie)", "Custom Key/Dial Set."), ("Fn Menu Settings (Still)", "Fn Menu Settings"), ("Fn Menu Settings (Playback)", "Fn Menu Settings")] {
+            assert!(heads.iter().any(|(x, path)| x == h && path.last().map(String::as_str) == Some(label)), "{h}, its path the label alone, in {heads:?}");
+        }
+        // the window draws them, and a screen reader names them so
+        app.select(Some(View::Tab("Setup".into())), Some("Operation Customize".into()), None);
+        let mut w = Win::new();
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        assert!(said.iter().any(|(_, _, l)| l == "⏷ Custom Key/Dial Set. (Movie)"), "the heading's accessible name");
+        // a row alone on its place titled as the camera draws it, its words with it: Shooting > Media's two Recording Media
+        let media = app.tab_groups("Shooting").into_iter().find(|(g, _, _)| g == "Media").unwrap().2;
+        let titles: Vec<String> = media.iter().map(|r| r[0].name.clone()).filter(|n| n.starts_with("Recording Media")).collect();
+        assert!(titles.contains(&"Recording Media (Still)".to_string()) && titles.contains(&"Recording Media (Movie)".to_string()), "{titles:?}");
+        // its place on hover
+        let cell = rows.iter().flatten().find(|s| s.row_at.first() == Some(&6)).cloned().unwrap();
+        assert!(menu_rows::place_words(&cell).unwrap().contains("Custom Key/Dial Set. (Movie)"));
+        // a search finds the heading by its drawn name, the Movie one not
+        let hits = app.search_hits_in(0, app.menu_shown().as_deref(), "Custom Key Still");
+        assert!(hits.iter().any(|(s, _)| s.row_at.first() == Some(&5) && s.row.first().map(String::as_str) == Some("Custom Key/Dial Set.")), "the Still heading's settings found");
+        assert!(!hits.iter().any(|(s, _)| s.row_at.first() == Some(&6) && s.row.first().map(String::as_str) == Some("Custom Key/Dial Set.")), "not the Movie one's");
+        // the page: the layout's headings and a row's place
+        let j: serde_json::Value = serde_json::from_slice(&answer(&mut app, "tab", serde_json::json!({ "target": 0, "tab": "Setup" })).body).unwrap();
+        let group = j["groups"].as_array().unwrap().iter().find(|g| g["name"] == "Operation Customize").cloned().unwrap();
+        assert!(group["layout"].as_array().unwrap().iter().any(|l| l["head"] == "Fn Menu Settings (Playback)"), "the page's heading");
+        assert!(group["rows"].as_array().unwrap().iter().any(|r| r["place"].as_str().is_some_and(|p| p.contains("Custom Key/Dial Set. (Still)"))), "the page's place");
+        let found: serde_json::Value = serde_json::from_slice(&answer(&mut app, "tab", serde_json::json!({ "target": 0, "q": "Custom Key Still" })).body).unwrap();
+        assert!(found["groups"].as_array().is_some_and(|g| !g.is_empty()), "the page's search");
+        // Compare: the two Recording Media rows titled with their words, the window's and the page's
+        let menu = app.compare_menu();
+        let cmp = app.compare_rows(menu.as_deref(), &BarKey::Tab("Shooting".into()), "");
+        let titles: Vec<String> = cmp.iter().map(|r| app.compare_title(r)).filter(|n| n.starts_with("Recording Media")).collect();
+        assert!(titles.contains(&"Recording Media (Still)".to_string()) && titles.contains(&"Recording Media (Movie)".to_string()), "{titles:?}");
+        let mut body = serde_json::json!({ "cols": [["a", 0], ["a", 1]], "only_diff": false, "entry": "tab:Shooting" });
+        if let Some(m) = &menu { body["menu"] = serde_json::json!(m); }
+        let page: serde_json::Value = serde_json::from_slice(&answer(&mut app, "compare", body).body).unwrap();
+        assert!(page["rows"].as_array().unwrap().iter().any(|r| r["name"] == "Recording Media (Movie)"), "the page's Compare");
         done(&dir, &user);
     }
 

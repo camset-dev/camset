@@ -1508,7 +1508,7 @@ function drawTab(groups, j = {}) {
 function drawSearch(groups) {
   hits = groups.reduce((n, g) => n + g.rows.length, 0);
   const head = el("div", { class: "head" }, el("h1", {}, `Search: "${view.q}"`));
-  if (!hits) return [head, el("p", {}, "Nothing matches. The search looks at setting names, groups and value labels.")];
+  if (!hits) return [head, el("p", {}, "Nothing matches. The search looks at setting names, groups, value labels and the camera's rows as drawn.")];
   groups = onlyEdited(groups);
   if (!groups.length) return [head, el("p", {}, `No edited settings match: none of the ${hits} setting(s) that match is edited.`)];
   head.append(groupFolds("of the results"));

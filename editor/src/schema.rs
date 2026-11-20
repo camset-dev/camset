@@ -26,6 +26,12 @@ pub struct Setting {
     /// the camera's order.
     #[serde(default)]
     pub row_at: Vec<i64>,
+    /// The words for the icon the camera draws beside each label of `row` ("Still", "Movie", "Playback": the camera's
+    /// own words for it, from the mapping's hand table), one per label, None where a label has none: what tells apart two
+    /// rows the camera tells apart by an icon alone. Drawn after the label (`menu_rows::with_words`, `row_words`), never
+    /// part of what a row is (`row`, `row_at`). Empty where no label has words.
+    #[serde(default)]
+    pub row_icons: Vec<Option<String>>,
     /// The option of its row's own setting this setting is the choice for ("Continuous Shooting" for the continuous
     /// shooting speed under Drive Mode): shown under that option in the detail panel.
     #[serde(default)]
@@ -205,6 +211,9 @@ pub struct Setting {
 pub struct RowPlace {
     pub row: Option<Vec<String>>,
     pub row_at: Option<Vec<i64>>,
+    /// The words for this place's own `row` (`Setting::row_icons`); read only with that row: a place that gives its
+    /// row and no words has none there.
+    pub row_icons: Option<Vec<Option<String>>>,
     pub row_tab: Option<String>,
     pub row_group: Option<String>,
     #[serde(deserialize_with = "given")]
@@ -669,7 +678,8 @@ impl Setting {
             return s;
         }
         if let Some(p) = self.row_places.get(menu) {
-            if let Some(r) = &p.row { s.row = r.clone(); }
+            // its own row, with its own words or none
+            if let Some(r) = &p.row { s.row = r.clone(); s.row_icons = p.row_icons.clone().unwrap_or_default(); }
             if let Some(r) = &p.row_at { s.row_at = r.clone(); }
             if p.row_tab.is_some() { s.row_tab = p.row_tab.clone(); }
             if p.row_group.is_some() { s.row_group = p.row_group.clone(); }
@@ -680,6 +690,12 @@ impl Setting {
         s.row_places.clear();
         s.shown_in = Some(menu.to_string());
         s
+    }
+
+    /// The words for label `level` of `row` (`row_icons`), trimmed; None where it has none (a missing item, null or
+    /// empty).
+    pub fn row_words(&self, level: usize) -> Option<&str> {
+        self.row_icons.get(level).and_then(|w| w.as_deref()).map(str::trim).filter(|w| !w.is_empty())
     }
 
     /// In the same place as `o`: the same row and the same option, so the two can be one setting kept in several

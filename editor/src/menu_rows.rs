@@ -72,6 +72,20 @@ pub fn drawn(label: &str) -> &str {
     }
 }
 
+/// A row's label as drawn with its words (`Setting::row_words`): the label without its `#n` (`drawn`), then the words
+/// in brackets where there are any ("Custom Key/Dial Set. (Still)"), as the camera tells such rows apart by an icon.
+pub fn with_words(label: &str, words: Option<&str>) -> String {
+    match words.map(str::trim).filter(|w| !w.is_empty()) {
+        Some(w) => format!("{} ({w})", drawn(label)),
+        None => drawn(label).to_string(),
+    }
+}
+
+/// `s`'s row as drawn, from its top label down, each with its words: "Custom Key/Dial Set. (Still) > Custom Key 1".
+pub fn drawn_row(s: &Setting) -> String {
+    s.row.iter().enumerate().map(|(i, l)| with_words(l, s.row_words(i))).collect::<Vec<_>>().join(" > ")
+}
+
 /// Lower-case letters and digits only, as the kit compares menu labels (camkit.placement.norm).
 pub fn norm(s: &str) -> String {
     s.to_lowercase().chars().filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit()).collect()
@@ -248,11 +262,20 @@ fn nest(rows: &[Vec<Setting>], placed: Vec<usize>, mode: Option<&str>, strip: &d
     // which have rows deeper down
     let mut here: HashMap<Node, HashSet<String>> = HashMap::new();
     let mut deeper: HashSet<Node> = HashSet::new();
+    // the words each of the camera's rows is drawn with (`row_icons`): those every setting on or under it agrees on, none
+    // where one has other words or none
+    let mut words: HashMap<Node, Option<String>> = HashMap::new();
     for &i in &placed {
         let s = &rows[i][0];
         here.entry(node(s, len(s))).or_default().insert(if s.on_page() { row_of(s) } else { s.key.clone() });
         for n in 1..len(s) {
             deeper.insert(node(s, n));
+        }
+        for n in 1..=len(s) {
+            for linked in &rows[i] {
+                let w = linked.row_words(strip(s) + n - 1).map(str::to_string);
+                words.entry(node(s, n)).and_modify(|e| if *e != w { *e = None }).or_insert(w);
+            }
         }
     }
     let mut order = placed;
@@ -273,7 +296,7 @@ fn nest(rows: &[Vec<Setting>], placed: Vec<usize>, mode: Option<&str>, strip: &d
         }
         row_here = None;
         for level in common..path.len() {
-            let label = drawn(&path[level].1).to_string();
+            let label = with_words(&path[level].1, words.get(&node(s, level + 1)).and_then(|w| w.as_deref()));
             let labels: Vec<String> = mode.map(str::to_string).into_iter().chain(path[..=level].iter().map(|p| p.1.clone())).collect();
             open.push(path[level].clone());
             let mine = node(s, level + 1);
@@ -349,10 +372,11 @@ pub fn place_words(s: &Setting) -> Option<String> {
     if !s.placed() {
         return None;
     }
-    let labels: Vec<&str> = s.row.iter().map(|l| drawn(l)).collect();
+    // each label as drawn, with its words (`drawn_row`)
+    let labels = drawn_row(s);
     let row = match s.row_tab.as_deref().filter(|t| !t.is_empty() && *t != s.tab) {
-        Some(tab) => format!("{tab} > {} > {}", camera_group(s), labels.join(" > ")),
-        None => labels.join(" > "),
+        Some(tab) => format!("{tab} > {} > {labels}", camera_group(s)),
+        None => labels,
     };
     let mode = s.row_mode.as_deref().map(|m| format!(" ({})", mode_words(m))).unwrap_or_default();
     Some(match &s.under_option {
@@ -376,6 +400,43 @@ mod tests {
 
     fn rows(list: Vec<Setting>) -> Vec<Vec<Setting>> {
         list.into_iter().map(|s| vec![s]).collect()
+    }
+
+    /// The rows the camera tells apart by an icon alone (`row_icons`): the case of editor/tests/data/menu_row_icons.json,
+    /// which the kit's copy lays out alike (kit/tests/test_menu_rows.py). A level is its label without its `#n`, then
+    /// its words in brackets where every setting on or under the row agrees on them (two settings under one heading,
+    /// one with words and one without: no words); the paths that name the headings keep the labels as they are. A
+    /// menu's own place takes its own words, none where it gives its row and no words.
+    #[test]
+    fn rows_told_apart_by_an_icon_draw_its_words() {
+        let case: serde_json::Value = serde_json::from_str(include_str!("../tests/data/menu_row_icons.json")).unwrap();
+        let made = |v: &serde_json::Value| -> Setting {
+            let mut base = serde_json::json!({ "area": "global", "id": 1, "tab": "Shooting", "group": "Drive Mode", "order": 46, "in_sets": false, "scalar": true, "values": [] });
+            for (k, x) in v.as_object().unwrap() {
+                base[k] = x.clone();
+            }
+            serde_json::from_value(base).unwrap()
+        };
+        let settings: Vec<Setting> = case["settings"].as_array().unwrap().iter().map(made).collect();
+        let lines: Vec<serde_json::Value> = lay_out(&rows(settings.clone())).into_iter().map(|l| match l {
+            Line::Heading { label, depth, path } => serde_json::json!(["heading", label, depth, path]),
+            Line::Row { index, depth } => serde_json::json!(["row", index, depth]),
+            Line::Mode(m) => serde_json::json!(["mode", m]),
+            Line::More => serde_json::json!(["more"]),
+        }).collect();
+        assert_eq!(serde_json::Value::Array(lines), case["lines"]);
+        assert_eq!(place_words(&settings[0]).as_deref(), Some("On the camera: Custom Key/Dial Set. (Still) > Custom Key 1"));
+        assert_eq!(drawn_row(&settings[5]), "Fn Menu Settings (Playback) > Fn Row", "an empty word is none");
+        let placed = made(&case["placed"]);
+        for c in case["places"].as_array().unwrap() {
+            let p = placed.place_in(c["menu"].as_str().unwrap());
+            let words: Vec<Option<&str>> = (0..p.row.len()).map(|i| p.row_words(i)).collect();
+            assert_eq!(serde_json::json!(words), c["words"], "{}", c["menu"]);
+            assert_eq!(drawn_row(&p), c["drawn"].as_str().unwrap());
+        }
+        // no words anywhere: the labels as before
+        let plain = s("a", "Delay", &["Drive Mode#2", "Self-timer"], &[26, 0], None, &[]);
+        assert_eq!(drawn_row(&plain), "Drive Mode > Self-timer");
     }
 
     /// The owner's case (2026-11-06): Drive Mode first, the continuous speed under it as the choice for Continuous

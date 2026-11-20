@@ -681,7 +681,7 @@ impl App {
         let hits = self.search_hits();
         ui.heading(format!("Search: \"{}\"", self.search.trim()));
         if hits.is_empty() {
-            ui.label("Nothing matches. The search looks at setting names, groups and value labels.");
+            ui.label("Nothing matches. The search looks at setting names, groups, value labels and the camera's rows as drawn.");
             return Vec::new();
         }
         ui.label(RichText::new(format!("{} setting(s). Click one to open it in its menu.", hits.len())).small().color(tone::weak(ui.visuals())));

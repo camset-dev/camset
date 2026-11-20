@@ -1,0 +1,36 @@
+{
+  "about": "A made-up group whose rows the camera tells apart by an icon alone (row_icons), laid out alike by editor/src/menu_rows.rs and kit/camkit/menu_rows.py: each one's test reads this file. A level is drawn as its label without its #n, then its words in brackets, where every setting on or under that row agrees on them; an empty word or a missing item is none.",
+  "settings": [
+    {"key": "k1", "name": "Key A", "row": ["Custom Key/Dial Set.#1", "Custom Key 1"], "row_at": [10, 0], "row_icons": ["Still", null]},
+    {"key": "k2", "name": "Key B", "row": ["Custom Key/Dial Set.#1", "Custom Key 2"], "row_at": [10, 1], "row_icons": ["Still"]},
+    {"key": "m1", "name": "Key C", "row": ["Custom Key/Dial Set.#2", "Custom Key 1"], "row_at": [11, 0], "row_icons": ["Movie", null]},
+    {"key": "r1", "name": "Slot One", "row": ["Recording Media", "Slot 1"], "row_at": [12, 0], "row_icons": ["Still", null]},
+    {"key": "r2", "name": "Slot Two", "row": ["Recording Media", "Slot 2"], "row_at": [12, 1], "row_icons": [null, null]},
+    {"key": "f1", "name": "Fn Item", "row": ["Fn Menu Settings#2", "Fn Row"], "row_at": [14, 0], "row_icons": ["Playback", ""]}
+  ],
+  "lines": [
+    ["heading", "Custom Key/Dial Set. (Still)", 0, ["Custom Key/Dial Set.#1"]],
+    ["row", 0, 1],
+    ["row", 1, 1],
+    ["heading", "Custom Key/Dial Set. (Movie)", 0, ["Custom Key/Dial Set.#2"]],
+    ["row", 2, 1],
+    ["heading", "Recording Media", 0, ["Recording Media"]],
+    ["row", 3, 1],
+    ["row", 4, 1],
+    ["heading", "Fn Menu Settings (Playback)", 0, ["Fn Menu Settings#2"]],
+    ["row", 5, 1]
+  ],
+  "placed": {
+    "key": "p1", "name": "Slot", "row": ["Recording Media", "Slot 1"], "row_at": [12, 0], "row_icons": ["Still", null],
+    "row_places": {
+      "Movie": {"row": ["Recording Media#2", "Slot 1"], "row_at": [3, 0], "row_icons": ["Movie", null]},
+      "S&Q": {"row": ["Rec. Media", "Slot 1"], "row_at": [1, 0]},
+      "Playback": {"row_tab": "Playback"}
+    }
+  },
+  "places": [
+    {"menu": "Movie", "words": ["Movie", null], "drawn": "Recording Media (Movie) > Slot 1"},
+    {"menu": "S&Q", "words": [null, null], "drawn": "Rec. Media > Slot 1"},
+    {"menu": "Playback", "words": ["Still", null], "drawn": "Recording Media (Still) > Slot 1"}
+  ]
+}
