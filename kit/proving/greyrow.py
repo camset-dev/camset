@@ -30,7 +30,7 @@ For one row, the cursor on it on a menu or submenu page, in this order, each ste
      first; its OK only where the camera refuses MENU and OK is plainly its only button); a screen that asks (its text a
      confirmation, or a question mark) gets MENU, never an answer; any other screen (the row opened after all, whatever
      its kind) MENU alone, which must leave it on a menu page or the shooting screen; the shooting screen gets nothing;
-     the camera's playback view fails the row, the session's close leaving it (proving.nav). No other key: no Enter, no
+     the camera's playback view ends the run (StopsRun), the session's close leaving it (proving.nav). No other key: no Enter, no
      second Right.
 
 The line written (the module's outcomes, "right" whether the Right went out): what was read and pressed. The guide's and
@@ -67,8 +67,8 @@ SENTENCE_END = re.compile(r"(?<=[.!?。])\s+")
 PASSED, NOT_GREY, UNSURE, NO_HELP, REASON, HELP_ONLY, TRIED, REFUSED, MOVED = (
     "passed over", "not drawn grey", "grey unsure", "help not offered", "help gave a reason", "help only",
     "right already pressed", "right refused", "no longer the grey row")
-NOTICE, QUESTION, OPENED, NO_RESPONSE, MENU_CLOSED, FAILED = (
-    "notice", "question", "opened after all", "no response to right", "menu closed", "failed")
+NOTICE, QUESTION, OPENED, NO_RESPONSE, MENU_CLOSED, FAILED, PLAYBACK = (
+    "notice", "question", "opened after all", "no response to right", "menu closed", "failed", "playback view")
 
 
 class RowFailed(Failed):
@@ -77,6 +77,16 @@ class RowFailed(Failed):
     def __init__(self, message: str, line: dict):
         super().__init__(message)
         self.line = line
+
+
+class StopsRun(RowFailed):
+    """The row left the camera where no run goes on: the camera's playback view after the Right, where a next row's
+    MENU would open the menu over the view and its Downs and Rights go out in it. Its line is written, and the run goes
+    up to the session's close, which leaves the view (proving.nav.to_shooting, leave_playback) before its restore."""
+
+
+class PlaybackView(Failed):
+    """after_right met the camera's playback view, nothing pressed there."""
 
 
 def _say(message: str) -> None:
@@ -280,6 +290,8 @@ def ask_why(cam, path, *, seen, tried: set, keys=None, stored=None, labels=(), s
     line["right"] = True
     try:
         got = after_right(cam, name, row_screen, labels, say)
+    except PlaybackView as e:
+        raise StopsRun(f"{name}: {e}", {**line, "outcome": PLAYBACK, "why": str(e)}) from e
     except Failed as e:
         raise RowFailed(f"{e}", {**line, "outcome": FAILED, "why": str(e)}) from e
     return {**line, **got}
@@ -297,7 +309,8 @@ def after_right(cam, name: str, row_screen, labels=(), say=_say) -> dict:
         say(f"{name}: the Right closed the menu ({frame}): nothing more pressed")
         return {"outcome": MENU_CLOSED, "after": {"screen": s.kind, "frame": frame}}
     if s.kind == "playback":
-        raise Failed(f"the Right brought up the camera's playback view ({frame}): nothing pressed there")
+        say(f"{name}: the Right brought up the camera's playback view ({frame}): nothing pressed there, the run ends")
+        raise PlaybackView(f"the Right brought up the camera's playback view ({frame}): nothing pressed there")
     text = read_text(cam)
     asks = safety.confirmation_refused(text) or ("a question mark" if safety.question_mark(text) else None)
     if s.kind == "notice" and not asks:

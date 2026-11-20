@@ -47,7 +47,7 @@ class GreyCam:
     goes out (camkit.link)."""
 
     KINDS = {"row": "menu", "notice": "notice", "asking notice": "notice", "question": "dialog", "list": "list",
-             "lost": "list", "shooting": "shooting", "unknown": "unknown"}
+             "lost": "list", "shooting": "shooting", "unknown": "unknown", "playback": "playback"}
 
     def __init__(self, after="notice", grey=True, help_button=True, label="Framing Stabilizer"):
         self.after, self.grey, self.help_button, self.label = after, grey, help_button, label
@@ -277,6 +277,17 @@ def test_a_right_that_closed_the_menu_or_did_nothing_gets_no_key_after_it(monkey
     world(monkeypatch, cam)
     line, said, tried = ask(cam)
     assert after_right(cam) == [] and line["outcome"] == outcome
+
+
+def test_a_right_that_brings_up_the_playback_view_ends_the_run_with_nothing_pressed_there(monkeypatch):
+    """The camera's playback view after the Right: no key there (the link lets MENU alone out, and MENU there opens the
+    menu over the view), and the run ends, its line said, so the session's close leaves the view (proving.nav)."""
+    cam = GreyCam(after="playback")
+    world(monkeypatch, cam)
+    with pytest.raises(greyrow.StopsRun) as e:
+        ask(cam)
+    assert after_right(cam) == [] and (e.value.line["outcome"], e.value.line["right"]) == (greyrow.PLAYBACK, True)
+    assert isinstance(e.value, greyrow.RowFailed)
 
 
 def test_a_stop_between_help_and_right_leaves_the_camera_on_the_menu(monkeypatch):

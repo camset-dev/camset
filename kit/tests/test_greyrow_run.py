@@ -80,9 +80,10 @@ def test_a_row_the_scan_does_not_lead_to_is_not_reached_and_asked_nothing(monkey
     assert (line["outcome"], line["right"]) == (G.NOT_REACHED, False)
 
 
-def run_main(monkeypatch, rows, one_row, context="Touch Off", scan=([], {}), extra=()):
+def run_main(monkeypatch, rows, one_row, context="Touch Off", scan=([], {}), extra=(), real_one_row=False):
     """greyrow_run.main with its session and the camera's records stood in for; returns (the lines written, the keys
-    each row was asked with and the rows spent before it, what was closed)."""
+    each row was asked with and the rows spent before it, what was closed). real_one_row: the runner's own one_row,
+    whatever the test stood in for under it, `one_row` unused."""
     asked, closed = [], []
     monkeypatch.setattr(G, "load_scan", lambda s: scan)
     monkeypatch.setattr(G, "known_labels", lambda model: set())
@@ -99,7 +100,8 @@ def run_main(monkeypatch, rows, one_row, context="Touch Off", scan=([], {}), ext
     def one(cam, cycle, model, path, seen, tried, keys, labels, say=None):
         asked.append((keys, set(tried)))
         return one_row(path, tried, keys)
-    monkeypatch.setattr(G, "one_row", one)
+    if not real_one_row:
+        monkeypatch.setattr(G, "one_row", one)
     argv = ["greyrow_run.py", "--in", "Movie", "--context", context, "--run", "kit2_greyrow_test", *extra]
     for r in rows:
         argv += ["--row", r]
@@ -184,6 +186,27 @@ def test_a_stop_in_a_row_writes_its_line_and_goes_up_to_the_session(monkeypatch)
         run_main(monkeypatch, ["Framing Stabilizer", "Select LUT"], one)
     assert [(x["path"], x["outcome"], x["right"], x["spent"]) for x in lines_written()] == [
         (["Framing Stabilizer"], G.STOPPED, None, True)]
+
+
+def test_a_playback_view_stops_the_run_with_its_line_written(monkeypatch):
+    """The review's probe: after a Right brought up the playback view, no next row (its MENU would go out in Playback,
+    then Downs and Rights in that menu): the row's line is written and the run goes up to the session's close, which
+    leaves the view."""
+    asked = []
+
+    def ask_why(cam, path, **kw):
+        asked.append(path)
+        kw["tried"].update(kw["keys"])
+        raise greyrow.StopsRun("the Right brought up the camera's playback view (00009_right.png)",
+                               {"path": path, "right": True, "outcome": greyrow.PLAYBACK})
+    monkeypatch.setattr(greyrow, "ask_why", ask_why)
+    monkeypatch.setattr(G, "stored_reason", lambda cycle, model, path: None)
+    monkeypatch.setattr(G, "reach", lambda *a: None)
+    with pytest.raises(greyrow.StopsRun):
+        run_main(monkeypatch, ["A", "B"], lambda path, tried, keys: None, real_one_row=True)
+    assert asked == [["A"]]
+    assert [(x["path"], x["outcome"], x["right"], x["spent"]) for x in lines_written()] == [
+        (["A"], greyrow.PLAYBACK, True, True)]
 
 
 def test_another_body_stops_the_session_before_anything_is_sent(monkeypatch):

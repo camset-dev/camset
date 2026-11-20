@@ -143,7 +143,8 @@ def reach(cam, cycle, model, path) -> None:
 
 def one_row(cam, cycle, model, path, seen, tried: set, keys, labels, say=_say) -> dict:
     """The row's line: passed over before anything is pressed where the kit may not open or reach it (proving.greyrow.
-    closed), else reached and asked (proving.greyrow.ask_why); a row that fails, or is not reached, says why."""
+    closed), else reached and asked (proving.greyrow.ask_why); a row that fails, or is not reached, says why. A row that
+    leaves the camera on its playback view ends the run (greyrow.StopsRun, raised on with its line)."""
     name = " > ".join(path)
     stored = stored_reason(cycle, model, path)
     why = greyrow.closed(path, seen, stored)
@@ -157,6 +158,8 @@ def one_row(cam, cycle, model, path, seen, tried: set, keys, labels, say=_say) -
         return {"path": path, "right": False, "outcome": NOT_REACHED, "why": str(e)}
     try:
         return greyrow.ask_why(cam, path, seen=seen, tried=tried, keys=keys, stored=stored, labels=labels, say=say)
+    except greyrow.StopsRun:
+        raise                                   # the playback view: main writes its line, the session closes
     except greyrow.RowFailed as e:
         say(f"{name}: failed: {e}")
         return e.line
@@ -197,8 +200,10 @@ def main():
         for path, keys in rows:
             try:
                 line = one_row(s.cam, cycle, model, path, seen, tried, keys, labels)
-            except Exception as e:      # a STOP, a refused press, a lost link: the line, then the session's close
-                write({"path": path, "right": None, "outcome": STOPPED, "why": f"{type(e).__name__}: {e}"}, keys)
+            except Exception as e:      # a STOP, a refused press, a lost link, the playback view: the line, then the
+                # session's close (a row's own line where it ends the run: greyrow.StopsRun)
+                write(getattr(e, "line", None) or {"path": path, "right": None, "outcome": STOPPED,
+                                                   "why": f"{type(e).__name__}: {e}"}, keys)
                 raise
             write(line, keys)
             close_screen(s.cam, s.link)         # MENU back to the shooting screen, for the next row's MENU
