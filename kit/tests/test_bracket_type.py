@@ -1312,6 +1312,22 @@ def test_a_grid_the_deadline_cuts_is_not_whole_and_stays_sampled(own_runs, monke
     assert R.option_fields_sampled(counted_rows(root)[CONT_ROW]) == {"global:0x13f9"}
 
 
+def test_a_later_grid_cut_short_takes_nothing_from_a_whole_one(own_runs, monkeypatch, capsys):
+    """The review of 2026-11-19: a whole grid, then one from the same pair held that --most 2 cut short. Its put-back,
+    which wrote nothing, took the whole grid's place in the report's row (the put-back rule keeps only a line that
+    wrote), so no whole grid was left and the record went back to a count. Each grid's lines are kept apart now: the
+    record is still every pair, listed."""
+    import pass2_report as R
+    cam = grid_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    run_fields(F, root, "Cont. Bracket", "--grid", "--most", "2")
+    assert [x["whole"] for x in fields_lines() if x["final"]] == [True, False]
+    rows = counted_rows(root)
+    assert R.option_fields_sampled(rows[CONT_ROW]) == set()
+    assert R.values_of(rows[CONT_ROW]) == {"global:0x13f9": PAIRS}
+
+
 def test_a_grid_stopped_midway_counts_none_of_its_pairs(own_runs, monkeypatch, capsys):
     """The screen stops reading as the carousel on the second visit's Right into box 0 (the ninth Right: the look's
     three, the base's, the first visit's three, the row's): the walk stops before the next key, the first pair's line is

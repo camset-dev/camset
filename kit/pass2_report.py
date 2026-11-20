@@ -1049,7 +1049,9 @@ def rows_of(run: Path, proofs: list | None = None, skip: set = frozenset()) -> d
     Mode's speeds). The later proof of another option at an index taken (its label another, as same_label reads it: 1.3"
     is not 13") is that
     option's latest where the row holds it at another index, and else goes under (index, label), the earlier proof
-    kept (option_key): before 2026-11-11 it took the other option's place, and options of the a1 II's pass 2 lost
+    kept (option_key); a grid's line (carousel_fields_run.py --grid) goes under its own attempt, so a later grid, cut
+    short by its deadline, never takes the place of a whole one's put-back or pairs (every_pair_moved reads each grid
+    whole). Before 2026-11-11 it took the other option's place, and options of the a1 II's pass 2 lost
     their proof so, the two hold values among them kept only from an older definition. A number field's index is its
     value, the same option whatever its label shows of the other fields. A later line the camera refused, and one that
     only put its session's own start back (put_back_only), never takes the place of an applied line of its option
@@ -1103,8 +1105,11 @@ def put_back_only(r: dict, last: dict) -> bool:
 
 def option_key(r: dict, opts: dict):
     """The key of proof r among its row's options (rows_of): its index; where another option's proof holds that index
-    already (a number field's never), the key its own option has at another index, else (index, label)."""
+    already (a number field's never), the key its own option has at another index, else (index, label). A grid's line
+    ("walk": "grid") is keyed by its index and its attempt, each grid's lines apart."""
     idx = tuple(r["index"]) if isinstance(r.get("index"), list) else r.get("index")
+    if r.get("walk") == "grid" and isinstance(idx, tuple):
+        return idx + (r.get("attempt"),)
     have, lab = opts.get(idx), str(r.get("label"))
     if r.get("kind") == "fields" or have is None or same_label(str(have.get("label")), lab):
         return idx
