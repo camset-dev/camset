@@ -1146,6 +1146,11 @@ V2_PROMPTS = {"lit.v2": "77d0da5d7dc8da89", "carousel.v2": "3050c5f8b5f62d16", "
               "fields.v2": "68a3fb0b69cafab2", "look.v2": "fbec3a1213e77186", "lookscale.v2": "08fdb10bac69ea61",
               "scale.v2": "13bf73d0a7f12bbc", "stars.v2": "7dbf13167e7ebc81", "checklist.v2": "de80063942d79bb1",
               "wbgrid.v2": "a03ec6c4e2b1c82a", "notice.v2": "c18c6d7e45c49ba2", "title.v2": "629cab3640bdfb4b"}
+# the ".grey" versions as measured on the three readers' census of 2026-11-19 (variant "grey"): pinned, so that a
+# wording changed after the measure fails here and is a key of its own, measured again
+GREY_PROMPTS = {"option.grey": "020ec469740c225b", "dialog.grey": "39b51c3f2eeffcd0", "lit.v2.grey": "f7d6aecf0b99f146",
+                "carousel.v2.grey": "7b822b0cb6bb2123", "cell.v2.grey": "e698101ce732967b",
+                "checklist.v2.grey": "f8594f57dfa9ad0a"}
 
 
 def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
@@ -1157,8 +1162,9 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
     import hashlib
 
     from camkit import vlm
-    for key, digest in {**OLD_PROMPTS, **V2_PROMPTS}.items():
+    for key, digest in {**OLD_PROMPTS, **V2_PROMPTS, **GREY_PROMPTS}.items():
         assert hashlib.sha1(vlm.PROMPTS[key].encode()).hexdigest()[:16] == digest, key
+    assert set(GREY_PROMPTS) == {k for k in vlm.PROMPTS if k.endswith(".grey")}         # every grey version pinned
     for kind, q in reading.QUESTIONS.items():
         text = vlm.PROMPTS[q.prompt]
         assert re.search(r"\.v[23]$", q.prompt) and q.prompt not in OLD_PROMPTS, kind
