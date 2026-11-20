@@ -292,6 +292,7 @@ class Menu:
         self.families = [f for f in cam.get("families") or [] if f.get("prefix")]
         self.my_menu = text.get("my_menu_name") or "My Menu"
         self.has_my_menu = bool((cam.get("my_menu") or {}).get("records"))
+        self.my_menu_records = set((cam.get("my_menu") or {}).get("records") or [])
         self.off = text.get("off_menu_name") or "Not in the menus"
         # the editor's camera_layout(): rows as on the camera when the definition places any setting (the viewer has
         # no flat list to ask for); a definition that places none keeps every setting in its own tab and group, and the
@@ -311,10 +312,15 @@ class Menu:
     def family(self, s):
         return next((f for f in self.families if (s.get("group") or "").startswith(f["prefix"])), None)
 
+    def is_my_menu_place(self, s) -> bool:
+        """One of My Menu's places while My Menu has its page (App::is_mymenu_place): its page's, under no tab."""
+        return self.has_my_menu and s.get("area") == "global" and s.get("id") in self.my_menu_records
+
     def off_menu(self, s) -> bool:
         """A setting of a tab the definition lists on no row of the camera (in none of its menus), whose group has
-        none on one either."""
+        none on one either; not one of My Menu's places, which its page shows."""
         return (self.camera and not placed_anywhere(s) and s.get("tab") in self.tabs and not (self.has_my_menu and s.get("tab") == self.my_menu)
+                and not self.is_my_menu_place(s)
                 and self.family(s) is None and (s.get("group") or "") not in self.placed_groups.get(s.get("tab"), ()))
 
     # ------------------------------------------------------------ one of the camera's menus (pages/menu.rs, listed)
@@ -418,6 +424,8 @@ class Menu:
         return sub_choices(own, [s for s in settings if self.layout_tab(s) == tab and camera_group(s) == group])
 
     def entry_of(self, s) -> str:
+        if self.is_my_menu_place(s):
+            return self.my_menu
         if self.off_menu(s):
             return self.off
         tab = self.layout_tab(s)

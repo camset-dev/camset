@@ -246,7 +246,7 @@ impl App {
                 let odd = linked.iter().filter(|l| l.copy_of.is_some() && !self.shape_ok_in(l, target) && self.put_back_value(l, target).is_some()).count();
                 let Some((words, acts)) = self.put_back_choice(&linked, target) else {
                     if odd > 0 {
-                        return WebReply::error(409, &left_alone(Left { copies_shape: odd, ..Default::default() }));
+                        return WebReply::error(409, &self.left_alone(Left { copies_shape: odd, ..Default::default() }));
                     }
                     return WebReply::error(409, "Nothing to put back: this setting holds what the camera keeps here.");
                 };
@@ -256,7 +256,7 @@ impl App {
                     Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
                     Err(Err(why)) => return WebReply::error(409, &why),
                 }
-                self.status = self.with_moved(with_left(&format!("{}: {} {from}", linked[0].name, words.to_lowercase()), Left { copies_shape: odd, ..Default::default() }));
+                self.status = self.with_moved(self.with_left(&format!("{}: {} {from}", linked[0].name, words.to_lowercase()), Left { copies_shape: odd, ..Default::default() }));
                 WebReply::json(json!({ "ok": true }))
             }
             "revert_record" => {
@@ -568,8 +568,8 @@ impl App {
                 }
                 let (f, t) = (self.col_name(src), dsts.iter().map(|d| self.col_name(*d)).collect::<Vec<_>>().join(", "));
                 let said = if action == "copy" { format!("{name} copied from {f} into {t} {from}") } else { format!("{n} row(s) copied from {f} into {t} {from}") };
-                self.status = self.with_moved(with_left(&said, left));
-                WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
+                self.status = self.with_moved(self.with_left(&said, left));
+                WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": self.left_alone(left) }))
             }
             // the three-way buttons: Merge B into A, Conflicts: take B, Conflicts: take Base, over the
             // rows the page's search and entry of the Menu give, as the window's buttons work over its own
@@ -609,8 +609,8 @@ impl App {
                     Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
                     Err(Err(why)) => return WebReply::error(409, &why),
                 }
-                self.status = self.with_moved(with_left(&format!("{n} {said} {from}"), left));
-                WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
+                self.status = self.with_moved(self.with_left(&format!("{n} {said} {from}"), left));
+                WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": self.left_alone(left) }))
             }
             "file" => {
                 let Some(doc) = &self.doc else { return WebReply::error(409, "No file is open.") };
@@ -2060,6 +2060,7 @@ impl App {
                 let file_a = st && c.editable();
                 let why: Vec<String> = self.unnamed_why(s, v).filter(|_| st).into_iter()
                     .chain(self.locked_why(s, c.section).filter(|_| file_a).map(|(w, _)| w))
+                    .chain(self.place_why(s).filter(|_| file_a))
                     .chain(self.copy_note(s, c.section).filter(|_| file_a).map(|(w, _)| w)).collect();
                 if !why.is_empty() {
                     cell["why"] = json!(why.join("\n\n"));
@@ -2077,7 +2078,7 @@ impl App {
             diffs += usize::from(d);
             // the sets of file A where the setting is view only outside Expert mode (`locked_why`): no copy goes there,
             // as the window's right-click menu offers none (`copy_targets`)
-            let locked: Vec<usize> = (0..self.n_sections()).filter(|&si| self.locked(s, si)).collect();
+            let locked: Vec<usize> = (0..self.n_sections()).filter(|&si| self.locked(s, si) || self.place_why(s).is_some()).collect();
             // its name opens it in Edit in the first column of file A that keeps it (the page's `cmpOpenInEdit`), where
             // the window's Open in Edit lands from this menu (`compare_place`)
             let into = cols.iter().find(|c| c.editable() && stored(c, s)).map_or(0, |c| c.section);
@@ -2283,8 +2284,8 @@ impl App {
         }
         let from = format!(" {from}");
         let (_, _, said) = if recall { self.recall_words(m, "", &from) } else { self.register_words(m, "", &from) };
-        self.status = self.with_moved(with_left(&said, left));
-        WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
+        self.status = self.with_moved(self.with_left(&said, left));
+        WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": self.left_alone(left) }))
     }
 
     /// One row's arrow on the Memories page: a memory's value into the live settings (⬅) or the live
@@ -2315,8 +2316,8 @@ impl App {
         }
         let cam = &self.schema.camera;
         let said = format!("{}: the value from {} put into {} {from}", linked[0].name, cam.target_name(a), cam.target_name(b));
-        self.status = self.with_moved(with_left(&said, left));
-        WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
+        self.status = self.with_moved(self.with_left(&said, left));
+        WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": self.left_alone(left) }))
     }
 
     /// The Exposure page as the window's (`exposure_view`, from the same helpers): per column (the

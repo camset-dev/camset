@@ -776,7 +776,7 @@ impl App {
         let copied = self.rows_copied.replace(None);
         self.rows_set.take();
         if skipped.total() > 0 {
-            self.status = with_left(&self.status, skipped);
+            self.status = self.with_left(&self.status, skipped);
         }
         if actions.is_empty() {
             return None;
@@ -835,7 +835,7 @@ impl App {
             });
             if actions.is_empty() {
                 if !odd_copies.is_empty() {
-                    self.status = with_left("", Left { copies_shape: odd_copies.len(), ..Default::default() });
+                    self.status = self.with_left("", Left { copies_shape: odd_copies.len(), ..Default::default() });
                 }
                 if let Some(w) = &why {
                     self.status = w.clone();
@@ -1129,7 +1129,7 @@ impl App {
             self.limits_moved = (moves.iter().map(|m| (m.section, m.moved)).collect(), Some(moved.join(" ")));
         }
         if !odd_copies.is_empty() {
-            self.status = with_left(&self.status, Left { copies_shape: odd_copies.len(), ..Default::default() });
+            self.status = with_left_in(&self.status, Left { copies_shape: odd_copies.len(), ..Default::default() }, self.schema.camera.text.my_menu_name());
         }
         doc.rev = next_open();
         match start.filter(|_| !joins) {

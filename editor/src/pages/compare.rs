@@ -369,8 +369,10 @@ impl App {
         if !self.editable() {
             return (false, false);
         }
-        // a column takes no value of a setting that is view only in its set outside Expert mode (`locked_why`)
-        let takes = |c: Col| c.editable() && !self.locked(s, c.section);
+        // a column takes no value of a setting that is view only in its set outside Expert mode (`locked_why`), nor of
+        // one of My Menu's places, which its page changes (`place_why`)
+        let place = self.place_why(s).is_some();
+        let takes = |c: Col| c.editable() && !self.locked(s, c.section) && !place;
         match (self.col_value(left, s), self.col_value(right, s)) {
             (Some(l), Some(r)) if l != r => (takes(left), takes(right)),
             _ => (false, false),
@@ -408,8 +410,9 @@ impl App {
         if !c.editable() || !self.editable() || !(c.section == 0 || s.in_sets) || c.section >= self.n_sections() || !linked.iter().all(|l| self.shape_ok_in(l, c.section)) {
             return false;
         }
-        // view only in that set outside Expert mode (a copy, or a setting no menu writes: `locked_why`)
-        if self.locked(s, c.section) {
+        // view only in that set outside Expert mode (a copy, or a setting no menu writes: `locked_why`), or one of My
+        // Menu's places, which its page changes (`place_why`)
+        if self.locked(s, c.section) || self.place_why(s).is_some() {
             return false;
         }
         let Some(doc) = &self.doc else { return false };
@@ -423,9 +426,44 @@ impl App {
     /// that store the setting and that the file holds, never the cell it comes from, nor a set where the setting is view
     /// only outside Expert mode (`locked_why`).
     pub(crate) fn copy_targets(&self, from: Col, s: &Setting) -> Vec<Col> {
+        if self.place_why(s).is_some() {
+            return Vec::new();
+        }
         self.cols.iter().copied()
             .filter(|c| c.editable() && *c != from && (c.section == 0 || s.in_sets) && c.section < self.n_sections() && !self.locked(s, c.section))
             .collect()
+    }
+
+    /// Why one of My Menu's places (`is_mymenu_place`) takes no value from Compare outside Expert mode, in the window
+    /// and on the page alike: Compare writes a record at a time and would pass by every rule the My Menu page keeps for
+    /// its items (`mymenu_set`: an item once, the pages packed, what the camera takes). None for any other setting, and
+    /// in Expert mode, which changes it here as before.
+    pub(crate) fn place_why(&self, s: &Setting) -> Option<String> {
+        (!self.prefs.expert && self.is_mymenu_place(self.def_of(s))).then(|| format!("{} Open in Edit opens this place there.", self.places_rule()))
+    }
+
+    /// My Menu's places as its page shows them, page by page and place by place, those the search `q` (lower case,
+    /// trimmed) finds by their name or the item they hold in the live settings (`place_found`): Compare's rows for them,
+    /// each under My Menu, in a group per page named as the page heads it (`place_page`).
+    pub(crate) fn place_rows(&self, q: &str) -> Vec<Row> {
+        let Some(mm) = self.schema.camera.my_menu.as_ref() else { return Vec::new() };
+        let mut places: Vec<&Setting> = self.schema.settings.iter().filter(|s| self.is_mymenu_place(s) && self.place_found(s, q)).collect();
+        places.sort_by_key(|s| (mm.records.iter().position(|&r| r == s.id), s.index));
+        let name = self.schema.camera.text.my_menu_name().to_string();
+        places.into_iter().map(|s| (name.clone(), self.place_page(s), vec![s.clone()])).collect()
+    }
+
+    /// Whether the search `q` (lower case, trimmed) finds one of My Menu's places: by its name, or by the name of the item
+    /// it holds in file A's live settings (never by every item it could hold).
+    pub(crate) fn place_found(&self, s: &Setting, q: &str) -> bool {
+        let held = self.doc.as_ref().and_then(|d| d.value(0, s.slot())).and_then(|c| s.label_for(c));
+        q.is_empty() || s.name.to_lowercase().contains(q) || held.is_some_and(|l| l.to_lowercase().contains(q))
+    }
+
+    /// The page of My Menu a place is on, as its page heads it ("My Menu 2").
+    pub(crate) fn place_page(&self, s: &Setting) -> String {
+        let p = self.schema.camera.my_menu.as_ref().and_then(|m| m.records.iter().position(|&r| r == s.id)).unwrap_or(0);
+        format!("{} {}", self.schema.camera.text.my_menu_name(), p + 1)
     }
 
     /// Actions that copy one row (every linked record) from column `from` into `to`. A row that either file holds
@@ -448,6 +486,12 @@ impl App {
             return Vec::new();
         }
         let mut left = self.copy_skipped.get();
+        // one of My Menu's places, outside Expert mode: its page changes it, never a copy (`place_why`); counted, and said
+        if linked.iter().any(|l| self.place_why(l).is_some()) {
+            left.places += 1;
+            self.copy_skipped.set(left);
+            return Vec::new();
+        }
         let src = self.set_for(from.src);
         let shaped = pairs.iter().all(|(l, _, _)| src.is_some_and(|c| shape_ok_for(c, from.section, l)) && self.shape_ok_in(l, to.section));
         if !shaped {
@@ -520,8 +564,7 @@ impl App {
         if let Some((_, rows)) = self.rows_cache.borrow().iter().find(|(k, _)| *k == key) {
             return rows.clone();
         }
-        let off = self.schema.camera.text.off_menu_name();
-        let under = |s: &Setting, t: &str| if self.off_menu(s) { off == t } else { self.menu_entry_of(self.layout_tab(s)) == t };
+        let under = |s: &Setting, t: &str| self.entry_here(s) == t;
         let named = |t: String| -> Vec<Row> {
             self.compare_rows(None, &BarKey::All, q).iter().filter(|r| under(&r.2[0], &t)).map(|(_, g, linked)| (t.clone(), g.clone(), linked.clone())).collect()
         };
@@ -585,9 +628,10 @@ impl App {
     pub(crate) fn build_matrix_rows(&self, q: &str, tab: Option<&str>) -> Vec<Row> {
         let tab_idx: std::collections::HashMap<&str, usize> = self.schema.tabs.iter().enumerate().map(|(i, t)| (t.as_str(), i)).collect();
         let tab_idx = |t: &str| tab_idx.get(t).copied().unwrap_or(99);
-        let shown = |s: &&Setting| s.area == "global" && (self.prefs.expert || !Self::expert_only(s));
+        // My Menu's places in Expert mode or out of it, as its page shows them, which a search finds as `place_rows` does
+        let shown = |s: &&Setting| s.area == "global" && (self.prefs.expert || !Self::expert_only(s) || self.is_mymenu_place(s));
         let mut list: Vec<&Setting> = self.schema.settings.iter().filter(shown)
-            .filter(|s| q.is_empty() || Self::matches_query(s, q))
+            .filter(|s| q.is_empty() || if self.is_mymenu_place(s) { self.place_found(s, q) } else { Self::matches_query(s, q) })
             .filter(|s| tab.is_none_or(|t| s.tab == t))
             .collect();
         // the camera's order over every setting (`menu_rank`), never the menu the window shows: these rows are cached
@@ -614,7 +658,11 @@ impl App {
                     linked.push((*o).clone());
                 }
             }
-            rows.push((s.tab.clone(), s.group.clone(), linked));
+            // a place of My Menu under My Menu, in a group per page (`place_rows`)
+            match self.is_mymenu_place(s) {
+                true => rows.push((self.schema.camera.text.my_menu_name().to_string(), self.place_page(s), linked)),
+                false => rows.push((s.tab.clone(), s.group.clone(), linked)),
+            }
         }
         // keep each group together, in the order its first setting appears
         let mut first: std::collections::HashMap<(String, String), usize> = Default::default();
@@ -795,7 +843,9 @@ pub(crate) mod copy_tests {
         let keys: Vec<&str> = rows.iter().flat_map(|r| r.2.iter().map(|s| s.key.as_str())).collect();
         let unique: std::collections::HashSet<&str> = keys.iter().copied().collect();
         assert_eq!(keys.len(), unique.len(), "each setting once");
-        for r in &rows {
+        // (My Menu's places, rows of Compare outside Expert mode too since its left bar is Edit's, are linked from My
+        // Menu's page, never as a row of a tab: no page link takes one there)
+        for r in rows.iter().filter(|r| !app.is_mymenu_place(&r.2[0])) {
             let linked = app.web_linked(0, &r.2[0].key).unwrap();
             let mut a: Vec<&str> = linked.iter().map(|s| s.key.as_str()).collect();
             let mut b: Vec<&str> = r.2.iter().map(|s| s.key.as_str()).collect();
@@ -1060,5 +1110,151 @@ pub(crate) mod copy_tests {
         app.apply(vec![Action::Set(1, (0x0180, Some(camset::FIELD | 288)), 280)]);
         assert_eq!(app.doc.as_ref().unwrap().edited.sections[0].get(0x018c).unwrap(), &live, "nothing copied");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// My Menu with `n` items at the top of its first page (added when the sample holds fewer), taken as an edit.
+    fn fill_mymenu(app: &mut App, n: usize) {
+        let mm = app.schema.camera.my_menu.clone().unwrap();
+        while app.mymenu_pages().unwrap()[0].iter().filter(|&&c| c != mm.empty).count() < n {
+            let code = app.schema.settings.iter().filter_map(|s| s.menu_code).find(|&c| app.mymenu_find(c).is_none()).unwrap();
+            let (acts, _) = app.mymenu_add(code).unwrap();
+            assert_eq!(app.apply(acts), None);
+        }
+    }
+
+    /// My Menu's places, as its page shows them: page by page, place by place (the definition's settings of the records
+    /// `camera.my_menu` names).
+    fn place_keys(app: &App) -> Vec<String> {
+        let mm = app.schema.camera.my_menu.clone().unwrap();
+        let mut places: Vec<&Setting> = app.schema.settings.iter().filter(|s| app.is_mymenu_place(s)).collect();
+        places.sort_by_key(|s| (mm.records.iter().position(|&r| r == s.id), s.index));
+        places.into_iter().map(|s| s.key.clone()).collect()
+    }
+
+    /// Integration review finding 2: My Menu in Compare. With items in My Menu's places, for a definition without menus
+    /// and one with the stub's, in both layouts, outside Expert mode and in it, in each menu (or none) and for a search
+    /// or none: every record of every row of All settings sits in exactly one row under exactly one entry other than All
+    /// and Main, and those list nothing All lacks (by every record of a row); Main's records are All's; and without a
+    /// search My Menu lists what Edit's My Menu page shows: one row per place, page by page, then its own tab's rows,
+    /// outside Expert mode too, and in Expert mode nowhere else (not under the entry for what the menus do not hold).
+    #[test]
+    fn my_menu_in_compare_as_on_its_page() {
+        use crate::test_support::{done, sample_app, strip_menus, stub_menus};
+        for (with_menus, stub) in [(false, strip_menus as fn(&mut serde_json::Value)), (true, stub_menus)] {
+            let (mut app, dir, user) = sample_app("cmp_mymenu", Some(stub));
+            fill_mymenu(&mut app, 2);
+            let places = place_keys(&app);
+            assert_eq!(places.len(), 42);
+            for flat in [false, true] {
+                app.prefs.flat_list = flat;
+                for expert in [false, true] {
+                    app.prefs.expert = expert;
+                    let menus: Vec<Option<String>> = std::iter::once(None).chain(app.menus().iter().map(|m| Some(m.name.clone()))).collect();
+                    for menu in &menus {
+                        let menu = menu.as_deref();
+                        for q in ["", "iso"] {
+                            let at = format!("menus {with_menus} flat {flat} expert {expert} menu {menu:?} q {q:?}");
+                            let records = |k: &BarKey| -> Vec<String> { app.compare_rows(menu, k, q).iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect() };
+                            let all = records(&BarKey::All);
+                            let mut sorted = all.clone();
+                            sorted.sort();
+                            sorted.dedup();
+                            assert_eq!(sorted.len(), all.len(), "{at}: each record of All once");
+                            let mut under: Vec<String> = Vec::new();
+                            for k in app.bar_keys(true, 0, menu, q, false) {
+                                match k {
+                                    BarKey::All => {}
+                                    BarKey::Main => assert!(records(&k).iter().all(|r| sorted.binary_search(r).is_ok()), "{at}: Main's records are All's"),
+                                    k => under.extend(records(&k)),
+                                }
+                            }
+                            under.sort();
+                            assert_eq!(under, sorted, "{at}: each record of All under one entry, and nothing else");
+                            if q.is_empty() {
+                                let mine: Vec<Vec<String>> = app.compare_rows(menu, &BarKey::MyMenu, q).iter().map(|r| r.2.iter().map(|s| s.key.clone()).collect()).collect();
+                                let own: Vec<Vec<String>> = app.mymenu_groups().into_iter().flat_map(|(_, rows)| rows.into_iter().map(|r| r.into_iter().map(|s| s.key).collect())).collect();
+                                let want: Vec<Vec<String>> = places.iter().map(|p| vec![p.clone()]).chain(own).collect();
+                                let mut got = mine.clone();
+                                for r in got.iter_mut() { r.sort(); }
+                                let mut want_sorted = want.clone();
+                                for r in want_sorted.iter_mut() { r.sort(); }
+                                assert_eq!(got, want_sorted, "{at}: My Menu's rows as its page shows them");
+                                let off = app.schema.camera.text.off_menu_name().to_string();
+                                assert!(!records(&BarKey::Tab(off)).iter().any(|r| places.contains(r)), "{at}: no place under the entry for what the menus do not hold");
+                            }
+                        }
+                    }
+                }
+            }
+            // Edit's side: a place is under My Menu's page only, in Expert mode too
+            app.prefs.flat_list = false;
+            app.prefs.expert = true;
+            let place = app.schema.settings.iter().find(|s| s.key == places[0]).cloned().unwrap();
+            assert_eq!(app.entry_of(&place), app.schema.camera.text.my_menu_name());
+            assert_eq!(app.view_of(&place), View::MyMenu);
+            assert!(app.menu_tabs().iter().all(|t| !app.settings_in(0, Some(t)).any(|s| s.key == place.key)), "under no tab");
+            done(&dir, &user);
+        }
+    }
+
+    /// Integration review finding 2: outside Expert mode a place of My Menu is never written from Compare, in the window
+    /// or on the page, whichever way: no arrow into file A, no picker, no copy target, a copy of its row leaves it and
+    /// says how many it left and why (the arrows, the right-click copy, the buttons over the rows shown, the page's
+    /// copy, copy of the rows shown and merge), the page's set refuses it, and the reason is in the cell where one would
+    /// press; Open in Edit opens it on My Menu's page. Expert mode copies it as before.
+    #[test]
+    fn my_menus_places_are_changed_on_its_page_only() {
+        use crate::test_support::{done, sample_app, strip_menus};
+        let (mut app, dir, user) = sample_app("cmp_mymenu_ro", Some(strip_menus));
+        fill_mymenu(&mut app, 2);
+        let place = app.schema.settings.iter().find(|s| s.key == place_keys(&app)[0]).cloned().unwrap();
+        let code = app.col_value(Col::a(0), &place).unwrap();
+        let other = place.values.iter().map(|(v, _)| *v).find(|v| *v != code && app.mymenu_find(*v).is_none() && *v != app.schema.camera.my_menu.as_ref().unwrap().empty).unwrap();
+        let mut b = app.doc.as_ref().unwrap().edited.clone();
+        b.sections[0].get_mut(place.id).unwrap().put(place.index, other).unwrap();
+        app.base = Some((PathBuf::from("base.DAT"), app.doc.as_ref().unwrap().edited.clone()));
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::b(0)], false);
+        let why = app.place_why(&place).expect("outside Expert mode, a reason");
+        assert!(why.contains("My Menu page"), "{why}");
+        assert_eq!(app.arrows_between(Col::b(0), Col::a(0), &place), (false, false), "no arrow into A");
+        assert!(!app.cell_editable(Col::a(0), std::slice::from_ref(&place)), "no picker");
+        assert!(app.copy_targets(Col::b(0), &place).is_empty(), "no copy target");
+        app.copy_skipped.set(Default::default());
+        assert!(app.copy_row(std::slice::from_ref(&place), Col::b(0), Col::a(0)).is_empty(), "a copy leaves it");
+        assert_eq!(app.copy_skipped.get().places, 1);
+        app.apply(Vec::new());
+        assert!(app.status.contains("1 of My Menu's places left as it was") && app.status.contains("My Menu page"), "{}", app.status);
+        // the page: the cell's reason, its set refused, and each copy over rows leaving it, saying so
+        let ask = |app: &mut App, name: &str, body: serde_json::Value| -> (u16, serde_json::Value) {
+            let a = crate::web::tests::answer(app, name, body);
+            (a.status, serde_json::from_slice(&a.body).unwrap_or(serde_json::Value::Null))
+        };
+        let (_, j) = ask(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["b", 0]], "entry": "mymenu", "only_diff": false }));
+        let row = j["rows"].as_array().unwrap().iter().find(|r| r["key"] == place.key.as_str()).cloned().expect("the place's row");
+        assert!(row["cells"][0]["why"].as_str().is_some_and(|w| w.contains("My Menu page")) && row["cells"][0].get("editable").is_none() && row["arrows"][0] == serde_json::json!([false, false]), "{row}");
+        let (status, _) = ask(&mut app, "set", serde_json::json!({ "target": 0, "key": place.key, "value": other, "col": ["a", 0] }));
+        assert!(status >= 400 && app.col_value(Col::a(0), &place) == Some(code), "the page's set refuses it: {status}");
+        for (name, body) in [
+            ("copy", serde_json::json!({ "from": ["b", 0], "to": ["a", 0], "key": place.key })),
+            ("copy_rows", serde_json::json!({ "from": ["b", 0], "to": ["a", 0], "keys": [place.key] })),
+            ("merge", serde_json::json!({ "base": ["base", 0], "a": ["a", 0], "b": ["b", 0], "kind": "b_into_a", "entry": "mymenu" })),
+        ] {
+            let (status, j) = ask(&mut app, name, body);
+            assert_eq!(status, 200, "{name}: {j}");
+            assert!(j["message"].as_str().is_some_and(|m| m.contains("of My Menu's places left as it was") && m.contains("My Menu page")), "{name}: {j}");
+            assert_eq!(app.col_value(Col::a(0), &place), Some(code), "{name}: the place as it was");
+        }
+        // Open in Edit opens it on My Menu's page
+        app.open_in_edit_from_compare(&place, 0);
+        assert!(app.mode == Mode::Edit && app.view == View::MyMenu, "{:?}", app.view);
+        assert_eq!(app.item_key.as_deref(), Some(place.key.as_str()));
+        // Expert mode: as before
+        (app.mode, app.prefs.expert) = (Mode::Compare, true);
+        assert!(app.place_why(&place).is_none() && app.cell_editable(Col::a(0), std::slice::from_ref(&place)) && app.arrows_between(Col::b(0), Col::a(0), &place) == (false, true));
+        let acts = app.copy_row(std::slice::from_ref(&place), Col::b(0), Col::a(0));
+        app.apply(acts);
+        assert_eq!(app.col_value(Col::a(0), &place), Some(other), "Expert mode copies it");
+        done(&dir, &user);
     }
 }

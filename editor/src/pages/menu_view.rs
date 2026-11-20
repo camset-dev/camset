@@ -719,12 +719,13 @@ mod menus_window_tests {
         assert!(!said.iter().any(|(_, r, l, _)| *r == Role::ComboBox || l == "Tab compared"), "no list of tabs: the Menu picks");
         assert_eq!(names(&app.matrix_rows()), names(&rows), "All settings: the rows Compare always had");
         assert_eq!(names(&app.matrix_rows_for("", None)), names(&rows));
-        // and those are the definition's live settings outside Expert mode, each record in one row, worked out here
+        // and those are the definition's live settings outside Expert mode, and My Menu's places as its page shows them
+        // (Compare's left bar is Edit's for every definition: All holds My Menu's places too), each record in one row
         let mut records: Vec<String> = rows.iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect();
         let n = records.len();
         records.sort();
         records.dedup();
-        let mut want: Vec<String> = app.schema.settings.iter().filter(|s| s.area == "global" && !App::expert_only(s)).map(|s| s.key.clone()).collect();
+        let mut want: Vec<String> = app.schema.settings.iter().filter(|s| s.area == "global" && (!App::expert_only(s) || app.is_mymenu_place(s))).map(|s| s.key.clone()).collect();
         want.sort();
         assert_eq!((n, &records), (want.len(), &want), "every live setting once");
         assert_eq!(app.mm_rows.len(), rows.len());

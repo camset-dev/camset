@@ -519,6 +519,8 @@ impl App {
                     // a value of file A that is view only outside Expert mode says why it takes none (`locked_why`), and
                     // one the camera keeps in more than one record what changing it changes (`copy_note`)
                     let r = match self.locked_why(s, c.section).filter(|_| c.editable()) { Some((why, _)) => r.on_hover_text(why), None => r };
+                    // one of My Menu's places says where it is changed instead (`place_why`)
+                    let r = match self.place_why(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
                     let r = match self.copy_note(s, c.section).filter(|_| c.editable()) { Some((note, _)) => r.on_hover_text(note), None => r };
                     // a value of file A that can change opens Compare's picker on a click (or the menu's "Change…",
                     // the frame after its menu closes)

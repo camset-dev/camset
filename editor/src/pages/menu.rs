@@ -242,7 +242,8 @@ impl App {
         let gathers = tab.is_some_and(|t| !self.schema.tabs.iter().any(|x| x == t));
         let placed = (tab.is_some() && self.camera_layout()).then(|| self.placed_groups());
         let off = self.schema.camera.text.off_menu_name();
-        move |s| tab.is_none_or(|t| {
+        // My Menu's places are its page's (`entry_here`), under no tab and not under the entry for what the menus do not hold
+        move |s| tab.is_none_or(|t| !self.is_mymenu_place(s) && {
             let away = placed.as_ref().is_some_and(|p| self.off_menu_in(s, p));
             // as on the camera in the tab whose menu holds its row (`layout_tab`)
             let tab = self.layout_tab(s);
@@ -276,11 +277,11 @@ impl App {
     /// a setting of a tab the definition lists on no row of the camera (in none of its menus), whose group has no
     /// setting on one either (a
     /// group with some keeps the others under "More settings in this group"), and not of a family shown as one table
-    /// (`camera.families`), nor of My Menu's own tab, which its page shows. Only the definition's places decide it;
-    /// the layout is not asked here (`off_menu`).
+    /// (`camera.families`), nor of My Menu's own tab or one of its places, which its page shows. Only the definition's
+    /// places decide it; the layout is not asked here (`off_menu`).
     fn off_menu_in(&self, s: &Setting, placed: &std::collections::HashMap<String, std::collections::HashSet<String>>) -> bool {
         !s.placed_anywhere() && self.schema.tabs.contains(&s.tab)
-            && !(self.has_mymenu_page() && s.tab == self.schema.camera.text.my_menu_name())
+            && !(self.has_mymenu_page() && s.tab == self.schema.camera.text.my_menu_name()) && !self.is_mymenu_place(s)
             && !self.schema.camera.families.iter().any(|f| !f.prefix.is_empty() && s.group.starts_with(&f.prefix))
             && !placed.get(&s.tab).is_some_and(|g| g.contains(&s.group))
     }
@@ -309,8 +310,15 @@ impl App {
     }
 
     /// `entry_of` for a setting as the menu it is listed in lays it out.
-    fn entry_here(&self, s: &Setting) -> String {
-        if self.off_menu(s) { self.schema.camera.text.off_menu_name().to_string() } else { self.menu_entry_of(self.layout_tab(s)).to_string() }
+    pub(crate) fn entry_here(&self, s: &Setting) -> String {
+        if self.is_mymenu_place(s) {
+            // one of My Menu's places: its page's, in Expert mode too
+            self.schema.camera.text.my_menu_name().to_string()
+        } else if self.off_menu(s) {
+            self.schema.camera.text.off_menu_name().to_string()
+        } else {
+            self.menu_entry_of(self.layout_tab(s)).to_string()
+        }
     }
 
     /// The page a jump to `s` opens, in the layout in use: the page of the Menu entry that shows it (`entry_of`,
@@ -1315,9 +1323,11 @@ impl App {
                 out
             }
             BarKey::MyMenu => {
-                // the settings of My Menu's own tab, as Edit's My Menu page lists them below its places, under its name
+                // as Edit's My Menu page: its places, page by page, then the settings of its own tab, under its name
                 let name = self.schema.camera.text.my_menu_name().to_string();
-                self.entry_rows(menu, &BarKey::Tab(name.clone()), &q)
+                let mut out = self.place_rows(&q);
+                out.extend(self.entry_rows(menu, &BarKey::Tab(name.clone()), &q));
+                out
             }
             BarKey::Tab(t) => {
                 let list: Vec<Setting> = match menu {

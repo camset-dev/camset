@@ -112,31 +112,77 @@ pub(crate) fn read_problem(e: &std::io::Error) -> &'static str {
 /// `copy_row`); they are view only outside Expert mode (`locked`, `App::locked_why`: no proof on the camera stands for
 /// them); their value is one the menus offer under another video system than file A was saved under (`other_system`,
 /// `Setting::other_system`); a copy the camera keeps of a setting that took no value (following its setting, put back,
-/// or taken along), its record being of another shape than mapped (`copies_shape`, `App::apply`).
+/// or taken along), its record being of another shape than mapped (`copies_shape`, `App::apply`); a place of the
+/// camera's own menu (My Menu), which Compare leaves to that menu's page outside Expert mode (`places`,
+/// `App::place_why`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Left {
     pub(crate) shape: usize,
     pub(crate) locked: usize,
     pub(crate) other_system: usize,
     pub(crate) copies_shape: usize,
+    pub(crate) places: usize,
 }
 
 impl Left {
     /// How many, whatever the reason.
     pub(crate) fn total(self) -> usize {
-        self.shape + self.locked + self.other_system + self.copies_shape
+        self.shape + self.locked + self.other_system + self.copies_shape + self.places
     }
 }
 
+impl App {
+    /// What an edit or a copy left alone (`Left`, `left_alone_in`), My Menu named as the definition names it.
+    pub(crate) fn left_alone(&self, left: Left) -> String {
+        left_alone_in(left, self.schema.camera.text.my_menu_name())
+    }
+
+    /// A status line with `left_alone`'s sentences after it (`with_left_in`).
+    pub(crate) fn with_left(&self, said: &str, left: Left) -> String {
+        with_left_in(said, left, self.schema.camera.text.my_menu_name())
+    }
+
+    /// Where My Menu's items are changed and why (`places_rule_in`).
+    pub(crate) fn places_rule(&self) -> String {
+        places_rule_in(self.schema.camera.text.my_menu_name())
+    }
+}
+
+/// Where the camera's own menu (`my_menu`, its name in the definition: My Menu) has its items changed and why: the reason
+/// a place takes no value from Compare outside Expert mode (`App::place_why`, `left_alone_in`).
+pub(crate) fn places_rule_in(my_menu: &str) -> String {
+    format!("{my_menu}'s items are changed on the {my_menu} page, which keeps the camera's rules for them (each item once, the places in order, as many as the camera takes).")
+}
+
 /// What an edit or a copy left alone (`Left`), one sentence per reason, each saying what to do where something can be
-/// done; empty when it left none.
-pub(crate) fn left_alone(left: Left) -> String {
+/// done, the camera's own menu named `my_menu`; empty when it left none.
+pub(crate) fn left_alone_in(left: Left, my_menu: &str) -> String {
+    let places = match left.places {
+        0 => None,
+        1 => Some(format!("1 of {my_menu}'s places left as it was: {}", places_rule_in(my_menu))),
+        n => Some(format!("{n} of {my_menu}'s places left as they were: {}", places_rule_in(my_menu))),
+    };
+    [left_alone_words(left), places].into_iter().flatten().filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ")
+}
+
+/// A status line with `left_alone_in`'s sentences after it, when there are some.
+pub(crate) fn with_left_in(said: &str, left: Left, my_menu: &str) -> String {
+    let said = said.trim().trim_end_matches('.');
+    match (left.total(), said.is_empty()) {
+        (0, _) => said.to_string(),
+        (_, true) => left_alone_in(left, my_menu),
+        _ => format!("{said}. {}", left_alone_in(left, my_menu)),
+    }
+}
+
+/// `left_alone_in`'s sentences for the reasons that need no name of the camera's.
+fn left_alone_words(left: Left) -> Option<String> {
     let one = |n: usize, it: &str, them: &str| match n {
         0 => None,
         1 => Some(format!("1 setting left alone: {it}")),
         n => Some(format!("{n} settings left alone: {them}")),
     };
-    [
+    Some([
         one(left.shape, "a file here holds it in another shape than the editor knows.", "a file here holds them in another shape than the editor knows."),
         one(left.locked, "it is view only outside Expert mode, as no proof on the camera stands for it here. Expert mode (⚙ Settings > Editing & Compare) copies it.",
             "they are view only outside Expert mode, as no proof on the camera stands for them here. Expert mode (⚙ Settings > Editing & Compare) copies them."),
@@ -144,17 +190,7 @@ pub(crate) fn left_alone(left: Left) -> String {
             "their values are offered only with the camera set to another video system than file A was saved with."),
         one(left.copies_shape, "a copy the camera keeps of a setting was not changed with it, as the file holds it in another shape than the editor knows; it holds its old value.",
             "copies the camera keeps of settings were not changed with them, as the file holds them in another shape than the editor knows; they hold their old values."),
-    ].into_iter().flatten().collect::<Vec<_>>().join(" ")
-}
-
-/// A status line with `left_alone`'s sentences after it, when there are some.
-pub(crate) fn with_left(said: &str, left: Left) -> String {
-    let said = said.trim().trim_end_matches('.');
-    match (left.total(), said.is_empty()) {
-        (0, _) => said.to_string(),
-        (_, true) => left_alone(left),
-        _ => format!("{said}. {}", left_alone(left)),
-    }
+    ].into_iter().flatten().collect::<Vec<_>>().join(" "))
 }
 
 /// Where the camera link's own messages are, outside Expert mode.

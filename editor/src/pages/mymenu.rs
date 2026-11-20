@@ -410,6 +410,9 @@ impl App {
         let mut put: Option<(usize, usize, i64)> = None;
         let items = self.mymenu_items();
         let packed = self.schema.camera.my_menu.as_ref().is_some_and(|m| m.packed);
+        // the place a jump chose (Compare's Open in Edit on a place): its page and number, marked and brought into view once
+        let chosen = self.item_key.as_ref().and_then(|k| self.schema.settings.iter().find(|s| &s.key == k && self.is_mymenu_place(s)))
+            .and_then(|s| Some((self.schema.camera.my_menu.as_ref()?.records.iter().position(|&r| r == s.id)?, usize::from(s.index?))));
         match self.mymenu_places() {
             None => { ui.label(self.mymenu_missing()); }
             Some(pages) => {
@@ -425,7 +428,16 @@ impl App {
                             let ink = if place.edited { tone::edit(ui.visuals()) } else { ui.visuals().text_color() };
                             let mark = if place.edited { format!("{EDIT_MARK} ") } else { String::new() };
                             let was = if place.edited { format!("\nWas: {}", place.was) } else { String::new() };
-                            ui.label(RichText::new((i + 1).to_string()).color(weak));
+                            if chosen == Some((p, i)) {
+                                let r = ui.label(RichText::new(format!("▶ {}", i + 1)).strong()).on_hover_text("The place opened from Compare");
+                                let key = egui::Id::new(("mymenu_place_shown", p, i));
+                                if ui.data(|d| d.get_temp::<bool>(key)).is_none() {
+                                    r.scroll_to_me(Some(egui::Align::Center));
+                                    ui.data_mut(|d| d.insert_temp(key, true));
+                                }
+                            } else {
+                                ui.label(RichText::new((i + 1).to_string()).color(weak));
+                            }
                             if place.empty {
                                 ui.label(RichText::new(format!("{mark}{}", place.name)).italics().color(if place.edited { ink } else { weak })).on_hover_text(format!("An empty place{was}"));
                                 ui.label("");

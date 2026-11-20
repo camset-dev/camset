@@ -210,6 +210,10 @@ def test_the_a1s_public_definition_has_every_setting_in_one_entry():
     keys = [x["key"] for _, settings in entries for x in settings]
     assert sorted(keys) == sorted(x["key"] for x in doc["settings"])
     assert [e for e, _ in entries][:len(doc["tabs"])] == [t for t in doc["tabs"] if t != "My Menu"]
+    # My Menu's places are its page's (App::entry_here), never under the entry for what the menus do not hold
+    records = set(doc["camera"]["my_menu"]["records"])
+    places = {x["key"] for x in doc["settings"] if x["area"] == "global" and x["id"] in records}
+    assert places and places <= {x["key"] for e, settings in entries if e == menu.my_menu for x in settings}
     for entry, settings in entries:
         held = {x["key"] for _, _, rows in menu.groups(entry, settings) for r in rows for x in r}
         assert held == {x["key"] for x in settings}, entry
