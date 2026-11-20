@@ -194,8 +194,9 @@ struct App {
     /// The Memories page's groups folded, by "tab > group" (all open to start with, as the page has always been drawn).
     mem_closed: std::collections::HashSet<String>,
     /// The view in front's own folds (the exposure page's "What decides" sections, a family group's table, the record
-    /// map's records), all to fold (true) or all to open (false) the next time it is drawn (`fold_all`); each keeps its
-    /// state where a click leaves it (egui's, the record map's).
+    /// map's records), all to fold (true) or all to open (false) as it is drawn this frame (`fold_all`, by the keys before
+    /// the panel, or a button above them); dropped after the central panel, so it never acts on a later view. Each keeps
+    /// its state where a click leaves it (egui's, the record map's).
     head_fold: Option<bool>,
     /// The control that had egui's focus when the fold keys were pressed, to have it back the next frame: egui moves the
     /// focus with an arrow whatever the modifiers (`fold_keys`).
@@ -809,6 +810,8 @@ impl eframe::App for App {
                 }
             })
             .inner;
+        // a Collapse all / Expand all request the view in front did not take this frame acts on no later one
+        self.head_fold = None;
         // a change that unticks a switch keeping copies apart waits for the question's answer (`untick_window`)
         let actions = self.hold_untick(actions);
         self.apply(actions);

@@ -415,15 +415,14 @@ impl App {
                     if ui.small_button("Collapse all").on_hover_text(format!("Fold the table ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
                     if ui.small_button("Expand all").on_hover_text(format!("Open the table ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
                 });
+                // a button's request acts in this same drawing, the table being drawn below it
+                if let Some(collapse) = fold_every.take() {
+                    self.fold_all(collapse);
+                }
                 egui::ScrollArea::both().id_salt("family_scroll").auto_shrink([false, false]).show(ui, |ui| {
                     self.pp_table(ui, gname, &rows[0], editable, &mut actions);
                 });
             });
-            self.head_fold = None;
-            if let Some(collapse) = fold_every {
-                self.fold_all(collapse);
-                ui.ctx().request_repaint();
-            }
         } else {
             // column 4: the selected item
             egui::SidePanel::right("detail").resizable(true).default_width(330.0).show_inside(ui, |ui| {

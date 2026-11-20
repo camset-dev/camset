@@ -2616,6 +2616,33 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The reviewer's mend 1: a Collapse all the view in front does not take acts on no later view. On a family group,
+    /// Cmd/Ctrl+Shift+↑ and a plain ↓ in the same frame: the ↓ moves to the next group, the request is dropped after that
+    /// frame's panel, and the family's table, back in front, is open as it was.
+    #[test]
+    fn a_fold_request_not_taken_acts_on_no_later_view() {
+        let (mut app, dir, user) = sample_app("fold_stale", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let (tab, group) = app.schema.tabs.iter().find_map(|t| app.tab_groups(t).into_iter().find(|(_, family, _)| *family).map(|(g, _, _)| (t.clone(), g))).expect("a family group");
+        app.select(Some(View::Tab(tab.clone())), Some(group.clone()), None);
+        app.focus = Focus::Groups;
+        let open = |w: &mut Win, app: &mut App| {
+            for _ in 0..8 {
+                let _ = w.run(app, vec![]);
+            }
+            w.drawn(app).iter().any(|t| t.contains("Values the camera never produces are not offered."))
+        };
+        assert!(open(&mut w, &mut app));
+        let key = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+        let _ = w.run(&mut app, vec![key(egui::Key::ArrowUp, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT), key(egui::Key::ArrowDown, egui::Modifiers::NONE)]);
+        assert_ne!(app.group.as_deref(), Some(group.as_str()), "the plain Down moved to the next group");
+        assert!(app.head_fold.is_none(), "the request the view in front did not take is gone after the panel");
+        let _ = w.run(&mut app, vec![]);
+        app.select(Some(View::Tab(tab)), Some(group), None);
+        assert!(open(&mut w, &mut app), "the family's table, back in front, is open as it was");
+        done(&dir, &user);
+    }
+
     /// The reviewer's inventory, B: the record map (Expert mode) folds and shows its records' bytes by the keys as by its
     /// own Collapse all and Expand all: Expand all the multi-byte records listed, Collapse all every one.
     #[test]

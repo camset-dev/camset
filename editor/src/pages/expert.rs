@@ -216,11 +216,6 @@ impl App {
         let only_interesting = ui.data(|d| d.get_temp::<bool>(egui::Id::new("rm_interesting"))).unwrap_or(false);
         let mut expanded: std::collections::HashSet<u16> = ui.data(|d| d.get_temp(egui::Id::new("rm_expanded"))).unwrap_or_default();
         let mut fold_every = None;
-        // Collapse all closes every record's bytes; Expand all opens those of the records listed (`head_fold`)
-        let forced = self.head_fold.take();
-        if forced == Some(true) {
-            expanded.clear();
-        }
         let (mut u, mut i) = (only_unmapped, only_interesting);
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("{}: records in file order", self.schema.camera.target_name(self.target))).strong());
@@ -235,6 +230,15 @@ impl App {
             ui.label(RichText::new("Search matches record ids (0x1234), setting names and values. Click a setting to open it; click the shape of a multi-byte record for its bytes.").small().color(tone::weak(ui.visuals())));
         });
         ui.data_mut(|d| { d.insert_temp(egui::Id::new("rm_unmapped"), u); d.insert_temp(egui::Id::new("rm_interesting"), i); });
+        // Collapse all closes every record's bytes; Expand all opens those of the records listed (`head_fold`): the keys'
+        // request, or a button's above, in this same drawing
+        if let Some(collapse) = fold_every.take() {
+            self.fold_all(collapse);
+        }
+        let forced = self.head_fold.take();
+        if forced == Some(true) {
+            expanded.clear();
+        }
         // fields the schema knows inside array records, and the records as listed: worked out once, not per frame
         let fields = self.record_fields(in_set);
         let rows = self.record_rows();
@@ -315,10 +319,6 @@ impl App {
             ui.label("No records match.");
         }
         ui.data_mut(|d| d.insert_temp(egui::Id::new("rm_expanded"), expanded));
-        if let Some(collapse) = fold_every {
-            self.fold_all(collapse);
-            ui.ctx().request_repaint();
-        }
         if let Some(s) = jump {
             // as every jump: the camera's menu, page, group and row that show it (`go_to`)
             self.go_to(&s);
