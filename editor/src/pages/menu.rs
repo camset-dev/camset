@@ -2168,6 +2168,27 @@ pub(crate) mod facts_tests {
         done(&d2, &u2);
     }
 
+    /// Integration review finding 5: Up/Down in the Menu column move from the first entry where the page shown is not
+    /// one of the bar's (Only edited with no edit there): Down opens the bar's first entry.
+    #[test]
+    fn the_menus_keys_start_from_the_first_entry_where_the_page_is_not_listed() {
+        for stub in [crate::test_support::strip_menus as fn(&mut serde_json::Value), crate::test_support::stub_menus] {
+            let (mut app, dir, user) = sample_app("menus_keys_unlisted", Some(stub));
+            let iso = setting(&app, "global:0x0334");
+            let v = app.offered_values(&iso, 0).into_iter().map(|(v, _)| v).find(|v| app.doc.as_ref().unwrap().value(0, iso.slot()) != Some(*v)).unwrap();
+            app.apply(vec![Action::Set(0, iso.slot(), v)]);
+            app.only_changed = true;
+            let keys = app.bar_keys(false, 0, app.menu_shown().as_deref(), "", true);
+            let unlisted = app.menu_tabs().into_iter().find(|t| !keys.contains(&BarKey::Tab(t.clone()))).expect("a tab with no edit");
+            (app.view, app.focus) = (View::Tab(unlisted), Focus::Tabs);
+            let down = egui::RawInput { events: vec![egui::Event::Key { key: egui::Key::ArrowDown, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], ..Default::default() };
+            let _ = egui::Context::default().run(down, |ctx| app.bar_nav(ctx));
+            let want = match &keys[0] { BarKey::Main => View::Main, BarKey::MyMenu => View::MyMenu, BarKey::Tab(t) => View::Tab(t.clone()), BarKey::All => unreachable!() };
+            assert_eq!(app.view, want);
+            done(&dir, &user);
+        }
+    }
+
     /// Second integration review, item 5: in Expert mode a search hit for a place of My Menu says where a click on it
     /// opens (My Menu's page, `entry_here`), with menus and without, as the jump lands.
     #[test]

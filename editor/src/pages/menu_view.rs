@@ -225,7 +225,8 @@ impl App {
             Mode::Compare if !self.compare_records => (self.bar_keys(true, 0, menu.as_deref(), &self.search, false), self.compare_key()),
             Mode::Compare => return,
         };
-        let Some(pos) = keys.iter().position(|k| *k == now) else { return };
+        // a page the bar does not list (Only edited, a search): the keys start from its first entry
+        let pos = keys.iter().position(|k| *k == now);
         let arrow = |k: egui::Key| move |e: &egui::Event| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if *key == k && modifiers.is_none());
         let (up, down) = ctx.input_mut(|i| {
             let (up, down) = (i.events.iter().any(arrow(egui::Key::ArrowUp)), i.events.iter().any(arrow(egui::Key::ArrowDown)));
@@ -233,7 +234,8 @@ impl App {
             (up, down)
         });
         let step = if down { 1 } else if up { -1 } else { return };
-        let Some(key) = step_in(keys.len(), pos, step).map(|i| keys[i].clone()) else { return };
+        let next = match pos { Some(p) => step_in(keys.len(), p, step), None => (!keys.is_empty()).then_some(0) };
+        let Some(key) = next.map(|i| keys[i].clone()) else { return };
         match self.mode {
             Mode::Edit => {
                 let view = match key {
