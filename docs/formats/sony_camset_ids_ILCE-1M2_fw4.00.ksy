@@ -198,7 +198,7 @@ enums:
       doc: 'RAW File Type (one slot) [Shooting > Image Quality/Rec]: 0 Uncompressed, 2 Lossless Comp (L), 3 Lossless
         Comp (M), 4 Lossless Comp (S), 7 Compressed. live settings; 1 of 1 settings on it proved on the camera.'
     0x01de:
-      id: jpeg_heif_quality
+      id: jpeg_heif_quality_01de
       doc: 'JPEG/HEIF Quality (one slot) [Shooting > Image Quality/Rec]: 0 Extra fine, 1 Fine, 2 Standard, 3 Light.
         live settings; 1 of 1 settings on it proved on the camera.'
     0x01e0:
@@ -206,7 +206,7 @@ enums:
       doc: 'JPEG/HEIF Quality (one slot, copy) [Shooting > Image Quality/Rec]: 0 Extra fine, 1 Fine, 2 Standard,
         3 Light. live settings; 1 of 1 settings on it proved on the camera.'
     0x01e2:
-      id: jpeg_heif_image_size
+      id: jpeg_heif_image_size_01e2
       doc: 'JPEG/HEIF Image Size (one slot) [Shooting > Image Quality/Rec]: 0 L: 50M, 1 M: 21M, 2 S: 12M. live settings;
         1 of 1 settings on it proved on the camera.'
     0x01e4:
@@ -222,7 +222,7 @@ enums:
       doc: 'RAW File Type (Slot 1) [Shooting > Image Quality/Rec]: 0 Uncompressed, 2 Lossless Comp (L), 3 Lossless
         Comp (M), 4 Lossless Comp (S), 7 Compressed. live settings; 1 of 1 settings on it proved on the camera.'
     0x01ea:
-      id: jpeg_heif_quality_01ea
+      id: jpeg_heif_quality
       doc: 'JPEG/HEIF Quality (Slot 1) [Shooting > Image Quality/Rec]: 0 Extra fine, 1 Fine, 2 Standard, 3 Light.
         live settings; 1 of 1 settings on it proved on the camera.'
     0x01ec:
@@ -230,7 +230,7 @@ enums:
       doc: 'JPEG/HEIF Quality (Slot 1, copy) [Shooting > Image Quality/Rec]: 0 Extra fine, 1 Fine, 2 Standard, 3
         Light. live settings; 1 of 1 settings on it proved on the camera.'
     0x01ee:
-      id: jpeg_heif_image_size_01ee
+      id: jpeg_heif_image_size
       doc: 'JPEG/HEIF Image Size (Slot 1) [Shooting > Image Quality/Rec]: 0 L: 50M, 1 M: 21M, 2 S: 12M. live settings;
         1 of 1 settings on it proved on the camera.'
     0x01f0:
@@ -1489,7 +1489,7 @@ enums:
       doc: 'Spot size when Spot was last left [Focus > Focus Area]: 0 S, 1 M, 2 L, 3 XL, 4 XS. live settings; 1
         of 1 settings on it proved on the camera.'
     0x04e2:
-      id: unknown_camera_state
+      id: unknown_camera_state_04e2
       doc: Unknown camera state (8 after a reset) [Setup > Setting]. live settings; 0 of 1 settings on it proved
         on the camera.
     0x04e5:
@@ -3046,7 +3046,7 @@ enums:
       doc: 'Recog Trgt Select: Auto [Focus > Subject Recognition]. live settings; 7 of 7 settings on it proved on
         the camera.'
     0x1126:
-      id: unknown_camera_state_1126
+      id: unknown_camera_state
       doc: Unknown camera state (not a menu setting) [Setup > Other settings]. live settings; 0 of 1 settings on
         it proved on the camera.
     0x1135:

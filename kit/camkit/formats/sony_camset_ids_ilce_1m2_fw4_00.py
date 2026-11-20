@@ -61,15 +61,15 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         jpeg_heif_switch = 472
         file_format = 474
         raw_file_type = 476
-        jpeg_heif_quality = 478
+        jpeg_heif_quality_01de = 478
         jpeg_heif_quality_01e0 = 480
-        jpeg_heif_image_size = 482
+        jpeg_heif_image_size_01e2 = 482
         jpeg_heif_image_size_01e4 = 484
         file_format_01e6 = 486
         raw_file_type_01e8 = 488
-        jpeg_heif_quality_01ea = 490
+        jpeg_heif_quality = 490
         jpeg_heif_quality_01ec = 492
-        jpeg_heif_image_size_01ee = 494
+        jpeg_heif_image_size = 494
         jpeg_heif_image_size_01f0 = 496
         file_format_01f2 = 498
         raw_file_type_01f4 = 500
@@ -392,7 +392,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         metering_spot_metering_size = 1236
         d_range_optimizer_04d6 = 1238
         spot_size_when_spot_was_last_left = 1248
-        unknown_camera_state = 1250
+        unknown_camera_state_04e2 = 1250
         disp_mode = 1253
         finder_disp_mode = 1254
         black_level_array = 1257
@@ -790,7 +790,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         recording_self_timer_count_time = 4349
         recording_self_timer_continuous = 4351
         recog_trgt_select_auto_array = 4361
-        unknown_camera_state_1126 = 4390
+        unknown_camera_state = 4390
         rec_frame_rate_1135 = 4405
         rec_frame_rate_1137 = 4407
         rec_frame_rate_1139 = 4409

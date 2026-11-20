@@ -361,6 +361,71 @@ def test_a_second_camera_gets_its_own_record_names(tmp_path, monkeypatch):
     assert camset_ksy.ids_id("DSC-RX1RM3_fw1.00") == "sony_camset_ids_dsc_rx1rm3_fw1_00"
 
 
+def test_a_published_record_name_stays_with_its_record():
+    """A name someone's parser uses never comes to mean another record (b3afe42: the new one-slot record 0x01de took
+    jpeg_heif_quality from Slot 1's 0x01ea, its id being lower). The committed file is the memory: a record keeps its
+    identifier while its name gives it, a new record bearing a taken name takes its id whatever its place, a renamed
+    record takes its new name's identifier but never one the file gives another, and a suffix once given stays."""
+    import camset_ksy
+
+    def doc(*settings):
+        return {"settings": [{"key": k, "name": n, "tab": "Shooting", "group": "G"} for k, n in settings]}
+
+    def ids(d, kept=None):
+        return {rid: i for rid, (i, _) in camset_ksy.record_names(d, kept).items()}
+    before = ids(doc(("global:0x01ea", "JPEG/HEIF Quality (Slot 1)"), ("global:0x01ec", "JPEG/HEIF Quality (Slot 1, copy)")))
+    assert before == {0x01EA: "jpeg_heif_quality", 0x01EC: "jpeg_heif_quality_01ec"}
+    grown = doc(("global:0x01ea", "JPEG/HEIF Quality (Slot 1)"), ("global:0x01ec", "JPEG/HEIF Quality (Slot 1, copy)"),
+                ("global:0x01de", "JPEG/HEIF Quality (one slot)"))
+    assert ids(grown)[0x01DE] == "jpeg_heif_quality", "dealt out afresh, the lower id takes the name"
+    assert ids(grown, before) == {**before, 0x01DE: "jpeg_heif_quality_01de"}, "kept: the name stays with 0x01ea"
+    # a rename takes its new name's identifier, never one the file gives another (06ed34b: 0x04e2 renamed took
+    # unknown_camera_state from 0x1126), and the old identifier goes with the old name
+    was = {0x04E2: "camera_position_state", 0x1126: "unknown_camera_state"}
+    renamed = doc(("global:0x04e2", "Unknown camera state (8 after a reset)"), ("global:0x1126", "Unknown camera state"))
+    assert ids(renamed, was) == {0x04E2: "unknown_camera_state_04e2", 0x1126: "unknown_camera_state"}
+    # a suffix once given stays, though the record that made it needed is gone; a kept file is a fixed point
+    alone = doc(("global:0x01de", "JPEG/HEIF Quality (one slot)"))
+    assert ids(alone, {0x01DE: "jpeg_heif_quality_01de"}) == {0x01DE: "jpeg_heif_quality_01de"}
+    assert ids(grown, ids(grown, before)) == ids(grown, before)
+    # a live setting found on a memory set's record (the a1 II's 0x023c) leads the record's line, and the record keeps
+    # the set's name while the set's setting bears it
+    sets = doc(("set:0x023c", "Memory slot filled"))
+    kept = ids(sets)
+    both = doc(("set:0x023c", "Memory slot filled"), ("global:0x023c", "Follows the video system"))
+    assert kept == {0x023C: "memory_slot_filled"} and ids(both) == {0x023C: "follows_the_video_system"}
+    assert ids(both, kept) == kept
+    assert camset_ksy.record_names(both, kept)[0x023C][1].startswith("Follows the video system")
+    # a name that is another's with an id already is told apart once more, never given twice
+    odd = doc(("global:0x0001", "X"), ("global:0x0002", "X 0003"), ("global:0x0003", "X"))
+    got = ids(odd, {0x0001: "x", 0x0002: "x_0003"})
+    assert got == {0x0001: "x", 0x0002: "x_0003", 0x0003: "x_0003_2"} and len(set(got.values())) == 3
+
+
+def test_the_record_names_file_is_the_memory_and_gives_the_moved_names_back(tmp_path, monkeypatch):
+    """published() reads the identifiers the committed file gives, none without one; render() keeps them, so the file it
+    writes is the one it read (build_docs --check). The a1 II's file gives back what b3afe42 and 06ed34b moved: Slot 1's
+    JPEG/HEIF Quality and Image Size their names, 0x1126 its unknown_camera_state."""
+    import camset_ksy
+    from camkit import definitions
+    monkeypatch.setattr(camset_ksy, "FORMATS", tmp_path)
+    assert camset_ksy.published("ILCE-7M5_fw1.00") == {}
+    d = {"model": "ILCE-7M5", "layouts": [{"model": "ILCE-7M5", "firmware": "1.00", "signature": "0123456789abcdef"}],
+         "settings": [{"key": "global:0x0020", "name": "Thing", "tab": "Shooting", "group": "G"}]}
+    first = camset_ksy.render(d)
+    camset_ksy.ids_path("ILCE-7M5_fw1.00").write_text(first, encoding="utf-8")
+    d["settings"].insert(0, {"key": "global:0x0010", "name": "Thing (copy)", "tab": "Shooting", "group": "G"})
+    spec = yaml.safe_load(camset_ksy.render(d))["enums"]["setting"]
+    assert (spec[0x10]["id"], spec[0x20]["id"]) == ("thing_0010", "thing")
+    monkeypatch.undo()
+    a1 = definitions.load_public(camset_ksy.SCHEMA)
+    kept = camset_ksy.published(A1)
+    assert (kept[0x01EA], kept[0x01EE], kept[0x1126]) == ("jpeg_heif_quality", "jpeg_heif_image_size", "unknown_camera_state")
+    assert (kept[0x01DE], kept[0x01E2], kept[0x04E2]) == ("jpeg_heif_quality_01de", "jpeg_heif_image_size_01e2",
+                                                         "unknown_camera_state_04e2")
+    assert camset_ksy.render(a1) == camset_ksy.ids_path(A1).read_text(encoding="utf-8")
+
+
 def test_check_names_record_names_no_definition_gives(tmp_path, monkeypatch):
     """A record names file whose definition is gone (renamed or removed) is not left behind unseen: --check says to
     delete it."""
