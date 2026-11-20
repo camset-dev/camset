@@ -137,12 +137,12 @@ def reader_grey(cam) -> tuple:
         return None, {}
     q = reading.QUESTIONS[kind]
     try:
-        got = reading.ask(cam.frame, q.prompt, reading.TIMEOUTS["press"])
+        got = reading.ask(cam.frame, q.grey_prompt, reading.TIMEOUTS["press"])
     except Exception as e:      # noqa: BLE001 - no answer: the pixels decide, as before
-        return None, {"question": q.prompt, "why": f"the question could not be asked ({type(e).__name__})"}
+        return None, {"question": q.grey_prompt, "why": f"the question could not be asked ({type(e).__name__})"}
     said = reading.greyed_of(got.answer, q)
     read = got.answer.get(q.field) if isinstance(got.answer, dict) else None
-    return said, {"question": q.prompt, **({"reader_name": got.name} if got.name else {}),
+    return said, {"question": q.grey_prompt, **({"reader_name": got.name} if got.name else {}),
                   **({"read": str(read)} if isinstance(read, (str, int, float)) and not isinstance(read, bool) else {}),
                   **({"why": got.why or "the answer says nothing of grey"} if said is None else {})}
 

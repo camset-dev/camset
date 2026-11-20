@@ -1161,7 +1161,7 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
         assert hashlib.sha1(vlm.PROMPTS[key].encode()).hexdigest()[:16] == digest, key
     for kind, q in reading.QUESTIONS.items():
         text = vlm.PROMPTS[q.prompt]
-        assert re.search(r"\.v[23](?:\.grey)?$", q.prompt) and q.prompt not in OLD_PROMPTS, kind
+        assert re.search(r"\.v[23]$", q.prompt) and q.prompt not in OLD_PROMPTS, kind
         assert text.isascii() and "Reply with JSON only, on one line: {" in text and f'"{q.field}"' in text, kind
         assert q.expect in reading.EXPECTS and len(text) < 600, kind
     assert [k for k, v in vlm.PROMPTS.items() if k.endswith(".v2") and "write none" in v] == \
@@ -1229,9 +1229,9 @@ def test_no_reader_a_camera_run_builds_is_the_census_claude_command_line(monkeyp
 def test_read_asks_a_kinds_own_question_when_given_its_region(eyes):
     f = eyes.frame("00015_right.png")
     eyes.see(f, "1/25", box=CAROUSEL.box)
-    eyes.answer("carousel.v2.grey", {"selected": "1/250", "greyed": False})
+    eyes.answer("carousel.v2", {"selected": "1/250"})
     r = reading.read(f, reading.region("carousel"), "number", "proof", choices=["1/25", "1/250"])
-    assert eyes.asked == ["carousel.v2.grey"] and r.raw["reader"] == "1/250"
+    assert eyes.asked == ["carousel.v2"] and r.raw["reader"] == "1/250"
 
 
 # the questions a ".grey" version was made from, and the kinds of screen that ask one (camkit.vlm, 2026-11-19)
@@ -1245,7 +1245,9 @@ GREY_KINDS = {"list": "lit.v2.grey", "side list": "lit.v2.grey", "table picker":
 def test_each_question_about_a_settings_options_has_a_grey_version_that_changes_nothing_else():
     """A ".grey" version is the question it was made from word for word (that one keeps its text: the old pins above),
     with one sentence and a "greyed" field added before its JSON (or, in the old JSON-template form, the field added
-    last); the kinds whose item can be drawn grey ask it (QUESTIONS, grey "greyed"), the others ask none."""
+    last). The kinds whose item can be drawn grey name it beside their own question (QUESTIONS' grey_prompt, grey
+    "greyed"), which stays the ".v2" one it was made from, what region() and every other caller ask; the others name
+    none."""
     from camkit import vlm
     assert {k: k.removesuffix(".grey") for k in vlm.PROMPTS if k.endswith(".grey")} == GREY_OF
     json_line = "Reply with JSON only, on one line: "
@@ -1260,9 +1262,12 @@ def test_each_question_about_a_settings_options_has_a_grey_version_that_changes_
             assert re.sub(r', "greyed": true or false', "", grey[grey.rfind(json_line):]) == was[was.rfind(json_line):], key
         else:
             assert grey.startswith(was[:-1] + ', "greyed": true if ') and grey.endswith("else false}"), key
-    assert {k: q.prompt for k, q in reading.QUESTIONS.items() if q.grey} == GREY_KINDS
-    assert all(q.grey == "greyed" for q in reading.QUESTIONS.values() if q.grey)
-    assert all(".grey" not in q.prompt for q in reading.QUESTIONS.values() if not q.grey)
+    assert {k: q.grey_prompt for k, q in reading.QUESTIONS.items() if q.grey_prompt} == GREY_KINDS
+    assert all(q.grey == "greyed" and q.prompt == q.grey_prompt.removesuffix(".grey")
+               for q in reading.QUESTIONS.values() if q.grey_prompt)
+    assert all(q.grey is None for q in reading.QUESTIONS.values() if not q.grey_prompt)
+    assert all(".grey" not in q.prompt for q in reading.QUESTIONS.values())
+    assert all(".grey" not in reading.region(k).prompt for k in GREY_KINDS if k != "checklist")
 
 
 def test_greyed_of_takes_a_true_or_false_and_only_where_something_was_read():
@@ -1292,8 +1297,9 @@ def test_greyed_asks_a_grey_question_for_its_grey_alone():
     text = (ROOT / "kit" / "proving" / "greyed.py").read_text(encoding="utf-8")
     assert not re.search(r"reading\.(read|region|choice_of|agree|tally|outcome)\(|with_options|ask_named_reader", text)
     from proving import greyed
-    assert {k: reading.QUESTIONS[v].prompt for k, v in greyed.ASKED.items()} == {
+    assert {k: reading.QUESTIONS[v].grey_prompt for k, v in greyed.ASKED.items()} == {
         "list": "lit.v2.grey", "sidelist": "lit.v2.grey", "dialog": "carousel.v2.grey"}
+    assert "grey_prompt" in text and not re.search(r"\.prompt\b", text)      # never the kind's own question
 
 
 def test_the_options_are_handed_to_the_reader_before_its_json_line():

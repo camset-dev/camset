@@ -80,9 +80,9 @@ it; --parallel asks a local server several questions at once (at most its config
 the failures in a row after which a reader is asked nothing more.
 
 "grey" (since 2026-11-19) measures the ".grey" questions (camkit.vlm), which also ask whether the item read is drawn
-grey: of each kind whose question asks it (camkit.reading.QUESTIONS' grey: a list, a side list, a table's picker, a
-checklist, a carousel, its axis and its cells), up to --per-kind frames whose truth is grey and as many whose truth is
-white, each asked the kind's ".grey" question and the one it was made from (its name without ".grey"), the option
+grey: of each kind whose question has one (camkit.reading.QUESTIONS' grey_prompt: a list, a side list, a table's
+picker, a checklist, a carousel, its axis and its cells), up to --per-kind frames whose truth is grey and as many whose
+truth is white, each asked the kind's question and its ".grey" version (the same name with ".grey" after it), the option
 question and its ".grey" version, and on a carousel and its axis the dialog question and its own. The truth needs no
 person (GREY_SURE's comment): a line greyed as drawn, or refused with "not available"; the pixel test with a margin on
 a list's and a side list's frames; a line the camera applied; a frame whose sources disagree is left out, counted.
@@ -845,10 +845,10 @@ BEST = {"list": ("v3: route",)}
 #   pixels   grey or white: proving.screens.drawn_grey's measure GREY_SURE or more from its GREY_LINE (a list and a side
 #            list): every list and side list proof frame of the first camera measured 110-139 grey or 220-259 white
 #   applied  white: the camera took the option (applied, a record changed, no notice)
-# Sources that disagree leave the frame out (counted). The kinds whose question asks it (QUESTIONS' grey); a carousel's
-# truth is its lines' alone, an axis cell's and a checklist box's none yet (said so).
+# Sources that disagree leave the frame out (counted). The kinds whose question has a ".grey" version (QUESTIONS'
+# grey_prompt); a carousel's truth is its lines' alone, an axis cell's and a checklist box's none yet (said so).
 GREY_SURE = 30
-GREY_KINDS = tuple(k for k, q in reading.QUESTIONS.items() if q.grey)
+GREY_KINDS = tuple(k for k, q in reading.QUESTIONS.items() if q.grey_prompt)
 PIXEL_KINDS = {"list", "side list"}                  # where drawn_grey measures the lit option
 NOT_AVAILABLE = re.compile(r"not available", re.I)
 GREY_JUDGED = ("right", "wrong", "no answer")
@@ -934,16 +934,17 @@ def grey_sample(items: list, per_kind: int, usable=None, level=None) -> tuple:
 
 def grey_questions(item: Item) -> list:
     """[(question key, the question's text, pick of the text, the Question whose grey is judged or None)] a frame of the
-    grey sample is asked: the kind's ".grey" question (QUESTIONS) and the one it was made from (its key without
-    ".grey"), the option question every proof keeps a reading by and its ".grey" version, and on a carousel and its
-    axis the dialog question and its own."""
+    grey sample is asked: the kind's question (QUESTIONS) and its ".grey" version (Question.grey_prompt), the option
+    question every proof keeps a reading by and its ".grey" version, and on a carousel and its axis the dialog question
+    and its own."""
     q = reading.QUESTIONS[item.kind]
     pick = NEW_PICK.get(item.kind, _selected)
-    out = [(q.prompt.removesuffix(".grey"), pick, None), (q.prompt, pick, q)]
+    out = [(q.prompt, pick, None), (q.grey_prompt, pick, q)]
     pairs = [("option", "selected")] + ([("dialog", "selected")] if item.kind in ("carousel", "axis") else [])
     for key, name in pairs:
         out += [(key, _field(name), None),
-                (f"{key}.grey", _field(name), reading.Question(f"{key}.grey", name, "label", grey=reading.GREYED))]
+                (f"{key}.grey", _field(name), reading.Question(key, name, "label", grey=reading.GREYED,
+                                                               grey_prompt=f"{key}.grey"))]
     return [(key, vlm.PROMPTS[key], p, gq) for key, p, gq in out]
 
 

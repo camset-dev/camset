@@ -68,8 +68,8 @@ they did, and every run decides and presses as before. The callers move onto it 
 census has measured what that changes; the tests already say where canonical differs from each old table.
 Since 2026-11-13 also: one question to the reader per kind of screen (QUESTIONS, region; camkit.vlm's ".v2" prompts),
 which kit/tools/reader_census.py --questions measures against the old questions on recorded frames and no caller asks
-yet (since 2026-11-19 a kind whose item can be drawn grey asks that too, in a ".grey" version, whose answer's grey
-alone proving.greyed reads, greyed_of); and, for finding a row, an icon OCR read as letters in front of its label left out before the reading is judged
+yet (since 2026-11-19 a kind whose item can be drawn grey names beside its question a ".grey" version that asks that
+too, Question.grey_prompt, whose answer's grey alone proving.greyed reads, greyed_of); and, for finding a row, an icon OCR read as letters in front of its label left out before the reading is judged
 (icon_left_out, doubts' find), as page_model.same_text leaves it out.
 
 The eyes go through one seam each, so that a test fakes them in one place (kit/tests/conftest.py, eyes):
@@ -882,13 +882,16 @@ class Question(NamedTuple):
     holds the reading (a number-entry screen's "fields" is a list, a box each; a checklist's "boxes" a list of
     {"label", "ticked"}; the white balance grid's answer has a field per readout, "A-B" and "G-M"; a Creative Look
     scale's "top" and "bottom"); expect, what is read there (doubts, agree); box, where OCR reads the same thing (None:
-    the lit item, found on the frame); grey, the answer's field saying whether the item read is drawn grey (a
-    checklist's, each box's own), None where the question asks none (greyed_of)."""
+    the lit item, found on the frame); grey_prompt, the camkit.vlm.PROMPTS key of prompt's ".grey" version, which also
+    asks whether the item read is drawn grey (None where the kind has none), and grey, the field of its answer that says
+    so (a checklist's, each box's own: greyed_of). Only proving.greyed's reader call and the census's grey variant ask
+    grey_prompt; region() and every other caller ask prompt."""
     prompt: str
     field: str
     expect: str
     box: tuple | None = None
     grey: str | None = None
+    grey_prompt: str | None = None
 
 
 # One question per kind of screen, each asking for exactly the thing the kit reads there, in a pinned form, those that
@@ -898,21 +901,23 @@ class Question(NamedTuple):
 # asks today by kit/tools/reader_census.py --questions, on frames already recorded, with the options expected there
 # handed to the reader and without; no caller asks them yet (the Regions above keep the old questions, whose answers
 # are cached). Where the item read can be drawn greyed out (a list's or side list's lit item, a table's picker, a
-# carousel's option and its axis cells, a checklist's boxes), the kind's question is its ".grey" version (camkit.vlm),
-# which asks that too, in its "greyed" (Question.grey, greyed_of); proving.greyed asks it for that alone, beside its
-# pixel test, and the census measures it against the question it was made from (its name without ".grey").
+# carousel's option and its axis cells, a checklist's boxes), the kind's question names beside it its ".grey" version
+# (camkit.vlm: Question.grey_prompt), which asks that too, in its "greyed" (Question.grey, greyed_of); proving.greyed
+# asks it for that alone, beside its pixel test, and the census's grey variant measures it against the question it was
+# made from. The kind's question itself (prompt) stays the ".v2" one everyone else asks.
 GREYED = "greyed"
 QUESTIONS = {
-    "list": Question("lit.v2.grey", "selected", "label", grey=GREYED),
-    "side list": Question("lit.v2.grey", "selected", "label", grey=GREYED),
-    "table picker": Question("lit.v2.grey", "selected", "label", grey=GREYED),
+    "list": Question("lit.v2", "selected", "label", grey=GREYED, grey_prompt="lit.v2.grey"),
+    "side list": Question("lit.v2", "selected", "label", grey=GREYED, grey_prompt="lit.v2.grey"),
+    "table picker": Question("lit.v2", "selected", "label", grey=GREYED, grey_prompt="lit.v2.grey"),
     "scale": Question("scale.v2", "selected", "number"),
     "star rating": Question("stars.v2", "selected", "number"),
-    "checklist": Question("checklist.v2.grey", "boxes", "label", grey=GREYED),
+    "checklist": Question("checklist.v2", "boxes", "label", grey=GREYED, grey_prompt="checklist.v2.grey"),
     "number field": Question("fields.v2", "fields", "number"),
-    "carousel": Question("carousel.v2.grey", "selected", "label", CAROUSEL.box, grey=GREYED),
-    "axis": Question("carousel.v2.grey", "selected", "label", CAROUSEL.box, grey=GREYED),
-    "axis cell": Question("cell.v2.grey", "selected", "code", grey=GREYED),
+    "carousel": Question("carousel.v2", "selected", "label", CAROUSEL.box, grey=GREYED,
+                         grey_prompt="carousel.v2.grey"),
+    "axis": Question("carousel.v2", "selected", "label", CAROUSEL.box, grey=GREYED, grey_prompt="carousel.v2.grey"),
+    "axis cell": Question("cell.v2", "selected", "code", grey=GREYED, grey_prompt="cell.v2.grey"),
     "look": Question("look.v2", "selected", "number"),
     "look scale": Question("lookscale.v2", "top", "number"),
     "look base": Question("carousel.v2", "selected", "code", CAROUSEL.box),
@@ -950,7 +955,7 @@ def _yes_no(v) -> bool | None:
 
 
 def greyed_of(answer, question: Question, label=None) -> bool | None:
-    """Whether a reader's answer to question says the item it read is drawn grey: the answer's question.grey field as a
+    """Whether a reader's answer to question's grey_prompt says the item it read is drawn grey: its question.grey as a
     JSON true or false (the strings "true" and "false" taken as those, in any case), and only where the answer reads
     something there (its question.field a text, or a number, that is neither empty nor "none": an answer that found
     nothing lit says nothing of its grey). For a checklist ("boxes"), the grey of the one box whose label agrees with
