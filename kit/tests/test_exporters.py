@@ -218,10 +218,11 @@ def test_a_modes_menu_goes_beside_the_stills_menu(camera, tmp_path, capsys):
 def test_a_later_crawl_is_folded_into_the_tree_by_label(camera, tmp_path, capsys):
     """--fold (menu_tree.fold): a later crawl's walk goes into the existing tree without rebuilding it. Each top row is
     found by its label, never by its page counter (the crawl's "9/9" is the tree's "1/3": the pages move with the
-    camera's state); a row the tree held greyed or only seen takes the crawl's walk, a submenu's rows the tree lacked are
-    added in the crawl's order, a row the tree had walked keeps what it read (a slip in the later reading changes
-    nothing), and a label no top row bears is said and left out. --dry-run writes nothing; a second fold changes
-    nothing; the menu's source names the crawl."""
+    camera's state); a row the tree held greyed or only seen takes the crawl's walk, a row with no rows under it the
+    crawl's rows whole (a label repeated there takes no options from the map, which keeps one row per path), a row the
+    tree lacks under a row it knows is added past its last row at its own slot and never past a gap, a row the tree had
+    walked keeps what it read (a slip in the later reading changes nothing), and a label no top row bears is said and
+    left out. --dry-run writes nothing; a second fold changes nothing; the menu's source names the crawl."""
     pass1_map.main(["kit2_crawl"])
     out = tmp_path / "menu_tree.json"
     menu_tree.main(["--crawl", "kit2_crawl", "--out", str(out)])
@@ -229,8 +230,9 @@ def test_a_later_crawl_is_folded_into_the_tree_by_label(camera, tmp_path, capsys
     write_lines(crawl / "rows.jsonl", [
         {"page": "9/9", "slot": 4, "label": "Long Exposure NR", "outcome": "walked", "kind": "list", "options": 2},
         {"page": "9/9", "slot": 5, "label": "Lens Compensation", "outcome": "submenu crawled", "kind": "submenu",
-         "submenu": [{"page": "s", "slot": 0, "label": "Distortion Comp.", "outcome": "walked", "kind": "list"},
-                     {"page": "s", "slot": 1, "label": "Shading Comp.", "outcome": "walked", "kind": "list"}]},
+         "submenu": [{"page": "s", "slot": 0, "label": "Shading Comp.", "outcome": "walked", "kind": "list"},
+                     {"page": "s", "slot": 1, "label": "Distortion Comp.", "outcome": "walked", "kind": "list"},
+                     {"page": "s", "slot": 3, "label": "Gap Comp.", "outcome": "walked", "kind": "list"}]},
         {"page": "9/9", "slot": 6, "label": "Display Quality", "outcome": "submenu crawled", "kind": "submenu",
          "submenu": [{"page": "s", "slot": 0, "label": "Level", "outcome": "walked", "kind": "list"},
                      {"page": "s", "slot": 1, "label": "Level", "outcome": "notice", "kind": "notice"}]},
@@ -252,21 +254,73 @@ def test_a_later_crawl_is_folded_into_the_tree_by_label(camera, tmp_path, capsys
     assert rows["Long Exposure NR"] == {"label": "Long Exposure NR", "state": "walked", "why": "", "kind": "list",
                                         "options": ["On", "Off"]}
     lens = rows["Lens Compensation"]["children"]
-    assert [c["label"] for c in lens] == ["Distortion Comp.", "Shading Comp."]               # the crawl's order
-    assert lens[0]["options"] == ["Auto", "Off"] and lens[1]["options"] == ["Auto", "Low", "Off"]   # walked: kept
+    assert [c["label"] for c in lens] == ["Shading Comp.", "Distortion Comp."]               # added at its slot, 1
+    assert lens[0]["options"] == ["Auto", "Low", "Off"] and lens[1]["options"] == ["Auto", "Off"]   # walked: kept
     shown = rows["Display Quality"]
-    assert shown["state"] == "submenu" and [(c["label"], c["state"]) for c in shown["children"]] == \
-        [("Level", "walked"), ("Level", "info")]
+    assert shown["state"] == "submenu" and [(c["label"], c["state"], c.get("options")) for c in shown["children"]] == \
+        [("Level", "walked", None), ("Level", "info", None)]                    # the map's one "Level" row, given neither
     assert "Nowhere Row" not in rows and "kit2_fin_crawl_x (menu_tree.py --fold)" in got["source"]
     assert [t["tab"] for t in got["tabs"]] == ["Shooting", "Setup"] and menu_tree.check(got) == []
     capsys.readouterr()
     menu_tree.main(["--fold", "kit2_fin_crawl_x", "--out", str(out)])
     said = [x.strip() for x in capsys.readouterr().out.splitlines() if x.startswith("  ")]
-    assert datafiles.load_menu_tree(out) == got and said == ["Nowhere Row: no top row of that label in the menu; not folded"]
+    assert datafiles.load_menu_tree(out) == got and said == [
+        "Lens Compensation > Gap Comp.: left out, its slot 3 is past the tree's rows with a gap",
+        "Nowhere Row: no top row of that label in the menu; not folded"]
     with pytest.raises(SystemExit, match="no Movie mode's menu"):
         menu_tree.main(["--fold", "kit2_fin_crawl_x", "--mode", "Movie", "--out", str(out)])
     with pytest.raises(SystemExit, match="existing tree"):
         menu_tree.main(["--fold", "kit2_fin_crawl_x", "--out", str(tmp_path / "none.json")])
+
+
+def test_rows_that_share_a_label_are_folded_only_slot_for_slot(tmp_path):
+    """Rows of one label under one row (Rec. Media Settings' stills and movie Recording Media rows, which the walk reads
+    alike) are folded only where the crawl and the tree hold the same number of them in the same slots, and then take no
+    options from the crawl's map, which keeps one row per path; otherwise they stay as they are, and it is said (the
+    review of 2026-11-19: with the stills row unread, the movie row's walk landed on the stills row; with its icon read
+    as letters, a phantom row was added and every later row moved). A top row two of the menu's top rows bear is never
+    folded. Made-up tree and crawls."""
+    def tree():
+        rm = {"label": "Recording Media", "state": "greyed", "why": "", "kind": "notice"}
+        return {"tabs": [{"tab": "Shooting", "pages": [
+            {"page": "7/65", "group": "Media", "rows": [{"label": "Rec. Media Settings", "state": "submenu", "kind": "submenu",
+                                                          "children": [dict(rm), dict(rm),
+                                                                       {"label": "Auto Switch Media Card", "state": "seen"}]}]},
+            {"page": "8/65", "group": "Other", "rows": [{"label": "Twice", "state": "seen"}, {"label": "Twice", "state": "seen"}]}]}]}
+
+    def crawl(name, subs):
+        folder = tmp_path / name
+        write_lines(folder / "rows.jsonl", [
+            {"page": "6/63", "slot": 2, "label": "Rec. Media Settings", "outcome": "submenu crawled", "kind": "submenu",
+             "submenu": [{"page": "R", "slot": s, "label": lab, "outcome": "walked", "kind": "list"} for s, lab in subs]},
+            {"page": "7/63", "slot": 0, "label": "Twice", "outcome": "walked", "kind": "list"}])
+        (folder / "map.json").write_text(json.dumps({"rows": [
+            {"path": ["Rec. Media Settings", "Recording Media"], "options": [{"index": 0, "label": "Slot 1"}]},
+            {"path": ["Rec. Media Settings", "Auto Switch Media Card"], "options": [{"index": 0, "label": "On"}]}]}),
+            encoding="utf-8")
+        return folder
+
+    def rows(t):
+        return [(r["label"], r["state"], r.get("options")) for r in t["tabs"][0]["pages"][0]["rows"][0]["children"]]
+    before = rows(tree())
+    for name, subs, why in (
+            ("unread", [(0, ""), (1, "Recording Media"), (2, "Auto Switch Media Card")],
+             "2 rows of this label in the tree (slots 0, 1), 1 in the crawl (slots 1); left as they are"),
+            ("icon", [(0, "Recording Media"), (1, "a Recording Media"), (2, "Auto Switch Media Card")],
+             "2 rows of this label in the tree (slots 0, 1), 1 in the crawl (slots 0); left as they are")):
+        t = tree()
+        said = menu_tree.fold(t, crawl(name, subs))
+        got = rows(t)
+        assert got[:2] == before[:2] and len(got) == 3, name                 # neither Recording Media row touched
+        assert got[2] == ("Auto Switch Media Card", "walked", ["On"]), name   # its one row folded
+        assert f"Rec. Media Settings > Recording Media: {why}" in said, name
+        assert "Twice: 2 top rows of that label in the menu; not folded" in said
+    assert "Rec. Media Settings > a Recording Media: left out, the tree holds 'Recording Media' at its slot 1" in said
+    t = tree()
+    said = menu_tree.fold(t, crawl("both", [(0, "Recording Media"), (1, "Recording Media"), (2, "Auto Switch Media Card")]))
+    assert rows(t) == [("Recording Media", "walked", None), ("Recording Media", "walked", None),
+                       ("Auto Switch Media Card", "walked", ["On"])]                 # the map's one list given to neither
+    assert [r["state"] for r in t["tabs"][0]["pages"][1]["rows"]] == ["seen", "seen"]
 
 
 def test_menu_tree_goes_to_the_private_evidence_folder_by_default(camera, tmp_path, monkeypatch):

@@ -32,11 +32,15 @@ replaced only with --replace, and replacing the Stills menu keeps the modes. A s
 --fold CRAWL takes a later crawl's walk into the existing tree (the Stills menu, or --mode's), changing nothing else
 (fold): each top row the crawl walked is found in the tree by its label, never by its page counter, which moves with
 the camera's state ("38/63" in one state is "40/65" in another), and only where one top row bears it. What the walk read
-fills what the tree did not know, and rows under a row come in the crawl's order, the camera's: a row the tree held
-greyed, seen or unread takes the crawl's walk (Bracket Type's options, walked with the drive mode dial on BRK), a
-submenu's rows the tree lacked are added where the crawl met them (Playback's Aspect Marker Disp., Aspect Marker Disp.
-then Aspect Marker Level), and a row the tree had walked keeps what it read. Rows that share a label under one row are
-matched in their order (the stills and the movie Recording Media rows). Each row it changes is said.
+fills what the tree did not know, and never moves a row the tree holds: a row the tree held greyed, seen or unread
+takes the crawl's walk (Bracket Type's options, walked with the drive mode dial on BRK), a row with no rows under it
+takes the crawl's rows whole (Playback's Aspect Marker Disp.: Aspect Marker Disp., then Aspect Marker Level), and a row
+the tree had walked keeps what it read. Under a row the tree knows the rows of, a crawl row is matched by its label
+where one row bears it; where a label repeats under the row (the stills and the movie Recording Media rows, which the
+walk reads alike), its rows are folded only when the crawl and the tree hold the same number of them in the same slots,
+and never take options from the crawl's map, which keeps one row per path (the last one walked); a row the tree lacks
+is added only after the tree's last row, at its own slot; anything else is left as it is. Each row it changes or
+leaves is said (folded_rows).
 """
 import argparse
 import collections
@@ -267,13 +271,32 @@ def known(r: dict | None) -> int:
     return 0 if r.get("state") in ("seen", "", None) else 1
 
 
-def folded(old: dict, new: dict, path: tuple, said: list) -> dict:
-    """A tree's row `old` with what a crawl's row `new` (row_of) adds, each change said in `said` by its path: two
-    submenus' rows merged (folded_rows), else the crawl's row where it says more of the camera (known) and the tree's
-    row has no rows under it to lose, else the tree's row as it is."""
+def unshared(r: dict) -> dict:
+    """A crawl's row (row_of) with no options or fields on a row whose label another row beside it repeats, at every
+    depth: the crawl's map keeps one row per path, the last walked, so it gives each of them that one's (two Recording
+    Media rows, one list each, would both show the movie row's)."""
+    kids = r.get("children") or []
+    if not kids:
+        return r
+    seen = collections.Counter(placement.norm(c.get("label")) for c in kids)
+    out = []
+    for c in kids:
+        c = unshared(c)
+        if seen[placement.norm(c.get("label"))] > 1:
+            c = {k: v for k, v in c.items() if k not in ("options", "fields")}
+        out.append(c)
+    return {**r, "children": out}
+
+
+def folded(old: dict, new: dict, subs: list, path: tuple, said: list) -> dict:
+    """A tree's row `old` with what a crawl's row `new` (row_of; `subs`, its rows' summaries in the crawl, for their
+    slots) adds, each change said in `said` by its path: two submenus' rows merged (folded_rows), else the crawl's row
+    where it says more of the camera (known) and the tree's row has no rows under it to lose, else the tree's row as it
+    is."""
     if old.get("children") and new.get("children"):
-        return {**old, "children": folded_rows(old["children"], new["children"], path, said)}
+        return {**old, "children": folded_rows(old["children"], new["children"], subs, path, said)}
     if known(new) > known(old) and not old.get("children"):
+        new = unshared(new)
         said.append(f"{' > '.join(path)}: {old.get('state') or 'seen'} -> {new.get('state')}"
                     + (f" ({len(new['children'])} rows)" if new.get("children") else "")
                     + (f" ({len(new['options'])} options)" if new.get("options") else ""))
@@ -281,29 +304,54 @@ def folded(old: dict, new: dict, path: tuple, said: list) -> dict:
     return old
 
 
-def folded_rows(old: list, new: list, path: tuple, said: list) -> list:
-    """The rows under one row, the tree's (`old`) with a crawl's (`new`): each crawl row matched to the tree's of its
-    label (placement.norm), rows sharing a label in their order, and folded into it; one the tree lacks put after the
-    tree's row the crawl met before it (first, when none), so the rows stay in the camera's order. A crawl row with no
-    label read is left out."""
-    at, seen = {}, collections.Counter()
+def folded_rows(old: list, new: list, subs: list, path: tuple, said: list) -> list:
+    """The rows under one row, the tree's (`old`, each at its place, its slot) with a crawl's (`new`, parallel to
+    `subs`, their summaries, which give each its slot), the tree's rows never moved:
+      - a label one row bears in the crawl and at most one in the tree: folded into the tree's row of that label, or,
+        where the tree has none, added only at its own slot just past the tree's last row (or into a tree row there
+        whose label was never read); at a slot the tree holds another row at, left out and said;
+      - a label repeated in the crawl or in the tree (the stills and the movie Recording Media rows): folded row for
+        row only where both hold the same number of them in the same slots, each without options from the crawl's map
+        (unshared); otherwise all of them left as they are, and said;
+      - a crawl row with no label read is matched to nothing."""
+    def slot(j, s):
+        return s.get("slot") if isinstance(s.get("slot"), int) and not isinstance(s.get("slot"), bool) else j
+    crawl, tree = collections.defaultdict(list), collections.defaultdict(list)
+    for j, (r, s) in enumerate(zip(new, list(subs) + [{}] * (len(new) - len(subs)), strict=False)):
+        if placement.norm(r.get("label")):
+            crawl[placement.norm(r.get("label"))].append((slot(j, s), r, s))
     for i, r in enumerate(old):
-        k = placement.norm(r.get("label"))
-        at[(k, seen[k])] = i
-        seen[k] += 1
-    out, after, last, seen = list(old), collections.defaultdict(list), -1, collections.Counter()
-    for r in new:
-        k = placement.norm(r.get("label"))
-        if not k:
-            continue
-        i = at.get((k, seen[k]))
-        seen[k] += 1
-        if i is None:
-            said.append(f"{' > '.join(path + (r['label'],))}: added ({r.get('state')})")
-            after[last].append(r)
-            continue
-        out[i], last = folded(old[i], r, path + (old[i]["label"],), said), i
-    return after[-1] + [x for i, r in enumerate(out) for x in [r] + after[i]]
+        if placement.norm(r.get("label")):
+            tree[placement.norm(r.get("label"))].append(i)
+    out, added = list(old), []
+    for k, rows in crawl.items():
+        at, label = tree.get(k, []), rows[0][1]["label"]
+        if len(rows) == 1 and len(at) <= 1:
+            n, r, s = rows[0]
+            if at:
+                out[at[0]] = folded(old[at[0]], r, s.get("submenu") or [], path + (old[at[0]]["label"],), said)
+            elif n < len(old) and not placement.norm(old[n].get("label")):
+                out[n] = unshared(r)
+                said.append(f"{' > '.join(path + (label,))}: into the unread row at slot {n} ({r.get('state')})")
+            elif n < len(old):
+                said.append(f"{' > '.join(path + (label,))}: left out, the tree holds {old[n]['label']!r} at its slot {n}")
+            else:
+                added.append((n, r))
+        elif [n for n, _, _ in rows] == at:
+            for (n, r, s), i in zip(rows, at, strict=True):
+                bare = {f: v for f, v in r.items() if f not in ("options", "fields")}
+                out[i] = folded(old[i], bare, s.get("submenu") or [], path + (f"{old[i]['label']} (slot {n})",), said)
+        else:
+            said.append(f"{' > '.join(path + (label,))}: {len(at)} rows of this label in the tree (slots "
+                        f"{', '.join(map(str, at)) or 'none'}), {len(rows)} in the crawl (slots "
+                        f"{', '.join(str(n) for n, _, _ in rows)}); left as they are")
+    for n, r in sorted(added, key=lambda x: x[0]):
+        if n == len(out):
+            out.append(unshared(r))
+            said.append(f"{' > '.join(path + (r['label'],))}: added at slot {n} ({r.get('state')})")
+        else:
+            said.append(f"{' > '.join(path + (r['label'],))}: left out, its slot {n} is past the tree's rows with a gap")
+    return out
 
 
 def fold(menu: dict, crawl: Path) -> list:
@@ -321,7 +369,8 @@ def fold(menu: dict, crawl: Path) -> list:
                         "that label in the menu; not folded")
             continue
         pg, i = hits[0]
-        pg["rows"][i] = folded(pg["rows"][i], row_of(label, summary, (label,), maps), (pg["rows"][i]["label"],), said)
+        pg["rows"][i] = folded(pg["rows"][i], row_of(label, summary, (label,), maps), summary.get("submenu") or [],
+                               (pg["rows"][i]["label"],), said)
     return said
 
 
