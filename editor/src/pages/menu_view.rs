@@ -717,8 +717,14 @@ mod menus_window_tests {
         let (drawn, said) = w.settle(&mut app);
         assert!(!drawn.contains(&label), "no selector");
         assert!(!said.iter().any(|(_, r, l, _)| *r == Role::ComboBox || l == "Tab compared"), "no list of tabs: the Menu picks");
-        assert_eq!(names(&app.matrix_rows()), names(&rows), "All settings: the rows Compare always had");
-        assert_eq!(names(&app.matrix_rows_for("", None)), names(&rows));
+        // All settings: the rows Compare always had, and the records a Main tile shows that those leave out (a memory's
+        // own, a fraction's Expert-only parts: `tile_records`), each a row beside its group
+        let tiles: Vec<String> = app.tile_records("").into_iter().map(|s| s.key).collect();
+        assert!(!tiles.is_empty());
+        let shown = names(&app.matrix_rows());
+        assert_eq!(shown.iter().filter(|r| !tiles.contains(&r.2[0])).cloned().collect::<Vec<_>>(), names(&rows), "All settings: the rows Compare always had");
+        assert_eq!(shown.iter().filter(|r| tiles.contains(&r.2[0])).count(), tiles.len(), "and each tile record once");
+        assert_eq!(names(&app.matrix_rows_for("", None)), names(&rows), "the Memories page's and a recall's rows without them");
         // and those are the definition's live settings outside Expert mode, and My Menu's places as its page shows them
         // (Compare's left bar is Edit's for every definition: All holds My Menu's places too), each record in one row
         let mut records: Vec<String> = rows.iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect();
@@ -728,14 +734,14 @@ mod menus_window_tests {
         let mut want: Vec<String> = app.schema.settings.iter().filter(|s| s.area == "global" && (!App::expert_only(s) || app.is_mymenu_place(s))).map(|s| s.key.clone()).collect();
         want.sort();
         assert_eq!((n, &records), (want.len(), &want), "every live setting once");
-        assert_eq!(app.mm_rows.len(), rows.len());
+        assert_eq!(app.mm_rows.len(), rows.len() + tiles.len());
         let cols = app.cols.clone();
         let entries = app.compare_bar(None, "", &|s| app.row_differs(&cols, s));
         assert_eq!(entries.iter().map(|e| e.key.clone()).collect::<Vec<_>>(), [vec![BarKey::All], edit.clone()].concat(), "Edit's entries, All settings first");
-        assert!(drawn.contains(&format!("{ALL_SETTINGS}  ({})", rows.len())), "{drawn:?}");
+        assert!(drawn.contains(&format!("{ALL_SETTINGS}  ({})", rows.len() + tiles.len())), "{drawn:?}");
         assert!(entries[0].badge >= 1, "the row that differs");
         // a tab's rows: those of All settings Edit lists under it, under its name; each of them under one entry only
-        let all: Vec<String> = rows.iter().map(|r| r.2[0].key.clone()).collect();
+        let all: Vec<String> = app.matrix_rows().iter().map(|r| r.2[0].key.clone()).collect();
         let mut seen = std::collections::HashSet::new();
         for k in &edit {
             let BarKey::Tab(t) = k else { continue };
@@ -744,8 +750,10 @@ mod menus_window_tests {
                 assert!(r.0 == *t && all.contains(&r.2[0].key) && seen.insert(r.2[0].key.clone()), "{t}: {}", r.2[0].name);
                 got.extend(r.2.iter().map(|s| s.key.clone()));
             }
-            // the records of the rows Edit's own page lists under that tab (`tab_groups`), not Compare's code
+            // the records of the rows Edit's own page lists under that tab (`tab_groups`), not Compare's code, and the
+            // records a Main tile shows (a memory's own) that it shows (`tile_records`)
             let mut want: Vec<String> = app.tab_groups(t).into_iter().flat_map(|(_, _, rows)| rows.into_iter().flatten().map(|s| s.key)).collect();
+            want.extend(app.tile_records("").into_iter().filter(|s| app.entry_of(s) == *t).map(|s| s.key));
             got.sort();
             want.sort();
             want.dedup();

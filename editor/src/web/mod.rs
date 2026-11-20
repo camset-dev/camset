@@ -539,7 +539,8 @@ impl App {
                     Some(_) => (*self.compare_rows(menu, &Self::web_entry(&body), "")).clone(),
                     None => Vec::new(),
                 };
-                let rows = self.matrix_rows_for("", None);
+                // every row Compare lists without a menu, a Main tile's memory records too (`tile_records`)
+                let rows = (*self.compare_rows(None, &BarKey::All, "")).clone();
                 self.rows_set.take();               // what this copy's rows cover, and nothing left from another
                 let (mut actions, mut n, mut name) = (Vec::new(), 0, String::new());
                 for key in keys {
@@ -2084,7 +2085,7 @@ impl App {
             let into = cols.iter().find(|c| c.editable() && stored(c, s)).map_or(0, |c| c.section);
             let mut row = json!({
                 "tab": t, "group": g, "color": css_color(tab_color(&self.schema.camera, t)),
-                "key": s.key, "name": self.setting_title(s), "record": format!("0x{:04x}", s.id), "in_sets": s.in_sets, "locked": locked,
+                "key": s.key, "name": self.compare_title(&(t.clone(), g.clone(), linked.clone())), "record": format!("0x{:04x}", s.id), "in_sets": s.in_sets, "locked": locked,
                 // the name's hover, as the window's (the record number in Expert mode only), by the setting's own name
                 "where": self.where_kept(self.def_of(s)),
                 "three": class.map(word), "differs": d, "mark": mark, "arrows": arrows, "cells": cells,
@@ -3254,7 +3255,8 @@ pub(crate) mod tests {
             assert_eq!(app.col_from_json(&json!(["b", m])), Some(Col::b(m)));
         }
         let names = |rows: Vec<(String, String, Vec<Setting>)>| rows.into_iter().map(|(t, g, l)| (t, g, l.iter().map(|s| s.key.clone()).collect::<Vec<_>>())).collect::<Vec<_>>();
-        let rows = app.matrix_rows_for("", None);
+        // Compare's All: the rows as before menus and the records a Main tile shows that those leave out
+        let rows = (*app.compare_rows(None, &BarKey::All, "")).clone();
         let (tab, word) = (rows[0].0.clone(), rows[0].2[0].name.split(' ').next().unwrap().to_uppercase());
         let all = names(rows);
         assert_eq!(names(app.matrix_rows()), all, "the window's rows with no search and every tab");
@@ -3389,7 +3391,7 @@ pub(crate) mod tests {
         };
         let all = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false }));
         assert_eq!((all["entry"].as_str(), keys(&all)), (Some("all"), window(&mut app, BarKey::All, "")));
-        assert_eq!(all["total"], app.matrix_rows_for("", None).len(), "without menus, the rows Compare always had");
+        assert_eq!(all["total"], app.compare_rows(None, &BarKey::All, "").len(), "without menus, the rows Compare always had and the records a Main tile shows that those leave out");
         assert_eq!(all["shown"], all["total"]);
         let tab = app.layout_tab(&s).to_string();
         let t = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false, "entry": format!("tab:{tab}") }));
@@ -4619,7 +4621,7 @@ pub(crate) mod tests {
             assert!(c.download.as_deref().unwrap().ends_with("_compare.csv"));
             let t = String::from_utf8(c.body).unwrap();
             assert_eq!(t, app.csv_text(Some((&[Col::a(0), Col::a(m)], false, app.show_raw)), 0, "", &BarKey::All, false).0);
-            assert_eq!(t.matches("\n\"").count(), app.matrix_rows_for("", None).len());
+            assert_eq!(t.matches("\n\"").count(), app.compare_rows(None, &BarKey::All, "").len(), "Compare's All, the tiles' memory records too");
         }
         let l = answer(&mut app, "layout", json!({}));
         assert_eq!(l.status, 200);

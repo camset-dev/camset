@@ -286,6 +286,21 @@ impl App {
             && !placed.get(&s.tab).is_some_and(|g| g.contains(&s.group))
     }
 
+    /// The records a Main tile shows (of every tile set: `keys`, `memory_keys`, a fraction's `numerator_key` and
+    /// `denominator_key`) that the live settings' rows leave out: a record a memory keeps alone, and one of Expert mode's
+    /// outside it (a fraction's parts). Compare lists them under Main, and in All under the entry that shows them
+    /// (`entry_here`), since every record shown anywhere outside Expert mode is All's. Those the search `q` (lower case,
+    /// trimmed) finds, each once, in the definition's order.
+    pub(crate) fn tile_records(&self, q: &str) -> Vec<Setting> {
+        let Some(sets) = self.schema.camera.main_tiles.as_ref() else { return Vec::new() };
+        let keys: std::collections::HashSet<&String> = sets.0.iter().flat_map(|set| &set.tiles)
+            .flat_map(|t| t.keys.iter().chain(&t.memory_keys).chain(&t.numerator_key).chain(&t.denominator_key)).collect();
+        self.schema.settings.iter()
+            .filter(|s| keys.contains(&s.key) && !(s.area == "global" && (self.prefs.expert || !Self::expert_only(s))))
+            .filter(|s| q.is_empty() || Self::matches_query(s, q))
+            .cloned().collect()
+    }
+
     /// Whether `s` is shown under the Menu's entry for what the camera's menus do not hold (`text.off_menu_name`): as
     /// on the camera only (`off_menu_in`); the flat list keeps every setting in its tab.
     pub(crate) fn off_menu(&self, s: &Setting) -> bool {
@@ -1314,9 +1329,11 @@ impl App {
                 let Some(set) = sets.0.get(at) else { return Vec::new() };
                 let mut out = Vec::new();
                 for tile in &set.tiles {
-                    let keys: Vec<&String> = tile.keys.iter().chain(&tile.memory_keys).collect();
+                    // every record the tile shows, in the live settings or a memory, as Edit's Main draws it: a fraction's
+                    // two parts too, Expert-only or not (`tile_records`)
+                    let keys: Vec<&String> = tile.keys.iter().chain(&tile.memory_keys).chain(&tile.numerator_key).chain(&tile.denominator_key).collect();
                     let list: Vec<Setting> = keys.iter().filter_map(|k| self.index_of_key(k)).map(|i| &self.schema.settings[i])
-                        .filter(|s| s.area == "global" && (self.prefs.expert || !Self::expert_only(s))).map(|s| match menu { Some(m) => self.row_record(s, m, &Bind::Menu).clone(), None => s.clone() })
+                        .map(|s| match menu { Some(m) => self.row_record(s, m, &Bind::Menu).clone(), None => s.clone() })
                         .filter(|s| matches(s)).collect();
                     out.extend(link(list).into_iter().map(|r| (self.schema.camera.text.main_title().to_string(), tile.caption.clone(), r)));
                 }
@@ -1330,10 +1347,13 @@ impl App {
                 out
             }
             BarKey::Tab(t) => {
-                let list: Vec<Setting> = match menu {
+                let mut list: Vec<Setting> = match menu {
                     Some(m) => self.listed_in(0, m, &Bind::Menu, Some(t)),
                     None => self.settings_in(0, Some(t)).cloned().collect(),
                 }.into_iter().filter(|s| matches(s)).collect();
+                // the records a Main tile shows that the live settings' rows leave out, under the entry that shows them
+                // (`tile_records`), so Main's rows are All's
+                list.extend(self.tile_records(&q).into_iter().filter(|s| self.entry_here(s) == *t).map(|s| match menu { Some(m) => s.place_in(m), None => s }));
                 let groups = self.groups_of(list, t);
                 // a family's setting on the page an option opens comes with that page's group, not again in the family's
                 let on_pages: std::collections::HashSet<String> = groups.iter().filter(|(_, family, _)| !family).flat_map(|(_, _, rows)| rows.iter().flatten().map(|s| s.key.clone())).collect();

@@ -130,9 +130,10 @@ pub(crate) struct RowInfo {
 pub(crate) type Row = (String, String, Vec<Setting>);
 
 /// What a list of compare rows was worked out from: the camera definition (its generation), the search in
-/// lower case, the camera's menu (None: as before menus), the Menu entry, Expert mode, and whether the rows are laid
-/// out as on the camera (which records a row holds, `same_row`).
-pub(crate) type RowsKey = (u64, String, Option<String>, BarKey, bool, bool);
+/// lower case, the camera's menu (None: as before menus), the Menu entry, Expert mode, whether the rows are laid out as
+/// on the camera (which records a row holds, `same_row`), and whether they hold the records a Main tile shows that the
+/// live settings' rows leave out (`tile_records`: Compare's do, `matrix_rows_for`'s do not).
+pub(crate) type RowsKey = (u64, String, Option<String>, BarKey, bool, bool, bool);
 
 /// How many lists of compare rows are kept: every entry of the Menu in the menu shown, each menu's whole list for its
 /// button's count, and a few the web page asks for.
@@ -379,9 +380,10 @@ impl App {
         }
     }
 
-    /// Value of a setting's record in a column; None when the column does not store it.
+    /// Value of a setting's record in a column; None when the column does not store it, nor where its set does not keep
+    /// the setting (`kept_in`: a memory's own record in the live settings, a live one in a memory).
     pub(crate) fn col_value(&self, c: Col, s: &Setting) -> Option<i64> {
-        if c.section != 0 && !s.in_sets {
+        if !kept_in(s, c.section) {
             return None;
         }
         self.set_for(c.src)?.sections.get(c.section)?.get(s.id)?.get(s.index)
@@ -533,9 +535,10 @@ impl App {
         (*self.matrix_rows_shared(q, tab)).clone()
     }
 
-    /// `matrix_rows_for` without a copy (`compare_rows` with no camera menu).
+    /// `matrix_rows_for` without a copy (`compare_rows` with no camera menu, without the records a Main tile shows that
+    /// the live settings' rows leave out).
     pub(crate) fn matrix_rows_shared(&self, q: &str, tab: Option<&str>) -> std::rc::Rc<Vec<Row>> {
-        self.compare_rows(None, &tab.filter(|t| !t.is_empty()).map_or(BarKey::All, |t| BarKey::Tab(t.to_string())), q)
+        self.rows_with(None, &tab.filter(|t| !t.is_empty()).map_or(BarKey::All, |t| BarKey::Tab(t.to_string())), q, false)
     }
 
     /// The camera's menu Compare shows: the one the Menu shows (`menu_shown`), one choice for Edit and Compare; None
@@ -557,20 +560,35 @@ impl App {
     /// like. Without one, as before menus: All settings is the rows Compare always had (`build_matrix_rows`), a tab,
     /// Other, the entry for what the menus do not hold or My Menu those of them Edit lists under it (its tab as laid
     /// out, `menu_entry_of`, or `off_menu`), under its name, so each row is under one entry; Main its tiles' settings
-    /// (`entry_rows`). Kept for what they were worked out for (`RowsKey`), so a frame does not work them out again.
+    /// (`entry_rows`). Every record a Main tile shows is All's too, under the entry that shows it (`tile_records`). Kept
+    /// for what they were worked out for (`RowsKey`), so a frame does not work them out again.
     pub(crate) fn compare_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> std::rc::Rc<Vec<Row>> {
+        self.rows_with(menu, entry, q, true)
+    }
+
+    /// `compare_rows`, with the records a Main tile shows that the live settings' rows leave out (`tiles`) or without
+    /// them (`matrix_rows_for`: the Memories page and a recall compare the sets' own rows).
+    fn rows_with(&self, menu: Option<&str>, entry: &BarKey, q: &str, tiles: bool) -> std::rc::Rc<Vec<Row>> {
         let menu = menu.filter(|m| self.menu_named(m).is_some());
-        let key: RowsKey = (self.schema_gen, q.to_lowercase(), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout());
+        let key: RowsKey = (self.schema_gen, q.to_lowercase(), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout(), tiles);
         if let Some((_, rows)) = self.rows_cache.borrow().iter().find(|(k, _)| *k == key) {
             return rows.clone();
         }
         let under = |s: &Setting, t: &str| self.entry_here(s) == t;
         let named = |t: String| -> Vec<Row> {
-            self.compare_rows(None, &BarKey::All, q).iter().filter(|r| under(&r.2[0], &t)).map(|(_, g, linked)| (t.clone(), g.clone(), linked.clone())).collect()
+            self.rows_with(None, &BarKey::All, q, tiles).iter().filter(|r| under(&r.2[0], &t)).map(|(_, g, linked)| (t.clone(), g.clone(), linked.clone())).collect()
         };
         let rows = match (menu, entry) {
             (Some(m), e) => self.entry_rows(Some(m), e, &key.1),
-            (None, BarKey::All) => self.build_matrix_rows(&key.1, None),
+            (None, BarKey::All) => {
+                let mut rows = self.build_matrix_rows(&key.1, None);
+                // the records a Main tile shows that those rows leave out, each beside its group (`tile_records`)
+                for s in self.tile_records(&key.1).into_iter().filter(|_| tiles) {
+                    let at = rows.iter().rposition(|r| r.0 == s.tab && r.1 == s.group).or_else(|| rows.iter().rposition(|r| r.0 == s.tab)).map_or(rows.len(), |i| i + 1);
+                    rows.insert(at, (s.tab.clone(), s.group.clone(), vec![s]));
+                }
+                rows
+            }
             (None, BarKey::Tab(t)) => named(t.clone()),
             (None, BarKey::MyMenu) => named(self.schema.camera.text.my_menu_name().to_string()),
             (None, BarKey::Main) => self.entry_rows(None, &BarKey::Main, &key.1),
@@ -580,6 +598,18 @@ impl App {
         if cache.len() >= ROWS_KEPT { cache.remove(0); }
         cache.push((key, rows.clone()));
         rows
+    }
+
+    /// A Compare row's title, the window's and the page's: its setting's (`setting_title`), and under Main the tile's
+    /// label first where that title does not begin with it ("Slot 1: File Format (Slot 1)"; "Shutter speed: numerator"
+    /// already does), so a row says what it is part of.
+    pub(crate) fn compare_title(&self, row: &Row) -> String {
+        let title = self.setting_title(&row.2[0]);
+        if row.0 == self.schema.camera.text.main_title() && !title.to_lowercase().starts_with(&row.1.to_lowercase()) {
+            format!("{}: {title}", row.1)
+        } else {
+            title
+        }
     }
 
     /// Whether a row differs between the columns `cols` (the first the baseline): a later column that keeps the setting
@@ -873,7 +903,8 @@ pub(crate) mod copy_tests {
         assert_eq!((app.col_value(Col::a(0), &one.2[0]), app.col_value(Col::a(0), &two.2[0])), (Some(b1), Some(a2)), "the other profile is left as it was");
         // the page counts the same rows
         let j: serde_json::Value = serde_json::from_slice(&crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["b", 0]], "only_diff": false })).body).unwrap();
-        assert_eq!(j["total"], serde_json::json!(app.matrix_rows_for("", None).len()));
+        // (Compare's All: the rows as before menus and the records a Main tile shows that those leave out)
+        assert_eq!(j["total"], serde_json::json!(app.compare_rows(None, &BarKey::All, "").len()));
         assert_eq!(j["rows"].as_array().unwrap().len() as u64, j["shown"].as_u64().unwrap());
         assert!(j["rows"].as_array().unwrap().iter().filter(|r| r["key"] == serde_json::json!(one.2[0].key) || r["key"] == serde_json::json!(two.2[0].key)).count() == 2, "both rows on the page");
         // every row Compare lists is under one entry of its Menu (a tab, Other, the entry for what the menus do not
@@ -1193,6 +1224,67 @@ pub(crate) mod copy_tests {
             assert_eq!(app.entry_of(&place), app.schema.camera.text.my_menu_name());
             assert_eq!(app.view_of(&place), View::MyMenu);
             assert!(app.menu_tabs().iter().all(|t| !app.settings_in(0, Some(t)).any(|s| s.key == place.key)), "under no tab");
+            done(&dir, &user);
+        }
+    }
+
+    /// Integration review finding 6, as corrected: Compare's Main lists every record a Main tile shows, outside Expert
+    /// mode too, the Shutter Speed tile's two parts (Expert-only records a memory keeps) included, each titled with the
+    /// tile's label first (`compare_title`); All settings holds them, each under one entry; without menus and in each
+    /// of the stub's menus, the window's rows and the page's alike.
+    #[test]
+    fn compares_main_lists_every_record_a_tile_shows() {
+        use crate::test_support::{done, sample_app, strip_menus, stub_menus};
+        for (with_menus, stub) in [(false, strip_menus as fn(&mut serde_json::Value)), (true, stub_menus)] {
+            let (mut app, dir, user) = sample_app("cmp_main_tiles", Some(stub));
+            let sets = app.schema.camera.main_tiles.clone().unwrap().0;
+            let menus: Vec<Option<String>> = std::iter::once(None).chain(app.menus().iter().map(|m| Some(m.name.clone()))).collect();
+            for menu in &menus {
+                let menu = menu.as_deref();
+                let at = format!("menus {with_menus} menu {menu:?}");
+                let tiles = &sets[menu.and_then(|m| app.menu_tile_set(m)).unwrap_or(0)].tiles;
+                let main = app.compare_rows(menu, &BarKey::Main, "");
+                let shown: Vec<String> = main.iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect();
+                // every record each tile shows, as that menu's row shows it (`row_record`)
+                for t in tiles {
+                    for k in t.keys.iter().chain(&t.memory_keys).chain(&t.numerator_key).chain(&t.denominator_key) {
+                        let s = app.schema.settings.iter().find(|s| &s.key == k).unwrap();
+                        let want = match menu { Some(m) => app.row_record(s, m, &Bind::Menu).key.clone(), None => s.key.clone() };
+                        assert!(shown.contains(&want), "{at}: {} of {}", s.name, t.caption);
+                    }
+                }
+                // a memory's own record holds no value in the live settings' column, and takes none there
+                for s in app.tile_records("").iter().filter(|s| s.area != "global") {
+                    assert_eq!(app.col_value(Col::a(0), s), None, "{at}: {} in the live settings", s.name);
+                    assert!(app.col_value(Col::a(1), s).is_some(), "{at}: {} in a memory", s.name);
+                }
+                // the fraction's two parts, under the tile, its label first
+                let shutter = tiles.iter().find(|t| t.kind == TileKind::Fraction).expect("the Shutter Speed tile");
+                for k in shutter.numerator_key.iter().chain(&shutter.denominator_key) {
+                    let row = main.iter().find(|r| r.2.iter().any(|s| &s.key == k)).unwrap();
+                    let title = app.compare_title(row);
+                    assert!(row.1 == shutter.caption && title.to_lowercase().starts_with(&shutter.caption.to_lowercase()), "{at}: {title}");
+                }
+                // All holds them, each record under one entry other than All and Main
+                let records = |k: &BarKey| -> Vec<String> { app.compare_rows(menu, k, "").iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect() };
+                let mut all = records(&BarKey::All);
+                let n = all.len();
+                all.sort();
+                all.dedup();
+                assert_eq!(n, all.len(), "{at}: each record of All once");
+                assert!(shown.iter().all(|k| all.binary_search(k).is_ok()), "{at}: Main's records are All's");
+                let mut under: Vec<String> = app.bar_keys(true, 0, menu, "", false).into_iter().filter(|k| !matches!(k, BarKey::All | BarKey::Main)).flat_map(|k| records(&k)).collect();
+                under.sort();
+                assert_eq!(under, all, "{at}: each record of All under one entry");
+                // the page: the same rows under Main, with the same titles
+                let mut body = serde_json::json!({ "cols": [["a", 0], ["a", 1]], "entry": "main", "only_diff": false });
+                if let Some(m) = menu { body["menu"] = serde_json::json!(m); }
+                let a = crate::web::tests::answer(&mut app, "compare", body);
+                let j: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+                let page: Vec<(String, String)> = j["rows"].as_array().unwrap().iter().map(|r| (r["key"].as_str().unwrap().to_string(), r["name"].as_str().unwrap().to_string())).collect();
+                let window: Vec<(String, String)> = main.iter().map(|r| (r.2[0].key.clone(), app.compare_title(r))).collect();
+                assert_eq!(page, window, "{at}: the page's Main as the window's");
+            }
             done(&dir, &user);
         }
     }

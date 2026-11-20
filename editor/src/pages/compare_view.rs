@@ -395,7 +395,7 @@ impl App {
         // fixed column widths, so the columns stay put while rows off screen are skipped: the setting names' widest,
         // and one width for every value column (a longer value is cut short, in full on hover)
         let body = egui::TextStyle::Body.resolve(ui.style());
-        let name_w = ui.fonts(|f| shown.iter().map(|r| f.layout_no_wrap(self.setting_title(&r.2[0]), body.clone(), Color32::WHITE).size().x)
+        let name_w = ui.fonts(|f| shown.iter().map(|r| f.layout_no_wrap(self.compare_title(r), body.clone(), Color32::WHITE).size().x)
             .fold(130.0_f32, f32::max)).min(460.0) + 2.0;
         let cell_w = 190.0;
         // a row's height as last drawn, for the rows off screen, which only keep their place
@@ -472,7 +472,7 @@ impl App {
                     continue;
                 }
                 let on_cursor = cursor == Some(ri);
-                let title = self.setting_title(s);
+                let title = self.compare_title(&(tab.clone(), group.clone(), linked.clone()));
                 let name = if on_cursor { RichText::new(title).strong().color(cursor_color) } else { RichText::new(title) };
                 // the name is a link, underlined under the pointer: a click opens the setting in Edit, in the first
                 // column of file A that keeps it (else the live settings)
