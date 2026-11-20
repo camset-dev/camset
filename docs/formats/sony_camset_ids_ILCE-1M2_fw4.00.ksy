@@ -4010,3 +4010,14 @@ enums:
       id: rec_frame_rate_190c
       doc: 'Rec Frame Rate [Shooting > Image Quality/Rec]: 1 60p, 3 30p, 5 24p, 7 120p. live settings; 1 of 1 settings
         on it proved on the camera.'
+-retired-ids:
+  sq_recording_frame_rate_setting: 0x0240
+  sq_frame_rate: 0x0248
+  operation_in_vertical_orientatir: 0x0473
+  movie_hdmi_output_raw: 0x0495
+  camera_position_state: 0x04e2
+  movie_interval_rec_frame_rate_setting: 0x1137
+  movie_interval_rec_recording_setting: 0x1145
+  unknown_1479: 0x1479
+  custom_box_in_use_height_x_1000: 0x148c
+  custom_box_in_use_width_x_1000: 0x148e

@@ -13,14 +13,23 @@ the reference definition's (camkit.definitions.REFERENCE); a second camera's is 
 spec of its own. Sony's help text stays out: the files are meant to be published.
 
 A record's identifier is its first setting's name in Kaitai's spelling (base), with its record id added where another
-record holds that one. A name someone's parser uses must never come to mean another record, so the file is its own
-memory (record_names, published): a record keeps the identifier the file gives it while the name of one of its
-settings still gives that identifier (base, or base with its id: a live setting found on a memory set's record leaves
-the set's name with it), and no record takes an identifier the file gives another. A new record whose
-name another record already bears takes its id ("jpeg_heif_quality_01de" beside the Slot 1 record's
-"jpeg_heif_quality"); a record renamed takes its new name's identifier, the old one gone with the name it said. Until
-2026-11-19 the names were dealt out afresh in record order at every write, so a new record with a lower id took a name
-another record had borne (b3afe42: 0x01de took jpeg_heif_quality from 0x01ea).
+record holds that one. A name someone's parser uses must never come to mean another record: no identifier the file
+ever gave one record is given to another. So the file is its own memory (published, record_names): its enum, and under
+the top-level key "-retired-ids" (RETIRED) every identifier a record bore before it was renamed, or before it left the
+definition, with that record's id. Kaitai's compiler ignores a key that begins with "-" (its reader comes out the
+same, and kit/tools/build_docs.py leaves such keys out of what the reader is compiled from), and the key sits in the
+file itself so the memory travels with what is published and merged, and no other file can fall out of step with it.
+A record keeps the identifier the file gives it while the name of one of its settings still gives it (base, or base
+with its id: a live setting found on a memory set's record leaves the set's name with it), takes back one it bore
+before when its name gives that again, and otherwise takes its name's, with its id added where the file gave that one
+to another record, current or retired. Renames stay allowed: the old identifier is retired, never reused. A file that
+cannot be read (git's conflict markers left in it) stops the write in plain words, never a traceback: the memory is
+never written over unread.
+
+Until 2026-11-19 the names were dealt out afresh in record order at every write, so a new record with a lower id took a
+name another record had borne (b3afe42: 0x01de took jpeg_heif_quality from 0x01ea), and then for a while a renamed
+record's old identifier left the file and could be taken again. The a1 II's retired identifiers were seeded from the
+published files (github/main, gitea/main, v0.2.0, v0.2.1): the ten its records bore there before they were renamed.
 """
 import argparse
 import collections
@@ -37,6 +46,8 @@ SCHEMA = definitions.path(definitions.REFERENCE)          # the definition whose
 FORMATS = ROOT / "docs" / "formats"
 FORMAT = FORMATS / "sony_camset.ksy"
 IDS_PREFIX = "sony_camset_ids_"
+RETIRED = "-retired-ids"            # {identifier: record id} no longer borne, never given to another record
+IDENT = re.compile(r"[a-z][a-z0-9_]*")
 
 
 def ids_name(camera: str) -> str:
@@ -83,25 +94,67 @@ def ident(name: str, used: set, rid: int) -> str:
     return s
 
 
-def published(camera: str) -> dict:
-    """{record id: identifier} the camera's committed record names file gives (ids_path), {} with none: the memory
-    record_names keeps each identifier with its record by."""
+START_AGAIN = ("Its identifiers are the memory that keeps each record's Kaitai name with its record, so it is never "
+               "written over unread. Take the file whole as the branch you publish from has it (git checkout main -- {f}; "
+               "with conflict markers, that is resolving the conflict to that side), then run "
+               ".venv/bin/python kit/tools/build_docs.py --no-viewer: the records only the other side named take their "
+               "names again, and none takes one the file gave another record. Nothing was written.")
+
+
+def unreadable(p: Path, why: str) -> SystemExit:
+    """The stop for a record names file the memory cannot be read from, in plain words: why, and how to start again."""
+    from camkit import paths
+    f = paths.shown(p) if Path(p).resolve().is_relative_to(ROOT) else str(p)
+    return SystemExit(f"{f}: {why}. " + START_AGAIN.format(f=f))
+
+
+def published(camera: str) -> tuple:
+    """(kept, retired): the identifiers the camera's committed record names file gives (ids_path), {record id:
+    identifier} from its enum, and {identifier: record id} from its RETIRED key; ({}, {}) with no file. The memory
+    record_names keeps each identifier with its one record by. A file that is not YAML (git's conflict markers left
+    in it), or that gives one identifier to two records, stops in plain words (unreadable), never a traceback."""
     p = ids_path(camera)
     if not p.exists():
-        return {}
-    spec = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    values = ((spec.get("enums") or {}).get("setting") or {}) if isinstance(spec, dict) else {}
-    return {rid: e["id"] for rid, e in values.items()
+        return {}, {}
+    text = p.read_text(encoding="utf-8")
+    try:
+        spec = yaml.safe_load(text) or {}
+    except yaml.YAMLError as e:
+        marks = any(line.startswith(("<<<<<<<", ">>>>>>>")) for line in text.splitlines())
+        raise unreadable(p, ("it holds git's conflict markers, so it does not read as YAML" if marks else
+                             f"it does not read as YAML ({str(e).splitlines()[0]})")) from None
+    if not isinstance(spec, dict):
+        raise unreadable(p, "it is not a Kaitai spec (no mapping at its top)")
+    values = ((spec.get("enums") or {}).get("setting") or {})
+    kept = {rid: e["id"] for rid, e in values.items()
             if isinstance(rid, int) and isinstance(e, dict) and isinstance(e.get("id"), str)}
+    retired = spec.get(RETIRED) or {}
+    if not isinstance(retired, dict) or not all(isinstance(i, str) and IDENT.fullmatch(i) and isinstance(r, int)
+                                                and not isinstance(r, bool) for i, r in retired.items()):
+        raise unreadable(p, f"its {RETIRED} is not identifiers each with a record id")
+    owner = dict(retired)
+    for rid, i in sorted(kept.items()):
+        if owner.setdefault(i, rid) != rid:
+            a, b = sorted((owner[i], rid))
+            raise unreadable(p, f"it gives {i} to two records, 0x{a:04x} and 0x{b:04x}")
+    return kept, dict(retired)
 
 
-def record_names(doc, kept: dict | None = None) -> dict:
-    """{record id: (identifier, doc line)} from the schema, live keys before memory-set ones. `kept`, the identifiers
-    the committed file gives (published): a record keeps its own while the name of one of its settings still gives it
-    (base, or base with its id: a live setting found on a memory set's record leaves the set's name with it), and none
-    takes one the file gives another record; every other record, in record order, takes its first setting's name's
+def retired_after(names: dict, kept: dict, retired: dict) -> dict:
+    """{identifier: record id} retired once `names` (record_names') are written: every identifier the file gave a
+    record (`kept`, `retired`) that its record does not bear now, renamed or gone from the definition."""
+    owner = {**retired, **{i: rid for rid, i in kept.items()}}
+    return {i: rid for i, rid in owner.items() if (names.get(rid) or (None,))[0] != i}
+
+
+def record_names(doc, kept: dict | None = None, retired: dict | None = None) -> dict:
+    """{record id: (identifier, doc line)} from the schema, live keys before memory-set ones. `kept` and `retired`, the
+    identifiers the committed file gives (published): a record keeps its own while the name of one of its settings
+    still gives it (base, or base with its id: a live setting found on a memory set's record leaves the set's name with
+    it), else takes back one it bore before (retired) that a name of its gives again; none ever takes one the file gave
+    another record, current or retired; every other record, in record order, takes its first setting's name's
     (ident)."""
-    kept = kept or {}
+    kept, retired = kept or {}, retired or {}
     first, every = {}, collections.defaultdict(list)
     for s in doc["settings"]:
         m = re.match(r"(global|set):0x([0-9a-f]+)(\[\d+\]|@\d+)?$", s["key"])
@@ -120,15 +173,18 @@ def record_names(doc, kept: dict | None = None) -> dict:
             name = f"{name} (array)" if s["key"].endswith("]") else f"{name} (block)"
         return name
     names = {rid: name_of(rid, s) for rid, (_, s, _) in first.items()}
-    # what the file gives a record stays its own while one of its settings' names gives it; every identifier the file
-    # holds is taken
+    # what the file gives a record stays its own while one of its settings' names gives it, else one it bore before
+    # that a name of its gives again; every identifier the file ever gave a record is taken
     stays = {}
     for rid in sorted(first):
         mine = kept.get(rid)
-        given = {x for s in every[rid] for b in [base(name_of(rid, s))] for x in (b, f"{b}_{rid:04x}")}
+        given = [x for s in every[rid] for b in [base(name_of(rid, s))] for x in (b, f"{b}_{rid:04x}")]
+        back = [x for x in given if retired.get(x) == rid and x not in stays.values()]
         if mine in given and mine not in stays.values():
             stays[rid] = mine
-    out, used = {}, set(kept.values())
+        elif back:
+            stays[rid] = back[0]
+    out, used = {}, set(kept.values()) | set(retired)
     for rid in sorted(first):
         area, s, all_ = first[rid]
         proved = sum(1 for x in all_ if x.get("proved"))
@@ -141,21 +197,29 @@ def record_names(doc, kept: dict | None = None) -> dict:
     return out
 
 
-def ksy(doc, kept: dict | None = None) -> dict:
-    """The record names file of a definition as data; `kept` the identifiers to keep with their records (record_names),
-    by default the ones the camera's committed file gives (published)."""
+def ksy(doc, kept: dict | None = None, retired: dict | None = None) -> dict:
+    """The record names file of a definition as data; `kept` and `retired` the identifiers to keep with their records
+    (record_names), by default the ones the camera's committed file gives (published). The identifiers no record bears
+    now go under RETIRED, by record id, last."""
     lay = (doc.get("layouts") or [{}])[0]
-    names = record_names(doc, published(definitions.key(doc)) if kept is None else kept)
+    if kept is None:
+        kept, retired = published(definitions.key(doc))
+    retired = retired or {}
+    names = record_names(doc, kept, retired)
     cam, model, fw = definitions.key(doc), lay.get("model", doc.get("model")), lay.get("firmware", "?")
     used = ("imported by sony_camset.ksy" if ids_name(cam) in imported() else
             "no container spec imports it yet (docs/formats/index.md)")
-    return {
+    out = {
         "meta": {"id": ids_id(cam), "title": f"Record ids of a Sony camera settings file, by name: {model} firmware {fw}"},
         "doc": (f"The record ids {model} firmware {fw} (layout "
                 f"{lay.get('signature', '?')}) uses, named from editor/definitions/{cam}.json; {used}. "
                 "Generated by kit/tools/build_docs.py (kit/tools/camset_ksy.py); edit those, not this file."),
         "enums": {"setting": {rid: {"id": i, "doc": d} for rid, (i, d) in names.items()}},
     }
+    gone = retired_after(names, kept, retired)
+    if gone:
+        out[RETIRED] = dict(sorted(gone.items(), key=lambda x: (x[1], x[0])))
+    return out
 
 
 def format_spec() -> dict:
@@ -174,12 +238,16 @@ def width(spec: dict, f: dict) -> int:
     return ints.get(f["type"]) or sum(width(spec, x) for x in spec["types"][f["type"]]["seq"])
 
 
-def render(doc, kept: dict | None = None) -> str:
+def render(doc, kept: dict | None = None, retired: dict | None = None) -> str:
     """The .ksy file's text (kit/tools/build_docs.py writes it, and its test compares it with the committed file);
-    `kept` as ksy's."""
-    text = yaml.safe_dump(ksy(doc, kept), sort_keys=False, allow_unicode=True, width=110)
-    # hex record ids read better than YAML's decimal keys
+    `kept` and `retired` as ksy's."""
+    spec = ksy(doc, kept, retired)
+    gone = spec.pop(RETIRED, None)
+    text = yaml.safe_dump(spec, sort_keys=False, allow_unicode=True, width=110)
+    # hex record ids read better than YAML's decimal keys and values
     text = re.sub(r"^(    )(\d+):$", lambda m: f"{m.group(1)}0x{int(m.group(2)):04x}:", text, flags=re.M)
+    if gone:
+        text += f"{RETIRED}:\n" + "".join(f"  {i}: 0x{rid:04x}\n" for i, rid in gone.items())
     return (f"# Generated by kit/tools/build_docs.py (kit/tools/camset_ksy.py) from editor/definitions/"
             f"{definitions.key(doc)}.json; edit those, not this file.\n" + text)
 

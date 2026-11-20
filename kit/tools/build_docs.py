@@ -666,14 +666,17 @@ def reader_sources() -> list:
 def reader_part(spec):
     """What of a .ksy's YAML the reader is compiled from, as data: comments, layout and line ends are gone with the
     YAML read, and each enum value's doc is left out here, as kaitai-struct-compiler leaves it out of the Python
-    reader (the record names' docs hold each record's proof counts, and a proof alone must not stale the reader).
-    Keys become text with their type, so a mapping of numbers and "_" (a switch's cases) sorts."""
+    reader (the record names' docs hold each record's proof counts, and a proof alone must not stale the reader), and
+    so is a key that begins with "-", which the compiler ignores (the record names' retired identifiers,
+    camset_ksy.RETIRED). Keys become text with their type, so a mapping of numbers and "_" (a switch's cases) sorts."""
     if isinstance(spec, list):
         return [reader_part(x) for x in spec]
     if not isinstance(spec, dict):
         return spec
     out = {}
     for k, v in spec.items():
+        if isinstance(k, str) and k.startswith("-"):
+            continue
         if k == "enums" and isinstance(v, dict):          # an enums section, the top level's or a type's
             v = {name: {value: {f: x for f, x in e.items() if f != "doc"} if isinstance(e, dict) else e
                         for value, e in (values or {}).items()}

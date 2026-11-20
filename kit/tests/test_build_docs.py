@@ -400,30 +400,121 @@ def test_a_published_record_name_stays_with_its_record():
     odd = doc(("global:0x0001", "X"), ("global:0x0002", "X 0003"), ("global:0x0003", "X"))
     got = ids(odd, {0x0001: "x", 0x0002: "x_0003"})
     assert got == {0x0001: "x", 0x0002: "x_0003", 0x0003: "x_0003_2"} and len(set(got.values())) == 3
+    # an identifier kept twice (no file published() reads holds that) stays with the first record only
+    twice = doc(("global:0x0001", "X"), ("global:0x0002", "X"))
+    assert ids(twice, {0x0001: "x", 0x0002: "x"}) == {0x0001: "x", 0x0002: "x_0002"}
 
 
-def test_the_record_names_file_is_the_memory_and_gives_the_moved_names_back(tmp_path, monkeypatch):
-    """published() reads the identifiers the committed file gives, none without one; render() keeps them, so the file it
-    writes is the one it read (build_docs --check). The a1 II's file gives back what b3afe42 and 06ed34b moved: Slot 1's
-    JPEG/HEIF Quality and Image Size their names, 0x1126 its unknown_camera_state."""
+def test_a_retired_identifier_is_never_given_to_another_record():
+    """A renamed or dropped record's identifier is retired (camset_ksy.retired_after), and no other record ever takes
+    it, as the review of 2026-11-19 found two would have: a new "Camera position state" took camera_position_state,
+    published on 0x04e2, and "SQ Frame Rate" took sq_frame_rate, published on 0x0248. A record whose name gives one it
+    bore before takes it back."""
     import camset_ksy
-    from camkit import definitions
+
+    def doc(*settings):
+        return {"settings": [{"key": k, "name": n, "tab": "Shooting", "group": "G"} for k, n in settings]}
+
+    kept = {0x04E2: "unknown_camera_state_04e2", 0x0248: "frame_rate"}
+    retired = {"camera_position_state": 0x04E2, "sq_frame_rate": 0x0248}
+    d = doc(("global:0x04e2", "Unknown camera state (8 after a reset)"), ("global:0x0248", "Frame Rate"),
+            ("global:0x1500", "Camera position state"), ("global:0x1502", "SQ Frame Rate"))
+    names = camset_ksy.record_names(d, kept, retired)
+    assert {rid: i for rid, (i, _) in names.items()} == {0x04E2: "unknown_camera_state_04e2", 0x0248: "frame_rate",
+                                                         0x1500: "camera_position_state_1500", 0x1502: "sq_frame_rate_1502"}
+    assert camset_ksy.retired_after(names, kept, retired) == retired
+    # renamed: its old identifier retired, its new one its own; renamed back: the old one taken back
+    back = doc(("global:0x04e2", "Camera position state"), ("global:0x0248", "Frame Rate"))
+    names = camset_ksy.record_names(back, kept, retired)
+    assert names[0x04E2][0] == "camera_position_state"
+    assert camset_ksy.retired_after(names, kept, retired) == {"unknown_camera_state_04e2": 0x04E2, "sq_frame_rate": 0x0248}
+    # a record gone from the definition keeps its identifier retired
+    gone = doc(("global:0x04e2", "Unknown camera state (8 after a reset)"))
+    names = camset_ksy.record_names(gone, kept, retired)
+    assert camset_ksy.retired_after(names, kept, retired) == {**retired, "frame_rate": 0x0248}
+
+
+def test_the_record_names_file_is_the_memory_and_keeps_its_retired_identifiers(tmp_path, monkeypatch):
+    """published() reads the identifiers the committed file gives, its enum's and its "-retired-ids", none without a
+    file; render() writes them back, the retired ones last with hex ids, so the file it writes is the one it read
+    (build_docs --check). A file it cannot read, git's conflict markers left in it, or one that gives an identifier to
+    two records, stops in plain words naming the file and how to start again, never a traceback."""
+    import camset_ksy
     monkeypatch.setattr(camset_ksy, "FORMATS", tmp_path)
-    assert camset_ksy.published("ILCE-7M5_fw1.00") == {}
+    cam = "ILCE-7M5_fw1.00"
+    assert camset_ksy.published(cam) == ({}, {})
     d = {"model": "ILCE-7M5", "layouts": [{"model": "ILCE-7M5", "firmware": "1.00", "signature": "0123456789abcdef"}],
-         "settings": [{"key": "global:0x0020", "name": "Thing", "tab": "Shooting", "group": "G"}]}
+         "settings": [{"key": "global:0x0020", "name": "Thing", "tab": "Shooting", "group": "G"},
+                      {"key": "global:0x0030", "name": "Old name", "tab": "Shooting", "group": "G"}]}
     first = camset_ksy.render(d)
-    camset_ksy.ids_path("ILCE-7M5_fw1.00").write_text(first, encoding="utf-8")
+    assert camset_ksy.RETIRED not in first
+    camset_ksy.ids_path(cam).write_text(first, encoding="utf-8")
+    d["settings"][1]["name"] = "New name"
     d["settings"].insert(0, {"key": "global:0x0010", "name": "Thing (copy)", "tab": "Shooting", "group": "G"})
-    spec = yaml.safe_load(camset_ksy.render(d))["enums"]["setting"]
-    assert (spec[0x10]["id"], spec[0x20]["id"]) == ("thing_0010", "thing")
-    monkeypatch.undo()
-    a1 = definitions.load_public(camset_ksy.SCHEMA)
-    kept = camset_ksy.published(A1)
+    d["settings"].append({"key": "global:0x0040", "name": "Old name", "tab": "Shooting", "group": "G"})
+    second = camset_ksy.render(d)
+    spec = yaml.safe_load(second)
+    assert {rid: e["id"] for rid, e in spec["enums"]["setting"].items()} == \
+        {0x10: "thing_0010", 0x20: "thing", 0x30: "new_name", 0x40: "old_name_0040"}
+    assert spec[camset_ksy.RETIRED] == {"old_name": 0x30} and second.endswith("-retired-ids:\n  old_name: 0x0030\n")
+    camset_ksy.ids_path(cam).write_text(second, encoding="utf-8")
+    assert camset_ksy.published(cam) == ({0x10: "thing_0010", 0x20: "thing", 0x30: "new_name", 0x40: "old_name_0040"},
+                                         {"old_name": 0x30})
+    assert camset_ksy.render(d) == second, "a fixed point"
+    head, tail = second.split("enums:", 1)
+    camset_ksy.ids_path(cam).write_text(f"{head}<<<<<<< HEAD\nenums:{tail}=======\nenums: {{}}\n>>>>>>> other\n",
+                                        encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"conflict markers.*git checkout main -- .*build_docs.py --no-viewer.*Nothing was written"):
+        camset_ksy.render(d)
+    camset_ksy.ids_path(cam).write_text(second.replace("  old_name: 0x0030", "  thing: 0x0030"), encoding="utf-8")
+    with pytest.raises(SystemExit, match="gives thing to two records, 0x0020 and 0x0030"):
+        camset_ksy.published(cam)
+
+
+def test_the_published_record_names_keep_their_records():
+    """Every identifier a published record names file of the a1 II gave a record (github/main, gitea/main, the tags
+    v0.2.0 and v0.2.1, where this clone holds them) is that record's in the committed file's memory, in its enum or
+    retired; and, whatever this clone holds, the ten its records bore before they were renamed are retired with their
+    records, and the three moved in b3afe42 and 06ed34b are back with theirs."""
+    import camset_ksy
+    kept, retired = camset_ksy.published(A1)
+    owner = {**retired, **{i: rid for rid, i in kept.items()}}
+    assert retired == {"sq_recording_frame_rate_setting": 0x0240, "sq_frame_rate": 0x0248,
+                       "operation_in_vertical_orientatir": 0x0473, "movie_hdmi_output_raw": 0x0495,
+                       "camera_position_state": 0x04E2, "movie_interval_rec_frame_rate_setting": 0x1137,
+                       "movie_interval_rec_recording_setting": 0x1145, "unknown_1479": 0x1479,
+                       "custom_box_in_use_height_x_1000": 0x148C, "custom_box_in_use_width_x_1000": 0x148E}
     assert (kept[0x01EA], kept[0x01EE], kept[0x1126]) == ("jpeg_heif_quality", "jpeg_heif_image_size", "unknown_camera_state")
-    assert (kept[0x01DE], kept[0x01E2], kept[0x04E2]) == ("jpeg_heif_quality_01de", "jpeg_heif_image_size_01e2",
-                                                         "unknown_camera_state_04e2")
-    assert camset_ksy.render(a1) == camset_ksy.ids_path(A1).read_text(encoding="utf-8")
+    path = camset_ksy.ids_path(A1).relative_to(ROOT).as_posix()
+    read = 0
+    for ref in ("github/main", "gitea/main", "v0.2.0", "v0.2.1"):
+        got = subprocess.run(["git", "-C", str(ROOT), "show", f"{ref}:{path}"], capture_output=True, text=True)
+        if got.returncode:
+            continue
+        read += 1
+        for rid, e in yaml.safe_load(got.stdout)["enums"]["setting"].items():
+            assert owner.get(e["id"]) == rid, f"{ref} gives {e['id']} to 0x{rid:04x}"
+    if not read:
+        pytest.skip("this clone holds none of the published refs (a shallow checkout)")
+
+
+def test_the_retired_identifiers_change_nothing_kaitai_compiles(tmp_path):
+    """kaitai-struct-compiler ignores a top-level key that begins with "-": the reader compiled from the record names
+    with their "-retired-ids" is the committed one, byte for byte, and build_docs leaves the key out of what the reader
+    is compiled from (reader_part), so a retired identifier never stales it."""
+    import shutil
+    import camset_ksy
+    spec = yaml.safe_load(camset_ksy.ids_path(A1).read_text(encoding="utf-8"))
+    assert camset_ksy.RETIRED in spec
+    assert build_docs.reader_part(spec) == build_docs.reader_part({k: v for k, v in spec.items() if k != camset_ksy.RETIRED})
+    ksc = shutil.which("kaitai-struct-compiler")
+    if not ksc:
+        pytest.skip("kaitai-struct-compiler is not on this computer")
+    out = tmp_path / "out"
+    subprocess.run([ksc, "--target", "python", "--python-package", "camkit.formats", "--outdir", str(out),
+                    str(build_docs.CONTAINER)], check=True, capture_output=True)
+    for p in sorted(out.glob("*.py")):
+        assert p.read_bytes() == (build_docs.READER / p.name).read_bytes(), p.name
 
 
 def test_check_names_record_names_no_definition_gives(tmp_path, monkeypatch):

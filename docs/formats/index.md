@@ -17,8 +17,9 @@ The record names are generated, one file per definition (`kit/tools/build_docs.p
 anything else. `sony_camset.ksy` imports the ILCE-1M2's, `sony_camset_ids_ILCE-1M2_fw4.00.ksy` (Kaitai id
 `sony_camset_ids_ilce_1m2_fw4_00`); Kaitai's tools find an import by its file name, so in the Web IDE upload both
 files. A second camera's definition gets its own file the next time the generated files are built. A name in the file
-never comes to mean another record: a record keeps its name while its setting's name gives it, and a new record whose
-name another already bears takes its record id after it (`kit/tools/camset_ksy.py`).
+never comes to mean another record: a record keeps its name while its setting's name gives it, a new record whose name
+another already bears takes its record id after it, and a name a record bore before it was renamed stays its own under
+the file's `-retired-ids`, which Kaitai's tools ignore (`kit/tools/camset_ksy.py`).
 
 The container (the header, the sections of records and the two checksums) is taken to be shared by Sony bodies,
 and so far it is verified on one, the ILCE-1M2: by the camera runs on firmware 4.00, and on two files from other
