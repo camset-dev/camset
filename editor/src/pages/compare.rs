@@ -2115,6 +2115,33 @@ pub(crate) mod memory_settings_tests {
         done(&dir, &user);
     }
 
+    /// The one of them whose meaning is not known (0x00cb, a flag a Stills registration in S or M writes): Compare lists it
+    /// where Edit does for that memory (Focus > AF/MF), and as Edit outside Expert mode it is view only there (no proof
+    /// stands for it: `locked_why`): no picker, no copy target, no arrow, even where the two memories hold other values;
+    /// in Expert mode it takes them, as Edit's row does.
+    #[test]
+    fn the_unknown_flag_is_view_only_in_compare_as_in_edit() {
+        let (mut app, dir, user) = sample_app("cmp_mem_flag", None);
+        let u = app.schema.settings.iter().find(|s| s.key == "set:0x00cb").cloned().unwrap();
+        let edit_group = app.tab_groups_in(1, Some("Still"), "Focus", "", false).into_iter().find(|(_, _, rows)| rows.iter().flatten().any(|s| s.key == u.key)).map(|(g, ..)| g);
+        let cols = vec![Col::a(0), Col::a(1), Col::a(2)];
+        let rows = app.compare_rows_in(Some("Still"), &BarKey::Tab("Focus".into()), "", &cols);
+        let cmp_group = rows.iter().find(|r| r.2.iter().any(|s| s.key == u.key)).map(|r| r.1.clone());
+        assert!(edit_group.is_some() && cmp_group == edit_group, "under Edit's group: {edit_group:?} / {cmp_group:?}");
+        app.cols = cols;
+        app.prefs.expert = true;
+        let v = app.col_value(Col::a(1), &u).unwrap();
+        assert!(app.apply(vec![Action::Set(2, u.slot(), v ^ 1)]).is_none());
+        app.prefs.expert = false;
+        assert!(app.locked(&u, 1) && app.locked(&u, 2), "Edit: view only outside Expert mode");
+        assert!(!app.cell_editable(Col::a(1), std::slice::from_ref(&u)) && app.copy_targets(Col::a(2), &u).is_empty(), "no picker, no copy target");
+        assert_eq!(app.arrows_between(Col::a(1), Col::a(2), &u), (false, false), "no arrow though the memories differ");
+        assert!(app.row_info(&app.cols.clone(), None, &u).differs, "its difference is counted, as any row's");
+        app.prefs.expert = true;
+        assert!(app.cell_editable(Col::a(1), std::slice::from_ref(&u)) && app.copy_targets(Col::a(2), &u) == vec![Col::a(1)], "Expert mode: as Edit's row");
+        done(&dir, &user);
+    }
+
     /// A search that would find one of them with no memory of the menu among the columns says why none is shown.
     #[test]
     fn a_search_says_why_a_memorys_setting_is_not_shown() {
