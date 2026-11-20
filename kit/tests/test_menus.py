@@ -598,3 +598,24 @@ def test_a_row_the_walk_found_a_notice_on_takes_no_options_from_its_twins_walk(t
     first, second = menu["tabs"][0]["pages"][0]["rows"]
     assert first["options"] == ["Program Auto", "Manual Exposure"] and first["state"] == "walked"
     assert second["state"] == "info" and "options" not in second and second["kind"] == "notice"
+
+
+def test_rows_a_menu_read_from_its_held_row_keep_the_settings_own_order():
+    """A list of rows another menu's walk read from the row the camera held (the S&Q crawl of 2026-11-20 read
+    Recognition Target's rows from Human round to Auto, where the Stills walk read Auto first): the same rows in a
+    turned order are the same rows, so the setting keeps its own place there and no row_places rests on where the
+    camera stood (decision 16). The same rows in an order no turn gives are that menu's own order."""
+    kids = ["Auto", "Human", "Animal/Bird", "Insect"]
+    turned = kids[1:] + kids[:1]
+
+    def tree_of(order):
+        return [{"tab": "Focus", "pages": [page("1/1", "Subject Recog.", row("Recognition Target", *[
+            row(x, row("Recognition Priority Set.")) for x in order]))]}]
+    d = {"model": "TEST", "tabs": ["Focus"], "menu": [{"tab": "Focus", "group": "Subject Recog.", "label": "Recognition Target", "order": 0}],
+         "settings": [{**setting("global:0x0001", "Recognition Priority Set.", "Subject Recog.",
+                                 "Recognition Target > Animal/Bird > Recognition Priority Set."), "tab": "Focus"}]}
+    for order, places in ((turned, None), (["Animal/Bird", "Auto", "Human", "Insect"], {"row": ["Recognition Target", "Animal/Bird", "Recognition Priority Set."], "row_at": [0, 0, 0]})):
+        tree = {"model": "TEST", "firmware": "1.00", "tabs": tree_of(kids), "modes": [{"mode": "S&Q", "tabs": tree_of(order)}]}
+        got = placement.by_menu(copy.deepcopy(d), tree, [MENUS[0], MENUS[2]])["global:0x0001"]
+        assert got.get("row_menus") == ["Still", "S&Q"]
+        assert got.get("row_places", {}).get("S&Q") == places, order

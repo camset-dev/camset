@@ -895,13 +895,22 @@ def _options_at(doc) -> dict:
     return out
 
 
-def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", options: dict) -> dict | None:
+def turned(a: list, b: list) -> bool:
+    """Whether the labels `a` are `b`'s turned round, in another order (a list a walk read from the row the camera
+    held, wrapping round: Human ... Airplane, Auto where another walk read Auto first)."""
+    return len(a) == len(b) and a != b and any(a == b[k:] + b[:k] for k in range(1, len(b)))
+
+
+def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", options: dict,
+              own: dict | None = None) -> dict | None:
     """The setting's place (`place`, the definition's) in another menu `m`, where `m`'s own rows hold it: the same top
     row (the one the merged numbering gives the same number, merge_tops), then each label of the row among the rows `m`
     read under it (of rows bearing one label, the one at the same place, else the one written alike), the page an
     option opens as `m` holds it (its row named as that option, or as another option settings sit under there, with
     rows under it). None where `m` lacks the top row, read the rows under one and the label is not among them, or never
-    read them (the row's own menu is not this one: nothing is taken from another menu's rows)."""
+    read them (the row's own menu is not this one: nothing is taken from another menu's rows). `own`: the top row in
+    the setting's own menu; where `m`'s rows under a row are its own menu's rows turned round (turned: read from the row
+    the camera held), the setting keeps its own place among them, so no place rests on where the camera stood."""
     labels, at, opt = place["row"], place["row_at"], place.get("under_option")
     tab = place.get("row_tab") or s.get("tab") or "Other"
     node = nodes.get((tab, at[0]))
@@ -909,8 +918,11 @@ def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", o
         return None
     top, idx = node, [at[0]]
     page = isinstance(opt, str) and opt in labels[1:-1]
+    mine = own if own is not None and norm(own["l"]) == norm(labels[0]) else None
     for i in range(1, len(labels)):
         kids = node["kids"]
+        theirs = mine["kids"] if mine is not None else None
+        mine = theirs[at[i]] if theirs is not None and at[i] < len(theirs) else None
         if page and i == labels.index(opt, 1):
             names = options.get((tab, tuple(norm(x) for x in labels[:i])), set()) | {norm(opt)}
             shape = next((k for k in kids if norm(k["l"]) == norm(opt) and k["kids"]), None) or \
@@ -926,7 +938,9 @@ def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", o
             return None
         pick = kids[at[i]] if len(same) > 1 and at[i] < len(kids) and kids[at[i]] in same else \
             next((k for k in same if strict(k["l"]) == strict(labels[i])), same[0])
-        idx.append(kids.index(pick))
+        keep = theirs is not None and turned([norm(k["l"]) for k in kids], [norm(k["l"]) for k in theirs]) \
+            and mine is not None and norm(mine["l"]) == norm(pick["l"])
+        idx.append(at[i] if keep else kids.index(pick))
         node = pick
     out = {"row": list(labels), "row_at": idx}
     if opt is not None:
@@ -1108,7 +1122,7 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None,
     by_key = {s["key"]: s for s in doc["settings"]}
     options = _options_at({"settings": [{**s, **top.get(s["key"], {})} for s in doc["settings"]]})
     every = set(menu_modes(tree)) | {m for menu in menus for m in menu.get("modes") or []}
-    out = {}
+    out, owns = {}, {}                  # owns: each menu's top rows by number (_nodes_at), the settings' own menus'
     for menu in menus:
         key = menu_of(menu, tree)
         if key is False:
@@ -1136,7 +1150,10 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None,
             if place.get("row_mode", None) == key:
                 got = {f: place[f] for f in PLACE_FIELDS if f in place}
             else:
-                got = looked_up(m, nodes, s, place, groups, t, options)
+                mk = place.get("row_mode")
+                own_nodes = owns.setdefault(mk, _nodes_at(trees[mk], mk, number) if mk in trees else {})
+                own_top = own_nodes.get((place.get("row_tab") or s.get("tab") or "Other", place["row_at"][0]))
+                got = looked_up(m, nodes, s, place, groups, t, options, own_top)
                 mine = theirs.get(k)
                 if got is None and mine is not None and any(_names_row(p, mine) for p in own(s)):
                     tab = mine.get("row_tab") or s.get("tab") or "Other"
