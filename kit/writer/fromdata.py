@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, paths, placement
+from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, paths, placement, row_names
 from runner import read_json
 
 from .mirror import mirror_names, mirror_of, mirror_place
@@ -218,7 +218,9 @@ def menu_list(doc: dict) -> list | None:
             icon = [x for x in groups.get(tb["tab"], ()) if x != g and placement.norm(g)[1:] == placement.norm(x)]
             g = icon[0] if len(set(icon)) == 1 and g not in groups.get(tb["tab"], ()) else g
             for r in pg.get("rows") or []:
-                label = " ".join((r.get("label") or "").split())
+                # a top row's label as the camera draws it where the tree was written with an older one (camkit.row_names),
+                # as each setting's "row" begins with it
+                label = " ".join(row_names.renamed((r.get("label") or "",), definitions.key(doc))[-1].split())
                 if label:
                     out.append({"tab": tb["tab"], "group": g, "label": label, "order": start + len(out)})
     return out or None

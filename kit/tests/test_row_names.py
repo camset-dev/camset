@@ -439,3 +439,20 @@ def test_a_table_is_read_once_a_run_and_a_bad_one_stops_it_before_its_link(own_r
     p.write_text('{"camera": "TEST-CAM_fw9.99", "ROW_NAMES": {"Proxy Settings > Px Pro', encoding="utf-8")   # half saved
     assert first_open.key(("Proxy Settings", "Px Proxy Recording")) == ("proxy settings", "proxy recording")
     row_names.forget()
+
+
+def test_the_definitions_menu_list_takes_a_top_rows_camera_name(tmp_path, monkeypatch):
+    """writer/fromdata.menu_list writes the definition's top rows from the private menu tree's labels: a tree written
+    before the rename ("S with Shutter Button") gives the camera's name, as each setting's row does, so the public menu
+    and a setting's row never disagree, whether the tree was folded first or not."""
+    from writer import fromdata
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", tmp_path / "evidence")
+    hand_tables(tmp_path / "data", ROW_NAMES={"S with Shutter Button": "with Shutter Button"})
+    datafiles.write_menu_tree(datafiles.menu_tree_file(TEST_CAMERA), {
+        "model": "TEST-CAM", "firmware": "9.99", "source": "made up", "tabs": [{"tab": "Setup", "pages": [
+            {"page": "1/1", "group": "Operation Customize", "rows": [
+                {"label": "REC w/ Shutter", "state": "seen"}, {"label": "S with Shutter Button", "state": "seen"}]}]}]})
+    doc = {"layouts": [{"model": "TEST-CAM", "firmware": "9.99"}], "tabs": ["Setup"], "menu": []}
+    assert [m["label"] for m in fromdata.menu_list(doc)] == ["REC w/ Shutter", "with Shutter Button"]
+    row_names.forget()
