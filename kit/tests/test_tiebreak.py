@@ -112,7 +112,8 @@ def test_the_majority_counts_one_vote_per_family_and_no_majority_is_no_reading()
     assert M.tie_label(four) == ("Cont.", "majority of four")
     alone = line("Single", "Cont.", "Timer", ("glm", GLM, "Timer"), old=GEMMA)              # neither OCR nor the second
     assert M.majority(M.voices(alone)) == ("Timer", ("omlx", "glm"))
-    assert M.tie_label(alone) == ("Timer", "majority of four, third readers alone")
+    assert M.tie_label(alone) == (None, "unresolved, third readers alone")                  # never on them alone
+    assert M.settled(alone) is None and M.settled(four) == "Cont."
     # the second reader's own reading, carried by two third readers where its family read two things: not "alone"
     given = line("Single", "Cont.", "Single", ("gemma", GEMMA, "Cont."), ("glm", GLM, "Cont."))
     assert M.majority(M.voices(given)) == ("Cont.", ("gemma", "glm")) and M.tie_label(given) == ("Cont.", "majority of five")
@@ -126,7 +127,7 @@ def test_new_lines_ask_the_third_readers_in_turn_and_keep_each_reading_and_model
     """Each option the first two read apart: the third readers in turn while no reading stands by family, the first that
     answers under "omlx", the next under "voters"; each line names the models that read it, and its winner is the
     majority. A third reader of the second's family is never asked, for it could make no reading stand. A reading third
-    readers alone carry is marked and listed."""
+    readers alone carry is marked and listed, with no winner (decision 22: 7 of 10 such were wrong)."""
     b = bench
     b.config([lan("vllm", QWEN), lan("gemma", GEMMA), lan("glm", GLM), lan("omlx", QWEN_OLD)],
              roles={"second": "vllm", "third": ["gemma", "omlx", "glm"]})
@@ -138,13 +139,14 @@ def test_new_lines_ask_the_third_readers_in_turn_and_keep_each_reading_and_model
                    ("gemma", "00004_down.png"): "Timer", ("glm", "00004_down.png"): "Timer"})
     tiebreak(b.run)
     got = lines(b.run)
-    assert [t["winner"] for t in got] == ["Single", "Cont.", None, "Timer"]
+    assert [t["winner"] for t in got] == ["Single", "Cont.", None, None]
     assert b.asked == [("gemma", "00001_down.png"), ("gemma", "00002_down.png"), ("glm", "00002_down.png"),
                        ("gemma", "00003_down.png"), ("glm", "00003_down.png"), ("gemma", "00004_down.png"),
                        ("glm", "00004_down.png")]                             # omlx is the second's family: never
     assert got[3]["third_only"] is True and not any("third_only" in t for t in got[:3])
     out = capsys.readouterr().out
-    assert "1 lines stand on third readers alone" in out and "third readers alone: kit2_crawl 00004_down.png index 3" in out
+    assert "1 lines third readers alone named" in out and "third readers alone: kit2_crawl 00004_down.png index 3" in out
+    assert got[3]["omlx"] == "Timer" and got[3]["voters"] == [{"reader": "glm", "model": GLM, "selected": "Timer"}]
     assert got[0] == {"frame": "00001_down.png", "path": ["Drive Mode"], "index": 0, "ocr": "Single", "vllm": "Cont.",
                       "models": {"vllm": QWEN, "omlx": GEMMA}, "omlx": "Single", "winner": "Single"}
     assert got[1]["voters"] == [{"reader": "glm", "model": GLM, "selected": "Cont."}]
@@ -212,7 +214,8 @@ def test_revote_asks_todays_third_readers_where_no_reading_stands_by_family_and_
     """Lines written when the second and third readers were one model in two builds: --revote needs the old third's
     model (--was), keeps its reading as that model's, and asks today's third readers, in turn, wherever no reading
     stands by family: two builds against OCR, and two builds that read two things (no vote at all) beside OCR. A
-    reading third readers alone carry is marked and listed by run, frame and index. The file is written afresh, the
+    reading third readers alone carry is marked, given no winner and listed by run, frame and index. The file is
+    written afresh, the
     old one kept beside it; a second --revote asks only a third reader that gave no answer."""
     b = bench
     b.config([lan("vllm", QWEN), lan("gemma", GEMMA), lan("glm", GLM)],
@@ -236,7 +239,7 @@ def test_revote_asks_todays_third_readers_where_no_reading_stands_by_family_and_
     tiebreak(b.run, "--revote", "--was", QWEN_OLD)
     got = lines(b.run)
     # line 4: Timer by gemma alone, the old third's Timer no vote now (its family read Cont. too)
-    assert [t["winner"] for t in got] == ["Single", "Single", "Cont.", None, "Self-timer"]
+    assert [t["winner"] for t in got] == ["Single", "Single", "Cont.", None, None]
     assert b.asked == [("gemma", "00001_down.png"), ("gemma", "00002_down.png"), ("gemma", "00003_down.png"),
                        ("glm", "00003_down.png"), ("gemma", "00004_down.png"), ("glm", "00004_down.png"),
                        ("gemma", "00005_down.png"), ("glm", "00005_down.png")]
@@ -251,7 +254,7 @@ def test_revote_asks_todays_third_readers_where_no_reading_stands_by_family_and_
     assert ("5 lines: 5 answered by a third reader of today; kept as they were for a later --revote, 0 that none answered "
             "(0 of them with no frame under shots/) and 0 with no third reader of another family to ask; 2 with another "
             "winner than before") in out
-    assert "1 lines stand on third readers alone" in out and "third readers alone: kit2_crawl 00005_down.png index 4" in out
+    assert "1 lines third readers alone named" in out and "third readers alone: kit2_crawl 00005_down.png index 4" in out
     b.asked.clear()
     tiebreak(b.run, "--revote")                            # every line names its models now: --was not needed
     assert b.asked == [("glm", "00004_down.png")] and lines(b.run) == got     # only the reader that gave no answer
@@ -303,7 +306,8 @@ def test_revote_never_asks_about_an_identity_rows_option(bench):
 def test_the_map_takes_the_majority_by_family_and_lists_every_voice_for_review(bench, capsys):
     """pass1_map: a line that names its models is voted afresh, by family ("majority of four" with four voices); one
     with no majority goes on the review list with each third reader's reading; a line written before lines named
-    models keeps the winner it was written with, said once per crawl. A label third readers alone carry is told apart in
+    models keeps the winner it was written with, said once per crawl. An option third readers alone named gets no label
+    from the vote: it goes on the review list with every voice's reading, told apart in
     its source and listed by frame, for a look by eye."""
     import pass1_map
     b = bench
@@ -324,13 +328,33 @@ def test_the_map_takes_the_majority_by_family_and_lists_every_voice_for_review(b
     opts = m["rows"][0]["options"]
     assert [(o["label"], o["source"]) for o in opts] == [("Single", "majority of four"), ("Cont.", "unresolved"),
                                                          ("Cont.", "majority of three"),
-                                                         ("Timer", "majority of four, third readers alone")]
-    assert m["review"] == [{"path": ["Drive Mode"], "frame": "00002_down.png", "ocr": "Single", "vllm": "Cont.",
-                            "omlx": "Timer", "voters": [{"reader": "glm", "selected": "Bracket"}]}]
+                                                         ("Cont.", "unresolved, third readers alone")]
+    assert m["review"][-1] == {"path": ["Drive Mode"], "frame": "00004_down.png", "ocr": "Single", "vllm": "Cont.",
+                               "omlx": "Timer", "voters": [{"reader": "glm", "selected": "Timer"}], "third_only": True}
+    assert m["review"][0] == {"path": ["Drive Mode"], "frame": "00002_down.png", "ocr": "Single", "vllm": "Cont.",
+                              "omlx": "Timer", "voters": [{"reader": "glm", "selected": "Bracket"}]}
     pass1_map.main([str(b.run), "--own", "--dry-run"])
     out = capsys.readouterr().out
     assert "glm='Bracket'" in out and "1 tiebreak lines name no models" in out
-    assert "1 labels stand on third readers alone" in out and "00004_down.png   index 3 Drive Mode" in out
+    assert "1 options third readers alone named" in out and "00004_down.png   index 3 Drive Mode" in out
+    (b.run / "checked_labels.json").write_text(json.dumps({"00004_down.png": "Single"}), encoding="utf-8")
+    m = pass1_map.build(b.run)                             # a label read by eye still wins
+    assert m["rows"][0]["options"][3]["source"] == "checked by eye" and len(m["review"]) == 1
+
+
+def test_third_readers_alone_ask_the_next_third_reader(bench):
+    """Two third readers naming a reading neither OCR nor the second reader gave settle nothing, so the next third
+    reader is asked: here it sides with the second reader, two against two, no winner and no mark."""
+    b = bench
+    b.config([lan("vllm", QWEN), lan("gemma", GEMMA), lan("glm", GLM), lan("pix", "mistralai/Pixtral-12B-2409")],
+             roles={"second": "vllm", "third": ["gemma", "glm", "pix"]})
+    b.options(("00001_down.png", "Single", "Cont."))
+    b.said.update({("gemma", "00001_down.png"): "Timer", ("glm", "00001_down.png"): "Timer",
+                   ("pix", "00001_down.png"): "Cont."})
+    tiebreak(b.run)
+    got = lines(b.run)[0]
+    assert b.asked == [("gemma", "00001_down.png"), ("glm", "00001_down.png"), ("pix", "00001_down.png")]
+    assert got["winner"] is None and "third_only" not in got
 
 
 def test_a_plain_run_writes_no_line_no_third_reader_answered_so_a_rerun_asks_it(bench, capsys):

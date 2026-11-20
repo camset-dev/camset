@@ -13,8 +13,9 @@ A line holds "frame", "path", "index", "ocr" (OCR's reading), "vllm" (the second
 did); "voters", each further third reader that answered, in turn ({"reader": its name, "model", "selected": its
 reading}); "models", the model
 that read "vllm" (the second reader's, as configured) and "omlx" ({"vllm": ..., "omlx": ...}); and "winner", what the
-majority names (pass1_map.majority) or null; "third_only": true where third readers alone carry it, a reading neither
-OCR nor the second reader gave (pass1_map.third_only), which the rule lets stand and the summary lists for a look by eye.
+majority names (pass1_map.majority) or null; "third_only": true where third readers alone carry the majority, a reading
+neither OCR nor the second reader gave (pass1_map.third_only), which never stands on those later votes alone: the line
+keeps every reading and no "winner", and the summary lists it for a look by eye.
 The third readers are asked in the order private/config.json gives them, each only while no reading stands: OCR, the
 second reader and the third readers asked so far, one vote per model family (camkit.reading.model_id), none for a
 family that read two things. A third reader of a family that has read the line already (the second reader's included)
@@ -47,7 +48,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import jsonl, paths, runs, safety, vlm  # noqa: E402
 from camkit.reading import model_id  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, make_reader, readers  # noqa: E402
-from pass1_map import majority, third_only, voices  # noqa: E402
+from pass1_map import majority, settled, third_only, voices  # noqa: E402
 
 BEFORE = "tiebreak.jsonl.before_revote"        # the file --revote wrote afresh, as it was
 FAIL_RUN = 3                                   # failures in a row after which a third reader is asked nothing more
@@ -99,7 +100,7 @@ def vote(line: dict, asking: list, image) -> tuple:
     down counted with them; how many answered)."""
     picture, due, answered = None, 0, 0
     for cfg, reader in asking:
-        if majority(voices(line))[0] is not None or model_id(cfg.get("model")) in families(line):
+        if settled(line) is not None or model_id(cfg.get("model")) in families(line):
             continue
         due += 1
         if down(cfg):                             # due, and down: as a reader that did not answer
@@ -121,9 +122,10 @@ def vote(line: dict, asking: list, image) -> tuple:
 
 
 def settle(line: dict) -> dict:
-    """The line's "winner" (pass1_map.majority) and its "third_only" mark taken afresh from what it holds."""
+    """The line's "winner" (pass1_map.majority) and its "third_only" mark taken afresh from what it holds; a line third
+    readers alone carry keeps every reading, marked, and no winner (pass1_map.settled)."""
     text, _ = majority(voices(line))
-    line["winner"] = text
+    line["winner"] = None if third_only(text, line) else text
     if third_only(text, line):
         line["third_only"] = True
     else:
@@ -209,8 +211,8 @@ def said_missing(run: Path, missing: list) -> None:
 def said_alone(run: Path, alone: list) -> None:
     """The lines third readers alone carry ("third_only"), by run, frame and index, for a look by eye."""
     if alone:
-        print(f"{len(alone)} lines stand on third readers alone, a reading neither OCR nor the second reader gave "
-              "(marked \"third_only\"): look at each frame by eye", flush=True)
+        print(f"{len(alone)} lines third readers alone named, a reading neither OCR nor the second reader gave (marked "
+              "\"third_only\", no winner, on the map's review list): look at each frame by eye", flush=True)
     for line in alone:
         print(f"  third readers alone: {run.name} {line['frame']} index {json.dumps(line.get('index'))}", flush=True)
 
