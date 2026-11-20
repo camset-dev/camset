@@ -1222,7 +1222,14 @@ def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None, guide=None,
                         # whether the walk read a page as rows or as an option's, are not this menu's to give, so the
                         # setting's own place (the camera's, read in the menu it was found in) stands below what it read
                         d = read_depth(m, nodes, s, place, options)
-                        got = {**{f: place[f] for f in PLACE_FIELDS if f in place}, "row_at": got["row_at"][:d] + place["row_at"][d:]}
+                        # the rows it did read in its own order, but where that order is the own menu's turned round
+                        # (looked_up with the own top row: a list read from the row the camera held)
+                        part = {**place, "row": place["row"][:d], "row_at": place["row_at"][:d]}
+                        if place.get("under_option") not in part["row"][1:-1]:
+                            part.pop("under_option", None)
+                        read = looked_up(m, nodes, s, part, collections.defaultdict(set), m, options, own_top) if d else None
+                        head = read["row_at"] if read is not None else got["row_at"][:d]
+                        got = {**{f: place[f] for f in PLACE_FIELDS if f in place}, "row_at": head + place["row_at"][d:]}
             if got is None:
                 continue
             entry = out.setdefault(k, {"row_menus": []})

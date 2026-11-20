@@ -840,3 +840,20 @@ def test_records_one_row_in_the_editor_carry_equal_or_apart_menus():
     places = {"settings": [s("global:0x0001", ["Still", "Movie"], {"Movie": {"row": ["D-Range Optimizer"], "row_at": [2]}}),
                            s("global:0x0002", ["Still", "Movie"])]}
     assert "row_places" in fromdata.linked_refusal(places)
+
+
+def test_rows_read_turned_round_keep_the_own_place_one_unread_level_deeper():
+    """The S&Q tree after pass 10: Recognition Target's target rows read turned round (from Human, round to Auto) with
+    nothing read below them, and a setting under Animal/Bird with a proof made in S&Q. The menu's own paths reach it
+    through a row S&Q never read; the rows S&Q did read keep the setting's own order there too, so no S&Q place rests
+    on where its walk began."""
+    kids = ["Auto", "Human", "Animal/Bird", "Insect"]
+    stills = [{"tab": "Focus", "pages": [page("1/1", "Subject Recog.", row("Recognition Target", *[
+        row(x, row("Recognition Priority Set.")) for x in kids]))]}]
+    sq = [{"tab": "Focus", "pages": [page("1/1", "Subject Recog.", row("Recognition Target", *[row(x) for x in kids[1:] + kids[:1]]))]}]
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": stills, "modes": [{"mode": "S&Q", "tabs": sq}]}
+    path = "Recognition Target > Animal/Bird > Recognition Priority Set."
+    d = {"model": "TEST", "tabs": ["Focus"], "menu": [{"tab": "Focus", "group": "Subject Recog.", "label": "Recognition Target", "order": 0}],
+         "settings": [{**setting("global:0x0001", "Recognition Priority Set.", "Subject Recog.", path, f"{path} [S&Q mode]"), "tab": "Focus"}]}
+    got = placement.by_menu(copy.deepcopy(d), tree, [MENUS[0], MENUS[2]])["global:0x0001"]
+    assert got == {"row_menus": ["Still", "S&Q"]}, got
