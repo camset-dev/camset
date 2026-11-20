@@ -1484,6 +1484,56 @@ def test_a_later_grid_cut_short_takes_nothing_from_a_whole_one(own_runs, monkeyp
     assert R.values_of(rows[CONT_ROW]) == {"global:0x13f9": PAIRS}
 
 
+def test_a_whole_grid_beside_the_fields_own_walks_is_one_to_one(own_runs, monkeypatch, tmp_path, capsys):
+    """Bracket Type on the camera, 2026-11-20: each field walked along the grid's edges, a grid that did not finish, then
+    a whole grid. option_key keys a grid's line by its attempt, so the row held each edge pair twice and the report
+    counted 78 options of 60 and called the record not one to one ("0.5 EV 3 Img." writing 9 twice). A label that wrote
+    one value is one option whatever its index: every pair once, one to one, every pair listed, while the row still
+    holds every counted line, the grid whole, and the unfinished grid's lines count for nothing. An edge line that wrote
+    another value is still a conflict, and two labels writing one value are still not one to one."""
+    import copy
+    import subprocess
+
+    import pass2_report as R
+    import test_definitions as D
+    cam = grid_cam(strict=False)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket")                      # the fields' own walks: the grid's edges, a cross
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    walked = fields_lines()
+    done = sorted({x["attempt"] for x in walked if x["final"]})
+    edges = [x for x in walked if x.get("walk") != "grid"]
+    cut = [dict(x, attempt="a grid stopped midway", base="50000_base.DAT", dat=f"{50001 + i:05d}_grid.DAT")
+           for i, x in enumerate(x for x in walked if x.get("walk") == "grid" and not x["final"])]
+    lines = edges + cut[:len(cut) // 2] + [x for x in walked if x.get("walk") == "grid"]
+    shared = {x["label"] for x in edges} & set(PAIRS)
+    assert len(shared) > 5 and all(x["changes"][0]["after"] == PAIRS[x["label"]] for x in edges if x["changes"])
+    opts = R.rows_of(None, lines, R.unfinished(lines, set(done), {}))[CONT_ROW]
+    assert len(opts) == len(walked) and R.every_pair_moved(R.fields_lines(opts)) == {"global:0x13f9"}
+    assert R.proved_options(opts) == len(PAIRS) and R.two_labels_one_value(opts, R.values_of(opts)) == {}
+    assert R.not_one_to_one(lines, CONT_ROW, "global:0x13f9", {}, {"list"}) == []
+    run = D.write_run(tmp_path, lines, done=done)
+    r = subprocess.run([sys.executable, str(ROOT / "kit" / "pass2_report.py"), str(run), "--no-schema"],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    (entry,) = json.loads((run / "report.json").read_text(encoding="utf-8"))
+    rec = entry["records"]["global:0x13f9"]
+    assert (entry["options"], rec["proved"], rec["notes"]) == (len(PAIRS), PAIRS, []) and "sampled_from_start" not in rec
+    # an edge line of 0.5 EV 3 Img. that wrote another value than the grid's: one label, two values
+    other = copy.deepcopy(lines)
+    next(x for x in other if x.get("walk") != "grid" and x["label"] == "0.5 EV 3 Img.")["changes"][0]["after"] = 99
+    assert [n["why"] for n in R.not_one_to_one(other, CONT_ROW, "global:0x13f9", {}, {"list"})] == \
+        ["the label wrote 2 different values"]
+    # 0.5 EV 3 Img. writing, on its edge line and in the grid alike, what 0.7 EV 3 Img. writes: two labels, one value
+    twice = copy.deepcopy(lines)
+    for x in twice:
+        if x["label"] == "0.5 EV 3 Img." and x["changes"]:
+            x["changes"][0]["after"] = PAIRS["0.7 EV 3 Img."]
+    opts = R.rows_of(None, twice, R.unfinished(twice, set(done), {}))[CONT_ROW]
+    assert R.two_labels_one_value(opts, R.values_of(opts)) == {"global:0x13f9": ["0.5 EV 3 Img.", "0.7 EV 3 Img."]}
+    assert R.not_one_to_one(twice, CONT_ROW, "global:0x13f9", {}, {"list"}) == []
+
+
 def test_a_grid_stopped_midway_counts_none_of_its_pairs(own_runs, monkeypatch, capsys):
     """The screen stops reading as the carousel on the second visit's Right into box 0 (the ninth Right: the look's
     three, the base's, the first visit's three, the row's): the walk stops before the next key, the first pair's line is

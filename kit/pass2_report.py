@@ -59,7 +59,9 @@ values the cells before it held glued on: the walked table's name of the cell at
 one no walked cell matches keeps its own reading with its place, and the report lists it). A label that wrote
 two values, or two labels of a one-record list row that wrote one value, is a conflict ("not one to one")
 that kit/schema_update.py does not apply (tables and carousels' axes too; a picker's twins, one function listed
-twice, are told apart by their place: "AEL hold (2)").
+twice, are told apart by their place: "AEL hold (2)"). There two lines of one label that wrote one value are one
+option, whatever their index, and so are a grid's line and another walk's line of the same pair in the options a row
+counts (proved_options).
 
 Names (name_of): the map's label stands unless the vision model's reading (a proof's "vlm", or the line
 kit/tools/reread_proofs.py wrote for its frame in <run>/readings.jsonl) confirms the bar's OCR instead; the OCR never
@@ -1056,7 +1058,8 @@ def rows_of(run: Path, proofs: list | None = None, skip: set = frozenset()) -> d
     option's latest where the row holds it at another index, and else goes under (index, label), the earlier proof
     kept (option_key); a grid's line (carousel_fields_run.py --grid) goes under its own attempt, so a later grid, cut
     short by its deadline, never takes the place of a whole one's put-back or pairs (every_pair_moved reads each grid
-    whole). Before 2026-11-11 it took the other option's place, and options of the a1 II's pass 2 lost
+    whole), and an option another walk chose too is one option in the counts (proved_options, two_labels_one_value).
+    Before 2026-11-11 it took the other option's place, and options of the a1 II's pass 2 lost
     their proof so, the two hold values among them kept only from an older definition. A number field's index is its
     value, the same option whatever its label shows of the other fields. A later line the camera refused, and one that
     only put its session's own start back (put_back_only), never takes the place of an applied line of its option
@@ -1217,7 +1220,10 @@ def carried_over(proofs: list, skip: set = frozenset()) -> list:
 
 
 def two_labels_one_value(opts: dict, recs: dict) -> dict:
-    """{key: [labels]} for a list row whose options write one record only: two options seen writing one value."""
+    """{key: [labels]} for a list row whose options write one record only: two options seen writing one value. Two
+    lines of one label (same_label) that wrote one value are one option, whatever their index: a grid's line, which
+    option_key keys by its attempt, and another walk's line of the same pair (Bracket Type, 2026-11-20). One label
+    writing two values is not_one_to_one's."""
     if len(recs) != 1 or not all(o["kind"] == "list" for o in opts.values()):
         return {}
     (key, _), = recs.items()
@@ -1226,10 +1232,35 @@ def two_labels_one_value(opts: dict, recs: dict) -> dict:
         if o.get("applied") is False or o.get("planned") is False:
             continue
         for c in element_changes(o):
-            if c["key"] == key:
-                by_value[json.dumps(c["after"])].append(str(o["label"]))
+            labs = by_value[json.dumps(c["after"])] if c["key"] == key else None
+            if labs is not None and not any(same_label(str(o["label"]), x) for x in labs):
+                labs.append(str(o["label"]))
     clash = [labs for labs in by_value.values() if len(labs) > 1]
     return {key: sorted(set(sum(clash, [])))} if clash else {}
+
+
+def writes(o: dict) -> frozenset:
+    """What a proof line wrote: each record or array slot it changed, with its value after (element_changes); nothing
+    for a line with no diff."""
+    return frozenset((c["key"], json.dumps(c["after"], sort_keys=True)) for c in element_changes(o)) \
+        if "changes" in o or o.get("proof") == "display" else frozenset()
+
+
+def proved_options(opts: dict) -> int:
+    """How many options a row proved (its entry's "options"): each credited line one (credited), but a grid's line
+    ("walk": "grid") and another line of the row with its label (same_label) that wrote the same (writes) are one
+    option. option_key keys a grid's line by its attempt, so that each grid stays whole (every_pair_moved), and an
+    option another walk of the row chose too is held twice: Bracket Type's grids, 60 pairs beside the fields' own walks
+    along their edges, were 78 options (2026-11-20)."""
+    lines = [(str(o.get("label")), writes(o), o.get("walk") == "grid") for o in opts.values() if credited(o)]
+    grids = [(lab, w) for lab, w, grid in lines if grid]
+    n, seen = 0, []
+    for lab, w, grid in lines:
+        # a grid's line once among the grids' lines; another walk's only where no grid's line holds its option
+        n += not any(w == ww and same_label(lab, la) for la, ww in (seen if grid else grids))
+        if grid:
+            seen.append((lab, w))
+    return n
 
 
 def linear(vals: dict, boxes: bool = False):
@@ -2080,7 +2111,7 @@ def main():
         # the options proved: a line the camera refused, or an option drawn grey never tried, is none (credited); they
         # are listed apart, greyed or refused, with what named the blocker
         not_applied = [o for o in opts.values() if not credited(o)]
-        entry = {"row": name, "options": len(opts) - len(not_applied), "kinds": sorted({o["kind"] for o in opts.values()}),
+        entry = {"row": name, "options": proved_options(opts), "kinds": sorted({o["kind"] for o in opts.values()}),
                  "records": {}, "notices": notices,
                  **({"not_applied": [not_applied_entry(o) for o in not_applied]} if not_applied else {})}
         if name in UNWALKED_CELLS:

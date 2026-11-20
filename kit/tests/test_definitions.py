@@ -268,6 +268,31 @@ def test_two_labels_one_value_in_a_one_record_list(tmp_path):
     assert R.two_labels_one_value(opts, R.values_of(opts)) == {}
 
 
+def test_one_label_writing_one_value_under_two_keys_is_one_option():
+    """A grid's lines (keyed by their attempt: option_key) beside two walks' lines of the same options, each label
+    writing one value, the put-back A held at three places: every line kept, four options, one to one. Two labels
+    writing one value are still two options of one value."""
+    import pass2_report as R
+
+    def grid(label, k, after=None, final=False):
+        line = proof(label, ["grid", 0, k], [] if after is None else [("global:0x0001", 0, after)], "g", frame=40 + k)
+        return dict(line, walk="grid", final=final)
+    lines = [proof("B", [0, 1], [("global:0x0001", 0, 4)], "a", frame=10), dict(proof("A", [0, 0], [], "a", frame=12),
+                                                                                final=True),
+             proof("C", [1, 1], [("global:0x0001", 0, 5)], "b", frame=20), dict(proof("A", [1, 0], [], "b", frame=22),
+                                                                                final=True),
+             grid("B", 0, 4), grid("C", 1, 5), grid("D", 2, 6), grid("A", 3, final=True)]
+    opts = R.rows_of(None, lines)["Drive Mode"]
+    assert len(opts) == 8 and R.proved_options(opts) == 4
+    assert R.two_labels_one_value(opts, R.values_of(opts)) == {}
+    for x in lines:
+        if x["label"] == "C":
+            x["changes"][0]["after"] = 4                      # C writing B's value, on both its lines
+    opts = R.rows_of(None, lines)["Drive Mode"]
+    assert R.two_labels_one_value(opts, R.values_of(opts)) == {"global:0x0001": ["B", "C"]}
+    assert R.proved_options(opts) == 4
+
+
 
 def test_a_display_proof_counts_as_a_seen_value_and_reaches_the_definition(tmp_path):
     """A single-option list's display proof (prove_run's "proof": "display", nothing chosen): pass2_report takes the
