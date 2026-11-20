@@ -808,12 +808,13 @@ def test_page_model_folds_no_two_options_of_one_setting_together():
     capitals or a run of short words in front, one or two letters glued on, marks, case, spacing, a stop, OCR's l and 1,
     the plus-minus zero). same_text, for rows, also leaves out an icon read as a lone word of a capital and a small
     letter ("Px Proxy Settings", "Sc Power Save by Monitor" on the a1 II's scans), the one shape a label's own word has
-    too: of options of one setting it takes only Fn Menu's Tv Auto/Manual Switch for Auto/Manual Switch, listed here, and
-    the test fails on any new pair."""
+    too: of options of one setting it took only Fn Menu's Tv Auto/Manual Switch for Auto/Manual Switch, the first kit's
+    cut name of Av Auto/Manual Switch, which the definition names as drawn since 2026-11-20; it takes none now, and the
+    test fails on any new pair."""
     import page_model as P
     assert merged(lambda a, b: P.key_text(a) == P.key_text(b)) == []
     assert merged(P.same_option) == []
-    assert {(a, b) for _, a, b in merged(P.same_text)} == {("Auto/Manual Switch", "Tv Auto/Manual Switch")}
+    assert {(a, b) for _, a, b in merged(P.same_text)} == set()
     for a, b in (("S Focus Area", "Focus Area"), ("MR Camera Set. Memory", "Camera Set. Memory"),
                  ("SAF Frame Move Amt", "SAF Frame Move Amt"), ("S after still img crt", "after still img crt"),
                  ("& Priority Set in AWB", "Priority Set in AWB"), ("5 lmg.", "5 Img."), ("Sec.", "sec"),
