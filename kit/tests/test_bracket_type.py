@@ -323,6 +323,7 @@ class FieldsCam:
         self.extra = {}                       # records a test sets beside the boxes'
         self.drop = None                      # (key, n): the n-th press of key goes unanswered (a new frame, no change)
         self.correct = None                   # correct(option, edit) -> the boxes the camera keeps on Enter
+        self.rule = None                      # rule(option, edit, field, key) -> the boxes after Up or Down on a field
         self.shoot("start")
 
     def shoot(self, tag):
@@ -345,6 +346,8 @@ class FieldsCam:
             if self.field is not None and self.field + 1 >= len(boxes):
                 raise AssertionError("Right on the last box")
             self.field = 0 if self.field is None else self.field + 1
+        elif self.where == "dialog" and self.field is not None and key in ("up", "down") and self.rule:
+            self.edit = list(self.rule(self.opt, self.edit, self.field, key))
         elif self.where == "dialog" and self.field is not None and key in ("up", "down"):
             b, n = boxes[self.field], len(boxes[self.field]["values"])
             i = self.edit[self.field] + (1 if key == "up" else -1)
@@ -1071,3 +1074,193 @@ def test_each_box_of_a_run_is_its_own_attempt(own_runs, monkeypatch, capsys):
     run = root / "kit2_pass2"
     counted = {x["index"][0] for i, x in enumerate(lines) if i not in R.unfinished(lines, R.attempts_done(run), {})}
     assert counted == {1}
+
+
+# ------------------------------------------------------------------------------------- every pair of two fields (--grid)
+
+# Cont. Bracket as the Drive Mode bracket lists word its pairs (0x04c6's codes), on a made-up span: up to 9 Images at
+# 0.3 to 1.0EV, up to 7 at 1.3EV; Down from 3 Images gives 2 Images (-), then (+), its low end (kit2_pass2, 2026-11-19)
+EVS = ["0.3EV", "0.5EV", "0.7EV", "1.0EV", "1.3EV"]
+SHOTS_OF = ["2 Images (+)", "2 Images (-)", "3 Images", "5 Images", "7 Images", "9 Images"]
+TOPS, CODES = [5, 5, 5, 5, 4], [1, 7, 14, 21, 27]
+PAIRS = {f"{ev[:3]} EV {'2 Img. +' if s == 0 else '2 Img. -' if s == 1 else SHOTS_OF[s].split()[0] + ' Img.'}":
+         CODES[e] + s for e, ev in enumerate(EVS) for s in range(TOPS[e] + 1)}
+
+
+def grid_cam(held=(0, 2), strict=True, clamp=True) -> FieldsCam:
+    """Bracket Type with Cont. Bracket's pairs: box 1 offers what box 0's step allows. `strict`: box 0 moving while box
+    1 stands off its low end fails the test (the grid moves box 0 only from there); else the camera clamps box 1 to what
+    the new step allows (`clamp`) or box 0 stands still (a camera whose step refuses the count held)."""
+    cam = FieldsCam()
+    cam.spec = {0: [box("Exposure Value", EVS, EVS[held[0]]), box("Number of Shots", SHOTS_OF, SHOTS_OF[held[1]])],
+                2: FOCUS_BOXES}
+    cam.at[0] = list(held)
+
+    def rule(opt, edit, field, key):
+        ev, sh = edit
+        d = 1 if key == "up" else -1
+        if field == 1:
+            return [ev, max(0, min(TOPS[ev], sh + d))]
+        to = max(0, min(len(EVS) - 1, ev + d))
+        if to != ev and sh:
+            assert not strict, f"box 0 moved from {EVS[ev]} with box 1 on {SHOTS_OF[sh]}, off its low end"
+            if sh > TOPS[to] and not clamp:
+                return [ev, sh]
+        return [to, min(sh, TOPS[to])]
+    cam.rule = rule
+    cam.records = lambda: {"global:0x02bf": cam.saved, "global:0x13f9": CODES[cam.at[0][0]] + cam.at[0][1]}
+    return cam
+
+
+def test_a_grid_chooses_every_pair_once_and_puts_the_pair_held_back_last(own_runs, monkeypatch, capsys):
+    """--grid on Cont. Bracket held on 0.3 EV 3 Img.: box 1 scanned at 0.3EV (Down to its low end, Up to its top, nothing
+    chosen), its pairs chosen from the top down, 3 Images left to the put-back; box 0 then Up one value at a time, box 1
+    on its low end each time (the made-up camera fails the test otherwise), each step's pairs chosen likewise; box 0's
+    top end, then its low end at once, found in one visit; 0.3 EV 3 Img. put back last, whole. One download a pair,
+    every pair the boxes offer once, never Right on the last box, one attempt finished."""
+    cam = grid_cam()
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    lines = fields_lines()
+    assert [x["label"] for x in lines[:5]] == ["0.3 EV 9 Img.", "0.3 EV 7 Img.", "0.3 EV 5 Img.", "0.3 EV 2 Img. -",
+                                               "0.3 EV 2 Img. +"]
+    assert {x["label"]: (x["changes"][0]["after"] if x["changes"] else None) for x in lines} == \
+        {**PAIRS, "0.3 EV 3 Img.": None}
+    assert len(lines) == len(PAIRS) and len(downloads) == 1 + len(PAIRS), "one download a pair, and the base"
+    assert all(x["walk"] == "grid" and x["via"] == F.VIA and x["applied"] is True for x in lines)
+    assert len({json.dumps(x["index"]) for x in lines}) == len(lines) and lines[0]["index"] == ["grid", 0, 5]
+    last = lines[-1]
+    assert (last["label"], last["final"], last["whole"], last["changes"]) == ("0.3 EV 3 Img.", True, True, [])
+    assert not any(x["final"] for x in lines[:-1]) and len({x["attempt"] for x in lines}) == 1
+    assert cam.keys.count("enter") == 1 + len(PAIRS) and cam.at[0] == [0, 2]
+    from camkit.runs import Run
+    assert [a["attempt"] for a in map(json.loads, (Run("kit2_pass2").dir / "attempts.jsonl").read_text(
+        encoding="utf-8").splitlines())] == [last["attempt"]]
+    out = capsys.readouterr().out
+    assert "box 0: '1.3EV' is its top end" in out and "box 0: '0.3EV' is its low end" in out
+
+
+def test_the_report_lists_a_whole_grids_pairs_and_samples_none(own_runs, monkeypatch, capsys):
+    """kit/pass2_report.py: a record a whole grid moved is credited every pair, the one held among them by the put-back,
+    and is not marked sampled: every value is listed, so the pair the camera held stands out nowhere (decision 16). The
+    cross the fields' own walks made beside it changes nothing of that."""
+    import pass2_report as R
+    cam = grid_cam(strict=False)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket")                     # each field walked from the pair held: a cross
+    rows = counted_rows(root)
+    assert R.option_fields_sampled(rows[CONT_ROW]) == {"global:0x13f9"}
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    rows = counted_rows(root)
+    assert R.values_of(rows[CONT_ROW]) == {"global:0x13f9": PAIRS}
+    assert R.option_fields_sampled(rows[CONT_ROW]) == set()
+
+
+def test_the_writer_lists_every_pair_of_a_whole_grid(own_runs, monkeypatch, tmp_path, capsys):
+    """The report written whole (pass2_report.py --no-schema) over a whole grid's lines, then the plain pass over it with
+    the record laid out as the definition holds it (0x13f9, the sibling's names, a count of its proofs): its proof is
+    the codes the grid chose, each named, no longer a count."""
+    import subprocess
+
+    import schema_update as S
+    import test_definitions as D
+    cam = grid_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    lines = fields_lines()
+    run = D.write_run(tmp_path, lines, done=[lines[-1]["attempt"]])
+    r = subprocess.run([sys.executable, str(ROOT / "kit" / "pass2_report.py"), str(run), "--no-schema"],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    report = json.loads((run / "report.json").read_text(encoding="utf-8"))
+    (entry,) = report
+    rec = entry["records"]["global:0x13f9"]
+    assert entry["row"] == CONT_ROW and rec["proved"] == PAIRS and "sampled_from_start" not in rec
+    setting = json.loads(json.dumps(sibling_04c6()))
+    setting.update(key="global:0x13f9", id=0x13f9, proved={"sampled": {"proofs": 6, "linear": None, "from_start": True}})
+    doc = {"settings": [setting], "menu": [], "camera": {}}
+    S.generic(doc, report, run, "2026-11-19")
+    s = doc["settings"][0]
+    assert s["proved"]["values"] == sorted(PAIRS.values()) and "sampled" not in s["proved"]
+    assert {v: lab for v, lab in s["values"] if v in PAIRS.values()} == {v: lab for lab, v in PAIRS.items()}
+
+
+@pytest.mark.parametrize("held", [(0, 0), (2, 3), (4, 4)])
+def test_a_grid_from_any_pair_held_proves_the_same_pairs(own_runs, monkeypatch, held):
+    """Held on its low end (0.3 EV 2 Img. +: chosen at its place too, so box 0 moves from there, and put back last), in
+    the middle (0.7 EV 5 Img.: Up, then Down past it) or on box 0's top end: every pair once, the same codes."""
+    cam = grid_cam(held)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    lines = fields_lines()
+    credited = {x["label"]: x["changes"][0]["after"] for x in lines if x["changes"]}
+    held_label = next(lab for lab, v in PAIRS.items() if v == CODES[held[0]] + held[1])
+    assert credited == {lab: v for lab, v in PAIRS.items() if lab != held_label}
+    assert lines[-1]["label"] == held_label and lines[-1]["final"] and lines[-1]["whole"] is True
+    assert cam.at[0] == list(held)
+
+
+@pytest.mark.parametrize("clamp", [True, False])
+def test_a_grid_is_the_same_whatever_box_0_does_with_a_count_its_step_refuses(own_runs, monkeypatch, clamp):
+    """Box 0 moves only with box 1 on its low end, so a camera that clamps the count to the new step and one whose step
+    stands still on a count it refuses give the same pairs."""
+    cam = grid_cam(strict=False, clamp=clamp)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    assert {x["label"] for x in fields_lines()} == set(PAIRS)
+
+
+def test_a_grid_the_deadline_cuts_is_not_whole_and_stays_sampled(own_runs, monkeypatch, capsys):
+    """--most 2: box 0 two values Up at most; the put-back says "whole": false, and the report keeps the record
+    sampled."""
+    import pass2_report as R
+    cam = grid_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid", "--most", "2")
+    lines = fields_lines()
+    assert {x["fields"][0]["value"] for x in lines} == {"0.3EV", "0.5EV", "0.7EV"}
+    assert lines[-1]["final"] and lines[-1]["whole"] is False
+    assert "the deadline (--most): its top end not reached" in capsys.readouterr().out
+    assert R.option_fields_sampled(counted_rows(root)[CONT_ROW]) == {"global:0x13f9"}
+
+
+def test_a_grid_stopped_midway_counts_none_of_its_pairs(own_runs, monkeypatch, capsys):
+    """The screen stops reading as the carousel on the second visit's Right into box 0 (the ninth Right: the look's
+    three, the base's, the first visit's three, the row's): the walk stops before the next key, the first pair's line is
+    written saying what applied is not known, and its one attempt never finishes, so the report counts none of its
+    lines."""
+    cam = grid_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.lost = ("right", 9)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--grid")
+    assert [(x["label"], x["applied"]) for x in fields_lines()] == [("0.3 EV 9 Img.", None)]
+    assert CONT_ROW not in counted_rows(root)
+
+
+def test_a_grid_stops_on_a_box_opening_on_another_pair_than_the_last_ok_chose(own_runs, monkeypatch, capsys):
+    cam = grid_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.downloaded = lambda tag: tag == "Bracket-Type-grid-0-4" and cam.at[0].__setitem__(1, 3)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--grid")
+    assert "box 1 opened on '5 Images', not '7 Images', which the last OK chose" in capsys.readouterr().out
+
+
+def test_a_grid_takes_two_fields_of_one_box_each(own_runs, monkeypatch, capsys):
+    cam = FieldsCam()
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Focus Bracket", "--grid")
+    assert "--grid: Focus Bracket draws 4 boxes in 2 fields" in capsys.readouterr().out and downloads == []
+
+
+@pytest.mark.parametrize("extra, said", [(["--grid", "--box", "1"], "--box and --grid"),
+                                         (["--look", "--grid"], "--look and --grid")])
+def test_one_way_of_proving_a_run(own_runs, monkeypatch, extra, said):
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    with pytest.raises(SystemExit, match=said):
+        run_fields(F, root, "Focus Bracket", *extra)
+    assert cam.keys == []
+

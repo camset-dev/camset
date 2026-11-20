@@ -5,7 +5,8 @@ boxes (2026-11-19).
 
     CAMSET_EYES=osd .venv/bin/python -u kit/provers/carousel_fields_run.py --scan SCAN --map kit2_fin_crawl_brk/map.json \\
         --row "Bracket Settings > Bracket Type" --option "Cont. Bracket" --context "Drive Mode dial on BRK" --look
-    (the same without --look; --box N proves the N-th box alone, counted from 0; --most N, the deadline)
+    (the same without --look; --box N proves the N-th box alone, counted from 0; --most N, the deadline; --grid every
+    pair of two fields)
 
 The screen (camkit.screen's dialog with a lit field): Up and Down move between the carousel's options, Right on the lit
 option goes into its boxes (the first lit, filled orange, its field's name written above the row, the option's icon in
@@ -32,6 +33,16 @@ walk steps the box back onto the place asked and goes on from there; otherwise t
 last, put back so, and its download must equal the base. Each box's walk is an attempt of its own, so a later box's
 stop takes back no box that finished. The session's start file goes back on at the end, as every prover's.
 
+--grid, for an option of two fields of one box each (Cont. and Single Bracket's Exposure Value and Number of Shots, one
+record holding the pair): every pair the boxes offer, one a download, as one attempt. Box 1 is scanned where box 0
+stands, nothing chosen (Down until it stands still, then Up until it stands still again, each new value read), then its
+pairs are chosen from its top down to its low end, one visit each; box 0 moves only with box 1 on its low end, so a
+step that refuses a count never stands still for it (which pairs exist is the camera's: the Drive Mode lists name 60
+of the 72 crossings), Up from the value held one place at a time, then Down; the end it finds and the next place are
+reached in one visit. Each opening checks the pair the last OK chose, box 1 too before MENU takes the visit back to
+the option for box 0's move. The pair held is put back last; "whole" unless a deadline cut a list short. A pair the
+camera refuses stops the grid.
+
 Readings, as kit/provers/optboxes_run.py reads its boxes: the lit box by OCR, the second reader asked about the lit box
 itself on every doubt (camkit.reading.doubts) and always where the value decides a proof (the owner's rule: the reader is
 asked before a row fails), OCR plain and the reader apart stopping the row; the field's name by OCR, the reader where it
@@ -48,10 +59,12 @@ as drawn ("Exposure Value"), "value" that field's value after the change as draw
 count in the words of the definition's Drive Mode bracket lists, "0.5 EV 3 Img.", as kit/provers/bracket_run.py forms
 them; any other, the fields' values joined " | "), "box" and "read_by" the lit box's reading and who gave it ("ocr",
 "both", "reader"), "shown" OCR's reading of it, "box_vlm" and "box_reader" the second reader's and its name, "final" on
-the put-back and with it "whole" (False where the deadline cut the walk short), "attempt", "changes".
-kit/pass2_report.py credits a record moved by the lines of two fields or more with "label", a record only one field's
-lines moved with that field's "value"; a put-back's value only where its walk was whole, as the value held would stand
-out among a part walk's (docs/decisions/0016).
+the put-back and with it "whole" (False where the deadline cut the walk short), "attempt", "changes". A grid's lines
+say "walk": "grid", "index" ["grid", box 0's place, box 1's place from its low end], "field" and "value" box 1's.
+kit/pass2_report.py credits a record moved by the lines of two fields or more, or by a grid's, with "label", a record
+only one field's lines moved with that field's "value"; a put-back's value only where its walk was whole, as the value
+held would stand out among a part walk's (docs/decisions/0016). A record a whole grid moved is no sample: every pair
+is listed, the one held among them.
 """
 import argparse
 import json
@@ -322,6 +335,44 @@ def step(cam, option: str, b: int, count: int, way: str) -> None:
         raise Failed(f"{option}: after {way.title()} on box {b}: {why} ({cam.frame.path.name})")
 
 
+def stood_still(cam, option: str, b: int, count: int, way: str, name: str) -> bool:
+    """One Up or Down on box b (step), judged by its picture: False where the box moved; True where it stood still, on a
+    fresh frame too and on one more press (an end). A box that stood still and then moved on that press stops the row:
+    a press went unanswered."""
+    before = box_pic(cam, b)
+    step(cam, option, b, count, way)
+    if not same_pic(box_pic(cam, b), before):
+        return False
+    cam.refresh("field-again")                          # nothing moved: a late frame, or an end
+    if not same_pic(box_pic(cam, b), before):
+        return False
+    step(cam, option, b, count, way)                    # one more press: at an end it changes nothing either
+    if not same_pic(box_pic(cam, b), before):
+        raise Failed(f"{name}: box {b} stood still on one {way.title()} and moved on the next "
+                     f"({cam.frame.path.name}): a press went unanswered; nothing chosen")
+    return True
+
+
+def step_known(cam, option: str, b: int, count: int, way: str, want: tuple, name: str) -> None:
+    """One Up or Down on box b onto a value seen there before (`want`, its reading and picture): the box must move, and
+    show that picture, else read as that value (a value seen before, on the way, as visit checks one)."""
+    before = box_pic(cam, b)
+    step(cam, option, b, count, way)
+    now = box_pic(cam, b)
+    if same_pic(now, before):
+        cam.refresh("field-again")
+        now = box_pic(cam, b)
+    if same_pic(now, want[1]):
+        return
+    if same_pic(now, before):
+        raise Failed(f"{name}: box {b} stood still on {way.title()} where it moved on to {want[0]!r} before "
+                     f"({cam.frame.path.name}); nothing chosen")
+    got = lit_read(cam, False).text
+    if key(got) != key(want[0]):
+        raise Failed(f"{name}: box {b} reads {got!r} where it read {want[0]!r} before ({cam.frame.path.name}); nothing "
+                     "chosen")
+
+
 def enter(cam, option: str, labels: list, b: int | None, count: int | None, want: str | None, pic=None) -> str:
     """Enter on this row's option itself (b None) or on its box b holding `want` (its picture `pic`, as the walk saw
     that value): judged first (option_refused; on a box, a fresh frame grabbed, box_refused with the title read, the
@@ -404,18 +455,8 @@ def visit(cam, link, eyes, cycle, model, path, option, labels, look_: Look, b, w
     way = "up" if target > w.pos else "down"
     at = w.pos
     while at != target:
-        before = box_pic(cam, b)
-        step(cam, option, b, count, way)
         nxt = at + (1 if way == "up" else -1)
-        now = box_pic(cam, b)
-        if same_pic(now, before):                       # nothing moved: a late frame, or an end
-            cam.refresh("field-again")
-            now = box_pic(cam, b)
-        if same_pic(now, before):
-            step(cam, option, b, count, way)            # one more press: at an end it changes nothing either
-            if not same_pic(box_pic(cam, b), before):
-                raise Failed(f"{name}: box {b} stood still on one {way.title()} and moved on the next "
-                             f"({cam.frame.path.name}): a press went unanswered; nothing chosen")
+        if stood_still(cam, option, b, count, way, name):
             if nxt in w.values:
                 raise Failed(f"{name}: box {b} stopped at {w.values[at]!r}, where it had moved on before "
                              f"({cam.frame.path.name})")
@@ -423,6 +464,7 @@ def visit(cam, link, eyes, cycle, model, path, option, labels, look_: Look, b, w
                   f"{way.title()} changed nothing)", flush=True)
             close_screen(cam, link)
             return "end"
+        now = box_pic(cam, b)
         if nxt in w.values:                             # a place seen before, on the way: its picture again
             if not same_pic(now, w.pics[nxt]) and key(lit_read(cam, False).text) != key(w.values[nxt]):
                 raise Failed(f"{name}: box {b} reads {lit_read(cam, False).text!r} where it read "
@@ -633,6 +675,231 @@ def walk_box(cam, link, eyes, cycle, model, path, option, labels, look_: Look, b
     print(f"{name}: box {b} walked: held {w.values[0]!r}; Up {ups}; Down {downs}", flush=True)
 
 
+# ------------------------------------------------------------------------------------------------ every pair (--grid)
+
+class Grid:
+    """A two-field option's pairs (--grid): box 0's values by place (counted from the value held, Up positive), box 1's
+    values at each place of box 0, low end first, as a scan found them; the pairs chosen, where the last OK left the
+    boxes, and whether a deadline cut a list short."""
+
+    def __init__(self):
+        self.outer = {}         # box 0's place -> (reading, picture)
+        self.inner = {}         # box 0's place -> [(reading, picture)] of box 1 there, its low end first
+        self.held = None        # box 1's place in inner[0] that the base holds
+        self.done = set()       # (place, box 1's place) chosen, a download each
+        self.pos = None         # (place, box 1's place) the last OK left
+        self.phase = "up"       # box 0 Up from the value held, then Down from it, then "done"
+        self.cut = False        # a deadline cut a list short: the pairs proved are not every pair
+        self.pending = None     # the last pair's line, written once the next opening shows the camera kept it
+        self.left = None        # box 0's picture once Right left it (choose_pair: it never moves with box 1)
+
+    def next_at(self, p) -> int | None:
+        """The pair to choose next at box 0's place p: the highest place of box 1 there not chosen yet, the pair held
+        left to the put-back, but at box 1's low end, where every move of box 0 starts from (grid_walk)."""
+        todo = [i for i in range(len(self.inner[p])) if (p, i) not in self.done
+                and not (p == 0 and i == self.held and i != 0)]
+        return max(todo) if todo else None
+
+
+def held_box(cam, b: int, look_: Look, name: str) -> tuple:
+    """(reading, picture) of the lit box b, which must hold what the look read there."""
+    r = lit_read(cam, True)
+    if key(r.text) != key(look_.values[b]):
+        raise Failed(f"{name}: box {b} holds {r.text!r}, the look read {look_.values[b]!r}")
+    return r.text, box_pic(cam, b)
+
+
+def expect(cam, b: int, want: tuple, name: str) -> None:
+    """The lit box b on opening shows the value the last OK chose (`want`, its reading and picture): its picture, else
+    its reading; the grid stops on any other (no correction of the camera's is looked for here)."""
+    if same_pic(box_pic(cam, b), want[1]):
+        return
+    got = lit_read(cam, False).text
+    if key(got) != key(want[0]):
+        raise Failed(f"{name}: box {b} opened on {got!r}, not {want[0]!r}, which the last OK chose "
+                     f"({cam.frame.path.name})")
+
+
+def scan(cam, option: str, b: int, count: int, start: tuple, most: int, name: str) -> tuple:
+    """Box b's values from `start` (the reading and picture of the value it shows) to both its ends, nothing chosen: Down
+    until it stands still (stood_still), then Up through those and on until it stands still again, each new value read
+    by both readers (lit_read: each decides a proof), `most` new values each way at most. Returns ([(reading,
+    picture)], its low end first, and whether the deadline cut it short); the box stands on the last of them. A value
+    seen before on the way (a box that comes round, or two values the readers cannot tell apart) stops the row."""
+    vals, cut = [start], False
+    for way in ("down", "up"):
+        if way == "up":
+            for k in range(1, len(vals)):                   # back up through the values the Down found
+                step_known(cam, option, b, count, "up", vals[k], name)
+        for n in range(most + 1):
+            if n == most:
+                cut = True
+                print(f"   box {b}: {most} values {way} from {start[0]!r}, the deadline (--most): its "
+                      f"{'top' if way == 'up' else 'low'} end not reached", flush=True)
+                break
+            if stood_still(cam, option, b, count, way, name):
+                break
+            now = box_pic(cam, b)
+            r = lit_read(cam, True)
+            if any(same_pic(now, p) or key(r.text) == key(t) for t, p in vals):
+                raise Failed(f"{name}: box {b} reads {r.text!r} ({cam.frame.path.name}), a value seen before on its "
+                             "way: it comes round, or the readers cannot tell its values apart; nothing chosen")
+            if way == "down":
+                vals.insert(0, (r.text, now))
+            else:
+                vals.append((r.text, now))
+    return vals, cut
+
+
+def move_to(cam, option: str, b: int, count: int, vals: list, at: int, to: int, name: str) -> None:
+    """Box b from its place `at` to `to` among `vals` (a scan's), each press onto a value seen there before."""
+    way, d = ("up", 1) if to > at else ("down", -1)
+    while at != to:
+        at += d
+        step_known(cam, option, b, count, way, vals[at], name)
+
+
+def next_outer(cam, option: str, count: int, g: Grid, p: int, most: int, name: str) -> int | None:
+    """Box 0, lit on its place p, stepped to its next new place: Up beyond the highest seen, then Down beyond the
+    lowest, each press onto a place seen before checked on the way. Where the box stands still (stood_still) or the
+    deadline (`most` places each way) is reached, that way is done and the other goes on in the same visit. Returns the
+    new place, its value read by both readers; None once both ways are done, box 0 then stepped back to place 0."""
+    at = p
+    while g.phase != "done":
+        way, d = (g.phase, 1) if g.phase == "up" else (g.phase, -1)
+        edge = max(g.outer) if d > 0 else min(g.outer)
+        while at != edge:
+            at += d
+            step_known(cam, option, 0, count, way, g.outer[at], name)
+        nxt = at + d
+        if abs(nxt) > most:
+            g.cut = True
+            print(f"   box 0: {most} values {way} from the one held, the deadline (--most): its "
+                  f"{'top' if d > 0 else 'low'} end not reached", flush=True)
+        elif stood_still(cam, option, 0, count, way, name):
+            print(f"   box 0: {g.outer[at][0]!r} is its {'top' if d > 0 else 'low'} end (one more {way.title()} "
+                  "changed nothing)", flush=True)
+        else:
+            now, r = box_pic(cam, 0), lit_read(cam, True)
+            if any(same_pic(now, pic) or key(r.text) == key(t) for t, pic in g.outer.values()):
+                raise Failed(f"{name}: box 0 reads {r.text!r} ({cam.frame.path.name}), a value seen before: it comes "
+                             "round, or the readers cannot tell its values apart; nothing chosen")
+            g.outer[nxt] = (r.text, now)
+            return nxt
+        g.phase = "down" if d > 0 else "done"
+    move_to(cam, option, 0, count, [g.outer[k] for k in sorted(g.outer)], sorted(g.outer).index(at),
+            sorted(g.outer).index(0), name)
+    return None
+
+
+def choose_pair(cam, link, eyes, path, option, labels, look_: Look, g: Grid, p: int, i: int, row, base, out, attempt,
+                final: bool = False) -> None:
+    """The pair (box 0's place p, box 1's place i there), box 1 lit on it: read by both readers against the scan's
+    reading, box 0 checked as Right left it, Enter (enter), the screen after it read (after_ok), a download, its diff
+    against the base and the proof line, which waits for the next opening (g.pending) but where the camera refused it
+    or it is the put-back (`final`, the pair held: it must change nothing)."""
+    name = f"{' > '.join(path)} > {option}"
+    count = len(look_.labels)
+    want_text, want_pic = g.inner[p][i]
+    r = lit_read(cam, True)
+    if key(r.text) != key(want_text):
+        raise Failed(f"{name}: box 1 reads {r.text!r}, where the scan read {want_text!r} ({cam.frame.path.name}); "
+                     "nothing chosen")
+    if not same_pic(box_pic(cam, 0), g.left):
+        raise Failed(f"{name}: box 0 changed while box 1 moved ({cam.frame.path.name}); nothing chosen")
+    fields = look_.fields([g.outer[p][0], r.text])
+    lab = together(fields)
+    chosen = enter(cam, option, labels, 1, count, r.text, want_pic)
+    got = after_ok(cam, name, label=lab, back=lambda: same_place(place(cam), row), info=False)
+    row_frame = cam.frame.path.name
+    to_shooting(link, eyes, "the download after OK")
+    dat = link.download(f"{path[-1]}-grid-{p}-{i}".replace(" ", "-"))
+    wait_lock(time.monotonic(), eyes, clock=time)
+    ch = camset.diff(camset.read(base), camset.read(dat))
+    rec = {"path": [*path, option], "kind": "list", "via": VIA, "walk": "grid", "index": ["grid", p, i],
+           "field": look_.labels[1], "value": r.text, "label": lab, "fields": fields, "box": r.text, "read_by": r.by,
+           "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, "chosen_frame": chosen, "row_frame": row_frame,
+           "dat": dat.name, "base": base.name, **({"notice": got.notice} if got.notice else {}),
+           "applied": got.applied, "final": final, **({"whole": not g.cut} if final else {}), "attempt": attempt,
+           "changes": changes_of(ch)}
+    if final or not got.applied:
+        out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        out.flush()
+    else:
+        g.pending = rec
+    print(f"   {lab}: " + ("refused by the camera" if not got.applied else
+                           ", ".join(f"{c.key} {c.before!r}->{c.after!r}" for c in ch[:4]) or "no change"), flush=True)
+    if not got.applied:
+        # a pair its boxes offered: box 1 would stand off its low end for box 0's next move, so the grid stops here
+        raise Failed(f"{name}: the camera refused {lab!r}, a pair its boxes offered (its notice closed with MENU)")
+    g.pos = (p, i)
+    g.done.add((p, i))
+    if final and ch:
+        raise Failed(f"{name}: the pair held put back, {len(ch)} records still differ from the base")
+
+
+def grid_walk(cam, link, eyes, cycle, model, path, option, labels, look_: Look, base, out, run, most: int) -> None:
+    """Every pair of a two-field option (--grid, the module's), one pair a download, as one attempt: box 1 scanned at
+    each place of box 0 and its pairs chosen from its top down to its low end, box 0 moved only with box 1 on its low
+    end, Up from the value held and then Down; the pair held put back last, "whole" where no deadline cut a list short.
+    A line still waiting for the next opening when the walk stops is written saying what applied is not known."""
+    name = f"{' > '.join(path)} > {option}"
+    count = len(look_.labels)
+    attempt = f"{run.dir.name}-{time.time_ns():x}"
+    g = Grid()
+    print(f"{name}: every pair of {look_.labels[0]} and {look_.labels[1]}, one a download", flush=True)
+    try:
+        while True:
+            row = open_row(cam, cycle, model, path)
+            to_option(cam, option, labels)
+            into_box(cam, option, labels, 0, count)
+            if g.pos is None:                       # the first visit: the boxes as the base holds them
+                g.outer[0] = held_box(cam, 0, look_, name)
+                into_next(cam, option, 1, count)
+                start = held_box(cam, 1, look_, name)
+                g.inner[0], cut = scan(cam, option, 1, count, start, most, name)
+                g.cut |= cut
+                g.held = next(k for k, (_, pic) in enumerate(g.inner[0]) if same_pic(pic, start[1]))
+                p, at = 0, len(g.inner[0]) - 1
+            else:                                   # the last OK's pair, as the camera shows it, then its line
+                p, at = g.pos
+                expect(cam, 0, g.outer[p], name)
+                into_next(cam, option, 1, count)
+                expect(cam, 1, g.inner[p][at], name)
+                flush(g, out)
+            g.left = box_pic(cam, 0)
+            i = g.next_at(p)
+            if i is None:                           # every pair at this place chosen, box 1 on its low end
+                cam.press("menu")                   # back to the option lit, nothing changed; box 0 again
+                into_box(cam, option, labels, 0, count)
+                expect(cam, 0, g.outer[p], name)
+                nxt = next_outer(cam, option, count, g, p, most, name)
+                into_next(cam, option, 1, count)
+                g.left = box_pic(cam, 0)
+                arrived = (lit_read(cam, True).text, box_pic(cam, 1))
+                if nxt is None:                     # every place walked: the pair held put back
+                    at = next((k for k, v in enumerate(g.inner[0]) if same_pic(v[1], arrived[1])
+                               or key(v[0]) == key(arrived[0])), None)
+                    if at is None:
+                        raise Failed(f"{name}: box 1 shows {arrived[0]!r} back on {g.outer[0][0]!r}, none of the "
+                                     "values the scan found there; nothing chosen")
+                    move_to(cam, option, 1, count, g.inner[0], at, g.held, name)
+                    choose_pair(cam, link, eyes, path, option, labels, look_, g, 0, g.held, row, base, out, attempt,
+                                final=True)
+                    break
+                p = nxt
+                g.inner[p], cut = scan(cam, option, 1, count, arrived, most, name)
+                g.cut |= cut
+                at, i = len(g.inner[p]) - 1, g.next_at(p)
+            move_to(cam, option, 1, count, g.inner[p], at, i, name)
+            choose_pair(cam, link, eyes, path, option, labels, look_, g, p, i, row, base, out, attempt)
+    finally:
+        flush(g, out, applied=None)          # never seen again: what applied is not known
+    finish_attempt(run, attempt, name)
+    print(f"{name}: {len(g.done)} pairs over {len(g.outer)} values of {look_.labels[0]}"
+          + ("" if not g.cut else ", a deadline cutting a list short: not every pair"), flush=True)
+
+
 def map_labels(map_path, path: list) -> list:
     """The carousel's options as the row's own map names them ([] where the map has no such carousel)."""
     rows = read_json(Path(map_path)).get("rows") or []
@@ -647,6 +914,9 @@ def main(argv=None):
     ap.add_argument("--map", required=True, type=paths.run_arg, help="the row's own map.json (the crawl's)")
     ap.add_argument("--look", action="store_true", help="read only: the boxes' names and values, nothing chosen")
     ap.add_argument("--box", type=int, action="append", default=None, help="prove this box alone (from 0)")
+    ap.add_argument("--grid", action="store_true",
+                    help="every pair of the option's two fields, one pair a download (Cont. Bracket's Exposure Value "
+                         "and Number of Shots)")
     ap.add_argument("--most", type=int, default=MOST, help=f"values a walk proves each way at most ({MOST})")
     ap.add_argument("--context", default=None, help="the state the proofs are made in (\"Drive Mode dial on BRK\")")
     add_scan_argument(ap)
@@ -658,6 +928,9 @@ def main(argv=None):
                  "nothing was sent to the camera")
     if a.most < 1:
         sys.exit("--most: one value at least")
+    ways = [w for w, on in (("--look", a.look), ("--box", a.box is not None), ("--grid", a.grid)) if on]
+    if len(ways) > 1:
+        sys.exit(f"{' and '.join(ways)}: one way of proving a run, nothing was sent to the camera")
     cycle, model = load_scan(a.scan)
     run = Run(PROOF_RUN)
     eyes = eyes_from_config(run)
@@ -689,6 +962,9 @@ def body(s, eyes, cycle, model, path, a, labels, out, run) -> None:
     bad = [b for b in boxes if not 0 <= b < len(seen.labels)]
     if bad:
         raise Failed(f"--box {bad}: the option draws {len(seen.labels)} boxes (counted from 0)")
+    if a.grid and (len(seen.labels) != 2 or len(seen.fields()) != 2):
+        raise Failed(f"--grid: {a.option} draws {len(seen.labels)} boxes in {len(seen.fields())} fields, not two fields "
+                     "of one box each; nothing chosen")
     # the base: the option chosen as its boxes stand, so its own record never moves in a proof
     row = open_row(cam, cycle, model, path)
     to_option(cam, a.option, labels)
@@ -703,8 +979,11 @@ def body(s, eyes, cycle, model, path, a, labels, out, run) -> None:
     moved = camset.diff(camset.read(s.start), camset.read(base))
     print(f"base: {a.option} chosen as its boxes stand ({len(moved)} records moved from the start file); every proof "
           "is compared with it", flush=True)
-    for b in boxes:
-        walk_box(cam, link, eyes, cycle, model, path, a.option, labels, seen, b, base, out, run, a.most)
+    if a.grid:
+        grid_walk(cam, link, eyes, cycle, model, path, a.option, labels, seen, base, out, run, a.most)
+    else:
+        for b in boxes:
+            walk_box(cam, link, eyes, cycle, model, path, a.option, labels, seen, b, base, out, run, a.most)
 
 
 if __name__ == "__main__":

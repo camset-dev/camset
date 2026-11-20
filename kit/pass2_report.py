@@ -33,7 +33,7 @@ and its numbers are read as the boxes draw them, Zebra's "±5" and "100+" among 
 fields (kit/provers/carousel_fields_run.py: Bracket Type's Cont. Bracket) are its row "ROW > OPTION", a record two
 fields' lines move credited with both fields together ("0.5 EV 3 Img."), one only one field's lines move with that
 field's value as drawn (option_fields_values); a record whose values would tell the pair held is marked
-"sampled_from_start" (option_fields_sampled).
+"sampled_from_start" (option_fields_sampled), never one a whole grid of every pair moved (whole_grids).
 
 A registration mirror line ("kind": "registration mirror": kit/provers/memreg_run.py's, a live setting chosen in its
 menu and a memory slot registered to see the slot's copy take it; kit/provers/framepos_run.py --zone-grid's, a frame's
@@ -1454,13 +1454,21 @@ def fields_lines(opts: dict) -> list:
 
 
 def held_together(lines: list, key: str) -> bool:
-    """Whether record `key` holds a carousel option's fields together (option_fields_values): the lines of two fields or
-    more moved it, or a field the lines name ("fields") has no walk that finished among them (no put-back, "final":
-    never walked, or its attempt cut short and left out), so nothing says the record leaves that field out."""
-    moved_by = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
+    """Whether record `key` holds a carousel option's fields together (option_fields_values): a grid's lines (every pair
+    of two fields, "walk": "grid") or the lines of two fields or more moved it, or a field the lines name ("fields") has
+    no walk that finished among them (no put-back, "final": never walked, or its attempt cut short and left out), so
+    nothing says the record leaves that field out."""
+    moving = [o for o in lines if any(c["key"] == key for c in o["changes"])]
+    moved_by = {o.get("field") for o in moving}
     named = {f.get("label") for o in lines for f in o.get("fields") or [] if isinstance(f, dict)}
     finished = {o.get("field") for o in lines if o.get("final")}
-    return len(moved_by) > 1 or not named <= finished
+    return any(o.get("walk") == "grid" for o in moving) or len(moved_by) > 1 or not named <= finished
+
+
+def whole_grids(lines: list) -> set:
+    """The attempts of the grids among a carousel option's fields' lines that chose every pair (their put-back's
+    "whole": true: no deadline cut a list short), each finished, or its lines would not be counted."""
+    return {o.get("attempt") for o in lines if o.get("walk") == "grid" and o.get("final") and o.get("whole") is True}
 
 
 def option_fields_values(opts: dict, sources: dict | None = None) -> dict:
@@ -1517,13 +1525,17 @@ def option_fields_sampled(opts: dict) -> set:
     counts their proofs and lists none of their values): a record that holds the fields together (held_together: each
     field is walked from what the other held, so the values proved cross at the pair held, and one arm alone tells the
     other field's value held), and a record a field moved whose walk the deadline cut short (its put-back "whole": false:
-    the values proved stand round the one held)."""
+    the values proved stand round the one held). A record a whole grid moved (whole_grids: every pair the boxes offer
+    chosen, one a download, the pair held among them) is none: its values are every pair, whatever the camera held."""
     lines = fields_lines(opts)
     cut = {o.get("field") for o in lines if o.get("final") and o.get("whole") is False}
+    grids = whole_grids(lines)
     out = set()
     for key in {c["key"] for o in lines for c in o["changes"]}:
-        fields = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
-        if held_together(lines, key) or fields & cut:
+        moving = [o for o in lines if any(c["key"] == key for c in o["changes"])]
+        if any(o.get("attempt") in grids for o in moving):
+            continue
+        if held_together(lines, key) or {o.get("field") for o in moving} & cut:
             out.add(key)
     return out
 
