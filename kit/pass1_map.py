@@ -11,20 +11,24 @@ rows the coverage ledger had settled, so its map has holes: it is refused for ki
 a crawl only skipped as not seen opened on this body (camkit.first_open.SKIPPED) keeps the mapping made before of it.
 
 Inputs: <run>/options.jsonl (kit/pass1_labels.py: OCR under the cursor + the second reader) and, if present,
-<run>/tiebreak.jsonl (kit/tiebreak.py: the third reader where those two disagreed) and <run>/checked_labels.json
-({frame: label} read by eye, which wins). The sources and the review list name the second reader "vllm" and the third
-"omlx", whatever readers play those roles (the servers that first did). Rules, from the readings of
-2026-10-28:
+<run>/tiebreak.jsonl (kit/tiebreak.py: the third role's readers where those two disagreed) and
+<run>/checked_labels.json ({frame: label} read by eye, which wins). The sources and the review list name the second
+reader "vllm" and the third "omlx", whatever readers play those roles (the servers that first did); a further third
+reader's reading is under "voters". Rules, from the readings of 2026-10-28:
   - carousels (dialog): OCR of the orange line under the title wins; the vision readers tend to read the
     option's icon ("BRK WB") instead of its name ("White Balance Bracket: Lo"); likewise grids, whose
     subtitle names the selected cell ("Tracking: Spot M"; the vision reader said "M");
-  - lists, checklists, side lists: the two readers when they agree, else the majority of three;
+  - lists, checklists, side lists: the two readers when they agree, else the majority of the voices on the option's
+    tiebreak line (majority: OCR, the second reader and each third reader, one vote per model family, as the line's
+    "models" name them); a line kit/tiebreak.py wrote before it named its models keeps the winner it wrote, the majority
+    of three, until kit/tiebreak.py --revote asks today's third readers about it;
   - the cursor on OK/Cancel is a button, not an option;
   - star ratings, and anything without a majority, go on the review list.
 It prints a summary with the review list.
 """
 import argparse
 import collections
+import itertools
 import json
 import re
 import sys
@@ -32,11 +36,68 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import coverage, first_open, jsonl, paths  # noqa: E402
+from camkit.reading import model_id  # noqa: E402
 from camkit.runs import private_if_marked  # noqa: E402
+from page_model import same_option  # noqa: E402
 from runner import read_json  # noqa: E402
 
 BUTTONS = re.compile(r"^(ok|cancel|ok cancel)$", re.I)
 MAP_ALL = "map_all.json"
+COUNTED = {3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight"}
+
+
+def voices(line: dict) -> list:
+    """[(who, source, reading)] of a tiebreak.jsonl line (kit/tiebreak.py) in the order they count: OCR ("ocr", its
+    source "ocr"), the second reader ("vllm"), the first third reader ("omlx"), then each further one ("voters", in the
+    order asked: {"reader", "model", "selected"}). A reader's source is "reader:" and its model's family
+    (camkit.reading.model_id) as the line's "models" ({"vllm": ..., "omlx": ...}) and each voter's "model" name it: two
+    readers of one family are one source. Read only for a line that names its models (counted)."""
+    models = line.get("models") or {}
+    out = [("ocr", "ocr", str(line.get("ocr") or "")),
+           ("vllm", f"reader:{model_id(models.get('vllm'))}", str(line.get("vllm") or "")),
+           ("omlx", f"reader:{model_id(models.get('omlx'))}", str(line.get("omlx") or ""))]
+    out += [(str(v.get("reader")), f"reader:{model_id(v.get('model'))}", str(v.get("selected") or ""))
+            for v in line.get("voters") or [] if isinstance(v, dict)]
+    return out
+
+
+def majority(said: list) -> tuple:
+    """(the reading that stands, the voices behind it) of voices() or (None, ()): as camkit.reading.tally counts, with
+    page_model.same_option as the comparison pass 1 has always made. A reading stands when voices of two sources or
+    more name it (OCR is one source, each model family one) and no reading that names something else has as many; a
+    source counts once however many of its readers name it; voices stand together only as a group whose every two
+    readings are one option. The reading kept is the group's first in voices' order (OCR's, else the second reader's,
+    else a third reader's). No majority is no reading: the option goes on the review list, never a guess."""
+    named = [v for v in said if v[2].strip()]
+    groups = {}
+    for i, (_, _, text) in enumerate(named):
+        members = [j for j, w in enumerate(named) if j == i or same_option(text, w[2])]
+        if all(same_option(named[a][2], named[b][2]) for a, b in itertools.combinations(members, 2)):
+            groups.setdefault(tuple(members), [named[j] for j in members])
+    ranked = sorted(groups.values(), key=lambda g: len({w[1] for w in g}), reverse=True)
+    if not ranked:
+        return None, ()
+    n = len({w[1] for w in ranked[0]})
+    if n < 2 or (len(ranked) > 1 and len({w[1] for w in ranked[1]}) == n):
+        return None, ()
+    return ranked[0][0][2], tuple(w[0] for w in ranked[0])
+
+
+def counted(line: dict) -> bool:
+    """Whether a tiebreak line names the models that read it ("models", kit/tiebreak.py since 2026-11-19): its vote is
+    then taken afresh by family (majority); an older line's is the "winner" it was written with."""
+    return isinstance(line.get("models"), dict)
+
+
+def tie_label(line: dict) -> tuple:
+    """(the label a tiebreak line settles, or None; the map's source for it): the majority of its voices by family
+    ("majority of three", "majority of four"... by the voices on the line) where it names its models, else the winner
+    it was written with ("majority of three")."""
+    if not counted(line):
+        return line.get("winner") or None, "majority of three"
+    said = voices(line)
+    text, _ = majority(said)
+    return text, f"majority of {COUNTED.get(len(said), len(said))}"
 
 
 def build(run: Path) -> dict:
@@ -67,12 +128,13 @@ def build(run: Path) -> dict:
             label, source = ocr, "ocr (each field)" if o.get("agreed") else "ocr (each field; vLLM differs)"
         elif o.get("agreed"):
             label, source = ocr or vsel, "ocr + vllm"
-        elif o["frame"] in ties and ties[o["frame"]].get("winner"):
-            t = ties[o["frame"]]
-            label, source = t["winner"], "majority of three"
+        elif o["frame"] in ties and tie_label(ties[o["frame"]])[0]:
+            label, source = tie_label(ties[o["frame"]])
         if label is None:
-            review.append({"path": list(key), "frame": o["frame"], "ocr": ocr, "vllm": vsel,
-                           "omlx": ties.get(o["frame"], {}).get("omlx", "")})
+            tie = ties.get(o["frame"], {})
+            review.append({"path": list(key), "frame": o["frame"], "ocr": ocr, "vllm": vsel, "omlx": tie.get("omlx", ""),
+                           **({"voters": [{"reader": v.get("reader"), "selected": v.get("selected") or ""}
+                                          for v in tie["voters"]]} if tie.get("voters") else {})})
             label, source = vsel or ocr, "unresolved"
         rows.setdefault(key, {"path": list(key), "kind": o["kind"], "options": []})["options"].append(
             {"index": o["index"], "label": label, "source": source, "frame": o["frame"]})
@@ -183,8 +245,14 @@ def main(argv=None):
         maps.append((run.name, m))
         print(f"{run.name}: {summary(m)}; for review: {len(m['review'])}")
         for r in m["review"]:
+            more = "".join(f" {v['reader']}={str(v['selected'])[:20]!r}" for v in r.get("voters") or [])
             print(f"  {r['frame']:16s} {' > '.join(r['path'][1:])[:30]:30s} OCR={r['ocr'][:20]!r} "
-                  f"vLLM={r['vllm'][:20]!r} omlx={r['omlx'][:20]!r}")
+                  f"vLLM={r['vllm'][:20]!r} omlx={r['omlx'][:20]!r}{more}")
+        old_ties = sum(1 for t in jsonl.read(run / "tiebreak.jsonl") if not counted(t))
+        if old_ties:
+            print(f"  {old_ties} tiebreak lines name no models: each keeps the winner it was written with (the "
+                  f"majority of three); kit/tiebreak.py --revote --was MODEL {run.name} asks today's third readers "
+                  "about them")
         if not a.dry_run:
             with open(run / "map.json", "w", encoding="utf-8", newline="\n") as f:
                 json.dump(m, f, indent=1, ensure_ascii=False)
