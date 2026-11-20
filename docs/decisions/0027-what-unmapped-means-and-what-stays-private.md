@@ -10,8 +10,8 @@
 In the public files, the coverage ledger's public form and the editor's Unmapped records page, "unmapped" read as
 "nobody looked", though the mapper's private ledger tells the records no setting covers that held one value in every
 download it examined ("unmapped, never seen to change") from those seen to change. Asked "Records never seen to change:
-give the 456 of them a truthful public status? I'd say yes, with a decision record.", one of four questions asked
-together, the owner answered "Yes to the 4".
+give [them] a truthful public status? I'd say yes, with a decision record.", one of four questions asked together, the
+owner answered "Yes to the 4".
 
 A public status per record could not stand. Which records never changed depends on which settings files a mapper kept,
 so two owners who map the same model and firmware would get different definitions
