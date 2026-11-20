@@ -54,14 +54,14 @@ def test_a_made_up_camera_runs_the_plain_pass_with_its_own_tables(monkeypatch, t
     from writer import generic
     a_camera(monkeypatch, tmp_path, {"KEEP_LABELS": ["global:0x0001"]})
     called = []
-    monkeypatch.setattr(S, "generic_main", lambda target, run, write, force=False, accept_stale=False:
+    monkeypatch.setattr(S, "generic_main", lambda target, run, write, force=False, accept_stale=False, accept_lost=None:
                         called.append(target.stem))
     monkeypatch.setattr(S, "RUN_ROOT", Path("/nowhere") / CAM)
     monkeypatch.setattr(sys, "argv", ["schema_update.py"])
     S.main()
     assert called == [CAM]
     got = []
-    monkeypatch.setattr(generic, "plain", lambda target, run, write, force, accept_stale, tables, evidence:
+    monkeypatch.setattr(generic, "plain", lambda target, run, write, force, accept_stale, tables, evidence, accept_lost=None:
                         got.append(tables))
     generic.generic_main(definitions.path(CAM), Path("/nowhere") / CAM / "kit2_pass2", False)
     (tables,) = got

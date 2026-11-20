@@ -791,24 +791,51 @@ def test_a_row_the_walk_found_a_notice_on_takes_no_options_from_its_twins_walk(t
     assert second["state"] == "info" and "options" not in second and second["kind"] == "notice"
 
 
-def test_two_rows_the_camera_tells_apart_by_an_icon_alone_are_labelled_with_its_words(tmp_path, monkeypatch, capsys):
-    """Setup's two Custom Key/Dial Set. rows (a still camera's icon, a movie camera's) read alike everywhere but on the
-    camera: ROW_ICONS gives each icon's words by the row's path ("#1" the second), and the definition's label for such
-    a row is "label (words)", in its own place and in every menu's, a row under it named as before. The tree's matching
-    by label and place is untouched (the movie records still hang on "#1"); a row of a label no other row stands
-    beside keeps its label whatever the table says, and an entry that named no such row is said."""
+def test_a_write_that_would_take_a_menu_off_a_setting_says_each_and_needs_their_count(tmp_path, monkeypatch, capsys):
+    """Any cause (a menu tree not rebuilt for a change in how the kit reads it, a proof gone, a row a later scan names
+    otherwise) that would leave a setting listed in fewer camera menus than the definition there lists it in is said,
+    counted, setting by setting with the menus it loses, by every pass; and a write over that definition refuses unless
+    the run names that count (--accept-lost-menus N), so a steps file followed by habit cannot pass it."""
+    S = _test_camera(tmp_path, monkeypatch)
+    whole = S.from_data(doc(*copy.deepcopy(SETTINGS)))
+    was = copy.deepcopy(whole)
+    by = {s["key"]: s for s in was["settings"]}
+    by["global:0x0001"]["row_menus"] = ["Still", "S&Q"]                 # Drive Mode: its tree reads it in Still alone
+    capsys.readouterr()
+    again = S.from_data(copy.deepcopy(was))
+    said = capsys.readouterr().out
+    assert "menus: 1 settings no longer listed in a camera menu they listed before (the menus lost):" in said
+    assert "  global:0x0001 Drive Mode: S&Q" in said
+    assert fromdata.lost_menus(was, again) == [("global:0x0001", "Drive Mode", ["S&Q"])]
+    target = tmp_path / "TEST_fw1.00.json"
+    target.write_text(json.dumps(definitions.split(was)[0]), encoding="utf-8")
+    why = fromdata.lost_refusal(target, again)
+    assert why and "1 settings would no longer be listed in a camera menu" in why and "--accept-lost-menus 1" in why
+    assert fromdata.lost_refusal(target, again, 1) is None and fromdata.lost_refusal(target, again, 2) == why
+    assert fromdata.lost_refusal(target, was) is None and fromdata.lost_refusal(tmp_path / "none.json", again) is None
+    with pytest.raises(SystemExit) as e:
+        fromdata.refuse_before_writing(target, again)
+    assert "--accept-lost-menus 1" in str(e.value.code)
+
+
+def _icon_camera(tmp_path, monkeypatch, hand_places, icons, dial_first=False):
+    """A made-up camera whose Setup tab has two Custom Key/Dial Set. rows (a still camera's icon, a movie camera's) in
+    Operation Customize, a Fn Menu Settings row there, and two more Custom Key/Dial Set. rows in Dial Customize, after
+    them (or before them: `dial_first`, a later scan's order); its HAND_PLACES and ROW_ICONS as given; returns
+    (schema_update, the definition)."""
     S = _test_camera(tmp_path, monkeypatch)
     key = "TEST_fw1.00"
     hand = tmp_path / "data" / key / f"hand_tables_{key}.json"
     tables = json.loads(hand.read_text(encoding="utf-8"))
-    tables["HAND_PLACES"] = {"global:0x0042": {"row": "Setup > Custom Key/Dial Set.#1"}}
-    tables["ROW_ICONS"] = {"Setup > Custom Key/Dial Set.": "Still", "Setup > Custom Key/Dial Set.#1": "Movie",
-                           "Setup > Fn Menu Settings": "Still"}
+    tables["HAND_PLACES"], tables["ROW_ICONS"] = hand_places, icons
     hand.write_text(json.dumps(tables), encoding="utf-8")
-    setup = [page("1/1", "Operation Customize", row("Custom Key/Dial Set.", row("Dial/Wheel")), row("Custom Key/Dial Set.", row("Dial/Wheel")),
-                  row("Fn Menu Settings"))]
-    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Setup", "pages": copy.deepcopy(setup)}],
-            "modes": [{"mode": m, "tabs": [{"tab": "Setup", "pages": copy.deepcopy(setup)}]} for m in ("Movie", "S&Q")]}
+    pages = [page("1/2", "Operation Customize", row("Custom Key/Dial Set.", row("Dial/Wheel")), row("Custom Key/Dial Set.", row("Dial/Wheel")),
+                  row("Fn Menu Settings")),
+             page("2/2", "Dial Customize", row("Custom Key/Dial Set."), row("Custom Key/Dial Set."))]
+    if dial_first:          # a later scan's order: the other pair first in the tab
+        pages = [pages[1], pages[0]]
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Setup", "pages": copy.deepcopy(pages)}],
+            "modes": [{"mode": m, "tabs": [{"tab": "Setup", "pages": copy.deepcopy(pages)}]} for m in ("Movie", "S&Q")]}
     (tmp_path / "tree.json").write_text(json.dumps(tree), encoding="utf-8")
     d = {**doc(), "tabs": ["Setup"], "menu": [{"tab": "Setup", "group": "Operation Customize", "label": lab, "order": i}
                                                 for i, lab in enumerate(["Custom Key/Dial Set.", "Custom Key/Dial Set.", "Fn Menu Settings"])],
@@ -816,12 +843,70 @@ def test_two_rows_the_camera_tells_apart_by_an_icon_alone_are_labelled_with_its_
              ("global:0x0041", "Dial/Wheel (Still)", ["Custom Key/Dial Set. > Dial/Wheel"]),
              ("global:0x0042", "Custom Key (Movie)", ["Custom Key/Dial Set."]),
              ("global:0x0043", "Fn Menu (Still)", ["Fn Menu Settings"]))]}
+    return S, d
+
+
+ICONS = {"Setup > Operation Customize > Custom Key/Dial Set.": "Still", "Setup > Operation Customize > Custom Key/Dial Set.#1": "Movie"}
+MOVIE_KEYS = {"global:0x0042": {"row": "Setup > Operation Customize > Custom Key/Dial Set.#1"}}
+
+
+def test_two_rows_the_camera_tells_apart_by_an_icon_alone_carry_its_words_beside_their_labels(tmp_path, monkeypatch):
+    """Setup's two Custom Key/Dial Set. rows (a still camera's icon, a movie camera's) read alike everywhere but on the
+    camera: ROW_ICONS gives each icon's words by the row's path (its tab, its group, "#1" the second), and the definition
+    says them in row_icons beside row, one item a level, in its own place and in every menu's. row keeps the camera's
+    own labels, so every reader matching a setting's row to the camera's reads it as before; the movie records still
+    hang on "#1"; a setting on a row no other row of its label stands beside has no row_icons."""
+    S, d = _icon_camera(tmp_path, monkeypatch, MOVIE_KEYS, ICONS)
     got = {s["key"]: s for s in S.from_data(d)["settings"]}
-    said = capsys.readouterr().out
-    assert got["global:0x0041"]["row"] == ["Custom Key/Dial Set. (Still)", "Dial/Wheel"]
-    assert got["global:0x0042"]["row"] == ["Custom Key/Dial Set. (Movie)"] and got["global:0x0042"]["row_at"] == [1]
-    assert got["global:0x0043"]["row"] == ["Fn Menu Settings"]                       # no row of its label beside it
-    assert "ROW_ICONS: 'Setup > Fn Menu Settings' names no row that another row of its label stands beside" in said
+    assert got["global:0x0041"]["row"] == ["Custom Key/Dial Set.", "Dial/Wheel"] and got["global:0x0041"]["row_icons"] == ["Still", None]
+    assert got["global:0x0042"]["row"] == ["Custom Key/Dial Set."] and got["global:0x0042"]["row_at"] == [1]
+    assert got["global:0x0042"]["row_icons"] == ["Movie"]
+    assert "row_icons" not in got["global:0x0043"]
+    assert check_public.menu_problems({**S.from_data(copy.deepcopy(d)), "settings": list(got.values())}) == []
+
+
+def test_check_public_holds_row_icons_to_the_cameras_icon_words(tmp_path, monkeypatch):
+    """row_icons says no place and no value: one item per label of its row, each null or one of the words the camera's
+    ROW_ICONS table gives (a short fixed vocabulary), one at least not null, in a place and in a menu's place alike."""
+    S, d = _icon_camera(tmp_path, monkeypatch, MOVIE_KEYS, ICONS)
+    good = S.from_data(d)
+    assert check_public.menu_problems(good) == []
+    bad = copy.deepcopy(good)
+    by = {s["key"]: s for s in bad["settings"]}
+    by["global:0x0041"]["row_icons"] = ["Still"]                                  # one item for two labels
+    by["global:0x0042"]["row_icons"] = ["My Custom Look"]                          # no word of the table
+    by["global:0x0043"]["row_icons"] = [None]                                      # names no word
+    by["global:0x0042"]["row_places"] = {"Movie": {"row": ["Custom Key/Dial Set."], "row_at": [1], "row_icons": ["S&Q"]}}
+    said = check_public.menu_problems(bad)
+    assert "global:0x0041: row_icons is not one item per label of its row" in said
+    assert "global:0x0042: row_icons holds 'My Custom Look', none of the camera's icon words (ROW_ICONS)" in said
+    assert "global:0x0043: row_icons names no word" in said
+    assert "global:0x0042: row_places['Movie']: row_icons holds 'S&Q', none of the camera's icon words (ROW_ICONS)" in said
+    # one row, its settings saying two things of its icon: the editor would draw no words on its heading
+    split = copy.deepcopy(good)
+    by = {s["key"]: s for s in split["settings"]}
+    by["global:0x0042"]["row_at"] = [0]                                            # on the first row, still "Movie"
+    assert check_public.menu_problems(split) == ["row Custom Key/Dial Set.: its settings disagree on row_icons (Movie, Still)"]
+
+
+def test_an_icon_entry_or_a_hand_row_whose_group_no_longer_holds_its_row_stops_the_write(tmp_path, monkeypatch):
+    """A later scan that puts Dial Customize's two Custom Key/Dial Set. rows first in the tab moves which row "#1" (a
+    tab's top rows counted, as locate counts them) names: a ROW_ICONS entry or a HAND_PLACES row that names its group
+    then names a row that group does not hold, and the write stops in plain words, never labelling or placing another
+    row of that label quietly. An entry naming a row no other row of its label stands beside stops it too."""
+    S, d = _icon_camera(tmp_path, monkeypatch, {}, {"Setup > Operation Customize > Fn Menu Settings": "Still"})
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(copy.deepcopy(d))
+    assert "ROW_ICONS names 'Setup > Operation Customize > Fn Menu Settings'" in str(e.value.code)
+    S, d = _icon_camera(tmp_path / "b", monkeypatch, {}, ICONS, dial_first=True)
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(copy.deepcopy(d))
+    assert "ROW_ICONS names" in str(e.value.code)
+    S, d = _icon_camera(tmp_path / "c", monkeypatch, {"global:0x0042": {"row": "Setup > Dial Customize > Custom Key/Dial Set.#1"}}, {})
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(copy.deepcopy(d))
+    said = str(e.value.code)
+    assert "HAND_PLACES names a row by a group that no longer holds it" in said and "stands in 'Operation Customize'" in said
 
 
 def test_an_options_icon_letters_are_left_out_only_where_another_reading_of_it_did(tmp_path):
@@ -1115,11 +1200,12 @@ def test_the_writer_says_which_settings_are_in_fewer_menus_than_their_row(tmp_pa
     assert placement.fewer_menus(two, tw, MENUS, placed) == []
 
 
-def test_a_row_that_opens_nothing_in_a_menu_keeps_the_settings_below_it_out_of_that_menus_count():
+def test_a_row_that_opens_nothing_in_a_menu_keeps_the_settings_below_it_out_of_that_menus_count(capsys):
     """The S&Q walk's Right on Recognition Target's target rows changed nothing (the rows draw no ›: kit2_crawl_sq_1120
     00914, 00929, 00948), which the tree keeps as "unhandled: no response to Right": such a row opens nothing in that
     menu, so the Still settings below the Still menu's targets are no open work there, with nobody proving a negative.
-    A target row the walk never opened (seen, never, a notice) still leaves them listed."""
+    They are never dropped unsaid: the print names each such row apart, "opens nothing in S&Q, by one crawl", one
+    crawl's reading. A target row the walk never opened (seen, never, a notice) still leaves them listed."""
     def target(state, why):
         return {"label": "Human", "state": state, "why": why, "kind": "submenu", "options": [], "children": []}
 
@@ -1133,7 +1219,13 @@ def test_a_row_that_opens_nothing_in_a_menu_keeps_the_settings_below_it_out_of_t
                        "row": ["Recognition Target", "Human", "Tracking Shift Range"], "row_at": [0, 0, 0]}]}
     placed = {"global:0x0001": {"row": ["Recognition Target", "Human", "Tracking Shift Range"], "row_at": [0, 0, 0], "row_menus": ["Still"]}}
     menus = [MENUS[0], MENUS[2]]
-    assert placement.fewer_menus(d, tree(target("unhandled", placement.OPENS_NOTHING)), menus, placed) == []
+    opened = []
+    assert placement.fewer_menus(d, tree(target("unhandled", placement.OPENS_NOTHING)), menus, placed, opened) == []
+    assert opened == [("global:0x0001", "Focus", "Recognition Target", ["S&Q"])]
+    fromdata.say_fewer_menus([], [m["name"] for m in menus], opened)
+    said = capsys.readouterr().out
+    assert "menus: 1 settings below 1 rows are left out of a menu where a row on their way opens nothing (by one crawl)" in said
+    assert "  Focus > Recognition Target: 1 setting, opens nothing in S&Q, by one crawl" in said
     for state, why in (("seen", "not walked"), ("never", "action: x"), ("info", "an information notice comes first"),
                        ("unhandled", "unknown screen")):
         assert placement.fewer_menus(d, tree(target(state, why)), menus, placed) == [

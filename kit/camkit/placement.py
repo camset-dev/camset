@@ -970,7 +970,7 @@ def opens_nothing(node: dict) -> bool:
     return node.get("st") == "unhandled" and node.get("why") == OPENS_NOTHING and not node.get("kids")
 
 
-def fewer_menus(doc, tree, menus: list, placed: dict) -> list:
+def fewer_menus(doc, tree, menus: list, placed: dict, opened: list = None) -> list:
     """[(key, tab, the top row's label, [the menus it lacks])] of every placed setting (`placed`: settings() with
     by_menu's row_menus, as writer.fromdata.places gives them; no copy) listed in fewer camera menus than the menus
     whose own tree holds its top row (the same top row by the merged numbering and its label), where that menu never
@@ -979,12 +979,14 @@ def fewer_menus(doc, tree, menus: list, placed: dict) -> list:
     Target targets, which hold no rows of their own), and where no other record of the same row and option is listed in
     it (records of one row kept to their own modes' menus, the Help Guide's SteadyShot twins: the row is there, by its
     own record): the work a mapping has left, a row crawled or proved in those menus' modes (a mapping is not done while
-    there is any)."""
+    there is any). `opened`, when given, gets (key, tab, the top row's label, [the menus]) of each setting left out of a
+    menu's count only because a row on its way opens nothing there, one crawl's reading, which the print says apart."""
 
     def unread(node, labels):
+        """True: the rows under a row on the way never read; "opens nothing": one opens nothing; False: read."""
         for label in labels[1:]:
             if not node["kids"]:
-                return not opens_nothing(node)          # the rows under it never read, unless it opens none
+                return "opens nothing" if opens_nothing(node) else True
             node = next((k for k in node["kids"] if norm(k["l"]) == norm(label)), None)
             if node is None:
                 return False                 # read, and no such row
@@ -1010,59 +1012,104 @@ def fewer_menus(doc, tree, menus: list, placed: dict) -> list:
             continue
         tab = p.get("row_tab") or s.get("tab") or "Other"
         here = listed[(tab, tuple(p["row"]), tuple(p["row_at"]), p.get("under_option"))]
-        lack = []
+        lack, nothing = [], []
         for m in menus:
             node = (tops.get(m["name"]) or {}).get((tab, p["row_at"][0]))
             if m["name"] in here or node is None or norm(node["l"]) != norm(p["row"][0]):
                 continue
-            if len(p["row"]) == 1 or unread(node, p["row"]):
+            got = True if len(p["row"]) == 1 else unread(node, p["row"])
+            if got == "opens nothing":
+                nothing.append(m["name"])
+            elif got:
                 lack.append(m["name"])
         if lack:
             out.append((s["key"], tab, p["row"][0], lack))
+        if nothing and opened is not None:
+            opened.append((s["key"], tab, p["row"][0], nothing))
+    return out
+
+
+def twin_group(m: "Tree", tab: str, label: str):
+    """The name of the group that holds the row a top-row label names in menu `m` ("label#n": the n-th of the tab's top
+    rows that bear it, every group's, as locate counts them; bare: the first), where two or more of the tab's top rows
+    bear it; None where one row or none does, or no n-th one stands there. A path that names that group (a ROW_ICONS
+    entry, a HAND_PLACES row) is checked against it, so a page order a later scan changes fails loudly instead of
+    naming another row of that label quietly."""
+    t = m.by_tab.get(tab)
+    base, n = nth(label)
+    tops = [g["name"] for g in (t or {}).get("groups") or [] for x in g["rows"] if norm(x["l"]) == norm(base)]
+    return tops[n or 0] if len(tops) > 1 and (n or 0) < len(tops) else None
+
+
+def hand_group_problems(doc, tree, hand: dict) -> list:
+    """What is wrong, one line each, with the HAND_PLACES rows (`hand`: {key: [row paths]}) that name their top row's
+    group ("Setup > Operation Customize > Custom Key/Dial Set.#1", the tab, the group, then the labels): in a menu of the
+    tree whose tab has that group, the row the path's top label names (twin_group: two or more of the tab's top rows
+    bear it) stands in another group, so the page order changed and the path would name another row of that label."""
+    menus = [(None, Tree(doc, tree))] + mode_trees(doc, tree) if hand else []
+    out = []
+    for k, paths in (hand or {}).items():
+        for path in paths:
+            parts = [x.strip() for x in path.split(" > ")]
+            if len(parts) < 3:
+                continue
+            tab, group, label = parts[:3]
+            for name, m in menus:
+                if norm(group) not in {norm(g["name"]) for g in (m.by_tab.get(tab) or {}).get("groups") or []}:
+                    continue
+                got = twin_group(m, tab, label)
+                if got is not None and norm(got) != norm(group):
+                    out.append(f"{k}: its row {path!r} names the group {group!r}, but in the {name or 'Stills'} menu that "
+                               f"row stands in {got!r}")
     return out
 
 
 def icon_words(m: "Tree", icons: dict) -> dict:
     """{a row's node id: (the ROW_ICONS entry, the words its icon means)} for the rows of menu `m` the camera tells
-    apart by an icon alone: of
-    the rows that bear one label among a tab's top rows (every group's) or under one row, each the ROW_ICONS table
-    (`icons`) names by its path, its tab then its labels from the top row down, " > " between, the n-th of a label
-    written "label#n" (the first bare, or "#0"), as nth reads a path. A row no other row of its label stands beside
-    is never named so (two rows of one row reading alike is the table's one use)."""
+    apart by an icon alone: of the rows that bear one label among a tab's top rows (every group's) or under one row,
+    each the ROW_ICONS table (`icons`) names by its path: its tab, the group of its top row, then its labels from the top
+    row down, " > " between, the n-th of a label written "label#n" (the first bare, or "#0"), as nth reads a path and
+    locate counts a tab's top rows. A top row whose group is not the one the entry names is not named (twin_group: a
+    page order changed), nor is a row no other row of its label stands beside (two rows reading alike is the table's
+    one use)."""
     want = {}
     for k, w in (icons or {}).items():
-        tab, *labels = [x.strip() for x in k.split(" > ")]
-        want[(tab, tuple((norm(nth(x)[0]), nth(x)[1] or 0) for x in labels))] = (k, w)
+        tab, group, *labels = [x.strip() for x in k.split(" > ")]
+        want[(tab, norm(group), tuple((norm(nth(x)[0]), nth(x)[1] or 0) for x in labels))] = (k, w)
     out = {}
 
-    def walk(tab, rows, above):
+    def walk(tab, group, rows, above):
         counts, seen = collections.Counter(norm(x["l"]) for x in rows), collections.Counter()
         for x in rows:
             n = seen[norm(x["l"])]
             seen[norm(x["l"])] += 1
             here = above + ((norm(x["l"]), n),)
-            if counts[norm(x["l"])] > 1 and (tab, here) in want:
-                out[x["id"]] = want[(tab, here)]
-            walk(tab, x["kids"], here)
+            if counts[norm(x["l"])] > 1 and (tab, group, here) in want:
+                out[x["id"]] = want[(tab, group, here)]
+            walk(tab, group, x["kids"], here)
     for tb in m.tabs:
-        walk(tb["tab"], [x for g in tb["groups"] for x in g["rows"]], ())
+        tops = [(g, x) for g in tb["groups"] for x in g["rows"]]
+        counts, seen = collections.Counter(norm(x["l"]) for _, x in tops), collections.Counter()
+        for g, x in tops:
+            n = seen[norm(x["l"])]
+            seen[norm(x["l"])] += 1
+            here = ((norm(x["l"]), n),)
+            if counts[norm(x["l"])] > 1 and (tb["tab"], norm(g["name"]), here) in want:
+                out[x["id"]] = want[(tb["tab"], norm(g["name"]), here)]
+            walk(tb["tab"], norm(g["name"]), x["kids"], here)
     return out
-
-
-def iconed(label: str, words: str) -> str:
-    """A row's label as the definition writes it where its icon alone tells it from a row of the same label beside it:
-    "Custom Key/Dial Set. (Movie)"."""
-    return f"{nth(label)[0]} ({words})"
 
 
 def with_icons(doc, tree, places: dict, icons: dict, menus: list = ()) -> list:
     """Each place in `places` ({key: {"row", "row_at"[, "row_tab"][, "row_mode"][, "row_places"]}}, settings()' and
-    by_menu's, changed in place) with the label of every row on its way that the camera tells apart from a row of the
-    same label beside it by its icon alone given its words (icon_words, iconed: "Custom Key/Dial Set. (Movie)"), in its
-    own place and in each of its row_places (`menus`: the camera menus, camera.menus' entries). A row is found in the
-    menu the place was found in, by the merged numbering of its top row and then each row's own index there. Called
-    once every place is found and every menu looked up, the tree's matching by label and place untouched. Returns what
-    to say of the table's entries that named no such row in any menu."""
+    by_menu's, changed in place) with "row_icons" where a row on its way is one the camera tells apart from a row of the
+    same label beside it by its icon alone (icon_words): beside "row", one item a level, the icon's words or None,
+    present only where one level has words, in its own place and in each of its row_places entries that gives its own
+    row (`menus`: the camera menus, camera.menus' entries). "row" keeps the camera's own labels, so every reader that
+    matches a setting's row to the camera's rows reads it as before; the editor draws "label (words)" from the two. A row
+    is found in the menu the place was found in, by the merged numbering of its top row, then each row's own index
+    there; a row grown from a path, which that menu does not hold, ends the walk. Called once every place is found and
+    every menu looked up. Returns the table's entries that named no such row in any menu: a refusal's matter."""
     if not icons:
         return []
     t = Tree(doc, tree)
@@ -1071,36 +1118,33 @@ def with_icons(doc, tree, places: dict, icons: dict, menus: list = ()) -> list:
     trees = {None: t, **dict(modes)}
     words = {key: icon_words(m, icons) for key, m in trees.items()}
     nodes = {key: _nodes_at(m, key, number) for key, m in trees.items()}
-    used = set()
     by_key = {s["key"]: s for s in doc["settings"]}
 
-    def relabel(place, key, tab):
+    def iconed(place, key, tab):
         node = nodes.get(key, {}).get((tab, (place.get("row_at") or [None])[0]))
-        row = list(place.get("row") or [])
-        for i, label in enumerate(row):
+        said = [None] * len(place.get("row") or [])
+        for i, label in enumerate(place.get("row") or []):
             if i:
                 kids, at = node["kids"], place["row_at"][i] if i < len(place["row_at"]) else None
                 node = kids[at] if isinstance(at, int) and 0 <= at < len(kids) else None
             if node is None or norm(node["l"]) != norm(label):
                 break
             if node["id"] in words.get(key, {}):
-                entry, said = words[key][node["id"]]
-                row[i] = iconed(label, said)
-                used.add(entry)
-        place["row"] = row
+                said[i] = words[key][node["id"]][1]
+        place.pop("row_icons", None)
+        if any(said):
+            place["row_icons"] = said
     for k, place in places.items():
         s = by_key.get(k) or {}
         tab = place.get("row_tab") or s.get("tab") or "Other"
         if place.get("row"):
-            relabel(place, place.get("row_mode"), tab)
+            iconed(place, place.get("row_mode"), tab)
         for menu, there in (place.get("row_places") or {}).items():
             key = next((menu_of(m, tree) for m in menus or () if m.get("name") == menu), None)
             if there.get("row") and key is not False:
-                relabel(there, key, there.get("row_tab") or tab)
+                iconed(there, key, there.get("row_tab") or tab)
     named = {entry for key in words for entry, _ in words[key].values()}
-    return [f"ROW_ICONS: {k!r} names no row that another row of its label stands beside in the menu tree: left out"
-            for k in icons if k not in named] + \
-           [f"ROW_ICONS: {k!r} names a row no setting is placed on" for k in icons if k in named and k not in used]
+    return [k for k in icons if k not in named]
 
 
 def menu_of(menu: dict, tree) -> object:

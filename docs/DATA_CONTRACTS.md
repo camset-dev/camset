@@ -121,12 +121,16 @@ A setting proved only in Stills is not in the Movie menu until Movie's walk read
 where the camera shows it. So two owners of a model get the same `row_menus` only once the mapping is complete.
 `kit/schema_update.py` prints, at every pass, the settings listed in fewer menus than their top row stands in, and the
 menus each lacks. A row whose walk in a menu found that Right opens nothing there (it draws no ›) holds no rows in that
-menu, so the settings below it elsewhere are not counted as open work for it.
+menu, so the settings below it elsewhere are not counted as open work for it; the print names each such row apart, as
+one crawl's reading. A write that would list a setting in fewer menus than the definition there does says each and
+stops, unless it is run with `--accept-lost-menus` and their count.
 
 **Two rows of one label.** Where the camera tells two rows of one label under one row (or two top rows of one tab)
-apart by an icon alone, the camera's `ROW_ICONS` hand table gives each icon's words by the row's path ("label#n" for
-the n-th), and the definition writes such a row's label as "label (words)": Setup's "Custom Key/Dial Set. (Still)" and
-"Custom Key/Dial Set. (Movie)". The menu tree and every place are matched by the camera's own label first.
+apart by an icon alone, the camera's `ROW_ICONS` hand table gives each icon's words by the row's path (its tab, its top
+row's group, then its labels, "label#n" for the n-th), and the definition says them in `row_icons` beside `row`, one
+item a level, the words or null, in a place and in a menu's place alike; `row` keeps the camera's own labels, and an
+editor draws "Custom Key/Dial Set. (Movie)" from the two. A `ROW_ICONS` entry or a `HAND_PLACES` row that names its
+group stops the write where that group no longer holds the row it names.
 
 A write with the menu tree on the computer writes these from `MENUS`, and none of them without it. With no menu tree
 there (a fresh clone, CI) it leaves the definition's as they are, as it does the places. A write from a definition read

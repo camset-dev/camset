@@ -1570,7 +1570,7 @@ def test_the_a1_pass_runs_for_the_a1_definition_only(monkeypatch):
     (generic_main)."""
     import schema_update as S
     called = []
-    monkeypatch.setattr(S, "generic_main", lambda target, run, write, force=False, accept_stale=False:
+    monkeypatch.setattr(S, "generic_main", lambda target, run, write, force=False, accept_stale=False, accept_lost=None:
                         called.append(target.stem))
     monkeypatch.setattr(S, "RUN_ROOT", Path("/nowhere") / "ILCE-1M2_fw5.00")
     monkeypatch.setattr(sys, "argv", ["schema_update.py"])

@@ -364,7 +364,8 @@ def like_more(s: dict, e: dict, r: dict, whole: bool) -> None:
     s["values"] = sorted([v, lab] for v, lab in labels.items())
 
 
-def generic_main(target: Path, run: Path, write: bool, force: bool = False, accept_stale: bool = False) -> dict:
+def generic_main(target: Path, run: Path, write: bool, force: bool = False, accept_stale: bool = False,
+                 accept_lost=None) -> dict:
     """schema_update for any definition but the ILCE-1M2 firmware 4.00's: the plain pass, from a seed when the camera
     has no definition yet, with the camera's own hand tables and their evidence apart (writer/hand_tables.load_plain
     of target's camera: either file refused in plain words where it does not fit its JSON Schema, the evidence holding
@@ -391,10 +392,11 @@ def generic_main(target: Path, run: Path, write: bool, force: bool = False, acce
     if E.get("MY_MENU_EMPTY"):                  # evidence for a table only the ILCE-1M2's pass reads
         print("  hand evidence  MY_MENU_EMPTY: read only by the ILCE-1M2's own pass so far, not applied")
     with reworded(T.CONTEXT_WORDS):             # the camera's proof contexts the runs reworded (menu_row)
-        return plain(target, run, write, force, accept_stale, T, E)
+        return plain(target, run, write, force, accept_stale, T, E, accept_lost=accept_lost)
 
 
-def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool, tables, evidence: dict = None) -> dict:
+def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool, tables, evidence: dict = None,
+          accept_lost=None) -> dict:
     """generic_main's pass, once the camera's hand tables (`tables`) and hand evidence (`evidence`) are read and
     checked."""
     import datetime
@@ -482,7 +484,7 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
     gate(questions(report, unresolved, frozenset(s["key"] for s in doc["settings"])) + listgaps.questions(doc, run.parent),
          camera, force, write)
     if write:
-        write_definition(target, doc, accept_stale, taken_out=taken_out)   # every refusal first, the reset file, this
+        write_definition(target, doc, accept_stale, taken_out=taken_out, accept_lost=accept_lost)   # every refusal first, the reset file, this
         print(f"wrote {target}")
         say_stale(target)
     return doc

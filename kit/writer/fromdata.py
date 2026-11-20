@@ -167,7 +167,7 @@ def with_plain_words(s: dict, names: list = ()) -> dict:
     return s
 
 
-PLACE_KEYS = ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode", "row_menus", "row_places")
+PLACE_KEYS = ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode", "row_menus", "row_places", "row_icons")
 # what a definition written without the camera's menu tree keeps (places, menu_list), said once (a fresh clone, CI)
 NO_TREE = "the definition's menu list and each setting's place on the camera stay as the definition has them"
 MENU_FIELDS = ("name", "modes", "main_tiles", "hover")          # a camera menu, as camera.menus holds it
@@ -228,9 +228,14 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool | str
     found = placement.settings(doc, tree, boxes, placement.placing_paths(doc, tree, hand, menus))
     for k in sorted(set(hand) - set(found)):
         print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
+    shifted = placement.hand_group_problems(doc, tree, hand)
+    if shifted:
+        raise hand_tables.Refused(f"{paths.shown(datafiles.hand_tables_file(definitions.key(doc)))}: HAND_PLACES names a "
+                                  "row by a group that no longer holds it, so the menu's page order changed: "
+                                  + "; ".join(shifted) + ". Nothing was written: name each row as the menu tree holds it "
+                                  "now, then run the command again.")
     if not menus:
-        for line in placement.with_icons(doc, tree, found, icons or {}):
-            print(line)
+        icons_refusal(doc, placement.with_icons(doc, tree, found, icons or {}))
         return found
     why = placement.menus_refusal(tree, menus)
     if why:
@@ -241,27 +246,47 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool | str
     guide = jsonl.read(guide, bad="skip") if guide.exists() else []
     by = placement.by_menu(doc, tree, menus, boxes, hand, found, guide, modes)
     out = {k: {**v, **by.get(k, {})} for k, v in found.items()}
-    say_fewer_menus(placement.fewer_menus(doc, tree, menus, out), [m["name"] for m in menus])
-    for line in placement.with_icons(doc, tree, out, icons or {}, menus):          # last: the tree's labels matched first
-        print(line)
+    opened = []
+    say_fewer_menus(placement.fewer_menus(doc, tree, menus, out, opened), [m["name"] for m in menus], opened)
+    icons_refusal(doc, placement.with_icons(doc, tree, out, icons or {}, menus))          # last: the camera's labels first
     return out
 
 
-def say_fewer_menus(short: list, order: list = ()) -> None:
+def icons_refusal(doc: dict, unused: list) -> None:
+    """Refused, in plain words, where ROW_ICONS names a row no other row of its label stands beside in the group the
+    entry names, in any menu of the tree (camkit.placement.with_icons' `unused`): a page order changed, or the entry
+    is mistyped; its words would be written on no row, or on another."""
+    if unused:
+        raise hand_tables.Refused(f"{paths.shown(datafiles.hand_tables_file(definitions.key(doc)))}: ROW_ICONS names "
+                                  f"{', '.join(map(repr, unused))}, but no row of the menu tree stands there beside another "
+                                  "row of its label (in that group). Nothing was written: name each row as the menu tree "
+                                  "holds it now (its tab, its top row's group, its labels, \"#n\" for the n-th), then run "
+                                  "the command again.")
+
+
+def say_fewer_menus(short: list, order: list = (), opened: list = ()) -> None:
     """On the console only (the tree is the mapper's own): how many settings, below how many top rows, are listed in
     fewer camera menus than their row stands in (camkit.placement.fewer_menus), and each row with the menus it lacks:
-    the open work, seen at every pass, never a stop."""
-    if not short:
-        return
-    rows = {}
-    for _, tab, row, lack in short:
-        n, missing = rows.get((tab, row), (0, []))
-        rows[(tab, row)] = (n + 1, missing + [m for m in lack if m not in missing])
-    print(f"menus: {len(short)} settings below {len(rows)} rows are listed in fewer menus than their row stands in: "
-          "prove or crawl them there")
-    for (tab, row), (n, missing) in sorted(rows.items()):
-        missing = sorted(missing, key=lambda m: list(order).index(m) if m in order else len(order))
-        print(f"  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, not in {', '.join(missing)}")
+    the open work, seen at every pass, never a stop. Then, apart, the settings left out of a menu's count only because a
+    row on their way opens nothing there (`opened`), one crawl's reading, so none of them goes unsaid."""
+    def rows_of(items):
+        rows = {}
+        for _, tab, row, lack in items:
+            n, missing = rows.get((tab, row), (0, []))
+            rows[(tab, row)] = (n + 1, missing + [m for m in lack if m not in missing])
+        return {k: (n, sorted(m, key=lambda x: list(order).index(x) if x in order else len(order))) for k, (n, m) in rows.items()}
+    if short:
+        rows = rows_of(short)
+        print(f"menus: {len(short)} settings below {len(rows)} rows are listed in fewer menus than their row stands in: "
+              "prove or crawl them there")
+        for (tab, row), (n, missing) in sorted(rows.items()):
+            print(f"  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, not in {', '.join(missing)}")
+    if opened:
+        rows = rows_of(opened)
+        print(f"menus: {len(opened)} settings below {len(rows)} rows are left out of a menu where a row on their way opens "
+              "nothing (by one crawl): look at that row there if in doubt")
+        for (tab, row), (n, where) in sorted(rows.items()):
+            print(f"  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, opens nothing in {', '.join(where)}, by one crawl")
 
 
 def hand_unplaced(doc: dict, key: str, rows: list) -> str:
@@ -479,6 +504,7 @@ def from_data(doc: dict, rebuild: bool | str = None) -> dict:
     main() ends the same way, so on the committed data this gives the committed definition."""
     rebuild = places_as_read(doc) if rebuild is None else rebuild
     had_row = {s["key"] for s in doc["settings"] if "row" in s}          # the rows the definition holds as read
+    was = {"settings": [{k: s[k] for k in ("key", "name", "row_menus") if k in s} for s in doc["settings"]]}
     kept = (doc.get("camera") or {}).get("menus")          # the definition's own, for a write that cannot rebuild them
     doc = with_menu(with_camera(doc))
     tables = hand_tables.load(definitions.key(doc), evidence=False)       # the public tables: MENUS, HAND_PLACES
@@ -503,6 +529,7 @@ def from_data(doc: dict, rebuild: bool | str = None) -> dict:
     by_hand = frozenset(tables.HAND_PLACES)
     doc["settings"] = [with_expert(placed(with_plain_words(with_evidence_apart(with_tidy_note(s)), names)), slots, mirror, by_hand)
                        for s in doc["settings"]]
+    say_lost_menus(lost_menus(was, doc))          # a write refuses it unless told the count (lost_refusal)
     why = linked_refusal(doc)
     if why:
         raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: prove the row in the mode of each "
@@ -585,22 +612,63 @@ def reset_names(doc: dict, write: bool) -> int:
     return n
 
 
-def refuse_before_writing(target, doc: dict, accept_stale: bool = False, taken_out=()) -> None:
+def lost_menus(old: dict, new: dict) -> list:
+    """[(key, name, [the camera menus it no longer lists])] of each setting the definition `old` lists in a camera menu
+    (row_menus) that `new` no longer lists it in, in old's order: a menu tree not rebuilt for a change in how the kit
+    reads it, a proof gone, a row a later scan names otherwise. A setting `new` lacks is no loss of a menu."""
+    now = {s["key"]: set(s.get("row_menus") or ()) for s in new.get("settings") or []}
+    return [(s["key"], s.get("name") or "", [m for m in s["row_menus"] if m not in now[s["key"]]])
+            for s in old.get("settings") or [] if s.get("row_menus") and s["key"] in now
+            and any(m not in now[s["key"]] for m in s["row_menus"])]
+
+
+def say_lost_menus(lost: list) -> None:
+    """On the console: how many settings lose a camera menu they listed, then each with the menus it loses."""
+    if lost:
+        print(f"menus: {len(lost)} settings no longer listed in a camera menu they listed before (the menus lost):")
+        for k, name, menus in lost:
+            print(f"  {k} {name[:60]}: {', '.join(menus)}")
+
+
+ACCEPT_LOST = "--accept-lost-menus"
+
+
+def lost_refusal(target, doc: dict, accepted=None) -> str | None:
+    """Why the definition `doc` must not be written over the one at `target`, in plain words, or None: it would list
+    settings in fewer camera menus than the definition there does (lost_menus), unless the run acknowledges exactly
+    that many (`accepted`: kit/schema_update.py's --accept-lost-menus N, a number so no steps file passes it by habit)."""
+    if not Path(target).exists():
+        return None
+    lost = lost_menus(definitions.load_public(target), doc)
+    if not lost or accepted == len(lost):
+        return None
+    return (f"{paths.shown(target)}: {len(lost)} settings would no longer be listed in a camera menu they list now "
+            f"(each said above, \"menus: ... no longer listed\"). Nothing was written: rebuild the camera's menu tree "
+            f"if it was not (kit/tools/menu_tree.py, each mode as its pass's steps say), or, if those menus are lost on "
+            f"purpose, run the command again with {ACCEPT_LOST} {len(lost)}")
+
+
+def refuse_before_writing(target, doc: dict, accept_stale: bool = False, taken_out=(), accept_lost=None) -> None:
     """Every refusal of a definition's write, before anything is written: evidence that went stale in this run's
-    reading (definitions.stale_refusal; accept_stale writes all the same, the evidence kept aside), and a definition
+    reading (definitions.stale_refusal; accept_stale writes all the same, the evidence kept aside), a definition
     that lacks the evidence its evidence file holds (definitions.check_write), but what the writer took out on purpose
-    and said (`taken_out`)."""
+    and said (`taken_out`), and a definition that would list settings in fewer camera menus than the one there
+    (lost_refusal, unless `accept_lost` names their count)."""
     why = None if accept_stale else definitions.stale_refusal(definitions.newly_stale(doc, target), target)
     if why:
         raise definitions.StaleStop(why)
+    why = lost_refusal(target, doc, accept_lost)
+    if why:
+        raise SystemExit(why)
     definitions.check_write(target, doc, taken_out)
 
 
-def write_definition(target, doc: dict, accept_stale: bool = False, reset: bool = True, taken_out=()) -> None:
+def write_definition(target, doc: dict, accept_stale: bool = False, reset: bool = True, taken_out=(), accept_lost=None) -> None:
     """The definition `doc` written to `target`, its refusals first (refuse_before_writing, and with reset the reset
     file's: reset_refusal), then (reset) the reset file's names and tabs from it, then the definition itself: no
-    refusal arrives after a file was written. `taken_out`: evidence the writer took out on purpose (check_write)."""
-    refuse_before_writing(target, doc, accept_stale, taken_out)
+    refusal arrives after a file was written. `taken_out`: evidence the writer took out on purpose (check_write);
+    `accept_lost`: how many settings may lose a camera menu (lost_refusal)."""
+    refuse_before_writing(target, doc, accept_stale, taken_out, accept_lost)
     if reset:
         why = reset_refusal(doc)
         if why:
@@ -616,7 +684,7 @@ def say_stale(target) -> None:
         print(line)
 
 
-def refresh_from_data(write: bool, accept_stale: bool = False) -> None:
+def refresh_from_data(write: bool, accept_stale: bool = False, accept_lost=None) -> None:
     """--from-data: every definition's parts from data/, shown, and written with --write: each definition read whole
     (its private evidence put back, where this computer has it), its public file and its evidence written apart. Every
     definition is checked before any is written (its camera's private files still in data/, its stale evidence, its
@@ -636,7 +704,7 @@ def refresh_from_data(write: bool, accept_stale: bool = False) -> None:
     if write:
         for p, new, _ev, same in planned:            # every refusal, for every definition, before anything is written
             if not same:
-                refuse_before_writing(p, new, accept_stale)
+                refuse_before_writing(p, new, accept_stale, accept_lost=accept_lost)
             why = reset_refusal(new)
             if why:
                 raise datafiles.Refused("nothing written: " + why)

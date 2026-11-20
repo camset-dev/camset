@@ -614,14 +614,14 @@ def _shaped(name: str, kind: str, raw):
                 raise _Shape(f"{k!r} holds {', '.join(map(repr, extra))}, which a hand place does not have")
         return raw
     if kind == "row_icons":
-        # what the icon before a row's label means, by the row's path (its tab, then the labels from the top row down,
-        # " > " between, the n-th of the rows one label names under one row written "label#n", the first one bare):
-        # {path: one or two words}, the definition's label for that row then "label (words)" where two rows of one row
+        # what the icon before a row's label means, by the row's path (its tab, its top row's group, then the labels
+        # from the top row down, " > " between, the n-th of the rows one label names written "label#n", the first one
+        # bare): {path: one or two words}, which the definition says in row_icons beside row where two rows of one row
         # would otherwise read alike (camkit.placement.icon_words)
         for k, w in _need(raw, dict, "the table").items():
             labels = [x.strip() for x in k.split(" > ")]
-            if len(labels) < 2 or not all(labels):
-                raise _Shape(f"{k!r} is not a row's tab then its labels, \" > \" between")
+            if len(labels) < 3 or not all(labels):
+                raise _Shape(f"{k!r} is not a row's tab, its top row's group, then its labels, \" > \" between")
             if not re.fullmatch(ICON_WORDS, _need(w, str, f"{k!r}'s words")):
                 raise _Shape(f"{k!r}'s words, {w!r}, are not one or two words of letters (\"Still\", \"Movie\")")
         return raw

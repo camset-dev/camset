@@ -544,6 +544,35 @@ def test_check_public_refuses_a_public_form_or_a_looks_file_in_data(camera, tmp_
     assert any("no definition" in x for x in datafiles.evidence_in_public(g))
 
 
+def test_the_ledger_reads_a_definition_with_row_icons_as_one_without(tmp_path):
+    """A definition that says what a twin row's icon means (row_icons, beside the camera's own row labels) gives the
+    public form the same rows as one that does not: the ledger matches a setting's row to the camera's rows by label,
+    and the labels stay the camera's. A definition that wrote the words into the labels instead would not: its twin
+    rows would hold no setting and new rows would appear (the reviewer's finding on 2026-11-20, which put the words
+    beside the labels)."""
+    defn = json.loads(definitions.path(A1).read_text(encoding="utf-8"))
+    twins = {"Custom Key/Dial Set.", "Fn Menu Settings"}
+    marked = [s for s in defn["settings"] if (s.get("row") or [""])[0] in twins]
+    assert marked
+    with_icons, relabelled = json.loads(json.dumps(defn)), json.loads(json.dumps(defn))
+    for d, how in ((with_icons, "beside"), (relabelled, "inside")):
+        for s in d["settings"]:
+            if (s.get("row") or [""])[0] in twins:
+                if how == "beside":
+                    s["row_icons"] = ["Still"] + [None] * (len(s["row"]) - 1)
+                else:
+                    s["row"] = [s["row"][0] + " (Still)"] + s["row"][1:]
+    paths = {}
+    for name, d in (("icons", with_icons), ("labels", relabelled)):
+        paths[name] = tmp_path / name / f"{A1}.json"
+        paths[name].parent.mkdir()
+        paths[name].write_text(json.dumps(d), encoding="utf-8")
+    rows = lambda t: json.loads(t)["rows"]          # noqa: E731
+    today = rows(coverage.public_build_text(A1))
+    assert rows(coverage.public_build_text(A1, definition=paths["icons"])) == today
+    assert rows(coverage.public_build_text(A1, definition=paths["labels"])) != today
+
+
 def test_the_a1_ii_public_form_agrees_with_its_definition():
     """The a1 II's public form as every clone prints it (its public sources and seen file): its schema, no private
     key, no word outside its vocabulary, every value it calls proved (or, of a setting whose list was proved partly on

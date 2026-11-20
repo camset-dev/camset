@@ -95,7 +95,10 @@ def crawl_readings(crawl: Path) -> dict:
 def drawn_options(opts: list, readings: dict) -> dict:
     """{option: its label as the camera draws it} for the options whose leading token (at most row_names.ICON_LEAD
     characters) another reading of the same option left out (`readings`: crawl_readings' for the row): the evidence
-    that the token is an icon's letters ("W Rating", which the vision reader read "Rating"); none on length alone."""
+    that the token is an icon's letters ("W Rating", which the vision reader read "Rating"); none on length alone.
+    A glyph the camera draws before an option is caught the same way ("› On" under S&Q's Peaking Display, "/ Histogram"
+    on the Monitor list): harmless, since placement.option_names only reads it where no option names a label exactly,
+    and a glyph is no part of a label either."""
     out = {}
     for o in opts:
         token, _, rest = o.partition(" ")

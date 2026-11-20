@@ -507,16 +507,16 @@
      "row": {
       "type": "string",
       "pattern": "^\\S(.*\\S)? > \\S(.*\\S)?$",
-      "description": "The tab, then the row's labels from its top row down, \" > \" between, as the camera draws them (\"Setup > Anti-dust Function > Shutter When Pwr OFF\")."
+      "description": "The tab, then the row's labels from its top row down, \" > \" between, as the camera draws them (\"Setup > Anti-dust Function > Shutter When Pwr OFF\"); the top row's group may stand after the tab (\"Setup > Operation Customize > Custom Key/Dial Set.#1\"), which a row two of the tab's top rows bear needs: the write stops where that group no longer holds the row the path names."
      }
     }
    }
   },
   "ROW_ICONS": {
    "type": "object",
-   "description": "What the icon the camera draws before a row's label means, in one or two words, where two rows of one row (or two top rows of one tab) bear one label and the icon alone tells them apart (Setup's two Custom Key/Dial Set. rows, a still camera's icon and a movie camera's). Each key is the row's path as the menu tree holds it: its tab, then its labels from the top row down, \" > \" between, the n-th row of a label written \"label#n\" (the first one bare). kit/camkit/placement.py icon_words writes the definition's label for such a row \"label (words)\" (\"Custom Key/Dial Set. (Movie)\"), after every place is found, the tree's matching by label and place untouched; an entry for a row no other row of its label stands beside is left out, and said.",
+   "description": "What the icon the camera draws before a row's label means, in one or two words, where two rows of one row (or two top rows of one tab) bear one label and the icon alone tells them apart (Setup's two Custom Key/Dial Set. rows, a still camera's icon and a movie camera's). Each key is the row's path as the menu tree holds it: its tab, the group its top row stands in, then its labels from the top row down, \" > \" between, the n-th row of a label written \"label#n\" (the first one bare), a tab's top rows counted as every group's. kit/camkit/placement.py icon_words writes the words in the definition's row_icons beside row, which keeps the camera's own labels (an editor draws \"Custom Key/Dial Set. (Movie)\" from the two); an entry that names no row standing beside another row of its label in that group stops the write (a page order a later scan changed, or a slip).",
    "propertyNames": {
-    "pattern": "^\\S(.*\\S)? > \\S(.*\\S)?$"
+    "pattern": "^\\S(.*\\S)? > \\S(.*\\S)? > \\S(.*\\S)?$"
    },
    "additionalProperties": {
     "type": "string",

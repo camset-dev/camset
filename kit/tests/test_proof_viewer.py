@@ -1211,14 +1211,15 @@ def check_nodes(rows, keys: set) -> None:
 def test_the_viewer_hangs_a_record_where_the_writer_places_it_on_made_up_data(tmp_path, monkeypatch):
     """One placement for the viewer and the writer (placement.placing_paths), seen with no runs: a record whose row is
     given by hand (HAND_PLACES) hangs on that row in the proof viewer, not on the row its proof path names; and a row the
-    camera tells from a row of its label beside it by its icon alone carries the icon's words (ROW_ICONS), as the
-    definition labels it."""
+    camera tells from a row of its label beside it by its icon alone keeps the camera's label and carries the icon's
+    words beside it (ROW_ICONS), which the page draws "label (words)", as the definition's row_icons say."""
     key = "TEST_fw1.00"
     data = tmp_path / "data"
     (data / key).mkdir(parents=True)
     (data / key / f"hand_tables_{key}.json").write_text(json.dumps({
-        "camera": key, "HAND_PLACES": {"global:0x0002": {"row": "Setup > Custom Key/Dial Set.#1"}},
-        "ROW_ICONS": {"Setup > Custom Key/Dial Set.": "Still", "Setup > Custom Key/Dial Set.#1": "Movie"}}), encoding="utf-8")
+        "camera": key, "HAND_PLACES": {"global:0x0002": {"row": "Setup > Operation Customize > Custom Key/Dial Set.#1"}},
+        "ROW_ICONS": {"Setup > Operation Customize > Custom Key/Dial Set.": "Still",
+                      "Setup > Operation Customize > Custom Key/Dial Set.#1": "Movie"}}), encoding="utf-8")
     labels = ["Custom Key/Dial Set.", "Custom Key/Dial Set.", "Fn Menu Settings"]
     tree = tmp_path / "tree.json"
     tree.write_text(json.dumps({"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Setup", "pages": [
@@ -1236,8 +1237,8 @@ def test_the_viewer_hangs_a_record_where_the_writer_places_it_on_made_up_data(tm
            "settings": [setting("global:0x0001", "Custom Key (Still)", "Custom Key/Dial Set."),
                         setting("global:0x0002", "Custom Key (Movie)", "Fn Menu Settings")]}          # its hand row wins
     tabs = pv.menu(doc, pv.records(doc, {}), tmp_path)
-    where = {k: x["l"] for x, _ in pv.menu_nodes(tabs) for k in x.get("recs") or []}
-    assert where == {"global:0x0001": "Custom Key/Dial Set. (Still)", "global:0x0002": "Custom Key/Dial Set. (Movie)"}
+    where = {k: (x["l"], x.get("icon")) for x, _ in pv.menu_nodes(tabs) for k in x.get("recs") or []}
+    assert where == {"global:0x0001": ("Custom Key/Dial Set.", "Still"), "global:0x0002": ("Custom Key/Dial Set.", "Movie")}
 
 
 def test_every_cameras_data_holds_nothing_but_its_public_definition_and_sample(viewer):

@@ -94,6 +94,7 @@ import ast
 import fnmatch
 import io
 import ipaddress
+import collections
 import json
 import os
 import re
@@ -822,7 +823,17 @@ def data_problems() -> list:
 
 
 MENU_FIELDS = ("name", "modes", "main_tiles", "hover")                      # a camera menu (camera.menus)
-MENU_PLACE = ("row", "row_at", "row_tab", "row_group", "under_option")       # a place in a menu (row_places)
+MENU_PLACE = ("row", "row_at", "row_tab", "row_group", "under_option", "row_icons")       # a place in a menu (row_places)
+
+
+def icon_words(doc: dict) -> set:
+    """The words a definition's row_icons may hold: the camera's ROW_ICONS hand table's (data/<model>_fw<fw>/
+    hand_tables_<model>_fw<fw>.json), a short fixed vocabulary of what its icons mean; none without the table."""
+    try:
+        f = datafiles.hand_tables_file(definitions.key(doc))
+    except Exception:            # a document that names no camera: no table
+        return set()
+    return set((json.loads(f.read_text(encoding="utf-8-sig")).get("ROW_ICONS") or {}).values()) if f.exists() else set()
 PAGE_COUNTER = re.compile(r"^\s*(page\s*)?(\d+)\s*/\s*(\d+)\s*$", re.I)       # "38/63": moves with the camera's state
 
 
@@ -841,8 +852,10 @@ def menu_problems(doc: dict) -> list:
     row_places name no camera menu has, a row, tab or group label that is a page counter ("38/63", "Page 38/63", which
     move with My Menu's pages: page_counter), one that is one of My Menu's item pages however written (camera.text.
     my_menu_name and a number, "MyMenu1", "★My Menu1", "My Menu Page 1": what the owner put there,
-    camkit.placement.item_page), a row on My Menu's tab outside its setting page (an owner's item), and row_menus or
-    row_places on a copy (which follows its setting)."""
+    camkit.placement.item_page), a row on My Menu's tab outside its setting page (an owner's item), row_menus or
+    row_places on a copy (which follows its setting), row_icons that is not one item per label of its row, each null
+    or one of the camera's icon words (icon_words: no place and no value, a fixed vocabulary), at least one not null,
+    and a row whose settings disagree on its row_icons (icons_disagree)."""
     cam = doc.get("camera") or {}
     menus = cam.get("menus")
     mine = ((cam.get("text") or {}).get("my_menu_name")) or "My Menu"
@@ -863,6 +876,18 @@ def menu_problems(doc: dict) -> list:
         return [f"{where}: {f} is no label" for f in ("row_tab", "row_group", "under_option")
                 if place.get(f) is not None and not isinstance(place[f], str)]
 
+    words = icon_words(doc)
+
+    def icons(where, place):
+        got = place.get("row_icons")
+        if got is None:
+            return []
+        row = place.get("row") or []
+        if not isinstance(got, list) or len(got) != len(row) or not row:
+            return [f"{where}: row_icons is not one item per label of its row"]
+        return [f"{where}: row_icons holds {w!r}, none of the camera's icon words (ROW_ICONS)" for w in got
+                if w is not None and w not in words] + ([f"{where}: row_icons names no word"] if not any(got) else [])
+
     def on_my_menu(where, tab, group):
         if not isinstance(tab, str) or not isinstance(group, str):
             return []                    # no label: not_labels says so
@@ -881,6 +906,7 @@ def menu_problems(doc: dict) -> list:
             out += on_my_menu(k, s.get("row_tab") or s.get("tab"), s.get("row_group") or s.get("group"))
         out += [f"{k}: row_menus names {n!r}, no camera menu" for n in s.get("row_menus") or [] if n not in names]
         out += labels(f"{k}: row", *(s.get("row") or []), s.get("row_tab"), s.get("row_group"), option=s.get("under_option"))
+        out += icons(k, s)
         for n, place in (s.get("row_places") or {}).items():
             where = f"{k}: row_places[{n!r}]"
             if n not in names or n not in (s.get("row_menus") or []):
@@ -891,11 +917,29 @@ def menu_problems(doc: dict) -> list:
             out += [f"{where} holds {f!r}" for f in place if f not in MENU_PLACE]
             out += [f"{where}: row holds {x!r}, not a label" for x in place.get("row") or [] if not isinstance(x, str)]
             out += not_labels(where, place)
+            out += icons(where, place)
             out += labels(where, *(place.get("row") or []), place.get("row_tab"), place.get("row_group"),
                           option=place.get("under_option"))
             out += on_my_menu(where, place.get("row_tab") or s.get("row_tab") or s.get("tab"),
                               place.get("row_group") or s.get("row_group") or s.get("group"))
-    return out
+    return out + icons_disagree(doc)
+
+
+def icons_disagree(doc: dict) -> list:
+    """Each row whose settings disagree on what its icon means (row_icons, at that level: a word, another or none),
+    in a place or a menu's place: the editor draws a heading's words only where every setting on or under the row gives
+    the same, so the writer gives them alike (camkit.placement.with_icons, one row one node)."""
+    said = collections.defaultdict(set)          # (menu or None, tab, labels, row_at) down to a level -> its words
+    for s in doc.get("settings") or []:
+        tab = s.get("row_tab") or s.get("tab")
+        for menu, place in [(None, s)] + [(m, p) for m, p in (s.get("row_places") or {}).items() if isinstance(p, dict) and p.get("row")]:
+            row, at = place.get("row") or [], place.get("row_at") or []
+            got = place.get("row_icons") if isinstance(place.get("row_icons"), list) else []
+            for i in range(min(len(row), len(at))):
+                said[(menu, place.get("row_tab") or tab, tuple(map(str, row[:i + 1])), tuple(at[:i + 1]))].add(
+                    got[i] if i < len(got) else None)
+    return [f"row {' > '.join(labels)}{f' in {menu}' if menu else ''}: its settings disagree on row_icons "
+            f"({', '.join(sorted(map(str, words)))})" for (menu, _, labels, _), words in sorted(said.items(), key=str) if len(words) > 1]
 
 
 MENU_WORDS = ("its camera menus say more than names and places ({why}): mend the camera's MENUS or HAND_PLACES table "

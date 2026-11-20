@@ -261,16 +261,19 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   few rows no longer takes the row off every other setting. The writer's refusal of a Main tile on an Expert-only
   setting now says why that setting is Expert-only, and what to do about it.
 - **Two rows the camera tells apart by an icon alone read apart in the definition:** a camera's `ROW_ICONS` hand table
-  gives each icon's words, and the row's label becomes "label (words)", such as Setup's "Custom Key/Dial Set. (Still)"
-  and "Custom Key/Dial Set. (Movie)". The a1 II's table names its three such pairs, which its definition takes at the
-  next write.
+  gives each icon's words, and a setting's `row_icons` says them beside its `row`, which keeps the camera's labels, so
+  an editor draws "Custom Key/Dial Set. (Movie)". The a1 II's table names its three such pairs, each path with its
+  group, as its `HAND_PLACES` "#1" rows now do: a page order a later scan changes stops the write.
 - **A row's first word counts as an icon's letters only on evidence:** an option names a row without it only where
   another reading of that same option left it out, which `menu_tree.py` now keeps in the tree (`drawn_options`), so
   "Shot Mark" names no "Mark". Rebuild a mode's menu with `menu_tree.py` before the next write, or its checklists name
   only exactly.
-- **The fewer-menus print leaves out a row a menu opens nothing under:** a row whose Right changed nothing there (the
-  Movie and S&Q menus' Recognition Target targets) holds no rows in that menu. The option-tree audit says a row given
-  by hand is one, never that the camera lists those options flat.
+- **The fewer-menus print names apart a row a menu opens nothing under:** a row whose Right changed nothing there (the
+  Movie and S&Q menus' Recognition Target targets) holds no rows in that menu, said as one crawl's reading. The
+  option-tree audit says a row given by hand is one, never that the camera lists those options flat.
+- **A write that would take a camera menu off a setting says each and stops:** `kit/schema_update.py --write` (and
+  `--from-data --write`) refuses it unless run with `--accept-lost-menus` and their count, so a menu tree not rebuilt
+  for a pass is caught, whatever the cause.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.
