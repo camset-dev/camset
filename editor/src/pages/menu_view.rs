@@ -208,7 +208,7 @@ impl App {
     /// what the menus do not hold; in Compare All settings first), the keys taken so the columns' keys do not move too.
     /// Only plain arrows: Alt with them steps through Compare's differences.
     pub(crate) fn bar_nav(&mut self, ctx: &egui::Context) {
-        if self.doc.is_none() || self.focus != Focus::Tabs || ctx.wants_keyboard_input() || ctx.memory(|m| m.any_popup_open()) {
+        if self.doc.is_none() || self.focus != Focus::Tabs || typing(ctx) || ctx.memory(|m| m.any_popup_open()) {
             return;
         }
         let menu = self.menu_shown();
@@ -233,6 +233,9 @@ impl App {
             i.events.retain(|e| !arrow(egui::Key::ArrowUp)(e) && !arrow(egui::Key::ArrowDown)(e));
             (up, down)
         });
+        if up || down {
+            self.keep_focus(ctx);
+        }
         let step = if down { 1 } else if up { -1 } else { return };
         let next = match pos { Some(p) => step_in(keys.len(), p, step), None => (!keys.is_empty()).then_some(0) };
         let Some(key) = next.map(|i| keys[i].clone()) else { return };
@@ -342,7 +345,7 @@ impl App {
         // Up/Down move through the items as drawn, like the camera's menu, stopping on its rows that hold others too
         // (Left/Right pick the column, or fold a row that holds others: see keyboard_nav)
         let mut moved = false;
-        if !*family && self.focus == Focus::Items && !ui.ctx().wants_keyboard_input() {
+        if !*family && self.focus == Focus::Items && !typing(ui.ctx()) {
             let stops: Vec<usize> = (0..lines.len()).filter(|&a| !hidden[a] && matches!(lines[a], Line::Row { .. } | Line::Heading { .. })).collect();
             let cur = Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref());
             let at = lines.iter().position(|l| match l {
@@ -415,15 +418,14 @@ impl App {
                     if ui.small_button("Collapse all").on_hover_text(format!("Fold the table ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
                     if ui.small_button("Expand all").on_hover_text(format!("Open the table ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
                 });
+                // a button's request acts in this same drawing, the table being drawn below it
+                if let Some(collapse) = fold_every.take() {
+                    self.fold_all(collapse);
+                }
                 egui::ScrollArea::both().id_salt("family_scroll").auto_shrink([false, false]).show(ui, |ui| {
                     self.pp_table(ui, gname, &rows[0], editable, &mut actions);
                 });
             });
-            self.head_fold = None;
-            if let Some(collapse) = fold_every {
-                self.fold_all(collapse);
-                ui.ctx().request_repaint();
-            }
         } else {
             // column 4: the selected item
             egui::SidePanel::right("detail").resizable(true).default_width(330.0).show_inside(ui, |ui| {
