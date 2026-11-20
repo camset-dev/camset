@@ -110,7 +110,10 @@ Movie and S&Q), the definition carries them as `camera.menus`, and each placed s
 
 `row_places` gives a menu's place where it differs from the setting's own: always with its `row` and `row_at`, and
 with `"under_option": null` where that menu has no option the setting's own place has. No place rests on My Menu's
-item pages, nor on where a list's reading began when the camera held one of its rows.
+item pages. A menu's place keeps the setting's own order in two cases: among rows that menu read turned round (from
+the row the camera held), and below rows the setting's own menu never read. Nor does it rest on where an option
+list's reading began. The setting's own place takes its own menu's walk as it read the rows, and that walk may itself
+have begun at a held row.
 
 **`row_menus` follows the mapping.** It follows how deep each mode's walk read and in which modes the proofs were made.
 A setting proved only in Stills is not in the Movie menu until Movie's walk reads its row or a proof is made there, even

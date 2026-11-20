@@ -1041,7 +1041,9 @@ def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", o
     read under it (of rows bearing one label, the one at the same place, else the one written alike), the page an
     option opens as `m` holds it (its row named as that option, or as another option settings sit under there, with
     rows under it). None where `m` lacks the top row, read the rows under one and the label is not among them, or never
-    read them (by_menu then places it by that menu's own proofs, or not at all). At the place's last level, a row `m`
+    read them (by_menu then places it by that menu's own proofs, or not at all). Below a row the setting's own menu read
+    no rows under (its place grown from its proofs, in the definition's order), the setting keeps its own place in `m`
+    too: another menu's order there, turned or not, is never written as its place. At the place's last level, a row `m`
     read as a list or checklist with no rows below it holds the setting where one of its options names the label
     (option_names: Movie's Playback Filter Condition, a checklist of the items the Stills menu holds as rows), at the
     setting's own place. `own`: the top row in
@@ -1055,9 +1057,11 @@ def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", o
     top, idx = node, [at[0]]
     page = isinstance(opt, str) and opt in labels[1:-1]
     mine = own if own is not None and norm(own["l"]) == norm(labels[0]) else None
+    unread = False                       # the own menu read no rows at some level above: its place is the definition's
     for i in range(1, len(labels)):
         kids = node["kids"]
         theirs = mine["kids"] if mine is not None else None
+        unread = unread or (theirs is not None and not theirs)
         mine = theirs[at[i]] if theirs is not None and at[i] < len(theirs) else None
         if page and i == labels.index(opt, 1):
             names = options.get((tab, tuple(norm(x) for x in labels[:i])), set()) | {norm(opt)}
@@ -1077,8 +1081,8 @@ def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", o
             return None
         pick = kids[at[i]] if len(same) > 1 and at[i] < len(kids) and kids[at[i]] in same else \
             next((k for k in same if strict(k["l"]) == strict(labels[i])), same[0])
-        keep = theirs is not None and turned([norm(k["l"]) for k in kids], [norm(k["l"]) for k in theirs]) \
-            and mine is not None and norm(mine["l"]) == norm(pick["l"])
+        keep = unread or (theirs is not None and turned([norm(k["l"]) for k in kids], [norm(k["l"]) for k in theirs])
+                          and mine is not None and norm(mine["l"]) == norm(pick["l"]))
         idx.append(at[i] if keep else kids.index(pick))
         node = pick
     out = {"row": list(labels), "row_at": idx}

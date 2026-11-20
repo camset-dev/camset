@@ -997,3 +997,20 @@ def test_the_writer_stops_on_records_of_one_row_with_overlapping_menus(tmp_path,
         S.from_data(d)
     said = str(e.value.code)
     assert "global:0x0040 and global:0x0041 (Spot) are one row in the editor" in said and "twice" in said
+
+
+def test_where_the_own_menu_never_read_the_rows_another_menus_order_is_not_written():
+    """The setting's own menu never read the rows under its top row (its place grown from its proof, in the definition's
+    order), and another menu read them, turned or not: that menu's order is not written as its place there. The setting
+    keeps its own, so no place rests on where another menu's walk began."""
+    kids = ["Auto", "Human", "Animal/Bird", "Insect"]
+    stills = [{"tab": "Focus", "pages": [page("1/1", "Subject Recog.", row("Recognition Target"))]}]
+    sq = [{"tab": "Focus", "pages": [page("1/1", "Subject Recog.", row("Recognition Target", *[
+        row(x, row("Recognition Priority Set.")) for x in kids[1:] + kids[:1]]))]}]
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": stills, "modes": [{"mode": "S&Q", "tabs": sq}]}
+    d = {"model": "TEST", "tabs": ["Focus"], "menu": [{"tab": "Focus", "group": "Subject Recog.", "label": "Recognition Target", "order": 0}],
+         "settings": [{**setting("global:0x0001", "Recognition Priority Set.", "Subject Recog.",
+                                 "Recognition Target > Animal/Bird > Recognition Priority Set."), "tab": "Focus"}]}
+    assert placement.settings(copy.deepcopy(d), tree)["global:0x0001"]["row_at"] == [0, 0, 0]
+    got = placement.by_menu(copy.deepcopy(d), tree, [MENUS[0], MENUS[2]])["global:0x0001"]
+    assert got == {"row_menus": ["Still", "S&Q"]}, got
