@@ -27,8 +27,8 @@ Set", "Recall Custom hold N", item].
 A STOP means no press but cleanup MENU (camkit.link): after a STOP file made before the run or during it, a chain's
 limit or a first Ctrl-C (or a STOP during the session's restore), the put-back presses nothing; the session's restore
 (the start file uploaded where a record differs, checked) and the last download still happen, and
-customshoot_run.run_end says how it ended: a STOP file there before the run, nothing sent but what closes a screen
-already open, exit EXIT_UNRESTORED (a chain stops); a stop during the run, the start file back and checked, exit
+customshoot_run.run_end says how it ended: a STOP file there before the run, nothing pressed but what closes a
+screen already open, exit EXIT_UNRESTORED (a chain stops); a stop during the run, the start file back and checked, exit
 EXIT_INCOMPLETE where nothing more is owed, and the working copy judged by the start file's own slots: its record as the
 start file has it, nothing more owed; differing where the start file's fourth slot holds its hold-3 slot's value, so
 opening hold 3 restores it, the command that does that:

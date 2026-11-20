@@ -203,12 +203,13 @@ class Run:
         self._n = self._highest()
         self._stop_why = None                  # a stop asked for in this process (a signal), not by a file
         # a STOP file already there when the run starts is left from an earlier stop: the run refuses its first press
-        # (StopRequested, naming the file) and says so now, rather than stopping without a word. What still goes out is
+        # (StopRequested, naming the file) and says so now, rather than stopping without a word. What is still pressed is
         # what a session's start and end send to close a screen already open (camkit.link lets a cleanup press through:
-        # MENU, and proving.nav.to_shooting's one OK on a notice that has just refused MENU and shows OK alone)
+        # MENU, and proving.nav.to_shooting's one OK on a notice that has just refused MENU and shows OK alone); the
+        # session's downloads still go out
         self._left = [p for p in (d / "STOP" for d in self._stop_dirs()) if p.exists()]
         for p in self._left:
-            print(f"{p} is there from an earlier stop: a run sends nothing while it is there but what closes a screen "
+            print(f"{p} is there from an earlier stop: a run presses nothing while it is there but what closes a screen "
                   "already open (a cleanup MENU, and one cleanup OK on a notice that has just refused MENU and shows OK "
                   "alone). Remove it to run.", file=sys.stderr, flush=True)
             self.log("stop_left_over", path=str(p))

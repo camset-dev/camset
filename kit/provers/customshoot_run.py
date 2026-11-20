@@ -23,8 +23,8 @@ record out (prover_session's expected) and the last download checks it.
 
 A STOP means no press but cleanup MENU (camkit.link), here and in customshoot_values.py, which shares put_back and
 run_end: after a STOP file made before the run or during it, a chain's limit or a first Ctrl-C, the put-back presses
-nothing; the restore and the last download still happen. A STOP file there before the run: nothing sent but what
-closes a screen already open, exit EXIT_UNRESTORED, the file named (a chain stops). A stop during the run: the start
+nothing; the restore and the last download still happen. A STOP file there before the run: nothing pressed but
+what closes a screen already open, exit EXIT_UNRESTORED, the file named (a chain stops). A stop during the run: the start
 file back and checked, and the working copy judged by the start file's own slots (copy_remedy): as the start file has
 it, nothing more owed, exit EXIT_INCOMPLETE; differing, the command that puts it back (customshoot_values.py --put-back
 --against the start file) only where opening hold 3 restores it, exit EXIT_INCOMPLETE, else the hold to open by hand
@@ -345,9 +345,8 @@ def run_end(run, restored: bool, last: list, stopped: list, opened, done: bool, 
     """The exit status of a Recall Custom run once its put-back is over, said in true words. `last`: the records that
     differ between `start` (the file the camera must be on: the run's start download, or --put-back's --against file)
     and the last download; the working copy's record (`keys`) is judged by `start`'s slots (copy_remedy).
-    - a STOP file there before the run started (Run._left): the run sent nothing but what closes a screen already open
-      (cleanup MENU, or OK on a notice that has just refused MENU) and registered nothing; EXIT_UNRESTORED, as it always
-      exited, so a chain stops;
+    - a STOP file there before the run started (Run._left): the run pressed nothing but what closes a screen already
+      open (a cleanup MENU, and one cleanup OK on a notice that has just refused MENU and shows OK alone) and registered nothing; EXIT_UNRESTORED, as it always exited, so a chain stops;
     - a restore that did not check out, or records other than the working copy's that differ at the end:
       EXIT_UNRESTORED, as ever;
     - a stop during the run (in its session, during its restore, or in the put-back): the start file back and checked,
@@ -357,14 +356,14 @@ def run_end(run, restored: bool, last: list, stopped: list, opened, done: bool, 
       hold to open by hand, or none, EXIT_UNRESTORED); a record that differs though this run opened no hold's screen is
       never nothing owed, EXIT_UNRESTORED. A refusal that ended the run EXIT_REFUSED, any other failure EXIT_INCOMPLETE,
       the copy put back;
-    - else 0; EXIT_UNRESTORED when the working copy's record differs after it was put back (how it goes back, no
-      --put-back offered)."""
+    - else 0; EXIT_UNRESTORED when the working copy's record differs after it was put back, a failure having ended the
+      run or not (how it goes back, no --put-back offered)."""
     stop = next((e for e in stopped if isinstance(e, StopRequested)), None)
     left = getattr(run, "_left", None) or []
     if stop is not None and left:
-        print(f"{left[0]} was there before this run started (an earlier stop): the run sent nothing but what closes a "
-              "screen already open (cleanup MENU, or OK on a notice that has just refused MENU) and registered nothing. "
-              "Remove it to run.", flush=True)
+        print(f"{left[0]} was there before this run started (an earlier stop): the run pressed nothing but what closes "
+              "a screen already open (a cleanup MENU, and one cleanup OK on a notice that has just refused MENU and shows "
+              "OK alone) and registered nothing. Remove it to run.", flush=True)
         return EXIT_UNRESTORED
     others = [c.key for c in last if c.key not in keys]
     if not restored or others:
@@ -372,13 +371,15 @@ def run_end(run, restored: bool, last: list, stopped: list, opened, done: bool, 
     copy = [c for c in last if c.key in keys]
     named = ", ".join(sorted(keys)) or "its record"
     under = Path(run.dir).parent
-    if not stopped:
-        if not copy:
-            return 0
+    if done and copy:
+        # the put-back was done (no stop asked for, whether or not a failure ended the session) and the copy differs:
+        # not on its start file, however the session ended; how it goes back, never --put-back (it was just done)
         words, _ = copy_remedy(copy[0].before, scan, start, under, offer=False)
         print(f"the working copy's record ({copy[0].key}) still differs from the start file after hold {LAST_OPENED}'s "
               f"screen was opened and left. {words}", flush=True)
         return EXIT_UNRESTORED
+    if not stopped:
+        return 0
     print("the start file is back and checked" + (f", all but the working copy's record ({named}, which no settings "
                                                    "file sets back)" if copy else ""), flush=True)
     # why the copy was not put back: a stop, or (--put-back alone) the failure that ended its one session

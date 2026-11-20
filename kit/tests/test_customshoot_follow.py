@@ -448,9 +448,9 @@ def test_a_stop_file_there_before_the_run_presses_nothing_and_exits_4_naming_it(
     assert not any(e.startswith("press ") and "(cleanup)" not in e for e in ev)       # nothing pressed but MENU
     assert world["lines"]() == []
     out = capsys.readouterr().out
-    assert (f"{left} was there before this run started (an earlier stop): the run sent nothing but what closes a "
-            "screen already open (cleanup MENU, or OK on a notice that has just refused MENU) and registered nothing"
-            in out)
+    assert (f"{left} was there before this run started (an earlier stop): the run pressed nothing but what closes a "
+            "screen already open (a cleanup MENU, and one cleanup OK on a notice that has just refused MENU and shows OK "
+            "alone) and registered nothing" in out)
     assert "back and checked" not in out
 
 
@@ -574,6 +574,21 @@ def test_a_copy_off_that_no_hold_restores_says_so(world, capsys):
     out = capsys.readouterr().out
     assert "No hold's screen restores it: no hold's slot in the start file holds what its fourth slot holds." in out
     assert "--put-back" not in out
+
+
+def test_a_failure_whose_put_back_left_the_copy_differing_exits_4_and_says_how_it_goes_back(world, capsys):
+    """A failure (no stop) at 0.3EV, the start's copy on hold 1's value: the put-back is done (hold 3's screen opened and
+    left) and the copy differs at the end, so the run exits 4, as before 2026-11-20, never the failure's 8, and says how
+    the copy goes back (by hand: hold 1's screen), no --put-back; the start file is not called back and checked."""
+    copies(world, start=[2, 2, 0, 2], end=[2, 2, 0, 0])
+    world["fail_on"] = "0.3EV"
+    assert exits(world["go"]) == 4
+    assert world["events"][-len(PUT_BACK):] == PUT_BACK
+    out = capsys.readouterr().out
+    assert (f"the working copy's record ({COPY_KEY}) still differs from the start file after hold 3's screen was opened "
+            "and left. Opening hold 3 would not restore it: the start file's fourth slot holds what hold 1's slot holds"
+            in out)
+    assert "--put-back" not in out and "back and checked" not in out
 
 
 # ---------------------------------------------------------------- --put-back: the working copy put back alone

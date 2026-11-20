@@ -517,9 +517,9 @@ def test_a_stop_file_left_from_before_is_said_and_refuses_the_first_press(spaced
     (run.dir / "STOP").write_text("", encoding="utf-8")
     again = Run(run.dir.name, root=run.root)
     err = capsys.readouterr().err
-    # what goes out while it is there, as the link lets it (camkit.link: a cleanup press alone; proving.nav.to_shooting
-    # sends cleanup MENU, and OK only on a notice that has just refused MENU and shows OK alone)
-    assert "from an earlier stop: a run sends nothing while it is there but what closes a screen already open (a " \
+    # what is pressed while it is there, as the link lets it (camkit.link: a cleanup press alone; proving.nav.to_shooting
+    # sends cleanup MENU, and OK only on a notice that has just refused MENU and shows OK alone); downloads still go out
+    assert "from an earlier stop: a run presses nothing while it is there but what closes a screen already open (a " \
         "cleanup MENU, and one cleanup OK on a notice that has just refused MENU and shows OK alone)" in err
     with Link(again, ip="192.0.2.10", binary=CAMLINK, catch_signals=False) as link, \
             pytest.raises(StopRequested, match="before this run started"):
