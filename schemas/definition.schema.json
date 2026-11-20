@@ -304,8 +304,11 @@
         "description": "As the setting's \"row_group\", in this menu."
        },
        "under_option": {
-        "type": "string",
-        "description": "As the setting's \"under_option\", in this menu."
+        "type": [
+         "string",
+         "null"
+        ],
+        "description": "As the setting's \"under_option\", in this menu; null where the setting is under no option in this menu though its own place is under one (a field left out keeps the setting's own)."
        }
       }
      },

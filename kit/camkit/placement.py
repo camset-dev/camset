@@ -1095,13 +1095,14 @@ def place_differs(own: dict, got: dict, s) -> dict:
     """A menu's place written as what differs from the setting's own (`own`), {} where nothing does: its row and
     row_at always (the definition's schema and the editor's reader take the pair), then row_tab, row_group,
     under_option where they differ, the setting's own tab or group given where the menu's place is in its own and the
-    setting's own place is not (a field left out keeps the setting's own)."""
+    setting's own place is not, and "under_option": None where the setting's own place is under an option and the
+    menu's is under none (a field left out keeps the setting's own, so leaving it out would keep the option)."""
     out = {}
     for f, mine in (("row_tab", s.get("tab")), ("row_group", s.get("group"))):
         if got.get(f) != own.get(f):
             out[f] = got.get(f) or mine
-    if got.get("under_option") != own.get("under_option") and got.get("under_option") is not None:
-        out["under_option"] = got["under_option"]
+    if got.get("under_option") != own.get("under_option"):
+        out["under_option"] = got.get("under_option")
     if out or got.get("row") != own.get("row") or got.get("row_at") != own.get("row_at"):
         out = {"row": got["row"], "row_at": got["row_at"], **out}
     return out

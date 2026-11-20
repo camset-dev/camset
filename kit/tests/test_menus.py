@@ -645,3 +645,23 @@ def test_the_writer_stops_on_a_menus_table_the_tree_does_not_match(tmp_path, mon
     with pytest.raises(hand_tables.Refused) as e:
         fromdata.places(d, [{"name": "Photo", "modes": ["Photo"]}, MENUS[1], MENUS[2]])
     assert "'Photo'" in str(e.value.code) and "menu_tree.py --mode" in str(e.value.code)
+
+
+def test_a_menus_place_says_no_option_here_with_null():
+    """Where the setting's own place is under an option of its row and a menu's place is under none, that menu's place
+    says so: "under_option": null, which the definition's schema allows there (a field left out keeps the setting's
+    own, so leaving it out would keep the option)."""
+    from jsonschema import Draft202012Validator
+    s = {"tab": "Shooting", "group": "Drive Mode"}
+    own = {"row": ["Drive Mode"], "row_at": [2], "under_option": "Continuous Shooting"}
+    got = placement.place_differs(own, {"row": ["Shutter Type"], "row_at": [9]}, s)
+    assert got == {"row": ["Shutter Type"], "row_at": [9], "under_option": None}
+    assert placement.place_differs(own, dict(own), s) == {}
+    assert placement.place_differs({"row": ["A"], "row_at": [1]}, {"row": ["A"], "row_at": [2]}, s) == {"row": ["A"], "row_at": [2]}
+    schema = json.loads((definitions.ROOT / "schemas" / "definition.schema.json").read_text(encoding="utf-8"))
+    v = Draft202012Validator(schema["$defs"]["setting"]["properties"]["row_places"])
+    assert not list(v.iter_errors({"Movie": got}))
+    d = {**doc(), "camera": {"menus": MENUS, "text": {}}, "settings": [
+        {"key": "global:0x0001", "row": ["Drive Mode"], "row_at": [2], "under_option": "Continuous Shooting",
+         "row_menus": ["Still", "Movie"], "row_places": {"Movie": got}}]}
+    assert check_public.menu_problems(d) == []
