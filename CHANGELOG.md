@@ -70,6 +70,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the docs and the ledger's public form, the mapping found no menu row that changes such a record, so it does not know
   what the record holds, and a change to it is unproved and at your own risk. Which unmapped records never changed
   stays in the mapper's private ledger, never listed or counted in a public file (decision 27).
+- **The a1 II's definition lists the camera's three menus, Still, Movie and S&Q,** and the menus each of its 1380 placed
+  settings stands in, read from each mode's own menus; 165 settings take the row they lacked, among them Camera Set.
+  Memory's records, the focus positions under Focus Area and Preset Focus/Zoom's. It also names 340 values as the camera
+  draws them, says why eight rows are greyed (Focus Mode, ISO AUTO Min. SS, Select LUT, Aspect Marker Level), and adds
+  Save HEIF Size, the Recall Custom holds' Exposure step, Playback DISP Mode and whether Lock Operation Parts holds.
 - **The a1 II's definition proves Bracket Type's Cont. Bracket and Single Bracket whole,** each of their 60 choices
   and no longer a sample. Six rows take the names the camera draws (Proxy Recording, Proxy File Format, Proxy Rec.
   Settings, with Shutter Button, S&Q's Record Setting and the movie Recording Media row), and two value names are

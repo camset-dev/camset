@@ -372,8 +372,8 @@ enums:
       doc: 'Rec Frame Rate (S&Q, XAVC S-I HD) [Shooting > Image Quality/Rec]: 0 60p, 2 30p, 4 24p. live settings;
         1 of 1 settings on it proved on the camera.'
     0x0248:
-      id: frame_rate
-      doc: Frame Rate (S&Q) [Shooting > Image Quality/Rec]. live settings; 1 of 1 settings on it proved on the camera.
+      id: s_q_frame_rate
+      doc: S&Q Frame Rate [Shooting > Image Quality/Rec]. live settings; 1 of 1 settings on it proved on the camera.
     0x024e:
       id: record_setting_024e
       doc: 'Record Setting (S&Q, XAVC HS 4K, 60p) [Shooting > Image Quality/Rec]: 8 200M 4:2:2 10bit, 12 150M 4:2:0
@@ -543,8 +543,8 @@ enums:
         1 of 1 settings on it proved on the camera.'
     0x02c3:
       id: bracket_order
-      doc: 'Bracket Order [Shooting > Other settings]: 0 0 -> -(minus) -> +(plus), 1 -(minus) -> 0 -> +(plus). live
-        settings; 1 of 1 settings on it proved on the camera.'
+      doc: 'Bracket Order [Shooting > Other settings]: 0 0→-→+, 1 -→0→+. live settings; 1 of 1 settings on it proved
+        on the camera.'
     0x02c5:
       id: interval_rec_mode
       doc: 'Interval Rec Mode [Shooting > Drive Mode]: 0 OFF, 1 ON. live settings; 1 of 1 settings on it proved
@@ -662,8 +662,8 @@ enums:
       doc: 'Speed Type [Shooting > Zoom]: 0 Variable, 1 Fix. live settings; 1 of 1 settings on it proved on the
         camera.'
     0x0312:
-      id: fixed_speed_sby
-      doc: 'Fixed Speed sBy [Shooting > Zoom]: 0 1 (Slow), 1 2, 2 3, 3 4, 4 5, 5 6, 6 7, 7 8 (Fast). live settings;
+      id: fixed_speed_stby_0312
+      doc: 'Fixed Speed STBY [Shooting > Zoom]: 0 1 (Slow), 1 2, 2 3, 3 4, 4 5, 5 6, 6 7, 7 8 (Fast). live settings;
         1 of 1 settings on it proved on the camera.'
     0x0314:
       id: fixed_speed_rec_0314
@@ -1034,6 +1034,10 @@ enums:
       id: save_jpeg_size
       doc: 'Save JPEG Size [Network > Cnct./Remote Sht.]: 0 Large Size, 1 Small Size. live settings; 1 of 1 settings
         on it proved on the camera.'
+    0x03dd:
+      id: save_heif_size
+      doc: 'Save HEIF Size [Network > Cnct./Remote Sht.]: 0 Large Size, 1 Small Size. live settings; 1 of 1 settings
+        on it proved on the camera.'
     0x03f0:
       id: remote_shooting
       doc: 'Remote Shooting [Network > Cnct./Remote Sht.]: 0 On, 1 Off. live settings; 1 of 1 settings on it proved
@@ -1356,7 +1360,7 @@ enums:
         on the camera.'
     0x0483:
       id: gamma_display_assist_type
-      doc: 'Gamma Display Assist Type [Setup > Display Option]: 0 Auto, 2 S-Log3–>709 (800%), 3 HLG (BT.2020), 4
+      doc: 'Gamma Display Assist Type [Setup > Display Option]: 0 Auto, 2 S-Log3→709 (800%), 3 HLG (BT.2020), 4
         HLG (709). live settings; 1 of 1 settings on it proved on the camera.'
     0x0485:
       id: shoot_timing_display
@@ -1438,9 +1442,9 @@ enums:
       doc: 'Movie HDMI Output Audio CH [Setup > External Output]: 0 CH1/CH2, 1 CH3/CH4. live settings; 1 of 1 settings
         on it proved on the camera.'
     0x049c:
-      id: monitoring_output_display_hdmi
-      doc: 'Monitoring Output Display HDMI [Setup > External Output]: 0 On, 1 Off. live settings; 1 of 1 settings
-        on it proved on the camera.'
+      id: hdmi_info_display
+      doc: 'HDMI Info. Display [Setup > External Output]: 0 On, 1 Off. live settings; 1 of 1 settings on it proved
+        on the camera.'
     0x049d:
       id: control_for_hdmi
       doc: 'Control For HDMI [Setup > External Output]: 0 On, 1 Off. live settings; 1 of 1 settings on it proved
@@ -1521,6 +1525,10 @@ enums:
       id: finder_disp_mode
       doc: 'Finder DISP Mode [Setup > Operation Customize]: 0 Display All Info., 1 No Disp. Info., 2 Histogram,
         3 Level. live settings; 1 of 1 settings on it proved on the camera.'
+    0x04e7:
+      id: playback_disp_mode
+      doc: 'Playback DISP Mode [Setup > Other settings]: 0 Display Info., 1 No Disp. Info., 2 Histogram. live settings;
+        1 of 1 settings on it proved on the camera.'
     0x04e9:
       id: black_level_array
       doc: Black Level [Exposure/Color > Picture Profile PP1]. live settings; 8 of 11 settings on it proved on the
@@ -1961,6 +1969,10 @@ enums:
     0x0c35:
       id: af_on_array
       doc: AF On [Shooting > Recall Custom hold 1]. live settings; 3 of 3 settings on it proved on the camera.
+    0x0c39:
+      id: recall_custom_hold_exposure_step
+      doc: 'Recall Custom hold: Exposure step [Setup > Other settings]: 0 0.5EV, 1 0.3EV. live settings; 1 of 1
+        settings on it proved on the camera.'
     0x0c3d:
       id: interval_rec_shooting_interval
       doc: Interval Rec Shooting Interval [Shooting > Drive Mode]. live settings; 1 of 1 settings on it proved on
@@ -1993,6 +2005,10 @@ enums:
       id: time_code_preset_frames
       doc: 'Time Code Preset: frames [Setup > Other settings]. live settings; 1 of 1 settings on it proved on the
         camera.'
+    0x0c4c:
+      id: lock_operation_parts_locked_now
+      doc: 'Lock Operation Parts: locked now [Setup > Other settings]: 0 Unlocked, 1 Locked. live settings; 1 of
+        1 settings on it proved on the camera.'
     0x0c4d:
       id: wb_fine_tune_a_b
       doc: WB fine-tune A-B (AWB) [Exposure/Color > White Balance]. live settings; 1 of 1 settings on it proved
@@ -2960,8 +2976,8 @@ enums:
         live settings; 1 of 1 settings on it proved on the camera.'
     0x10a2:
       id: focus_bracket_order
-      doc: 'Focus Bracket Order [Focus > Other settings]: 0 0→+, 1 0 -> -(minus) -> +(plus). live settings; 1 of
-        1 settings on it proved on the camera.'
+      doc: 'Focus Bracket Order [Focus > Other settings]: 0 0→+, 1 0→-→+. live settings; 1 of 1 settings on it proved
+        on the camera.'
     0x10a4:
       id: focus_bracket_exposure_lock_1st_img
       doc: 'Focus Bracket Exposure Lock 1st Img [Shooting > Drive Mode]: 0 On, 1 Off. live settings; 1 of 1 settings
@@ -4037,9 +4053,12 @@ enums:
         on it proved on the camera.'
 -retired-ids:
   sq_recording_frame_rate_setting: 0x0240
+  frame_rate: 0x0248
   sq_frame_rate: 0x0248
+  fixed_speed_sby: 0x0312
   operation_in_vertical_orientatir: 0x0473
   movie_hdmi_output_raw: 0x0495
+  monitoring_output_display_hdmi: 0x049c
   camera_position_state: 0x04e2
   movie_interval_rec_frame_rate_setting: 0x1137
   movie_interval_rec_recording_setting: 0x1145
