@@ -192,6 +192,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   live list row on each option in turn, in one session,** for a record the hold writes from a setting its screen does
   not show (the a1 II's lead: 0x0c39 and the Exposure step). Each Register writes a "registration mirror" proof line, applied
   only where the hold's element of the record changed to the option's code.
+- **`reader_census.py --questions` and `label_audit.py` say why each reader failed, by count:** the server's words
+  (an HTTP status, a timeout, a refused connection) or "an answer that is no usable JSON", beside the asked line and in
+  the line that stops a reader after a run of failures, never what an answer held, a label or a file name.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.
