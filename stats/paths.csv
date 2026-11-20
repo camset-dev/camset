@@ -69,3 +69,13 @@ date,path,count,uniques
 2026-11-19,/camset-dev/camset/actions/workflows/editor-release.yml,6,1
 2026-11-19,/camset-dev/camset/tree/main,6,1
 2026-11-19,/camset-dev/camset/blob/main/docs/images/editor-main.png,5,4
+2026-11-20,/camset-dev/camset,75,18
+2026-11-20,/camset-dev/camset/actions/workflows/editor-ci.yml,16,1
+2026-11-20,/camset-dev/camset/actions,15,1
+2026-11-20,/camset-dev/camset/tree/main/docs,12,4
+2026-11-20,/camset-dev/camset/releases/tag/v0.1.0,8,2
+2026-11-20,/camset-dev/camset/issues,6,3
+2026-11-20,/camset-dev/camset/actions/metrics/usage,6,1
+2026-11-20,/camset-dev/camset/actions/workflows/editor-release.yml,6,1
+2026-11-20,/camset-dev/camset/tree/main,6,1
+2026-11-20,/camset-dev/camset/blob/main/docs/images/editor-main.png,5,4
