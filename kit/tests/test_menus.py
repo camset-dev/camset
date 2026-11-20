@@ -577,3 +577,24 @@ def test_the_writer_stops_on_a_main_tile_that_shows_an_expert_only_setting(tmp_p
         S.from_data(pub)
     said = str(e.value.code)
     assert f"camera_{key}.json" in said and "tile 'Numerator' shows set:0x0180@290" in said and "take the key off the tile" in said
+
+
+def test_a_row_the_walk_found_a_notice_on_takes_no_options_from_its_twins_walk(tmp_path):
+    """menu_tree.py: the crawl's map keeps one row per label path, so of two top rows of one label (the S&Q menu's two
+    Shoot Mode rows) a row the walk found a notice on, never opening it, takes none of the options its twin's walk read;
+    the walked one keeps them."""
+    scan, crawl = tmp_path / "scan", tmp_path / "crawl"
+    scan.mkdir()
+    crawl.mkdir()
+    (scan / "model.json").write_text(json.dumps([{"page": "8/59", "breadcrumb": "Shooting > Shooting Mode",
+                                                   "rows": [{"slot": 3, "label": "Shoot Mode"}, {"slot": 4, "label": "Shoot Mode"}]}]),
+                                     encoding="utf-8")
+    (crawl / "rows.jsonl").write_text(
+        json.dumps({"page": "8/59", "slot": 3, "label": "Shoot Mode", "outcome": "walked", "kind": "list"}) + "\n" +
+        json.dumps({"page": "8/59", "slot": 4, "label": "Shoot Mode", "outcome": "notice", "kind": "notice"}) + "\n", encoding="utf-8")
+    (crawl / "map.json").write_text(json.dumps({"rows": [{"path": ["Shoot Mode"], "kind": "list", "options": [
+        {"index": 0, "label": "Program Auto"}, {"index": 1, "label": "Manual Exposure"}]}]}), encoding="utf-8")
+    menu = menu_tree.tree(scan, [crawl], "TEST_fw1.00", "S&Q")
+    first, second = menu["tabs"][0]["pages"][0]["rows"]
+    assert first["options"] == ["Program Auto", "Manual Exposure"] and first["state"] == "walked"
+    assert second["state"] == "info" and "options" not in second and second["kind"] == "notice"

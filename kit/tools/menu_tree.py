@@ -225,14 +225,16 @@ def state_of(summary: dict, greyed: bool) -> tuple:
 
 
 def row_of(label: str, summary: dict | None, path: tuple, maps: dict, greyed: bool = False, never: str = None) -> dict:
-    """One row of the tree, with its children when the crawl walked a submenu."""
+    """One row of the tree, with its children when the crawl walked a submenu. A row the walk found a notice on, never
+    opening it, takes no options or fields from the map, which keeps one row per label path: those are its twin's of
+    one label (the S&Q menu's second Shoot Mode row beside the walked first)."""
     if summary is None:
         state, why = (("never", never) if never else ("greyed", "") if greyed else ("seen", "not walked"))
         return {"label": label, "state": state, "why": why or "", "kind": ""}
     state, why = state_of(summary, greyed)
     kind = summary.get("kind") or ""
     out = {"label": label, "state": state, "why": why, "kind": "notice" if is_notice(summary.get("outcome") or "") else kind}
-    m = maps.get(path)
+    m = None if is_notice(summary.get("outcome") or "") else maps.get(path)
     if m and kind == "fields":
         out["fields"] = fields_of(m)
     elif m:
