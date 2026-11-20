@@ -312,11 +312,30 @@ def test_the_crawl_names_s_and_q_settings_second_row_one_way_whatever_the_reader
     f = frame(run, name)
     cam = SimpleNamespace(frame=f)
     s = screen.read(f)
-    entry = {"label": read, "never_open": None, "readings": ["Saa Record Setting", read]}
+    entry = {"label": read, "never_open": None, "readings": ["Sea Record Setting"]}      # a reading other than the label
     got = icon_entry(cam, s, 1, entry, [{"label": "Frame Rate Settings"}, entry])
     assert got["label"] == "Record Setting" and got["icon"]["read"] == read
     assert got["icon"].get("left_out") == (None if read == "Record Setting" else read.split()[0])
-    assert read in got["readings"] and "Saa Record Setting" in got["readings"]        # the safety checks read them
+    assert got["readings"] == ["Sea Record Setting", read]          # the label as read joins them: the safety checks read
+
+
+@pytest.mark.parametrize("raw,rest", [("Clip Flag", "Flag"), ("Add Item", "Item"), ("FTP Function", "Function")])
+def test_a_bare_label_shortened_past_the_word_the_never_open_list_names_stays_unopened(monkeypatch, raw, rest):
+    """labels(cam) may give a bare label, with no never-open reason stored: the reason is then the label as read judged,
+    never the shortened label, which can leave out the word the list names (the review of 2026-11-20)."""
+    from camkit import crawl as C
+    from camkit import safety
+    assert safety.never_open(raw) and not safety.never_open(rest)
+    f = frame("kit2_plan3_crawl_shd120", "00008_down.png")
+    s = screen.read(f)
+    band = s.rows[1]
+    monkeypatch.setattr(pm.ocr, "read", lambda paths, eng=None: {
+        p: [ocr.Line(rest, 1.0, 92, band[0] + 10, 160, 30)] for p in paths})
+    entry = {"label": raw, "readings": [raw]}
+    got = icon_entry(SimpleNamespace(frame=f), s, 1, entry, [{"label": "Frame Rate Settings"}, entry])
+    assert got["label"] == rest and got["never_open"] == safety.never_open(raw)
+    why, decided = C.closed_row({"page": "S&Q Settings"}, got)
+    assert why and decided is None
 
 
 def test_the_crawl_reads_no_icon_without_a_saved_frame(tmp_path):

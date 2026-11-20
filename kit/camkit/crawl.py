@@ -644,7 +644,8 @@ def icon_entry(cam, s, slot: int, entry: dict, rows) -> dict:
     over (page_model.covered_readings), and what the label as read has in front of that reading is left out where
     page_model.icon_label can tell it is the icon ("S&Q Record Setting" is Record Setting, 2026-11-19), else the label
     stays as read; either way "icon" says what was read, left out or kept, and why. The label as read stays among the
-    row's readings, which the never-open and look lap checks read (row_readings). The picture is the frame as the run
+    row's readings, which the never-open and look lap checks read (row_readings), and the row's never-open reason is the
+    one labels(cam) stored, else the label as read judged (never the shortened label). The picture is the frame as the run
     saved it (a frame the eyes withheld is black there, and gives nothing), never one in memory only; crawl_submenu asks
     nothing of the kind on a --network run or a look lap, which keep no text read off the screen. The entry as it is
     where the camera gives no saved frame (the menu twin), the row starts with no icon, or the reading fails. rows: the
@@ -670,7 +671,10 @@ def icon_entry(cam, s, slot: int, entry: dict, rows) -> dict:
     readings = entry.get("readings")
     if not isinstance(readings, dict):                   # a live page read's list (camkit.live.submenu_labels)
         readings = [*(readings or ()), *([label] if label not in (readings or ()) else [])]
-    return {**entry, "label": new, "icon": record, "readings": readings}
+    # never-open judged on the label as read, where labels(cam) gave none (a bare label): the shortened one can leave out
+    # the very word the list names ("Clip Flag", "Delete All")
+    return {**entry, "label": new, "icon": record, "readings": readings,
+            "never_open": entry.get("never_open") or safety.never_open(label)}
 
 
 @dataclass
