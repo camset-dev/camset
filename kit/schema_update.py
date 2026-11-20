@@ -254,10 +254,12 @@ def blocked(run: Path) -> dict:
     later proof of the same option applied. A value the SDK's setter refused (kit/provers/sdk_run.py, "via" "SDK ...")
     is no menu's refusal: the menu may offer it all the same; nor is a value the camera did not keep but put another in
     its place ("kept": kit/provers/carousel_fields_run.py's number of shots 000, kept as 2). An index that is a list (a
-    carousel option's fields' [box, place]) is keyed as a tuple, as pass2_report.option_key keys it."""
+    carousel option's fields' [box, place]) is keyed as a tuple, as pass2_report.option_key keys it. A line of an option
+    only the reader called grey, never asked of the camera (camkit.coverage.reader_alone), is no refusal: left out."""
+    from camkit.coverage import reader_alone
     last = {}
     for r in jsonl.read(run / "proofs.jsonl"):
-        if r["kind"] in ("list", "dialog", "sidelist"):
+        if r["kind"] in ("list", "dialog", "sidelist") and not reader_alone(r):
             idx = tuple(r["index"]) if isinstance(r.get("index"), list) else r.get("index")
             last[(" > ".join(r["path"]), idx)] = r
     out = collections.defaultdict(list)

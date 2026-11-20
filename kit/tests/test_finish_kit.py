@@ -2597,6 +2597,43 @@ def test_the_report_lists_what_was_not_applied_and_how():
     assert "told" not in R.not_applied_entry({**OLD_REFUSED, "greyed_by": "reader"})
 
 
+# the reviewer's scenario (2026-11-20), on the made-up camera's Bravo row: On grey by its pixels and refused by the
+# camera on the row's one Enter (its notice names Alpha), Off white by its pixels but grey by the second reader's flag,
+# skipped with no key as the row's reason was known (proving.greyed.line: "greyed_by" "reader", no notice, the row's
+# blocker beside it)
+PIXEL_REFUSED = {**OLD_REFUSED, "changes": [], "greyed": "drawn", "greyed_by": "pixels", "entered": "for its reason",
+                 "blocker": {"row": "Alpha"}, "reason": {"from": "notice", "frame": "00011_enter.png", "entry": "On"}}
+READER_ALONE = {**GREY_LINE, "greyed_by": "reader"}
+
+
+def test_an_option_only_the_reader_called_grey_is_no_refusal_for_the_writer_the_ledger_or_the_census(ledger_camera,
+                                                                                                    tmp_path):
+    """camkit.coverage.reader_alone, one rule for the three: Off, which only the reader called grey and nobody tried,
+    gives the writer no blocked entry and the ledger no "greyed" value, and the census no grey truth; On, which the
+    camera refused, still does all three."""
+    import json
+
+    import schema_update as SU
+    import test_coverage as T
+    from camkit import coverage
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import reader_census as rc
+    assert coverage.reader_alone(READER_ALONE) and not coverage.reader_alone(PIXEL_REFUSED)
+    assert not coverage.reader_alone({**READER_ALONE, "notice": {"text": "not available as follows Alpha"}})
+    assert not coverage.reader_alone(GREY_LINE)                      # an older grey line, told by the pixels
+    (tmp_path / "proofs.jsonl").write_text("".join(json.dumps(x) + "\n" for x in (PIXEL_REFUSED, READER_ALONE)),
+                                           encoding="utf-8")
+    assert dict(SU.blocked(tmp_path)) == {"Bravo": [("On", "This operation or setting not available as follows Alpha On")]}
+    hand = ledger_camera.data / f"hand_tables_{T.CAM}.json"
+    hand.write_text(json.dumps({**json.loads(hand.read_text(encoding="utf-8")), "FRAME_PROOFS": {}}), encoding="utf-8")
+    T.write_proofs(ledger_camera, "kit2_pass2", [PIXEL_REFUSED, READER_ALONE], attempts=["A"])
+    led = T.ledger(validity=True)
+    values = {o["key"]: o for o in led.options}["global:0x0101"]["values"]
+    assert values.get(1) == "greyed in state" and values.get(0) != "greyed in state", values
+    assert T.row(led, "Bravo")["blocker"] == {"row": "Alpha"}
+    assert rc.line_grey(READER_ALONE) == {} and rc.line_grey(PIXEL_REFUSED) == {"drawn": True, "refused": True}
+
+
 def test_the_writer_reads_a_grey_lines_blocker_and_credits_no_refused_diff(tmp_path):
     """kit/schema_update.py: the grey line's option is blocked with its row's blocker in the camera's own sentence (the
     row alone, never a value); a refused line's diff names no record the row went through."""

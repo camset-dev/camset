@@ -869,7 +869,12 @@ def line_grey(r: dict) -> dict:
     (proving.greyed wrote it greyed as drawn by its pixels: "greyed_by" absent, written before the reader was asked,
     "pixels" or "both"; never where the reader alone told it, whose answer would be judged against itself), {"refused":
     True} (the camera's notice said "not available", whoever told it grey), {"applied": True} (the camera took it:
-    applied, a record changed, no notice); {} where it says none of these."""
+    applied, a record changed, no notice); {} where it says none of these, and for a line of an option only the reader
+    called grey that the camera was never asked about (camkit.coverage.reader_alone, the rule the ledger and the writer
+    keep too)."""
+    from camkit.coverage import reader_alone
+    if reader_alone(r):
+        return {}
     out = {}
     if r.get("greyed") == "drawn" and r.get("greyed_by") in (None, "pixels", "both"):
         out["drawn"] = True

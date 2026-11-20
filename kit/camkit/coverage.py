@@ -1221,6 +1221,15 @@ def blocker_of(text, labels) -> dict | None:
     return {"remote": REMOTE} if safety.NOTICE_REMOTE.search(t) else None
 
 
+def reader_alone(p: dict) -> bool:
+    """A proof line of an option only the second reader called grey, the camera never asked: written greyed as drawn
+    with "greyed_by" "reader" and no notice of its own (proving.greyed: skipped with no key, its row's reason read on
+    another option). No refusal the camera gave, so no blocker is taken from it (here, proof_refused; schema_update's
+    blocked) and it is no grey truth (kit/tools/reader_census.py's line_grey): the option stays open, as nobody tried
+    it. One rule for the three."""
+    return p.get("greyed") == "drawn" and p.get("greyed_by") == "reader" and not p.get("notice")
+
+
 def proof_blocker(p: dict, labels) -> dict | None:
     """The blocker of a proof line the camera did not apply: its notice's (blocker_of), else the one the line carries
     (an option drawn grey that no key was pressed on: proving.greyed), as blocker_of gives one: a row, equipment or a
@@ -1493,6 +1502,8 @@ def _facts(led: Ledger, src: Sources, by_key: dict) -> Facts:
             continue
         e = es[0]
         label = p.get("label")
+        if reader_alone(p):
+            continue                    # the reader alone called it grey and nobody tried it: no fact, the option open
         if p.get("applied") is False:
             # the camera's notice names the blocker; an option drawn grey that no key was pressed on carries the row's
             # (proving.greyed: from the camera's Help or the one notice its row was entered for)
