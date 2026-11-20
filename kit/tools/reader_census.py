@@ -83,7 +83,8 @@ the failures in a row after which a reader is asked nothing more.
 grey: of each kind whose question has one (camkit.reading.QUESTIONS' grey_prompt: a list, a side list, a table's
 picker, a checklist, a carousel, its axis and its cells), up to --per-kind frames whose truth is grey and as many whose
 truth is white, each asked the kind's question and its ".grey" version (the same name with ".grey" after it), the option
-question and its ".grey" version, and on a carousel and its axis the dialog question and its own. The truth needs no
+question and its ".grey" version, and on a carousel and its axis the dialog question and its own and carousel.v2's
+second grey wording (GREY_MORE: carousel.v2.grey2) beside its first. The truth needs no
 person (GREY_SURE's comment): a line greyed as drawn, or refused with "not available"; the pixel test with a margin on
 a list's and a side list's frames; a line the camera applied; a frame whose sources disagree is left out, counted.
 Each grey answer is judged right, wrong or no answer, the frames drawn grey and those drawn white apart, and each
@@ -855,6 +856,8 @@ BEST = {"list": ("v3: route",)}
 # grey_prompt); a carousel's truth is its lines' alone, an axis cell's and a checklist box's none yet (said so).
 GREY_SURE = 30
 GREY_KINDS = tuple(k for k, q in reading.QUESTIONS.items() if q.grey_prompt)
+# another wording of a kind's grey version, asked beside it on the same frames (camkit.vlm: carousel.v2.grey2)
+GREY_MORE = {"carousel.v2": ("carousel.v2.grey2",)}
 PIXEL_KINDS = {"list", "side list"}                  # where drawn_grey measures the lit option
 NOT_AVAILABLE = re.compile(r"not available", re.I)
 GREY_JUDGED = ("right", "wrong", "no answer")
@@ -948,6 +951,7 @@ def grey_questions(item: Item) -> list:
     q = reading.QUESTIONS[item.kind]
     pick = NEW_PICK.get(item.kind, _selected)
     out = [(q.prompt, pick, None), (q.grey_prompt, pick, q)]
+    out += [(key, pick, q._replace(grey_prompt=key)) for key in GREY_MORE.get(q.prompt, ())]
     pairs = [("option", "selected")] + ([("dialog", "selected")] if item.kind in ("carousel", "axis") else [])
     for key, name in pairs:
         out += [(key, _field(name), None),

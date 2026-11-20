@@ -1153,7 +1153,7 @@ GREY_PROMPTS = {"option.grey": "020ec469740c225b", "dialog.grey": "39b51c3f2eeff
                 "checklist.v2.grey": "f8594f57dfa9ad0a"}
 # the questions measured next (reader census, variants "entries" and "grey"): pinned from the start, so that what is
 # measured is what is pinned
-NEXT_PROMPTS = {"entries.v2": "0e8d5a88822362ca"}
+NEXT_PROMPTS = {"entries.v2": "0e8d5a88822362ca", "carousel.v2.grey2": "23960e8b44fa0768"}
 
 
 def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
@@ -1286,6 +1286,11 @@ def test_each_question_about_a_settings_options_has_a_grey_version_that_changes_
     assert all(q.grey is None for q in reading.QUESTIONS.values() if not q.grey_prompt)
     assert all(".grey" not in q.prompt for q in reading.QUESTIONS.values())
     assert all(".grey" not in reading.region(k).prompt for k in GREY_KINDS if k != "checklist")
+    # the carousel's second grey wording: carousel.v2 word for word, and named by no kind (measured beside the first)
+    was, second = vlm.PROMPTS["carousel.v2"], vlm.PROMPTS["carousel.v2.grey2"]
+    assert second.startswith(was[:was.rfind(json_line)]) and second.endswith(
+        json_line + '{"selected": "<the orange line>", "greyed": true or false}') and "copy nothing" in second
+    assert "carousel.v2.grey2" not in {q.grey_prompt for q in reading.QUESTIONS.values()}
 
 
 def test_greyed_of_takes_a_true_or_false_and_only_where_something_was_read():
@@ -1728,7 +1733,7 @@ class GreyReader:
             return {"boxes": [{"label": "Zqx One", "ticked": True, **({"greyed": grey} if ".grey" in key else {})}]}
         if key == "option.grey" and name == "00002.png":
             return {"selected": "Zqx Alpha", "greyed": True}
-        return {"selected": label, **({"greyed": grey} if key.endswith(".grey") else {})}
+        return {"selected": label, **({"greyed": grey} if ".grey" in key else {})}
 
 
 def test_the_census_judges_the_grey_questions_against_a_truth_that_needs_no_person(tmp_path, monkeypatch, capsys):
@@ -1760,11 +1765,13 @@ def test_the_census_judges_the_grey_questions_against_a_truth_that_needs_no_pers
     assert lit["option.grey"]["fake"]["text"] == {"right": 3, "another option": 1}     # the wording cost a reading
     assert lit["option.grey"]["fake"]["text, grey"] == {"right": 1, "another option": 1}
     car = g["scores"]["carousel"]
-    assert set(car) == {"carousel.v2", "carousel.v2.grey", "option", "option.grey", "dialog", "dialog.grey"}
+    assert set(car) == {"carousel.v2", "carousel.v2.grey", "carousel.v2.grey2", "option", "option.grey", "dialog",
+                        "dialog.grey"}
     assert car["carousel.v2.grey"]["fake"]["grey"] == {"grey: right": 1, "white: right": 1}
+    assert car["carousel.v2.grey2"]["fake"]["grey"] == {"grey: right": 1, "white: right": 1}   # beside the first
     assert car["dialog.grey"]["fake"]["grey"] == {"grey: right": 1, "white: right": 1}
     assert {k for _, k in asked} == {"lit.v2", "lit.v2.grey", "option", "option.grey", "carousel.v2",
-                                     "carousel.v2.grey", "dialog", "dialog.grey"}
+                                     "carousel.v2.grey", "carousel.v2.grey2", "dialog", "dialog.grey"}
     assert "00004.png" not in {n for n, _ in asked} and "00008.png" not in {n for n, _ in asked}
     assert files_of(root) == before
     # the text form prints counts and rates alone: no label, reading or file name

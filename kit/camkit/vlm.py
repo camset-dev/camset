@@ -274,6 +274,19 @@ PROMPTS.update({
         + _JSON + '{"boxes": [{"label": "<the label>", "ticked": true or false, "greyed": true or false}]}'),
 })
 
+# A second wording of carousel.v2's grey version, to be measured beside it on the carousels (where Qwen3.8-27B's
+# carousel.v2.grey called 8 of 13 grey options grey and 6 of 60 white ones, GLM-4.6V-Flash none): carousel.v2 keeps
+# saying "Do not read the icons in the column at the left", then the first wording asks about "its lit icon" in that
+# same column; this one says to look at the column only for that, and copy nothing from it. carousel.v2's text word for
+# word, as the ".grey" versions are; "grey2", the second grey wording, so that "grey" alone stays the measured first.
+PROMPTS.update({
+    "carousel.v2.grey2": (
+        PROMPTS["carousel.v2"][:PROMPTS["carousel.v2"].rfind(_JSON)] + "Then look at the column of icons at the left "
+        "only to say whether that option is greyed out: the lit icon there is the chosen option's, and the camera "
+        "draws it dim, dark red or grey, instead of bright orange or red, when it will not take the option; copy "
+        "nothing from that column. " + _JSON + '{"selected": "<the orange line>", "greyed": true or false}'),
+})
+
 # A setting's whole list, every option it draws, each with whether it is greyed out and which one is lit, in the menu
 # question's manner (its rows' "greyed" matched the pixels on 99% of a menu page's rows, where asked about the lit item
 # alone the readers saw no grey: a reader judges grey against the other rows it sees). A question for one kind of
