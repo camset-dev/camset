@@ -153,10 +153,11 @@ File B and the base must be from file A's camera model, or they are refused; one
 is compared, with a line saying that a setting the other firmware keeps elsewhere can show a wrong value, and that
 only the settings in the same place in both files are copied into A.
 
-Compare has Edit's Menu on its left, with All settings first: a click shows that entry's rows, grouped as Edit groups
-them, and each entry counts the rows that differ. Where the definition lists the camera's menus, Compare follows the
-one picked: each row shows that menu's mode's value in every column, so two files saved in different modes are
-compared like for like, and each menu's button counts its differences.
+Compare has Edit's Menu on its left, with All settings first: a click shows that entry's rows, and each entry counts
+the rows that differ. Where the definition lists the camera's menus, Compare follows the one picked: its rows are
+grouped as Edit shows them in that menu, each shows that menu's mode's value in every column, so two files saved in
+different modes are compared like for like, each menu's button counts its differences, and the column picker offers
+that menu's memories.
 
 Only file A is ever changed. An arrow between two columns copies a value into file A, a right-click on a value copies
 it into any other column of file A, and a click on a value of file A changes it in place, as in Edit. With a base file
