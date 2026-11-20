@@ -2063,6 +2063,47 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// Review finding 8: what an edit writes together never depends on `row_menus` or `row_places`. A setting kept in
+    /// two records of one name on one row (`twin_of`) whose records the menus name otherwise (one Still's, one Movie's)
+    /// writes both, as without menus; and every setting the sample keeps in more than one record (twins, copies) writes
+    /// the same records with the stub's menus as without. Inside one menu, rows laid out for two menus are two rows.
+    #[test]
+    fn what_an_edit_writes_together_does_not_depend_on_the_menus() {
+        use crate::test_support::{strip_menus, stub_menus};
+        let (mut plain, d1, u1) = sample_app("menus_twins_plain", Some(strip_menus));
+        let (mut menus, d2, u2) = sample_app("menus_twins_menus", Some(stub_menus));
+        let other = |app: &App, s: &Setting| app.offered_values(s, 0).into_iter().map(|(v, _)| v).find(|v| app.doc.as_ref().unwrap().value(0, s.slot()) != Some(*v));
+        let written = |app: &mut App, s: &Setting, v: i64| -> Vec<(usize, u16)> {
+            app.apply(vec![Action::Set(0, s.slot(), v)]);
+            let out = app.doc.as_ref().unwrap().changes();
+            app.undo();
+            out
+        };
+        let editable = |app: &App, s: &Setting| s.area == "global" && s.scalar && !app.locked(s, 0) && app.shape_ok_in(s, 0);
+        // two records of one setting that an edit of the first writes both of, without menus
+        let pairs: Vec<(Setting, Setting, i64)> = plain.schema.settings.iter().filter(|s| editable(&plain, s))
+            .filter_map(|s| Some((s.clone(), plain.schema.settings.iter().find(|o| s.twin_of(o) && o.id != s.id)?.clone(), other(&plain, s)?))).collect();
+        let (a, b, v) = pairs.into_iter().find(|(a, b, v)| written(&mut plain, a, *v).contains(&(0, b.id))).expect("two records of one setting written together");
+        for s in menus.schema.settings.iter_mut() {
+            if s.key == a.key { s.row_menus = vec!["Still".into()]; }
+            if s.key == b.key { s.row_menus = vec!["Movie".into()]; }
+        }
+        menus.schema_gen += 1;
+        let both = written(&mut plain, &a, v);
+        assert_eq!(written(&mut menus, &a, v), both, "{}: the same records with the menus naming them otherwise", a.name);
+        // inside one menu, rows laid out for two menus are two rows; the definition's own records one row
+        assert!(a.same_row(&b) && !a.place_in("Still").same_row(&b.place_in("Movie")) && a.place_in("Still").same_row(&b.place_in("Still")));
+        // every setting kept in more than one record
+        let several: Vec<Setting> = plain.schema.settings.iter().filter(|s| editable(&plain, s) && (s.copy_of.is_some() || !s.copies.is_empty() || plain.schema.settings.iter().any(|o| s.twin_of(o)))).cloned().collect();
+        assert!(several.len() > 20, "{}", several.len());
+        for s in several {
+            let Some(v) = other(&plain, &s) else { continue };
+            assert_eq!(written(&mut menus, &s, v), written(&mut plain, &s, v), "{}", s.name);
+        }
+        done(&d1, &u1);
+        done(&d2, &u2);
+    }
+
     /// Integration review finding 3: the rows as before menus (Compare's rows without a menu, the Memories page,
     /// recall, the page's copy lookup) come in one order, whatever menu the window shows and whatever was asked before.
     #[test]

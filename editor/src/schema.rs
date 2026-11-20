@@ -645,10 +645,13 @@ impl Setting {
         self.page_prefix().is_some_and(|n| own.row == self.row[..n - 1] && own.row_at == self.row_at[..n - 1])
     }
 
-    /// On the same row of the camera's menu as `o`, in the same mode's menu and the same menus (`row_menus`,
-    /// `row_places`; both unplaced counts as the same): two records of one name in two menus' rows are two rows.
+    /// On the same row of the camera's menu as `o`, in the same mode's menu (both unplaced counts as the same). Which of
+    /// the camera's menus name the records (`row_menus`, `row_places`) is compared only inside one menu, where both are
+    /// laid out (`shown_in`, `place_in`): rows laid out for two menus are two rows. So what an edit writes together
+    /// (`twin_of`, `App::apply`) never depends on them.
     pub fn same_row(&self, o: &Setting) -> bool {
-        self.row == o.row && self.row_at == o.row_at && self.row_mode == o.row_mode && self.row_menus == o.row_menus && self.row_places == o.row_places
+        self.row == o.row && self.row_at == o.row_at && self.row_mode == o.row_mode
+            && (self.shown_in.is_none() || o.shown_in.is_none() || (self.shown_in == o.shown_in && self.row_menus == o.row_menus && self.row_places == o.row_places))
     }
 
     /// Whether the definition places the setting on a row of any of the camera's menus: its own `row`, or one of
@@ -2576,10 +2579,11 @@ mod tests {
         // out keeps the top-level one (page file, finding C1)
         let pp = s(serde_json::json!({ "under_option": "PP2", "row_places": { "S&Q": { "row": ["Black Level"], "row_at": [7], "under_option": null }, "Movie": { "row": ["Black Level"], "row_at": [7] } } }));
         assert_eq!((pp.place_in("S&Q").under_option, pp.place_in("Movie").under_option.as_deref(), pp.place_in("Still").under_option.as_deref()), (None, Some("PP2"), Some("PP2")));
-        // two records of one name on one row in two menus' rows are two rows
+        // two records of one name on one row are one row, whichever menus name them (what an edit writes together does
+        // not depend on the menus); laid out for two menus, two rows
         let (a, b) = (s(serde_json::json!({ "row_menus": ["Still"] })), s(serde_json::json!({ "key": "global:0x0002", "id": 2, "row_menus": ["Movie"] })));
-        assert!(!a.same_row(&b) && !a.links_with(&b));
-        assert!(a.same_row(&s(serde_json::json!({ "key": "global:0x0003", "id": 3, "row_menus": ["Still"] }))));
+        assert!(a.same_row(&b) && a.links_with(&b));
+        assert!(!a.place_in("Still").same_row(&b.place_in("Movie")) && a.place_in("Still").same_row(&b.place_in("Still")));
         // one menu, or none: no choice of menu
         let one: Camera = serde_json::from_value(serde_json::json!({ "menus": [{ "name": "Still", "modes": ["Stills"] }] })).unwrap();
         assert!(one.menu_list().is_empty() && one.menus_of(&a).is_empty() && Camera::default().menu_list().is_empty());

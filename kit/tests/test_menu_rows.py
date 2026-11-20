@@ -142,7 +142,10 @@ def test_a_setting_in_the_cameras_menus():
     assert (p["row_menus"], p["shown_in"], mr.place_in(p, "S&Q")["row"]) == (["S&Q"], "S&Q", p["row"])
     assert mr.place_in(audio, "Movie")["row"] == ["Audio"] and "row_mode" not in mr.place_in(audio, "Movie")
     a, b = s("a", "Audio", ["Audio"], [5], row_menus=["Still"]), s("b", "Audio", ["Audio"], [5], row_menus=["Movie"])
-    assert not mr.same_row(a, b) and not mr.links_with(a, b)
+    # one row whichever menus name them (what an edit writes together does not depend on the menus); laid out for two
+    # menus, two rows (review finding 8)
+    assert mr.same_row(a, b) and mr.links_with(a, b)
+    assert not mr.same_row(mr.place_in(a, "Still"), mr.place_in(b, "Movie")) and mr.same_row(mr.place_in(a, "Still"), mr.place_in(b, "Still"))
     assert mr.menu_list({"camera": {"menus": MENUS[:1]}}) == []
 
 

@@ -89,10 +89,14 @@ def on_page(s) -> bool:
 
 
 def same_row(a, b) -> bool:
-    """On the same row of the camera's menu, in the same mode's menu and the same menus (Setting::same_row)."""
+    """On the same row of the camera's menu, in the same mode's menu (Setting::same_row); which menus name the records
+    is compared only inside one menu, where both are laid out (shown_in): what an edit writes together never depends on
+    row_menus or row_places."""
+    inside = a.get("shown_in") is None or b.get("shown_in") is None or (
+        a.get("shown_in") == b.get("shown_in") and (a.get("row_menus") or []) == (b.get("row_menus") or [])
+        and (a.get("row_places") or {}) == (b.get("row_places") or {}))
     return (a.get("row") or []) == (b.get("row") or []) and (a.get("row_at") or []) == (b.get("row_at") or []) \
-        and a.get("row_mode") == b.get("row_mode") and (a.get("row_menus") or []) == (b.get("row_menus") or []) \
-        and (a.get("row_places") or {}) == (b.get("row_places") or {})
+        and a.get("row_mode") == b.get("row_mode") and inside
 
 
 def links_with(a, b) -> bool:
