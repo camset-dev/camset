@@ -830,10 +830,11 @@ def main():
                 first = first_open.FirstOpens(link, hdmi, run, start, seen, skip_why, LOCK_S, private=look,
                                               per=a.first_open_check,
                                               name=functools.partial(kept_label, known=names) if look else None)
-            # the session's start, every runner's (runner.session_start): a plain menu page closed with one MENU, then
-            # the shooting screen waited for (runner.close_menu_and_wait on this module's screen reader and wait_for,
-            # whose grace covers the menu closing: no second slept), the start download, what the lap needs of it
-            # (prepared), and the menu's lock after it from the download's reply (camkit.session.wait_lock)
+            # the session's start, as prover_session's and prove_run's (runner.session_start): a plain menu page closed
+            # with one MENU, then the shooting screen waited for (runner.close_menu_and_wait on this module's screen
+            # reader and wait_for, whose grace covers the menu closing: no second slept), the start download, what the
+            # lap needs of it (prepared), and the menu's lock after it from the download's reply
+            # (camkit.session.wait_lock)
             before = session_start(link, hdmi, "the first settings download", reach=functools.partial(
                 close_menu_and_wait, read=screen.read, wait=wait_for), say=False, prepare=prepared,
                 lock=lambda eyes, since: wait_lock(since, eyes, clock=time), clock=time)
@@ -872,7 +873,7 @@ def main():
         # while a first open's marker is there, the check reconnects as kit/tools/upload_check.py does
         held = first is not None and first.marker is not None
         checking = {"link_class": functools.partial(Link, pending_restore=True)} if held else {}
-        # after an upload the check watches the eyes for the camera's restart, as every runner's does
+        # after an upload the check watches the eyes for the camera's restart, as prover_session's and prove_run's do
         # (runner.restart_watched)
         restored = restore_checked(run, ending, before, **values_withheld(look), **checking,
                                    **restart_watched(ending, hdmi))

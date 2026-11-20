@@ -248,6 +248,19 @@ def test_a_start_whose_check_fails_ends_before_the_wait(world, tmp_path):
     assert world.said == ["to_shooting: the settings download", "download before", "lock wait (4.5 s at most)"]
 
 
+def test_a_starts_clock_is_this_modules_time_as_it_is_at_the_call(world, tmp_path, monkeypatch):
+    """session_start with no clock times the download's reply on runner's time as it is when called (a test's
+    stand-in for runner.time reaches it), and with one, on that clock."""
+    world.wire()
+    link = world.link_class()(SimpleNamespace(dir=tmp_path))
+    seen = []
+    monkeypatch.setattr(runner, "time", SimpleNamespace(monotonic=lambda: 42.0, sleep=lambda s: None))
+    runner.session_start(link, Eyes(world), say=False, lock=lambda eyes, since: seen.append(since))
+    runner.session_start(link, Eyes(world), say=False, lock=lambda eyes, since: seen.append(since),
+                         clock=SimpleNamespace(monotonic=lambda: 7.0))
+    assert seen == [42.0, 7.0]
+
+
 @pytest.mark.parametrize("kind", ["menu", "tiles", "shooting", "dialog"])
 def test_a_walkers_reach_closes_a_plain_menu_page_alone_then_waits(world, tmp_path, kind):
     """close_menu_and_wait: MENU, a cleanup press, on a menu page or the Main tiles alone (on a dialog the wait asks for

@@ -1277,7 +1277,7 @@ def close_menu_and_wait(link, eyes, why: str, read=None, wait=None) -> None:
 
 
 def session_start(link, eyes, why: str = "the start download", tag: str = "before", reach=None, say: bool = True,
-                  settle: float = SETTLE_S, prepare=None, lock=None, clock=time) -> Path:
+                  settle: float = SETTLE_S, prepare=None, lock=None, clock=None) -> Path:
     """A session's start, the one place a runner downloads its start file (decision 15), its link open and its eyes
     attached: the shooting screen (`reach(link, eyes, why)`: proving.nav.to_shooting by default, MENU until it shows),
     the start download (`tag`), its name said (`say`), `prepare(start)` (what a runner does with the start file before
@@ -1286,7 +1286,8 @@ def session_start(link, eyes, why: str = "the start download", tag: str = "befor
     the download waited out from the download's reply: camkit.session.wait_lock (watched with HDMI eyes in a mode
     measured, else `settle` s), or `lock(eyes, since)`, a runner's own watch (kit/page_scan.py) or its own clock's
     (kit/drive.py). `clock`: the time module the download's reply is timed on and the wait sleeps on (a runner's own,
-    which its tests make sleep nothing). Returns the start file."""
+    which its tests make sleep nothing; else this module's time, looked up at the call). Returns the start file."""
+    clock = clock or time
     if reach is None:
         from proving.nav import to_shooting as reach
     reach(link, eyes, why)

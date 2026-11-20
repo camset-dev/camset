@@ -393,23 +393,42 @@ def finish(link, start: Path, tag: str = "after", say=_say, **kw) -> Ending:
 # fixed 40 s wait. RESTART_FIRST: the latest the first try waits; RESTART_RETRY: between tries that did not connect.
 RESTART_FIRST = 20.0
 RESTART_RETRY = 3.0
+# A notice can already be on show when the check begins, which is not the restart's: the end download's saving
+# notice (the check began 1.49 to 1.87 s after that download's reply in the a1 II's 65 watched restore waits of
+# 2026-11-18 and 19, and the saving notice was seen gone 1.79 to 2.06 s after a download's reply: LOCK_HDMI_S's
+# measurements), or a notice with OK alone that the restore went over (runner.restorable_after_close). Where such a
+# notice gives way to the shooting screen before the restart's own notice, that shooting screen is no restart's end.
+# So a notice counts once a readable frame that is no notice has been seen since the call (the restart's notice is
+# then a fresh one); the notice on show from the call counts only for a shooting screen then read on RESTART_HELD
+# looks in a row, since in those 65 waits the restart's notice followed the saving notice with no shooting screen read
+# between (none ended before 11.5 s into the check): a notice on show from the call to the restart's end is the usual
+# case, not a stale one, and the row costs it one look (0.25 s).
+RESTART_HELD = 2
 
 
 def restarted(eyes, clock=time, longest: float = RESTART_FIRST, poll: float = 0.25) -> str:
     """Wait for the camera to come back after an upload: with HDMI eyes until a frame reads as the shooting screen
-    after one has read as the notice (the restart's), or `longest` s, whichever comes first; with OSD eyes (they need
-    the link the upload closed) or none, `longest` s. A frame that cannot be grabbed or read counts as neither. What it
-    waited for: "the shooting screen after the notice" or f"{longest:g} s"."""
+    after the restart's notice, or `longest` s, whichever comes first; with OSD eyes (they need the link the upload
+    closed) or none, `longest` s. The restart's notice: one read after a readable frame that is no notice since the
+    call, the shooting screen after it ending the wait at once; or the notice already on show at the call, the
+    shooting screen after it ending the wait only once read on RESTART_HELD looks in a row (the comment above
+    RESTART_HELD). A frame that cannot be grabbed or read counts as neither, and breaks a row. What it waited for: "the
+    shooting screen after the notice" or f"{longest:g} s"."""
     start = clock.monotonic()
     if getattr(eyes, "name", "") == "hdmi":
-        notice = False
+        other = notice = fresh = False      # other: a readable frame that is no notice, since the call
+        shooting = 0                        # looks in a row read as the shooting screen
         while clock.monotonic() - start < longest:
             try:
                 kind = screen.read(eyes.grab(save=False)).kind
             except Exception:       # noqa: BLE001 (a feed that drops while the camera restarts: no frame)
                 kind = None
-            notice = notice or kind == "notice"
-            if notice and kind == "shooting":
+            if kind == "notice":
+                notice, fresh = True, fresh or other
+            elif kind is not None:
+                other = True
+            shooting = shooting + 1 if kind == "shooting" else 0
+            if kind == "shooting" and (fresh or (notice and shooting >= RESTART_HELD)):
                 return "the shooting screen after the notice"
             clock.sleep(min(poll, max(longest - (clock.monotonic() - start), 0.0)))
         return f"{longest:g} s"

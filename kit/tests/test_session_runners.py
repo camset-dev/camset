@@ -5,7 +5,7 @@ the test's own (a sleep is noted, never slept). Everything between is the kit's 
 the restore and its check), the exit status. Only what the run does on its row is made up (the scan, the camera's own
 checks, the lit text), as the guard tests make it up. Each pin was written against the runners as they were before
 their start moved onto runner.session_start, and holds after it; the one change made on purpose is the restore's check
-after an upload, which with HDMI eyes now watches for the camera's restart as every prover's does
+after an upload, which with HDMI eyes now watches for the camera's restart as prover_session's and prove_run's do
 (camkit.session.restarted) where it waited a fixed RESTART_FIRST s."""
 import ast
 import contextlib
@@ -106,15 +106,20 @@ class Cam:
 
 class Camera:
     """The stand-in camera and the run's made-up seams (see the module's docstring). `eyes`: their name; `mode`: the
-    shooting mode the page scan records (session.MODE: the lock is watched in a mode measured); `changed`: the end
+    shooting mode the page scan records (session.MODE: the lock is watched in a mode measured); changes_end(): the end
     download differs from the start in one record (a stand-in file, never sent anywhere), so the start file goes back;
-    `notice`: the saving notice shows after a download and after an upload, then the shooting screen; `kinds`: the
+    `notice`: the saving notice shows after the start download, and the restart's after an upload, then the shooting
+    screen; `restart`: what the screen reads as after an upload then; `end_notice`: the end download's saving notice
+    too, then the shooting screen, before the upload; `download_s`: the seconds the start download takes on the clock;
+    `first`: the row whose first open the made-up lap makes (camkit.first_open.FirstOpens.opening); `kinds`: the
     screen's kinds before the start, one a grab; `on_press`: {key: what happens just before it goes} ("stop": the STOP
     file, "ctrl-c": the first Ctrl-C, through camkit.link's own handler)."""
 
     def __init__(self, tmp_path, monkeypatch, own_runs):
         self.mp, self.tmp, self.root = monkeypatch, tmp_path, own_runs / TEST_CAMERA
         self.eyes, self.mode, self.notice, self.on_press, self.on_grab = "osd", None, False, {}, {}
+        self.end_notice, self.download_s, self.first = False, 0.0, None
+        self.restart = ["notice", "notice", "shooting"]     # what the screen reads as after an upload, with `notice`
         self.kinds, self.kind = deque(), "shooting"
         self.said, self.pressed, self.slept, self.closed, self.runs = [], [], [], [], []
         self.t, self.grabs = 1000.0, 0
@@ -133,14 +138,16 @@ class Camera:
 
         def downloaded(link, tag):
             got = download(link, tag)
-            if self.notice and tag == "before":         # the start download's saving notice
-                self.kinds.extend(["notice", "shooting"])
+            if tag == "before":
+                self.t += self.download_s               # the download's own time, before its reply
+            if (self.notice and tag == "before") or (self.end_notice and tag == "after"):
+                self.kinds.extend(["notice", "shooting"])       # its saving notice
             return got
 
         def uploaded(link, path):
             got = upload(link, path)
             if self.notice:
-                self.kinds.extend(["notice", "notice", "shooting"])
+                self.kinds.extend(self.restart)
             return got
         monkeypatch.setattr(Link, "download", downloaded)
         monkeypatch.setattr(Link, "upload", uploaded)
@@ -166,6 +173,8 @@ class Camera:
                             ("after_armed", lambda cam, grip, kinds=None: ("list", "Single Shooting", ""))):
             monkeypatch.setattr(drive, name, value)
         monkeypatch.setattr(crawl_run, "crawl_from_menu", self.lap)
+        # drive.py's lock clock (the real monotonic clock and drive's own time.sleep) on the test's clock
+        monkeypatch.setattr(drive, "LOCK_CLOCK", SimpleNamespace(monotonic=lambda: self.t, sleep=self.sleep))
 
     # ------------------------------------------------------------------ the made-up seams
 
@@ -219,7 +228,10 @@ class Camera:
             self.ctrl_c()
 
     def lap(self, cam, link, *a, **k):
-        """crawl_run.crawl_from_menu made up: MENU, Down, Up on the camera, then the menu closed (a cleanup MENU)."""
+        """crawl_run.crawl_from_menu made up: MENU, Down, Up on the camera, then the menu closed (a cleanup MENU); with
+        `first`, that row's first open made first (its RESTORE_BY_HAND written: FirstOpens.opening)."""
+        if self.first is not None:
+            assert k["first"].opening(self.first) is None
         for key in ("menu", "down", "up"):
             cam.press(key)
         link.press("menu", cleanup=True)
@@ -364,14 +376,41 @@ def test_a_drive_that_changed_a_record_puts_the_start_file_back_and_checks_it(ca
 
 def test_a_drive_with_hdmi_eyes_watches_the_restart_after_its_upload(camera):
     """The one change made on purpose: with HDMI eyes the check after the upload ends its wait on the shooting screen
-    after the restart's notice (camkit.session.restarted), as every prover's check does, where it waited a fixed 20 s."""
+    after the restart's notice (camkit.session.restarted), as prover_session's and prove_run's checks do, where it
+    waited a fixed 20 s. The restart's notice on show from the check's first look (the usual case on the camera), the
+    shooting screen after it ends the wait on its second look in a row."""
     camera.eyes, camera.mode, camera.notice = "hdmi", "Stills", True
     camera.changes_end()
     code, out = camera.main(drive, *DRIVE)
     assert code is None, (code, out)
     assert [e.get("waited_for") for e in camera.events("restore_wait")] == ["the shooting screen after the notice"]
-    assert camera.slept == pytest.approx([0.05, 1.0, 0.25, 0.25, 3.0], abs=0.05)
+    assert camera.slept == pytest.approx([0.05, 1.0, 0.25, 0.25, 0.25, 3.0], abs=0.05)
     assert "after the restore: 0 records differ from the start file" in out
+
+
+def test_a_notice_on_show_before_the_restart_does_not_end_the_restart_wait(camera):
+    """The end download's saving notice still on show when the check begins, the shooting screen for a look, then the
+    restart's own notice: the wait goes on past that look and ends on the shooting screen after the restart's notice
+    (a fresh one: a frame that is no notice came before it), four looks in, never on the first shooting screen."""
+    camera.eyes, camera.mode, camera.notice, camera.end_notice = "hdmi", "Stills", True, True
+    camera.changes_end()
+    code, out = camera.main(drive, *DRIVE)
+    assert code is None, (code, out)
+    wait = camera.events("restore_wait")[0]
+    assert wait["waited_for"] == "the shooting screen after the notice" and wait["seconds"] == pytest.approx(1.0)
+    assert camera.slept == pytest.approx([0.05, 1.0, 0.25, 0.25, 0.25, 0.25, 3.0], abs=0.05)
+
+
+def test_the_shooting_screen_after_a_fresh_restart_notice_ends_the_wait_at_once(camera):
+    """The shooting screen still on show at the check's first look, then the restart's notice: the shooting screen
+    after that notice ends the wait on its first look."""
+    camera.eyes, camera.mode, camera.notice = "hdmi", "Stills", True
+    camera.restart = ["shooting", "notice", "notice", "shooting"]
+    camera.changes_end()
+    code, out = camera.main(drive, *DRIVE)
+    assert code is None, (code, out)
+    assert camera.events("restore_wait")[0]["waited_for"] == "the shooting screen after the notice"
+    assert camera.slept == pytest.approx([0.05, 1.0, 0.25, 0.25, 0.25, 3.0], abs=0.05)
 
 
 def test_a_drive_whose_check_does_not_take_exits_unrestored(camera, monkeypatch):
@@ -463,7 +502,7 @@ def test_a_crawl_with_hdmi_eyes_waits_the_lock_by_the_screen_and_watches_the_res
     assert code is None, (code, out)
     assert camera.events("lock_wait")[0]["ended"] == "the shooting screen after the notice"
     assert [e.get("waited_for") for e in camera.events("restore_wait")] == ["the shooting screen after the notice"]
-    assert camera.slept == pytest.approx([0.05, 0.25, 0.25, 3.0], abs=0.05)
+    assert camera.slept == pytest.approx([0.05, 0.25, 0.25, 0.25, 3.0], abs=0.05)
 
 
 def test_a_crawl_that_changed_a_record_puts_the_start_file_back_and_checks_it(camera):
@@ -556,3 +595,31 @@ def test_a_drives_first_open_that_changed_a_record_keeps_the_marker_and_exits_5(
     assert code == EXIT_RESTORE_BY_HAND, (code, out)
     assert camera.marker.exists() and "global:0x0489" in out and "put back and checked" in out
     assert camera.sent()[-4:] == ["upload before", "quit", "download restored", "quit"]
+
+
+def test_a_crawls_first_open_whose_end_differs_is_checked_through_the_marker_and_exits_5(camera, monkeypatch):
+    """A row's first open in the lap (its RESTORE_BY_HAND written) and a record differing at the end: the start file
+    goes back, and the check reconnects as kit/tools/upload_check.py's does (Link(pending_restore=True): a plain link
+    refuses to open while the marker is there), downloads and finds the camera back; the marker stays, exit
+    EXIT_RESTORE_BY_HAND (5)."""
+    from exit_status import EXIT_RESTORE_BY_HAND
+    camera.scope(BLANK)
+    camera.changes_end()
+    camera.first = ("Drive Mode",)
+    monkeypatch.setattr(first_open, "seen_record", lambda camera=None: first_open.Seen(set()))
+    code, out = camera.main(crawl_run, *CRAWL)
+    assert code == EXIT_RESTORE_BY_HAND, (code, out)
+    assert camera.sent()[-5:] == ["download after", "upload before", "quit", "download restored", "quit"]
+    assert "after the restore: 0 records differ from the start file" in out
+    assert "1 records differed from the start file at the run's end; the start file is back and checked" in out
+    assert camera.marker.exists()
+
+
+@pytest.mark.parametrize("module,argv", [(drive, DRIVE), (crawl_run, CRAWL)])
+def test_the_lock_is_measured_from_the_start_downloads_reply(camera, module, argv):
+    """The menu's lock after the start download runs from the download's reply: a download that takes 2 s on the
+    camera's clock leaves the whole 4.5 s to wait after it (measured from before the download, 2.5 s would be left)."""
+    camera.download_s = 2.0
+    code, out = camera.main(module, *argv)
+    assert code is None, (code, out)
+    assert camera.slept[0] == pytest.approx(4.5) and camera.events("lock_wait")[0]["seconds"] == pytest.approx(4.5)

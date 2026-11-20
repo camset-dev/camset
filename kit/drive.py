@@ -1657,10 +1657,10 @@ def main():
             hdmi.attach(link)
             ledger.say()            # the ledger's word, built while the link opened
             budget.report(run)      # and what waiting for it took (camkit.budget)
-            # the session's start, every runner's (runner.session_start): a menu page closed with one MENU, then the
-            # shooting screen waited for (runner.close_menu_and_wait on this module's screen reader and wait_for, whose
-            # grace covers the menu closing: no second slept), the start download, and the menu's lock after it from
-            # the download's reply (camkit.session.wait_lock on LOCK_CLOCK)
+            # the session's start, as prover_session's and prove_run's (runner.session_start): a menu page closed with
+            # one MENU, then the shooting screen waited for (runner.close_menu_and_wait on this module's screen reader
+            # and wait_for, whose grace covers the menu closing: no second slept), the start download, and the menu's
+            # lock after it from the download's reply (camkit.session.wait_lock on LOCK_CLOCK)
             before = session_start(link, hdmi, "the settings download", reach=functools.partial(
                 close_menu_and_wait, read=screen.read, wait=wait_for), say=False,
                 lock=lambda eyes, since: wait_lock(since, eyes, clock=LOCK_CLOCK), clock=LOCK_CLOCK)
@@ -2189,7 +2189,7 @@ def main():
         # while this run's own marker is there, the reconnection that checks the restore opens as
         # kit/tools/upload_check.py's does: to check that very start file (camkit.link pending_restore)
         checking = {"link_class": functools.partial(Link, pending_restore=True)} if byhand else {}
-        # after an upload the check watches the eyes for the camera's restart, as every runner's does
+        # after an upload the check watches the eyes for the camera's restart, as prover_session's and prove_run's do
         # (runner.restart_watched)
         restored = (False if byhand and (byhand not in ("question", "answered") or unfinished)
                     else restore_checked(run, ending, before, **checking, **values_withheld(private),

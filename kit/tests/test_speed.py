@@ -954,6 +954,38 @@ def test_the_restore_check_starts_on_the_shooting_screen_after_the_notice(monkey
         assert eyes is None or eyes.grabs == 0
 
 
+class ScriptEyes:
+    """HDMI eyes reading `kinds` one a grab ("fail": a grab that fails), then the shooting screen."""
+    name = "hdmi"
+
+    def __init__(self, kinds):
+        self.kinds = list(kinds)
+
+    def grab(self, tag="f", save=True):
+        kind = self.kinds.pop(0) if self.kinds else "shooting"
+        if kind == "fail":
+            raise RuntimeError("no frames from the capture dongle")
+        return SimpleNamespace(kind=kind)
+
+
+@pytest.mark.parametrize("kinds,ends_at", [
+    (["notice", "shooting", "notice", "notice", "shooting"], 1.0),     # a notice on show before the restart's own
+    (["notice", "notice", "shooting"], 0.75),                          # the restart's notice on show from the call
+    (["shooting", "notice", "shooting"], 0.5),                         # a fresh notice: the shooting screen at once
+    (["notice", "shooting", "fail", "shooting"], 1.0),                 # a frame not read breaks the row
+])
+def test_a_notice_already_on_show_counts_only_for_a_shooting_screen_held_two_looks(monkeypatch, kinds, ends_at):
+    """camkit.session.restarted, the restore check's wait after an upload where it is given HDMI eyes (prover_session's,
+    prove_run's, drive.py's and crawl_run.py's): a notice counts at once where a readable frame that is no notice came
+    before it since the call;
+    the notice on show from the call (the end download's saving notice, or the restart's own already up) counts only
+    for a shooting screen then read on two looks in a row, so a shooting screen between a notice already up and the
+    restart's own never ends the wait."""
+    session, now, clock, *_ = restart_world(monkeypatch)
+    assert session.restarted(ScriptEyes(kinds), clock) == "the shooting screen after the notice"
+    assert now[0] == pytest.approx(ends_at)
+
+
 def test_a_try_that_does_not_connect_is_tried_again_3_s_later_and_the_wait_is_logged(monkeypatch):
     """verify_restore with HDMI eyes: the first try on the shooting screen (16 s), a try that did not connect tried
     again 3 s after it failed, the link that opens then checked as before (its ready wait, the download, the count);
