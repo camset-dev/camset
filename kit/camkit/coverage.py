@@ -66,7 +66,7 @@ import sys
 import threading
 from pathlib import Path
 
-from . import ROOT, budget, definitions, jsonl, match, paths, safety
+from . import ROOT, budget, definitions, jsonl, match, paths, placement, safety
 
 FORMAT = 1
 # the mode the definition's menu was walked in (pass 1 runs in Stills: runner.SCAN_MODES' first); a setting's
@@ -701,8 +701,13 @@ def plain(text) -> str:
 
 def same_label(a, b) -> bool:
     """Two labels of one row: camkit.match.same's (an OCR slip aside, digits and short words exact), or one the other
-    cut short ("Face Priority in Mul...", a page model's), which match.same does not take."""
-    return _memo(_same_label, a, b)
+    cut short ("Face Priority in Mul...", a page model's), which match.same does not take. A proof path's "#n", which
+    names the n-th of the rows bearing a label (camkit.placement.nth: "Recording Media#1"), is read as placement reads
+    it: the label alone, and two labels naming different places are never one row's."""
+    (x, i), (y, j) = placement.nth(str(a or "")), placement.nth(str(b or ""))
+    if i is not None and j is not None and i != j:
+        return False
+    return _memo(_same_label, x, y)
 
 
 def _same_label(a, b) -> bool:
@@ -835,8 +840,11 @@ class Ledger:
         return any(_fingerprint(p) != self.src.fingerprints.get(k) for k, p in self.src.paths.items())
 
     def find(self, path, mode=None, tab=None, group=None) -> list:
-        """The row entries a path names: by its labels (same_label), in that mode, tab and group where given."""
-        path = [str(x) for x in path or []]
+        """The row entries a path names: by its labels (same_label), in that mode, tab and group where given. A label's
+        "#n" (camkit.placement.nth) is read as placement reads it: the label alone, and on a top row the n-th of the
+        tab's rows bearing it (an entry's "nth"); the rows below a top row are entries by their labels."""
+        which = placement.nth(str((path or [""])[0]))[1] if path else None
+        path = [placement.nth(str(x))[0] for x in path or []]
         if getattr(self, "_by_path", None) is None or self._indexed != len(self.rows):
             self._by_path, self._indexed = {}, len(self.rows)
             for e in self.rows:
@@ -856,6 +864,8 @@ class Ledger:
             if tab and plain(e["tab"]) != plain(tab):
                 continue
             if group and plain(e["group"]) != plain(group):
+                continue
+            if which is not None and len(e["path"]) == 1 and e.get("nth", 0) != which:
                 continue
             out.append(e)
         return out
@@ -1667,7 +1677,7 @@ def _tie_through(led: Ledger, settings: list) -> None:
         for m in menus:
             # a proof's context ("[Movie mode]") and a table's cell (" / AEL Button @0.key.0") are no rows
             path = [x.strip() for x in re.sub(r"\s*\[[^\]]*\]$", "", str(m)).split(" / ")[0].split(" > ")]
-            if len(path) < 2 or not all(path) or path == list(s["row"]):
+            if len(path) < 2 or not all(path) or [placement.nth(x)[0] for x in path] == list(s["row"]):
                 continue
             for n in range(2, len(path) + 1):
                 for e in led.find(path[:n], tab=tab):

@@ -206,8 +206,9 @@ def test_two_rows_of_one_label_are_told_apart_by_their_place():
     reads alike: a label with "#n" names the n-th of the rows bearing it, from 0, in the menu's order (placement.nth),
     the public row its label alone; a label alone is the first. A name of the kit's own ("Recording Media (Movie)") is
     no row's: the setting stays on the row above, before its rows (b3afe42's 0x029a), and so does a place past the
-    last. Under a row whose rows the tree does not know, "#n" grows the n-th row of that label, the ones before it with
-    it."""
+    last. Under a row whose rows the tree does not know, "#n" grows the n-th row of that label only when it is the next
+    of it: "#5" with none there grows nothing (no phantom rows), and the setting stays on the row reached. An option a
+    path names reads "#n" aside too (option_named)."""
     tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": [{"page": "1/1", "group": "Media", "rows": [
         row("Format"), row("Rec. Media Settings", row("Recording Media"), row("Recording Media"), row("Auto Switch Media Card")),
         {"label": "Unwalked", "state": "seen"}]}]}]}
@@ -217,13 +218,21 @@ def test_two_rows_of_one_label_are_told_apart_by_their_place():
         setting("global:0x029c", "Auto Switch Media Card", group="Media", menus=["Rec. Media Settings > Auto Switch Media Card"]),
         setting("global:0x0001", "Named so", group="Media", menus=["Rec. Media Settings > Recording Media (Movie)"]),
         setting("global:0x0002", "Past the last", group="Media", menus=["Rec. Media Settings > Recording Media#2"]),
-        setting("global:0x0003", "Second grown", group="Media", menus=["Unwalked > Part#1"])]}
+        setting("global:0x0003", "First grown", group="Media", menus=["Unwalked > Part"]),
+        setting("global:0x0004", "Second grown", group="Media", menus=["Unwalked > Part#1"]),
+        setting("global:0x0005", "Far past", group="Media", menus=["Unwalked > Lone#5"])]}
     got = placement.settings(d, tree)
     assert got["global:0x0298"] == {"row": ["Rec. Media Settings", "Recording Media"], "row_at": [1, 0]}
     assert got["global:0x029a"] == {"row": ["Rec. Media Settings", "Recording Media"], "row_at": [1, 1]}
     assert got["global:0x029c"] == {"row": ["Rec. Media Settings", "Auto Switch Media Card"], "row_at": [1, 2]}
     assert got["global:0x0001"] == got["global:0x0002"] == {"row": ["Rec. Media Settings"], "row_at": [1]}
-    assert got["global:0x0003"] == {"row": ["Unwalked", "Part"], "row_at": [2, 1]}
+    assert got["global:0x0003"] == {"row": ["Unwalked", "Part"], "row_at": [2, 0]}
+    assert got["global:0x0004"] == {"row": ["Unwalked", "Part"], "row_at": [2, 1]}          # the next of its label
+    assert got["global:0x0005"] == {"row": ["Unwalked"], "row_at": [2]}                       # "#5": nothing grown
+    t = placement.Tree(d, tree)
+    unwalked = t.find("Shooting", ["Unwalked"])
+    assert t.grow(unwalked, ["Lone#5"]) is unwalked and unwalked["kids"] == []
+    assert placement.option_named("Continuous Shooting#1", {"opts": []}, [[1, "Continuous Shooting"]]) == "Continuous Shooting"
     assert placement.nth("Recording Media#1") == ("Recording Media", 1) and placement.nth("ISO #") == ("ISO #", None)
     # the n-th of a tab's top rows of one label, and the viewer's tree hangs by the same rule
     t = placement.Tree(d, {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": [
@@ -231,6 +240,23 @@ def test_two_rows_of_one_label_are_told_apart_by_their_place():
         {"page": "2/2", "group": "Zoom", "rows": [row("Other"), row("Fixed Speed REC", row("Speed"))]}]}]})
     assert t.where[t.find("Shooting", ["Fixed Speed REC#1", "Speed"])["id"]][2] == [2, 0]
     assert t.find("Shooting", ["Fixed Speed REC#2"], anywhere=False) is None
+
+
+def test_the_viewer_hangs_a_record_on_the_row_its_n_th_label_names(monkeypatch):
+    """The proof viewer hangs records with the same placement, so a path naming "Recording Media#1" hangs its record on
+    the second Recording Media row, never the first. Made-up tree and definition."""
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": [{"page": "1/1", "group": "Media", "rows": [
+        row("Rec. Media Settings", row("Recording Media"), row("Recording Media"))]}]}]}
+    d = {"model": "TEST", "tabs": ["Shooting"], "layouts": [{"model": "TEST", "firmware": "1.00"}],
+         "menu": [{"tab": "Shooting", "group": "Media", "label": "Rec. Media Settings", "order": 1}], "settings": [
+             setting("global:0x0298", "Recording Media", group="Media", menus=["Rec. Media Settings > Recording Media"]),
+             setting("global:0x029a", "Recording Media (Movie)", group="Media",
+                     menus=["Rec. Media Settings > Recording Media#1"])]}
+    monkeypatch.setattr(pv.datafiles, "load_menu_tree", lambda cam: tree)
+    tabs = pv.menu(d, pv.records(d, {}), Path("."))
+    media = next(g for t in tabs if t["tab"] == "Shooting" for g in t["groups"] if g["name"] == "Media")
+    kids = next(x for x in media["rows"] if x["l"] == "Rec. Media Settings")["kids"]
+    assert [x["recs"] for x in kids] == [["global:0x0298"], ["global:0x029a"]]
 
 
 def test_a_crawl_folded_into_the_tree_puts_its_rows_in_the_cameras_order(own_runs):

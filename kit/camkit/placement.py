@@ -335,12 +335,16 @@ class Tree:
         """The row `labels` names under `node`, made from a proof's path where the tree does not know the rows under
         a row (a submenu the walk never opened, a mode's row read off its page scan alone): each made row comes
         after its siblings, so they keep the order the definition lists the settings proved through them. A label with
-        "#n" (nth) is the n-th row of its label there, the rows before it made too, under the label alone."""
+        "#n" (nth) is the n-th row of its label there: one made only when it is the next of that label, never with rows
+        made before it that no path names ("#5" under a row with none of that label grows nothing: the setting stays
+        on the row reached)."""
         group, path, at = self.where[node["id"]]
         for said in labels:
             label, n = nth(said)
             same = [k for k in node["kids"] if norm(k["l"]) == norm(label)]
-            while len(same) <= (n or 0):
+            if (n or 0) > len(same):
+                break                    # a place past the next of its label: no row made, none before it either
+            if (n or 0) == len(same):
                 kid = {"id": f"{node['id']}.{len(node['kids'])}", "l": label, "st": "proof", "why": "", "opts": [],
                        "walk": [], "kids": [], "recs": [], "subs": [], "made": True}
                 self.where[kid["id"]] = (group, path + [label], at + [len(node["kids"])])
@@ -502,9 +506,10 @@ def indexed_option(path: str, opts: list, values) -> str | None:
 
 
 def option_named(said: str, node: dict, values) -> str | None:
-    """The option of a row `said` names exactly (norm(), a lookalike letter mended): as the row's own setting labels
-    it (`values`, [[value, label]]), else as the menu tree lists it (the row's "opts"); None when it names none."""
-    seg = norm(said.translate(LOOKALIKES))
+    """The option of a row `said` names exactly (norm(), a lookalike letter mended, a row's "#n" aside: nth): as the
+    row's own setting labels it (`values`, [[value, label]]), else as the menu tree lists it (the row's "opts"); None
+    when it names none."""
+    seg = norm(nth(said)[0].translate(LOOKALIKES))
     if not seg:
         return None
     for lab in [str(v[1]) for v in values or [] if isinstance(v, (list, tuple)) and len(v) > 1] + [str(o) for o in node["opts"] or []]:

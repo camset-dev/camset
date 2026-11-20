@@ -2079,3 +2079,21 @@ def test_a_map_whose_options_sit_on_a_panel_is_counted(camera):
         {"path": ["Bravo"], "options": [{"index": 0}, {"index": 1}]}]}), encoding="utf-8")
     src = coverage.load_sources(CAM, records=RECORDS)
     assert src.maps[("Alpha",)] == 2 and src.maps[("Bravo",)] == 2
+
+
+def test_the_ledger_reads_a_rows_n_th_label_as_placement_does():
+    """A proof path's "#n" names the n-th of the rows bearing a label (camkit.placement.nth: the a1 II's second
+    Recording Media row, "Recording Media#1"): the ledger reads it as placement does, the label alone, and on a top row
+    the n-th of the tab's rows of that label (an entry's "nth"); two labels naming different places are never one
+    row's. Made-up rows."""
+    assert coverage.same_label("Recording Media#1", "Recording Media")
+    assert coverage.same_label("Recording Media", "Recording Media#0")
+    assert not coverage.same_label("Recording Media#1", "Recording Media#2")
+    led = coverage.Ledger.__new__(coverage.Ledger)
+    led.rows = [coverage._entry("Stills", "Setup", "Operation Customize", ["Custom Key/Dial Set."], "menu", (0, 0, 0), 0),
+                coverage._entry("Stills", "Setup", "Operation Customize", ["Custom Key/Dial Set."], "menu", (0, 0, 1), 1),
+                coverage._entry("Stills", "Shooting", "Media", ["Rec. Media Settings", "Recording Media"], "setting", (1, 0, 0))]
+    assert led.find(["Rec. Media Settings", "Recording Media#1"]) == [led.rows[2]]
+    assert led.find(["Custom Key/Dial Set.#1"]) == [led.rows[1]]
+    assert led.find(["Custom Key/Dial Set."]) == led.rows[:2]
+    assert led.find(["Custom Key/Dial Set.#2"]) == []
