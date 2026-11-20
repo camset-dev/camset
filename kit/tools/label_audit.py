@@ -23,13 +23,17 @@ what backs it (kit/writer/proofs.py NAME_SOURCES). The audit takes:
            temporary folder, never in the runs), the camera's own cache (<root>/_cache/vlm) and each --census-cache
            looked in and never written, so an answer kept there is not asked again; --parallel, --timeout, --minutes
            (each reader's), --max-questions, --fail-run and --dry-run as the census has them
-  judging  each answer by the census's rule (judge: right when it names the option the file proved, under its
-           published name; where that name is a part of the line the camera draws, a carousel axis's value after its
-           option, it is also named by a reading that holds it alone of the options, as kit/pass2_report.py's
-           contained() takes a label held in another); one vote per model family (camkit.reading.model_id: the first
-           reader of a family that answered), and per name: every family agrees, some do, none do and they agree with
-           each other on another reading (two families or more naming one other option or text alike), or none do and
-           they differ
+  judging  the question is whether the name is spelled as drawn, not only whether a reader picks its option: a vote
+           is right only where the reading spells the published name (pass2_report.same_label), or, where that name
+           is a part of the line the camera draws, the part of the reading in its place (after or before the colon:
+           "DRO Bracket: Hi" for Hi), or the name alone of the options held in it as a whole word; a reading that
+           picks the option by the census's rule (judge: a loose likeness, an icon left out, the closest option) but
+           spells it otherwise is a vote of its own ("spelled otherwise"); a star count, a number and a box's state
+           are judged exactly, as the census does. One vote per model family (camkit.reading.model_id: the first
+           reader of a family that answered); per name, with two families or more: all agree, some agree, none agree
+           and all on another reading (one other option, or one other text alike, the name's own option spelled
+           otherwise among them), each picks the option but they spell it apart, or none agree and they differ; with
+           one family, "one family" (as published or not), never "all agree"
 Left out, and counted: a name no report line credits, a line of an identity or connection row a network decision
 opened (decision 8), a frame of a run that opened a row an owner decision names (camkit.vlm.NO_READER_MARKER, decision
 9: never read), a frame not on disk, a black frame, a frame the census would take no question from, a radio button's
@@ -76,7 +80,9 @@ ITEM_KINDS = {"list": ("list", "scale", "star rating"), "sidelist": ("side list"
               "dialog": ("carousel",), "axis": ("axis",), "lookbase": ("look base",), "checklist": ("checklist",),
               "fields": ("number field",), "wbgrid": ("wb grid",), "look": ("look",)}
 LABEL_KINDS = {"list", "scale", "side list", "table picker", "carousel", "axis", "look base"}
-VERDICTS = ("none agree, all on another reading", "none agree, apart", "some agree", "all agree", "not read")
+VERDICTS = ("none agree, all on another reading", "picks the option, spelled otherwise", "none agree, apart",
+            "some agree", "one family, not as published", "one family, spelled as published", "all agree", "not read")
+LISTED = VERDICTS[:5]                                   # the verdicts the private file lists, in this order
 NOT_TICKED = re.compile(r"(?:not|no|off)\b|un")       # how a checklist value's name for an unticked box begins (folded)
 DEFAULTS = {"minutes": 60.0, "timeout": 60.0}
 
@@ -86,13 +92,13 @@ class Name:
     source (proved.names'), and once its proof is found, row (the report's), line (the proof line), after (a
     checklist line's: whether the value is the one the box's visit wrote), frame, kind (the census's), item (the
     reader_census.Item judged against the published name), question; why: the reason it is left out, or None;
-    local_only: its frame goes to local readers only; hosted_why: why a hosted reader is sent none, or None; part: the
-    published name is a part of the label the run recorded (held), not the whole of it."""
+    local_only: its frame goes to local readers only; hosted_why: why a hosted reader is sent none, or None; part: how
+    the published name stands in the label the run recorded where it is not the whole of it (part_of), or None."""
 
     def __init__(self, key, value, name, source):
         self.key, self.value, self.name, self.source = key, str(value), name, source
         self.row = self.line = self.after = self.frame = self.kind = self.item = self.question = None
-        self.why, self.local_only, self.hosted_why, self.part = None, False, None, False
+        self.why, self.local_only, self.hosted_why, self.part = None, False, None, None
 
 
 # ------------------------------------------------------------------------------------------------ the names
@@ -309,7 +315,7 @@ def judged(n: Name, item, fixes: dict) -> tuple:
                 values[name].add(value)
         if len(values.get(n.name, {n.value})) > 1:
             return None, "two values of its record share the name"
-        n.part = not p2.same_label(own, n.name) and held(n.name, own) > 0
+        n.part = part_of(own, n.name)
         return rc.Item(k, item.frame, n.name, options, None, item.box, item.old, item.extra), None
     if k == "checklist":
         if n.after is None:
@@ -409,43 +415,104 @@ def within(text, options: list) -> int | None:
     return fits.index(best) if best and fits.count(best) == 1 else None
 
 
+def part_of(recorded: str, name: str) -> str | None:
+    """How a published name stands in the label the run recorded for its option, where it is not the whole label
+    (pass2_report.same_label): "after" (a carousel axis's value after its option and a colon: "Hi" of "DRO Bracket:
+    Hi"), "before" (an option-only record's option: "DRO Bracket" of "DRO Bracket: Lo"), "held" (the name held in it
+    otherwise: an icon OCR read in front, a word of the axis value left out), else None (the whole label)."""
+    if p2.same_label(recorded, name):
+        return None
+    head, colon, tail = str(recorded).partition(":")
+    if colon and p2.same_label(tail, name):
+        return "after"
+    if colon and p2.same_label(head, name):
+        return "before"
+    return "held" if held(name, recorded) else None
+
+
+def spelled(n: Name, text: str) -> bool:
+    """Whether a reading spells n's published name as the definition does, strictly (pass2_report.same_label: case,
+    spacing, stops and the readers' look-alikes aside, every letter, digit and sign kept): the whole reading, or the
+    part of it that stands where the name stands in the recorded label (Name.part: after or before its colon), or, held,
+    the name as a whole word in it while no other option's name is held there at all."""
+    if p2.same_label(text, n.name):
+        return True
+    head, colon, tail = text.partition(":")
+    if n.part == "after":
+        return bool(colon) and p2.same_label(tail, n.name)
+    if n.part == "before":
+        return bool(colon) and p2.same_label(head, n.name)
+    if n.part == "held":
+        return held(n.name, text) == 2 and not any(held(o, text) for o in n.item.options if o != n.name)
+    return False
+
+
 def reading_of(n: Name, got) -> tuple:
-    """(the verdict, the reading as the reader gave it, what other reading it names: a key two readings that name the
-    same other thing share, or None) of one answer about n's frame. A name the definition publishes as a part of the
-    label the run recorded (Name.part) is also named where the reading holds it alone of the options (within)."""
+    """(the vote, the reading as the reader gave it, what other reading it names: a key two readings that name the
+    same other thing share, or None) of one answer about n's frame. A name is "right" only where the reading spells it
+    as published (spelled); a reading that picks its option by the census's rule (reader_census.judge: a loose likeness,
+    an icon left out, the closest option; for a name published as a part of its line, first by the part of the reading
+    in the name's place, then by the option whose name it holds alone, within) but spells it otherwise is "spelled
+    otherwise"; else "another option", "no option" or
+    "no answer". A star count, a number, a white balance readout and a checklist box's state are judged as the census
+    judges them, which is exact."""
     value = rc.NEW_PICK.get(n.kind, rc._selected)(got, n.item)
     if value is None or (isinstance(value, str) and not value.strip()) or (isinstance(value, list) and not value):
         return "no answer", value, None
-    verdict = rc.judge(n.item, value)
-    if verdict in ("right", "no answer"):
-        return verdict, value, None
-    if n.kind == "checklist":
-        return verdict, value, ("box", "the other state") if verdict == "another option" else None
+    if n.kind not in LABEL_KINDS:
+        verdict = rc.judge(n.item, value)
+        if verdict in ("right", "no answer"):
+            return verdict, value, None
+        if n.kind == "checklist":
+            return verdict, value, ("box", "the other state") if verdict == "another option" else None
+        text = str(value) if isinstance(value, (str, int, float)) and not isinstance(value, bool) else ""
+        i = rc._index(rc.wb_value(n.item.extra["axis"], text), n.item.options) if n.kind == "wb grid" \
+            else rc._named(n.item, text)
+        return verdict, value, ("option", i) if i is not None else other_text(text)
     text = str(value) if isinstance(value, (str, int, float)) and not isinstance(value, bool) else ""
-    i = rc._index(rc.wb_value(n.item.extra["axis"], text), n.item.options) if n.kind == "wb grid" \
-        else rc._named(n.item, text)
+    if spelled(n, text):
+        return "right", value, None
+    head, colon, tail = text.partition(":")
+    i = rc._named(n.item, {"after": tail, "before": head}[n.part]) if colon and n.part in ("after", "before") else None
     if i is None and n.part:
         i = within(text, n.item.options)
-        if i is not None and n.item.options[i] == n.item.truth:
-            return "right", value, None
+    if i is None:
+        i = rc._named(n.item, text)
+    if i is not None and n.item.options[i] == n.item.truth:
+        return "spelled otherwise", value, other_text(text)
     if i is not None:
         return "another option", value, ("option", i)
+    return "no option", value, other_text(text)
+
+
+def other_text(text: str) -> tuple | None:
+    """The key of a reading that names no option of the row, or its own spelling of the one it picks: two readings
+    alike but for spacing, case and the punctuation that changes no meaning share it (camkit.reading.said_key)."""
     said = reading.said_key(text)
-    return verdict, value, ("text", said) if said and said != "none" else None
+    return ("text", said) if said and said != "none" else None
 
 
 def verdict_of(votes: dict) -> str:
-    """The name's verdict from its families' votes ({family: (verdict, reading, other)})."""
+    """The name's verdict from its families' votes ({family: (vote, reading, other)}): with one family, "one family"
+    (spelled as published, or not); with two or more, "all agree" when every one spells it as published, "some agree"
+    when some do, and where none does, "none agree, all on another reading" when they all name one other option or
+    read one other text alike (the published name's own option spelled otherwise among them), "picks the option,
+    spelled otherwise" when each picks its option but they spell it apart, else "none agree, apart"."""
     if not votes:
         return "not read"
-    rights = [v for v, _, _ in votes.values() if v == "right"]
-    if len(rights) == len(votes):
+    rights = sum(v == "right" for v, _, _ in votes.values())
+    if len(votes) == 1:
+        return "one family, spelled as published" if rights else "one family, not as published"
+    if rights == len(votes):
         return "all agree"
     if rights:
         return "some agree"
     others = {o for _, _, o in votes.values()}
-    return "none agree, all on another reading" if len(votes) >= 2 and len(others) == 1 and None not in others \
-        else "none agree, apart"
+    if len(others) == 1 and None not in others:
+        return "none agree, all on another reading"
+    if all(v == "spelled otherwise" for v, _, _ in votes.values()):
+        return "picks the option, spelled otherwise"
+    return "none agree, apart"
 
 
 # ------------------------------------------------------------------------------------------------ the run
@@ -510,7 +577,7 @@ def audit(root: Path, args) -> tuple:
         by_source[n.source][verdict] += 1
         by_kind[n.kind][verdict] += 1
         read_by[len(votes)] += 1
-        if verdict not in ("all agree", "not read"):
+        if verdict in LISTED:
             lines_out.append({"verdict": verdict, "key": n.key, "value": n.value, "name": n.name, "source": n.source,
                               "kind": n.kind, "row": n.row, "frame": n.frame.relative_to(root).as_posix()
                               if n.frame.is_relative_to(root) else str(n.frame), "families": len(votes),

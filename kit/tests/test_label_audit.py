@@ -228,6 +228,60 @@ def test_four_verdicts_one_vote_per_family_and_the_ledger_first_on_another_readi
             assert word not in out, word
 
 
+def judge_name(kind, name, recorded, options, readings, fixes=None):
+    """(each family's vote, the name's verdict) for a published name whose proof recorded `recorded` among the row's
+    recorded `options` (fixes: on the name's record, {recorded label: {(value, published name)}})."""
+    import label_audit as la
+    import reader_census as rc
+    n = la.Name("global:0x0001", "1", name, "one reader")
+    n.kind, n.line = kind, {"label": recorded}
+    n.item, why = la.judged(n, rc.Item(kind, Path("f.png"), recorded, options, extra={"expect": "label"}), fixes or {})
+    assert why is None, why
+    votes = {fam: la.reading_of(n, {"selected": text}) for fam, text in readings.items()}
+    return [v for v, _, _ in votes.values()], la.verdict_of(votes)
+
+
+def test_a_name_is_right_only_where_the_reading_spells_it_as_published():
+    """The audit asks whether the name is spelled as drawn, not only whether a reader picks its option: a published
+    name OCR garbled (a letter lost or changed, an icon's letter glued in front, a word left out) read exactly by every
+    family is never "all agree", and goes first in the list."""
+    two = {"qwen": None, "gemma": None}
+    for name, drawn, others in (("Zqx Fixed SBY", "Zqx Fixed STBY", ["Zqx Fixed REC", "Zqx Var"]),
+                                ("EZqx Frame Display", "Zqx Frame Display", ["Zqx Peaking", "Zqx Grid Line"]),
+                                ("Shorest", "Shortest", ["Short", "Long"]),
+                                ("8fs", "8fps", ["30fps", "60fps"]),
+                                ("Record Setting", "S&Q Record Setting", ["Movie Zqx", "Time-lapse Zqx"])):
+        votes, verdict = judge_name("list", name, name, [name, *others], dict.fromkeys(two, drawn))
+        assert votes == ["spelled otherwise"] * 2 and verdict == "none agree, all on another reading", name
+        # spelled alike but for case, spacing and a stop: right
+        assert judge_name("list", drawn, drawn, [drawn, *others], dict.fromkeys(two, drawn.upper() + "."))[1] == \
+            "all agree", drawn
+    # each picks the option, spelled apart: a verdict of its own
+    votes, verdict = judge_name("list", "Zqx Fixed SBY", "Zqx Fixed SBY", ["Zqx Fixed SBY", "Zqx Fixed REC", "Zqx Var"],
+                                {"qwen": "Zqx Fixed STBY", "gemma": "Zqx Fixed SBYY"})
+    assert votes == ["spelled otherwise"] * 2 and verdict == "picks the option, spelled otherwise"
+    # a part of the line: the reading's part in the name's place, or the name alone held in it
+    fixes = {"Zqx Mode: Hi": {("1", "Hi")}, "Zqx Mode: Hi+": {("2", "Hi+")}, "Zqx Mode: Lo": {("0", "Lo")}}
+    opts = ["Zqx Mode: Hi", "Zqx Mode: Hi+", "Zqx Mode: Lo"]
+    assert judge_name("axis", "Hi", "Zqx Mode: Hi", opts, dict.fromkeys(two, "Zqx Mode: Hi"), fixes)[1] == "all agree"
+    assert judge_name("axis", "Hi", "Zqx Mode: Hi", opts, dict.fromkeys(two, "Zqx Mode: Hi+"), fixes) == \
+        (["another option"] * 2, "none agree, all on another reading")
+    held = {"Zqx 50M L: 50M": {("1", "L: 50M")}, "Zqx 21M M: 21M": {("2", "M: 21M")}}
+    assert judge_name("table picker", "L: 50M", "Zqx 50M L: 50M", list(held), dict.fromkeys(two, "Zqx 50M L: 50M"),
+                      held)[1] == "all agree"
+
+
+def test_all_agree_needs_two_families():
+    import label_audit as la
+    right, wrong = ("right", "Zqx", None), ("another option", "Zqy", ("option", 0))
+    assert la.verdict_of({"qwen": right}) == "one family, spelled as published"
+    assert la.verdict_of({"qwen": wrong}) == "one family, not as published"
+    assert la.verdict_of({"qwen": right, "gemma": right}) == "all agree"
+    assert la.verdict_of({}) == "not read"
+    assert "one family, not as published" in la.LISTED and la.VERDICTS.index("all agree") > len(la.LISTED)
+    assert "all agree" not in la.LISTED and "one family, spelled as published" not in la.LISTED
+
+
 def test_a_checklist_name_is_judged_by_the_state_its_box_shows():
     import label_audit as la
     import reader_census as rc
