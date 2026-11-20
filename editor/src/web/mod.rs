@@ -5840,7 +5840,7 @@ pub(crate) mod tests {
         ask_upload(&mut app, "open", &c.to_bytes(), "wsa_menus_recall_A.DAT");
         let differs = |app: &App, slot: Slot| { let d = app.doc.as_ref().unwrap(); d.value(dial, slot) != d.value(0, slot) };
         assert!(differs(&app, theirs.slot()) && differs(&app, ours.slot()));
-        let other = vec![theirs.slot()];
+        let other = [theirs.slot()];
         let body = json!({ "memory": dial, "shown": true, "q": "", "entry": format!("tab:{tab}"), "menu": movie, "target": set });
         // without the menu, where the definition lists them: refused, nothing changed
         let mut none = body.clone();
