@@ -117,36 +117,94 @@ def test_a_table_added_between_two_runs_leaves_the_row_no_second_right(own_runs,
         row_names.forget()
 
 
-# what the camera's notices named on 2026-11-20 (kit2_greyrow, the prover's first camera run), by the grey row: the row
-# label alone; the notices' words are read from the run's own lines, never written here
+# what the camera's notices named on 2026-11-20 (kit2_greyrow, the prover's first camera run), by the grey row: a copy
+# kept here, names and labels only; each notice's words are its own with the blocker's value left out (decision 16)
 NAMED = {"ISO AUTO Min. SS": "Shoot Mode", "Framing Stabilizer": "Touch Operation", "Focus Mode": "Focus Mode Dial",
          "Aspect Marker Level": "HDMI Info. Display", "Select LUT": "Log Shooting"}
+NOTICE = "This operation or setting not available as follows {}"
+# the footer a notice's text ends on when OCR reads its OK button along ("• OK", "•ОК" with Cyrillic letters, "0K")
+FOOTER = r"[\s•·]+[OoО0][KkКк][\s•·]*$"
+
+
+def a1ii_definition() -> dict:
+    return json.loads((KIT.parent / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+
+
+def misnamed(text: str, labels, doc: dict) -> str:
+    """Why the blocker the rule takes from a notice's words (camkit.coverage.blocker_of on `labels`) is not the whole of
+    the blocker's name, "" when it is. Where it names a row, what follows that label in the notice must be nothing, or
+    start with a value the definition `doc` gives a setting of that name or row, as a whole word (the footer's OK left
+    out, and anything OCR read past the value): "Focus Mode" taken from "... as follows Focus Mode Dial Set with Dial"
+    leaves "Dial Set with Dial", no value of Focus Mode. Where it
+    names no row, no row label or setting name of the definition may start what follows "as follows": a label the
+    rule's vocabulary lacks ("Shoot Mode", withheld as an Fn function too) would else go unnamed."""
+    import re
+
+    from camkit import coverage
+    tail = re.sub(FOOTER, "", " ".join(str(text).split()).split("as follows", 1)[-1]).strip(" .:•")
+    got = coverage.blocker_of(text, labels)
+    if got and "row" in got:
+        rest = coverage.plain(tail)[len(coverage.plain(got["row"])):].strip()
+        values = {coverage.plain(str(v[1])) for s in doc["settings"] for v in s.get("values") or []
+                  if coverage.plain(got["row"]) in (coverage.plain(s.get("name") or ""),
+                                                   coverage.plain((s.get("row") or [""])[-1]))}
+        if not coverage.plain(tail).startswith(coverage.plain(got["row"])):
+            return f"{got['row']!r} is not what {tail!r} starts with"
+        whole = not rest or any(rest == v or rest.startswith(v + " ") for v in values if v)
+        return "" if whole else f"{got['row']!r} leaves {rest!r}, no value of it"
+    known = [x for x in coverage.known_labels(doc)
+             if coverage.plain(tail) == coverage.plain(x) or coverage.plain(tail).startswith(coverage.plain(x) + " ")]
+    return f"no row named, though {tail!r} starts with {max(known, key=len)!r}" if known else ""
 
 
 def test_the_camera_runs_notices_name_their_blockers_by_the_labels_the_runner_hands_over(monkeypatch):
-    """The first camera run's lines said no blocker for ISO AUTO Min. SS and Framing Stabilizer and "Focus Mode" for the
-    Focus Mode rows: runner.known_labels, a screen's allow-list, withholds a label that is also a value somewhere (Shoot
-    Mode and Touch Operation are Fn functions too) and holds no table's item (Focus Mode Dial, under Mode Dial Control
-    Set), so blocker_of found nothing or a shorter label. runner.blocker_labels, the ledger's own vocabulary beside the
-    page model's, names each one."""
-    from camkit import coverage
+    """Every notice the camera gave the grey-row runs (kit2_greyrow/greyrows.jsonl, whatever rows it has grown), judged
+    by the rule the runner's lines follow: coverage.blocker_of on runner.blocker_labels, the labels greyrow_run hands
+    over (with no page model: the definition's vocabulary every run's holds), names the whole blocker (misnamed). The
+    run folder is live: no row, count or line of it is expected here; the first run's own expectations are a copy kept
+    in this file (the next test)."""
     import runner
     lines = paths.a1ii_root() / "kit2_greyrow" / "greyrows.jsonl"
-    scan = paths.a1ii_root() / "kit2_page_scan_1118p" / "model.json"
-    if not lines.exists() or not scan.exists():
-        pytest.skip("the a1 II's kit2_greyrow lines or its page scan are not here")
-    doc = json.loads((KIT.parent / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    if not lines.exists():
+        pytest.skip("the a1 II's kit2_greyrow lines are not here")
+    doc = a1ii_definition()
     monkeypatch.setattr(runner, "definition", lambda: doc)
-    model = {p["key"]: p for p in json.loads(scan.read_text(encoding="utf-8"))}
-    labels, old = runner.blocker_labels(model), runner.known_labels(model)
-    notices = [(x["path"][-1], (x.get("notice") or {}).get("text") or "")
+    labels = runner.blocker_labels({})
+    notices = [((x.get("notice") or {}).get("text") or "", " > ".join(x.get("path") or []))
                for x in (json.loads(t) for t in lines.read_text(encoding="utf-8").splitlines() if t.strip())]
-    named = [(row, text) for row, text in notices if "as follows" in text]
-    assert {row for row, _ in named} == set(NAMED)
-    for row, text in named:
-        assert coverage.blocker_of(text, labels) == {"row": NAMED[row]}, row
-    assert coverage.blocker_of(dict(named)["ISO AUTO Min. SS"], old) is None, "the defect, as it stood"
-    assert coverage.blocker_of(dict(named)["Focus Mode"], old) == {"row": "Focus Mode"}, "the shorter label, as it stood"
+    named = [(text, row) for text, row in notices if "as follows" in text]
+    if not named:
+        pytest.skip("no notice in the a1 II's kit2_greyrow lines yet")
+    wrong = [f"{row}: {why}" for text, row in named for why in [misnamed(text, labels, doc)] if why]
+    assert not wrong, wrong
+
+
+def test_the_first_runs_blockers_are_named_whole_by_the_runner_labels_and_were_not_by_a_screens_allow_list(monkeypatch):
+    """The first camera run's lines (a copy, NAMED) said no blocker for ISO AUTO Min. SS and Framing Stabilizer and
+    "Focus Mode" for the Focus Mode rows: runner.known_labels, a screen's allow-list, withholds a label that is also a
+    value somewhere (Shoot Mode and Touch Operation are Fn functions too) and holds no table's item (Focus Mode Dial,
+    under Mode Dial Control Set), so blocker_of found nothing or a shorter label. runner.blocker_labels, the ledger's
+    own vocabulary beside the page model's, names each one whole; misnamed, the live test's judge, says what was
+    wrong with each of the old namings."""
+    from camkit import coverage
+    import runner
+    doc = a1ii_definition()
+    monkeypatch.setattr(runner, "definition", lambda: doc)
+    labels, old = runner.blocker_labels({}), runner.known_labels({})
+    for row, blocker in NAMED.items():
+        assert coverage.blocker_of(NOTICE.format(blocker), labels) == {"row": blocker}, row
+        assert misnamed(NOTICE.format(blocker), labels, doc) == "", row
+    assert coverage.blocker_of(NOTICE.format("Shoot Mode"), old) is None, "the defect, as it stood"
+    assert coverage.blocker_of(NOTICE.format("Focus Mode Dial"), old) == {"row": "Focus Mode"}, "the shorter label"
+    assert misnamed(NOTICE.format("Shoot Mode"), old, doc).startswith("no row named, though")
+    assert misnamed(NOTICE.format("Focus Mode Dial Set with Dial"), old, doc) == \
+        "'Focus Mode' leaves 'dial set with dial', no value of it"
+    # a value the definition gives the blocker passes, a word that is none does not; the footer's OK is left out
+    assert misnamed(NOTICE.format("Focus Mode Dial Set with Dial •ОК"), labels, doc) == ""
+    assert misnamed(NOTICE.format("Log Shooting Off • 0K"), labels, doc) == ""
+    assert misnamed(NOTICE.format("Log Shooting Off ~"), labels, doc) == "", "a stray mark after the value"
+    assert misnamed(NOTICE.format("Log Shooting Sideways"), labels, doc) == "'Log Shooting' leaves 'sideways', no value of it"
+    assert misnamed(NOTICE.format("Log Shooting Offset"), labels, doc).endswith("no value of it"), "a value only whole"
 
 
 def test_the_runner_hands_blocker_of_the_blocker_labels(monkeypatch):
