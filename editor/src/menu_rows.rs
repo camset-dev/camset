@@ -62,6 +62,16 @@ pub fn group_key<'a>(order: i64, name: &str, settings: impl IntoIterator<Item = 
     }
 }
 
+/// A row's label as the camera draws it: where two rows under one row bear one label, the definition tells them apart
+/// by `#n` after it (docs/DATA_CONTRACTS.md, "Where a setting sits on the camera"), which is not drawn. The label
+/// itself, with its `#n`, tells the rows apart.
+pub fn drawn(label: &str) -> &str {
+    match label.rsplit_once('#') {
+        Some((l, n)) if !l.is_empty() && !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => l,
+        _ => label,
+    }
+}
+
 /// Lower-case letters and digits only, as the kit compares menu labels (camkit.placement.norm).
 pub fn norm(s: &str) -> String {
     s.to_lowercase().chars().filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit()).collect()
@@ -149,12 +159,11 @@ pub fn page_for<'a>(pages: &'a [Page], option: &str) -> Option<&'a Page> {
     pages.iter().find(|p| p.option == option)
 }
 
-/// A setting's name without the copy it is of (" (stills)", " (movie)"), as the kit compares names (`norm`): the
-/// stills and movie copies of a page's parameter are one row of it.
-fn base_name(name: &str) -> String {
-    let n = name.trim();
-    let n = n.strip_suffix("(stills)").or_else(|| n.strip_suffix("(movie)")).unwrap_or(n);
-    norm(n)
+/// The setting a page's row stands for: a copy the camera keeps of a setting's value (`copy_of`) stands for that
+/// setting, so the copies of a page's parameter are one row of it, side by side, as the definition says, never by
+/// their names.
+fn row_of(s: &Setting) -> String {
+    s.copy_of.clone().unwrap_or_else(|| s.key.clone())
 }
 
 /// A row's sort key in its group: the camera's position of its row (`row_at`), then, on one row, its own setting
@@ -241,7 +250,7 @@ fn nest(rows: &[Vec<Setting>], placed: Vec<usize>, mode: Option<&str>, strip: &d
     let mut deeper: HashSet<Node> = HashSet::new();
     for &i in &placed {
         let s = &rows[i][0];
-        here.entry(node(s, len(s))).or_default().insert(if s.on_page() { base_name(&s.name) } else { s.key.clone() });
+        here.entry(node(s, len(s))).or_default().insert(if s.on_page() { row_of(s) } else { s.key.clone() });
         for n in 1..len(s) {
             deeper.insert(node(s, n));
         }
@@ -264,7 +273,7 @@ fn nest(rows: &[Vec<Setting>], placed: Vec<usize>, mode: Option<&str>, strip: &d
         }
         row_here = None;
         for level in common..path.len() {
-            let label = path[level].1.clone();
+            let label = drawn(&path[level].1).to_string();
             let labels: Vec<String> = mode.map(str::to_string).into_iter().chain(path[..=level].iter().map(|p| p.1.clone())).collect();
             open.push(path[level].clone());
             let mine = node(s, level + 1);
@@ -340,9 +349,10 @@ pub fn place_words(s: &Setting) -> Option<String> {
     if !s.placed() {
         return None;
     }
+    let labels: Vec<&str> = s.row.iter().map(|l| drawn(l)).collect();
     let row = match s.row_tab.as_deref().filter(|t| !t.is_empty() && *t != s.tab) {
-        Some(tab) => format!("{tab} > {} > {}", camera_group(s), s.row.join(" > ")),
-        None => s.row.join(" > "),
+        Some(tab) => format!("{tab} > {} > {}", camera_group(s), labels.join(" > ")),
+        None => labels.join(" > "),
     };
     let mode = s.row_mode.as_deref().map(|m| format!(" ({})", mode_words(m))).unwrap_or_default();
     Some(match &s.under_option {
@@ -523,14 +533,16 @@ mod tests {
             x.row_group = Some("Profile P1".into());
             x
         };
+        // a copy the camera keeps of a parameter (`copy_of`) is one row with it, whatever its name
+        let copy = |mut x: Setting, of: &str| { x.copy_of = Some(of.into()); x };
         let page = rows(vec![
             on("bl", "Black Level", &["Black Level"], &[0]),
-            on("bls", "Black Level (stills)", &["Black Level"], &[0]),
+            copy(on("bls", "Black Level (stills)", &["Black Level"], &[0]), "bl"),
             on("bgl", "Black Gamma Level", &["Black Gamma", "Level"], &[2, 1]),
             on("bgr", "Black Gamma Range", &["Black Gamma", "Range"], &[2, 0]),
             on("km", "Knee Mode", &["Knee", "Mode"], &[3, 0]),
             on("kmp", "Knee Auto Set Max Point", &["Knee", "Auto Set", "Max Point"], &[3, 1, 0]),
-            on("kmps", "Knee Auto Set Max Point (stills)", &["Knee", "Auto Set", "Max Point"], &[3, 1, 0]),
+            copy(on("kmps", "Copy of the max point", &["Knee", "Auto Set", "Max Point"], &[3, 1, 0]), "kmp"),
         ]);
         assert!(page.iter().all(|r| r[0].on_page()) && page[0][0].page_prefix() == Some(2));
         let row = |index, depth| Line::Row { index, depth };

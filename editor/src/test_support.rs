@@ -17,6 +17,81 @@ pub(crate) fn sample_app(tag: &str, strip: Option<fn(&mut serde_json::Value)>) -
     (app, dir, user)
 }
 
+/// The camera's menus stubbed onto the shipped definition in memory, until its own carry them: `sample_app(tag,
+/// Some(stub_menus))`. Three menus as the camera's switch has them: "Still" (the Stills mode), "Movie", and "S&Q" (the
+/// S&Q and Time-lapse modes, with a hover), each with its Main tiles. Every setting placed on a row gets `row_menus`:
+/// the rows only Movie mode's menu has (`row_mode`) and the settings named for Movie ("(Movie)") Movie's and S&Q's;
+/// the ones named for stills ("(Still)"), and those on the same row as one named for Movie, Still's only; every other
+/// placed setting all three. A copy (`copy_of`) and a setting placed nowhere get none; no `row_places`. Whatever menus
+/// the shipped definition lists go first (`strip_menus`), so the stub is the same world whatever it carries.
+pub(crate) fn stub_menus(v: &mut serde_json::Value) {
+    strip_menus(v);
+    v["camera"]["menus"] = serde_json::json!([
+        { "name": "Still", "modes": ["Stills"], "main_tiles": "Stills" },
+        { "name": "Movie", "modes": ["Movie"], "main_tiles": "Movie" },
+        { "name": "S&Q", "modes": ["S&Q", "Time-lapse"], "main_tiles": "S&Q", "hover": "Slow and quick motion, and time-lapse" },
+    ]);
+    let settings = v["settings"].as_array_mut().unwrap();
+    let place = |s: &serde_json::Value| (s["row"].clone(), s["row_at"].clone(), s["row_tab"].clone(), s["row_group"].clone());
+    let named = |s: &serde_json::Value, w: &str| s["name"].as_str().is_some_and(|n| n.contains(w));
+    let movie: Vec<_> = settings.iter().filter(|s| s["copy_of"].is_null() && named(s, "(Movie)")).map(place).collect();
+    for s in settings.iter_mut() {
+        let placed = s["row"].as_array().is_some_and(|r| !r.is_empty());
+        if !s["copy_of"].is_null() || !placed {
+            continue;
+        }
+        let menus: &[&str] = if !s["row_mode"].is_null() || named(s, "(Movie)") {
+            &["Movie", "S&Q"]
+        } else if named(s, "(Still)") || movie.contains(&place(s)) {
+            &["Still"]
+        } else {
+            &["Still", "Movie", "S&Q"]
+        };
+        s["row_menus"] = serde_json::json!(menus);
+    }
+}
+
+/// The shipped definition without the camera's menus (`camera.menus`, each setting's `row_menus` and `row_places`):
+/// the editor as before menus, for the tests that say so, whether or not the shipped definition lists menus.
+pub(crate) fn strip_menus(v: &mut serde_json::Value) {
+    if let Some(c) = v["camera"].as_object_mut() {
+        c.remove("menus");
+    }
+    for s in v["settings"].as_array_mut().into_iter().flatten() {
+        if let Some(o) = s.as_object_mut() {
+            o.remove("row_menus");
+            o.remove("row_places");
+        }
+    }
+}
+
+/// The definitions the app has loaded, and the one in use, without the camera's menus (as `strip_menus` takes them out
+/// of a definition's text): the editor as before menus, for a test that opens the shipped sample through `App::new`
+/// and is not about the menus, so it holds whether or not the shipped definition lists them. Call it before opening.
+pub(crate) fn as_before_menus(app: &mut App) {
+    let strip = |s: &mut camset_editor::schema::Schema| {
+        s.camera.menus.clear();
+        for x in s.settings.iter_mut() {
+            x.row_menus.clear();
+            x.row_places.clear();
+        }
+    };
+    for s in app.defs.list.iter_mut() {
+        strip(s);
+    }
+    strip(&mut app.schema);
+    app.schema_gen += 1;
+}
+
+/// `stub_menus`, and one setting placed in one menu otherwise than its own place says (`row_places`): Audio Recording
+/// (global:0x02e9, a row of Movie mode's menu only, on its own row in Audio Recording) under a row "Audio Settings" in
+/// S&Q's menu, in S&Q's alone of the two it has.
+pub(crate) fn stub_menus_and_a_place(v: &mut serde_json::Value) {
+    stub_menus(v);
+    let s = v["settings"].as_array_mut().unwrap().iter_mut().find(|s| s["key"] == "global:0x02e9").unwrap();
+    s["row_places"] = serde_json::json!({ "S&Q": { "row": ["Audio Settings", "Audio Recording"], "row_at": [52, 0] } });
+}
+
 /// The sample shipped beside the ILCE-1M2 firmware 4.00 definition.
 pub(crate) const SAMPLE_BYTES: &[u8] = include_bytes!("../definitions/ILCE-1M2_fw4.00.DAT");
 

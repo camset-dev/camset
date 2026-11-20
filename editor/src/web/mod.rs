@@ -197,17 +197,40 @@ impl App {
         let from = "from the web page".to_string();
         // the page asked the person before a request that replaces file A over unsaved edits
         let discard = r.discard || body["discard"].as_bool() == Some(true);
+        // the camera's menu the page drew with (`menu`, sent with every request but the state's, as `target` is): one the
+        // definition does not have is refused; a request that names its rows by a filter (recall and register of the
+        // rows shown, a merge, a copy from Compare, the comparison's export) names it where the definition lists menus,
+        // so the editor never takes a menu of its own for rows the page showed
+        if let Some(m) = body["menu"].as_str().filter(|m| action != "state" && self.schema.camera.menu_named(m).is_none()) {
+            return WebReply::error(400, &format!("This camera's definition has no camera menu named \"{m}\". The page asks for its menus again in a moment; try again then."));
+        }
+        let by_filter = match action {
+            "recall" | "register" => body["shown"].as_bool() == Some(true),
+            "csv" => body["compare"].as_bool() == Some(true),
+            "copy" | "copy_rows" | "merge" => true,
+            _ => false,
+        };
+        if by_filter && !self.menus().is_empty() && !body["menu"].is_string() {
+            return WebReply::error(400, "Not done: the page did not say which camera menu its rows are in. Reload the page and try again.");
+        }
+        // else the one the set opens on (the state's, which is how the page learns the menu to draw with)
+        let menu = self.web_menu(&body, target);
+        let menu = menu.as_deref();
         match action {
             // the menu's counts are for the set the page edits (the live settings when it names none it can show)
-            "state" => WebReply::json(self.web_state(if self.shown_sections().contains(&target) { target } else { 0 })),
-            "tab" => WebReply::json(self.web_tab(target, body["tab"].as_str(), body["q"].as_str().unwrap_or(""))),
-            "main" => WebReply::json(self.web_main(target, body["set"].as_u64().unwrap_or(0) as usize)),
+            "state" => {
+                let t = if self.shown_sections().contains(&target) { target } else { 0 };
+                WebReply::json(self.web_state_in(t, self.web_menu(&body, t).as_deref()))
+            }
+            "tab" => WebReply::json(self.web_tab(target, menu, body["tab"].as_str(), body["q"].as_str().unwrap_or(""))),
+            "main" => WebReply::json(self.web_main(target, body["set"].as_u64().unwrap_or(0) as usize, menu)),
             "set" => self.web_set(target, &body, &from),
             "revert" => {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
                 // as the window's Revert: a copy in step with its setting takes the setting and its other copies back
-                // along (`apply`); a step that would leave a setting held by none of its copies is refused, with why
-                if let Some(why) = self.apply(linked.iter().map(|l| Action::Revert(target, l.slot())).collect()) {
+                // along (`apply`); a step that would leave a setting held by none of its copies is refused, with why; a
+                // fraction tile's part goes back with its other part (`revert_actions`)
+                if let Some(why) = self.apply(self.revert_actions(&linked, target)) {
                     return WebReply::error(409, &why);
                 }
                 self.status = self.with_moved(format!("{} reverted {from}", linked[0].name));
@@ -224,7 +247,7 @@ impl App {
                 let odd = linked.iter().filter(|l| l.copy_of.is_some() && !self.shape_ok_in(l, target) && self.put_back_value(l, target).is_some()).count();
                 let Some((words, acts)) = self.put_back_choice(&linked, target) else {
                     if odd > 0 {
-                        return WebReply::error(409, &left_alone(Left { copies_shape: odd, ..Default::default() }));
+                        return WebReply::error(409, &self.left_alone(Left { copies_shape: odd, ..Default::default() }));
                     }
                     return WebReply::error(409, "Nothing to put back: this setting holds what the camera keeps here.");
                 };
@@ -234,7 +257,7 @@ impl App {
                     Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
                     Err(Err(why)) => return WebReply::error(409, &why),
                 }
-                self.status = self.with_moved(with_left(&format!("{}: {} {from}", linked[0].name, words.to_lowercase()), Left { copies_shape: odd, ..Default::default() }));
+                self.status = self.with_moved(self.with_left(&format!("{}: {} {from}", linked[0].name, words.to_lowercase()), Left { copies_shape: odd, ..Default::default() }));
                 WebReply::json(json!({ "ok": true }))
             }
             "revert_record" => {
@@ -287,11 +310,11 @@ impl App {
             "memories" => WebReply::json(self.web_memories(body["q"].as_str().unwrap_or(""), body["all"].as_bool(), body["only_diff"].as_bool())),
             "mymenu_page" if !self.has_mymenu_page() => WebReply::error(409, &format!("This camera's definition has no {}.", self.schema.camera.text.my_menu_name())),
             // the live settings whatever set the page edits, which only its note names
-            "mymenu_page" => WebReply::json(self.web_mymenu(if self.shown_sections().contains(&target) { target } else { 0 })),
+            "mymenu_page" => WebReply::json(self.web_mymenu(if self.shown_sections().contains(&target) { target } else { 0 }, menu)),
             "recall" | "register" => self.web_recall(action == "recall", &body, &from),
             "memory_copy" => self.web_memory_copy(&body, &from),
             "exposure" if self.schema.camera.exposure.is_none() => WebReply::error(409, "This camera's definition has no exposure page."),
-            "exposure" => WebReply::json(self.web_exposure()),
+            "exposure" => WebReply::json(self.web_exposure(menu)),
             "changes" => WebReply::json(self.web_changes()),
             // Settings > About > Changes: the changelog built into this editor, as the window's Changes shows it
             "changelog" => WebReply::json(json!({ "blocks": changelog_blocks(CHANGELOG) })),
@@ -461,9 +484,10 @@ impl App {
                 // the stored numbers are Expert mode's, whatever the page asks
                 let raw = self.prefs.expert && body["raw"].as_bool().unwrap_or(self.show_raw);
                 if action == "compare_records" {
-                    return WebReply::json(self.web_compare_records(&cols, q, only_diff, raw));
+                    return WebReply::json(self.web_compare_records(&cols, q, only_diff, raw, menu));
                 }
-                let tab = body["tab"].as_str().filter(|t| !t.is_empty());
+                // the entry of the Menu the page's Compare shows (`entry`: "all", "main", "mymenu" or "tab:<name>")
+                let entry = Self::web_entry(&body);
                 let three = match body["three"].as_str().unwrap_or("all") {
                     "a" => ThreeFilter::AOnly,
                     "b" => ThreeFilter::BOnly,
@@ -473,7 +497,7 @@ impl App {
                 };
                 // the row the page last changed from its compare (`keep`), kept shown as the window keeps it (`cmp_kept`)
                 let keep = body["keep"].as_str().filter(|k| !k.is_empty());
-                WebReply::json(self.web_compare(&cols, q, tab, (only_diff, keep), raw, three))
+                WebReply::json(self.web_compare(&cols, q, (menu, &entry), (only_diff, keep), raw, three))
             }
             // a value of file A changed from the compare: the setting as the page's rows draw it, in the cell's set, for
             // the same picker (then "set", with the cell's column as `col`)
@@ -482,8 +506,9 @@ impl App {
                 if !self.shown_sections().contains(&target) {
                     return WebReply::error(400, "This file has no such set.");
                 }
+                // the cell's own records (a row of a menu shows the record for that menu: `entry_rows`), links in the menu
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
-                WebReply::json(json!({ "row": self.web_row(target, &linked) }))
+                WebReply::json(json!({ "row": self.web_row_in(target, menu, &linked) }))
             }
             // a value put into a column of file A (`to`: one column, or several for a cell's "All of A"):
             // one row (a cell's menu, an arrow) or every row shown (a column header's "Copy all shown
@@ -509,11 +534,28 @@ impl App {
                 } else {
                     body["keys"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default()
                 };
-                let rows = self.matrix_rows_for("", None);
+                // a row of the page's Compare in a camera's menu holds the records for that menu (`compare_rows`):
+                // those its entry shows first, then any setting's own row
+                let shown = match menu {
+                    Some(_) => (*self.compare_rows(menu, &Self::web_entry(&body), "")).clone(),
+                    None => Vec::new(),
+                };
+                // every row Compare lists without a menu, a Main tile's memory records too (`tile_records`)
+                let rows = (*self.compare_rows(None, &BarKey::All, "")).clone();
                 self.rows_set.take();               // what this copy's rows cover, and nothing left from another
                 let (mut actions, mut n, mut name) = (Vec::new(), 0, String::new());
-                for key in keys {
-                    let Some((_, _, linked)) = rows.iter().find(|(_, _, l)| l.iter().any(|s| s.key == key)) else { return WebReply::error(404, "No such setting here.") };
+                let mut chosen: Vec<&Row> = Vec::new();
+                for key in &keys {
+                    match shown.iter().chain(rows.iter()).find(|(_, _, l)| l.iter().any(|s| s.key == *key)) {
+                        Some(row) => chosen.push(row),
+                        None => return WebReply::error(404, "No such setting here."),
+                    }
+                }
+                // a copy of the rows shown: a fraction's part goes with its other part only where both are shown
+                if action == "copy_rows" {
+                    self.copying_over(chosen.iter().copied());
+                }
+                for (_, _, linked) in chosen {
                     for d in &dsts {
                         let row = self.copy_row(linked, src, *d);
                         n += usize::from(!row.is_empty());
@@ -537,11 +579,11 @@ impl App {
                 }
                 let (f, t) = (self.col_name(src), dsts.iter().map(|d| self.col_name(*d)).collect::<Vec<_>>().join(", "));
                 let said = if action == "copy" { format!("{name} copied from {f} into {t} {from}") } else { format!("{n} row(s) copied from {f} into {t} {from}") };
-                self.status = self.with_moved(with_left(&said, left));
-                WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
+                self.status = self.with_moved(self.with_left(&said, left));
+                WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": self.left_alone(left) }))
             }
             // the three-way buttons: Merge B into A, Conflicts: take B, Conflicts: take Base, over the
-            // rows the page's search and tab give, as the window's buttons work over its own
+            // rows the page's search and entry of the Menu give, as the window's buttons work over its own
             "merge" => {
                 if !self.editable() {
                     return WebReply::error(409, &self.view_only_why(true));
@@ -559,16 +601,12 @@ impl App {
                     "conflicts_base" => (Three::Conflict, tb, "conflicts reset to the base values"),
                     _ => return WebReply::error(400, "No such merge."),
                 };
-                let tab = body["tab"].as_str().filter(|t| !t.is_empty());
+                // the rows the page's Compare shows, as the window's merge goes over its own (`compare_rows`): its entry
+                // of the Menu in its camera's menu, with its search
+                let entry = Self::web_entry(&body);
                 self.rows_set.take();
-                let (mut actions, mut n) = (Vec::new(), 0);
-                for (_, _, linked) in self.matrix_rows_for(body["q"].as_str().unwrap_or("").trim(), tab) {
-                    if self.three_way((tb, ta, tbb), &linked[0]) == want {
-                        n += 1;
-                        actions.extend(self.copy_row(&linked, take, ta));
-                    }
-                }
-                self.pin_families(None, ta.section, &mut actions);
+                let rows = self.compare_rows(menu, &entry, body["q"].as_str().unwrap_or("").trim());
+                let (actions, n) = self.merge_rows(&rows, (tb, ta, tbb), want, take);
                 let left = self.copy_skipped.get();
                 // a switch that keeps copies apart, unticked by the merge, asks first unless its family comes too
                 match self.web_untick_apply(actions, &body) {
@@ -576,8 +614,8 @@ impl App {
                     Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
                     Err(Err(why)) => return WebReply::error(409, &why),
                 }
-                self.status = self.with_moved(with_left(&format!("{n} {said} {from}"), left));
-                WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
+                self.status = self.with_moved(self.with_left(&format!("{n} {said} {from}"), left));
+                WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": self.left_alone(left) }))
             }
             "file" => {
                 let Some(doc) = &self.doc else { return WebReply::error(409, "No file is open.") };
@@ -654,8 +692,19 @@ impl App {
     /// The frame of the page: the open file, the camera link, a camera job and its report, and the
     /// menu as the window's left column has it for `target` (each tab's colour, settings and edits).
     /// It is asked for every few seconds, so it names no path but file names, and nothing of the cameras
-    /// (address, serial number, MAC address): those come in `camera_cards`, which Connect to the camera asks for.
+    /// (address, serial number, MAC address): those come in `camera_cards`, which Connect to the camera asks for. In the
+    /// camera's menu set `target` opens on (`web_state_in`); the page's requests name their menu.
+    #[cfg(test)]
     pub(super) fn web_state(&self, target: usize) -> Value {
+        self.web_state_in(target, self.opening_menu(target).as_deref())
+    }
+
+    /// `web_state` with the Menu as the camera's menu `menu` lists it (None: as before menus): its entries, their counts
+    /// and edits (`edit_entries`), the sets the Editing row offers in it (`menu_sets`, each a button of its own outside
+    /// Expert mode), and the menus to pick one of (`menus`: each name and hover, `menu_hover`), the one shown, the
+    /// selector's words and the opening of the file the choice is kept for (`opened`). Without menus every key as before.
+    pub(super) fn web_state_in(&self, target: usize, menu: Option<&str>) -> Value {
+        let menu = menu.filter(|m| self.menu_named(m).is_some());
         let file = self.doc.as_ref().map(|d| {
             // the link as the helper names it ("LAN", "USB"), without the camera's address
             let (source, link, read_at) = match &d.source {
@@ -691,15 +740,13 @@ impl App {
             })
         });
         // [section, name, a button of its own]: the live settings and the dial memories get one, the
-        // other sets (expert mode) share a list, as in the window's Editing row
-        let targets: Vec<Value> = self.shown_sections().into_iter()
-            .map(|s| json!([s, self.schema.camera.target_name(s), s == 0 || self.schema.camera.is_dial(s)])).collect();
-        // the window's Menu tabs (`menu_tabs`: Other gathers the tabs the definition does not list), as it shows them
-        let sections = self.shown_sections();
+        // other sets (expert mode) share a list, as in the window's Editing row; in a camera's menu, outside Expert mode,
+        // the live settings and the sets of that menu's shooting modes, each with a button of its own
+        let in_menu = menu.is_some() && !self.prefs.expert;
+        let offered = match menu { Some(m) if in_menu => self.editing_sets_in(target, Some(m)), _ => self.shown_sections() };
+        let targets: Vec<Value> = offered.into_iter()
+            .map(|s| json!([s, self.schema.camera.target_name(s), s == 0 || self.schema.camera.is_dial(s) || in_menu])).collect();
         let menu_tabs = self.menu_tabs();
-        let tabs: Vec<&String> = menu_tabs.iter()
-            .filter(|t| sections.iter().any(|&si| self.settings_in(si, Some(t.as_str())).next().is_some()))
-            .collect();
         // where a jump to a setting of a tab that has no entry of its own goes (`shown_view`): My Menu's page, or Other
         let mut routes = serde_json::Map::new();
         for s in &self.schema.settings {
@@ -717,17 +764,27 @@ impl App {
                 routes.insert(off.to_string(), json!({ "page": "tab", "tab": first }));
             }
         }
-        let edited = |s: &Setting| self.doc.as_ref().is_some_and(|d| d.value(target, s.slot()) != d.original_value(target, s.slot()));
-        let tab_info: Vec<Value> = tabs.iter().map(|t| {
-            let (mut count, mut changed) = (0, 0);
-            for s in self.settings_in(target, Some(t.as_str())) {
-                count += 1;
-                // My Menu's places count on its own entry (`mymenu_edits`), as in the window
-                changed += (edited(s) && !self.is_mymenu_place(s)) as usize;
+        let (tabs, tab_info): (Vec<String>, Vec<Value>) = match menu {
+            // in a camera's menu, the window's entries in it, from the one function its bar is built from (`edit_entries`)
+            Some(m) => self.edit_entries(target, Some(m), "", false).into_iter().filter(|e| matches!(e.key, BarKey::Tab(_)))
+                .map(|e| (e.label.clone(), json!({ "name": e.label, "color": e.color.map(css_color), "count": e.count, "edited": e.badge, "title": e.hover })))
+                .unzip(),
+            // the window's Menu tabs (`menu_tabs`: Other gathers the tabs the definition does not list), as it shows them
+            None => {
+                let sections = self.shown_sections();
+                let edited = |s: &Setting| self.doc.as_ref().is_some_and(|d| d.value(target, s.slot()) != d.original_value(target, s.slot()));
+                menu_tabs.iter().filter(|t| sections.iter().any(|&si| self.settings_in(si, Some(t.as_str())).next().is_some())).map(|t| {
+                    let (mut count, mut changed) = (0, 0);
+                    for s in self.settings_in(target, Some(t.as_str())) {
+                        count += 1;
+                        // My Menu's places count on its own entry (`mymenu_edits`), as in the window
+                        changed += (edited(s) && !self.is_mymenu_place(s)) as usize;
+                    }
+                    let title = (t.as_str() == off).then(App::off_menu_hover);
+                    (t.clone(), json!({ "name": t, "color": css_color(tab_color(&self.schema.camera, t)), "count": count, "edited": changed, "title": title }))
+                }).unzip()
             }
-            let title = (t.as_str() == off).then(App::off_menu_hover);
-            json!({ "name": t, "color": css_color(tab_color(&self.schema.camera, t)), "count": count, "edited": changed, "title": title })
-        }).collect();
+        };
         let main_sets: Vec<&str> = self.schema.camera.main_tiles.as_ref().map(|m| m.0.iter().map(|s| s.name.as_str()).collect()).unwrap_or_default();
         let job = self.camera_job.as_ref().map(|j| {
             let (title, line, progress) = j.progress();
@@ -829,6 +886,22 @@ impl App {
         out["version_short"] = json!(version_short());
         out["build"] = json!(build_hash());
         out["about"] = self.web_about();
+        // the camera's menus to pick one of, where the definition lists two or more and the rows are laid out as on the
+        // camera (`menus`): each by its name with its hover (`menu_hover`: the file's own says it was saved in it), the
+        // one the answer is for and the selector's words
+        // the opening of the file (`opened`: this run of the editor's and its counter's, so another run's openings are
+        // other ones too), whether menus are shown or not: the page keeps a choice of menu for this opening only (a file
+        // opened since, while the flat list is on too, opens on its own menu, as in the window)
+        out["opened"] = json!(self.doc.as_ref().map(|d| format!("{}:{}", std::process::id(), d.opened)));
+        if let Some(m) = menu {
+            out["menus"] = json!(self.menus().iter().map(|x| json!({ "name": x.name, "title": self.menu_hover(&x.name) })).collect::<Vec<_>>());
+            out["menu"] = json!(m);
+            out["menus_label"] = json!(self.schema.camera.text.menus_label());
+            out["menus_hover"] = json!(self.schema.camera.text.menus_hover());
+            // the sets a column of Compare may show (`shown_sections`): every menu's; the picker offers this menu's
+            // (`sections` in Compare's answer, `column_sets_in`, as the window's)
+            out["column_sets"] = json!(self.shown_sections());
+        }
         out
     }
 
@@ -864,11 +937,13 @@ impl App {
 
     /// The Main page for `target`, as the window's: the definition's pages (Stills, Movie, …),
     /// the tiles of page `set` with their values and, for a tile holding one setting that can be
-    /// changed, that setting as a row; then every setting the tiles show, as rows.
-    fn web_main(&self, target: usize, set: usize) -> Value {
+    /// changed, that setting as a row; then every setting the tiles show, as rows. In a camera's menu that names its
+    /// tiles (`menu_tile_set`), those, and no buttons of the Main page's own for the others (`sets` empty).
+    fn web_main(&self, target: usize, set: usize, menu: Option<&str>) -> Value {
         let pages = self.schema.camera.main_tiles.as_ref().map_or(&[][..], |m| m.0.as_slice());
-        let set = if set < pages.len() { set } else { 0 };
-        let names: Vec<&str> = pages.iter().map(|p| p.name.as_str()).collect();
+        let tied = menu.and_then(|m| self.menu_tile_set(m));
+        let set = tied.unwrap_or(if set < pages.len() { set } else { 0 });
+        let names: Vec<&str> = if tied.is_some() { Vec::new() } else { pages.iter().map(|p| p.name.as_str()).collect() };
         let Some(doc) = &self.doc else { return json!({ "sets": names, "set": set, "tiles": [], "rows": [] }) };
         let editable = self.editable();
         let (mut tiles, mut rows) = (Vec::new(), Vec::new());
@@ -894,7 +969,7 @@ impl App {
             if let [s] = settings.as_slice() {
                 if editable && self.tile_changes_in_place(s, target) {
                     if let Some(l) = linked(s) {
-                        t["edit"] = self.web_row(target, &l);
+                        t["edit"] = self.web_row_in(target, menu, &l);
                     }
                 }
             }
@@ -908,9 +983,9 @@ impl App {
                     caption.to_string()
                 };
                 let mut row = match linked(s) {
-                    Some(l) => self.web_row(target, &l),
+                    Some(l) => self.web_row_in(target, menu, &l),
                     None => {
-                        let mut r = self.web_row(target, std::slice::from_ref(*s));
+                        let mut r = self.web_row_in(target, menu, std::slice::from_ref(*s));
                         r["editable"] = json!(false);
                         r
                     }
@@ -946,16 +1021,109 @@ impl App {
         settings.iter().map(|s| value(s)).collect::<Vec<_>>().join(" · ")
     }
 
-    /// The rows of one tab for `target`, by group; with `q`, the settings of every tab that match it.
-    fn web_tab(&self, target: usize, tab: Option<&str>, q: &str) -> Value {
+    /// The rows of one Menu entry for `target` in the camera's menu `menu` (None: as before menus), by group, as the
+    /// window lists them (`web_entry_groups`); with `q`, the settings of every entry that match it, where the definition
+    /// lists menus of every menu (`web_search`).
+    fn web_tab(&self, target: usize, menu: Option<&str>, tab: Option<&str>, q: &str) -> Value {
         let q = q.trim().to_lowercase();
+        match (tab, menu) {
+            (Some(t), _) if q.is_empty() => self.web_entry_groups(target, menu, t),
+            // a search: the window's (`search_hits_in`), with menus or without
+            _ if !q.is_empty() => self.web_search(target, menu, &q),
+            _ => self.web_tab_any(target, tab, &q),
+        }
+    }
+
+    /// The groups of Menu entry `tab` for set `target` in menu `menu` (None: as before menus), from the window's own
+    /// listing (`tab_groups_in`), so the page cannot drift from it: a family as one table first, then each group in its
+    /// tab's colour, as on the camera its rows in the camera's order with the lines the window draws (`layout`), the
+    /// page an option opens marked with its option (`page`), the sub-choices beside their options (`beside`); in a menu,
+    /// each row titled as the camera draws it there, showing the record for that menu (`listed`).
+    fn web_entry_groups(&self, target: usize, menu: Option<&str>, tab: &str) -> Value {
+        let camera = self.camera_layout();
+        let groups: Vec<Value> = self.tab_groups_in(target, menu, tab, "", false).into_iter().map(|(name, family, mut rows)| {
+            if family {
+                let pp: Vec<Setting> = rows.into_iter().flatten().collect();
+                return self.web_family(target, menu, &name, &pp);
+            }
+            let tab = rows.first().map(|r| self.layout_tab(&r[0]).to_string()).unwrap_or_default();
+            // as on the camera: the rows in the camera's order, laid out as the window lays them out (`group_lines`: the
+            // camera's rows that are headings, each setting's depth, the settings it does not place last)
+            let mut layout = None;
+            if camera {
+                let lines = self.group_lines(&rows);
+                if lines.iter().any(|l| !matches!(l, Line::Row { depth: 0, .. })) {
+                    layout = Some(lines.iter().map(|l| match l {
+                        Line::Heading { label, depth, path } => json!({ "head": label, "depth": depth, "path": path }),
+                        Line::Row { index, depth } => json!({ "key": rows[*index][0].key, "depth": depth }),
+                        Line::Mode(mode) => json!({ "mode": menu_rows::mode_words(mode), "name": mode }),
+                        Line::More => json!({ "more": menu_rows::MORE }),
+                    }).collect::<Vec<_>>());
+                }
+                rows = menu_rows::order(&lines).into_iter().map(|i| rows[i].clone()).collect();
+            }
+            let mut g = json!({ "name": name, "color": css_color(tab_color(&self.schema.camera, &tab)), "tab": tab,
+                "rows": rows.iter().map(|r| self.web_row_in(target, menu, r)).collect::<Vec<_>>() });
+            if let Some(layout) = layout {
+                g["layout"] = json!(layout);
+            }
+            if camera {
+                // the page an option opens (Picture Profile's PP1), as the window's group column marks it: its option
+                if let Some(o) = rows.iter().flatten().find(|s| s.on_page()).and_then(|s| s.under_option.clone()) {
+                    g["page"] = json!(o);
+                }
+                // the sub-choices are no rows here, only beside their owner's options: the page counts them in the
+                // group's number, as the window counts its settings
+                g["beside"] = json!(true);
+            }
+            g
+        }).collect();
+        // "places": the definition says where its settings sit on the camera, so the page offers the layout switch
+        json!({ "groups": groups, "editable": self.editable(), "places": self.places(), "flat": self.prefs.flat_list })
+    }
+
+    /// The page's search where the definition lists the camera's menus: the live settings that match `q` (lower case)
+    /// in every menu, each once, in the menu a click on it opens for set `target` while the page shows menu `now`
+    /// (`search_hits_in`, in its order), as that menu's row shows it, under its menu, tab and group ("Movie › Shooting ›
+    /// Audio Recording"); each row says where it opens (`open`: `web_place`, and `where_in`'s words).
+    fn web_search(&self, target: usize, now: Option<&str>, q: &str) -> Value {
+        // the window's search page, hit by hit in its order (`search_hits_in`): each hit one row, titled as the window
+        // titles it (the definition's name), under the words the window gives its place (`where_in`, ">" between
+        // them), consecutive hits of one place under one heading; its row the one its menu shows, as that menu lays it
+        // out, with the link a click on it follows (`web_place`)
+        let mut groups: Vec<(String, String, Option<String>, Vec<Value>)> = Vec::new();
+        for (s, m) in self.search_hits_in(target, now, q).into_iter().take(MAX_HITS) {
+            let m = m.or_else(|| now.map(str::to_string));
+            let shown = match &m { Some(m) => self.listed_record(&s, target, m), None => s.clone() };
+            let linked = match &m { Some(m) => self.web_linked_in(target, Some(m), &shown.key), None => self.web_linked(target, &s.key) }.unwrap_or_else(|| vec![shown.clone()]);
+            let mut row = self.web_row_in(target, m.as_deref(), &linked);
+            row["name"] = json!(s.name);
+            let mut place = self.web_place(&s, target, m.as_deref());
+            place.insert("key".into(), json!(s.key));
+            let at = self.where_in(&s, target, m.as_deref());
+            place.insert("where".into(), json!(at));
+            row["open"] = Value::Object(place);
+            match groups.last_mut().filter(|g| g.0 == at) {
+                Some(g) => g.3.push(row),
+                None => groups.push((at, self.layout_tab(&shown).to_string(), m, vec![row])),
+            }
+        }
+        let groups: Vec<Value> = groups.into_iter().map(|(name, tab, m, rows)| json!({
+            "name": name, "color": css_color(tab_color(&self.schema.camera, &tab)), "tab": tab, "menu": m, "rows": rows,
+        })).collect();
+        json!({ "groups": groups, "editable": self.editable(), "places": self.places(), "flat": self.prefs.flat_list })
+    }
+
+    /// The rows of one tab for `target`, by group; with `q`, the settings of every tab that match it: the page's own
+    /// grouping of a search without menus, and of every entry at once.
+    fn web_tab_any(&self, target: usize, tab: Option<&str>, q: &str) -> Value {
         let tab_pos = |t: &str| self.schema.tabs.iter().position(|x| x == t).unwrap_or(usize::MAX);
         // groups in menu order (a group sorts by its first setting), rows by name within a group;
         // each group headed in its tab's colour
         let mut keys: BTreeMap<String, (usize, i64, String)> = BTreeMap::new();
         let mut tab_of: BTreeMap<String, String> = BTreeMap::new();
         let mut groups: BTreeMap<(usize, i64, String), Vec<Vec<Setting>>> = BTreeMap::new();
-        let list = self.settings_in(target, if q.is_empty() { tab } else { None }).filter(|s| q.is_empty() || Self::matches_query(s, &q));
+        let list = self.settings_in(target, if q.is_empty() { tab } else { None }).filter(|s| q.is_empty() || Self::matches_query(s, q));
         // the entry for what the camera's menus do not hold names its groups by their tab too, as the window (`off_group`)
         let off = q.is_empty() && self.camera_layout() && tab == Some(self.schema.camera.text.off_menu_name());
         for s in list.take(if q.is_empty() { usize::MAX } else { MAX_HITS }) {
@@ -983,7 +1151,7 @@ impl App {
                 let page = |rows: &Vec<Vec<Setting>>| camera && rows.iter().flatten().any(Setting::on_page);
                 let pp: Vec<Setting> = keys.iter().filter_map(|k| if groups.get(k).is_some_and(page) { groups.get(k).cloned() } else { groups.remove(k) }).flatten().flatten().collect();
                 if !pp.is_empty() {
-                    families.push(self.web_family(target, &f.title, &pp));
+                    families.push(self.web_family(target, None, &f.title, &pp));
                 }
             }
         }
@@ -1045,6 +1213,108 @@ impl App {
         Some(self.settings_in(target, None).filter(|o| self.same_row(o, s)).cloned().collect())
     }
 
+    /// The camera's menu a page request lists its rows in: the one it names (`menu`, one of `menus`), else the one set
+    /// `target` opens on (`opening_menu`), so the page follows the set edited and a file opened until a menu is picked
+    /// on it. None without menus (fewer than two in the definition, or the flat list): every answer as before menus.
+    fn web_menu(&self, body: &Value, target: usize) -> Option<String> {
+        body["menu"].as_str().filter(|m| self.menu_named(m).is_some()).map(str::to_string).or_else(|| self.opening_menu(target))
+    }
+
+    /// The entry of the Menu a request of the page's Compare names (`entry`: "all", "main", "mymenu" or "tab:<name>",
+    /// `web_entry_key`); "All settings" when it names none.
+    fn web_entry(body: &Value) -> BarKey {
+        match body["entry"].as_str().unwrap_or("all") {
+            "main" => BarKey::Main,
+            "mymenu" => BarKey::MyMenu,
+            e => e.strip_prefix("tab:").map_or(BarKey::All, |t| BarKey::Tab(t.to_string())),
+        }
+    }
+
+    /// An entry of the Menu as the page names it (`web_entry`).
+    fn web_entry_key(key: &BarKey) -> String {
+        match key {
+            BarKey::All => "all".into(),
+            BarKey::Main => "main".into(),
+            BarKey::MyMenu => "mymenu".into(),
+            BarKey::Tab(t) => format!("tab:{t}"),
+        }
+    }
+
+    /// Where a link of the page to setting `s` lands for set `target`, the page showing the camera's menu `now`, as every
+    /// jump of the window goes (`jump_place`): `open_tab` and `open_group`; where the definition lists menus also
+    /// `open_menu`, the menu to show, and `open_key` where the row there that shows `s` is another's (a copy shown in its
+    /// setting's row: `listed_record`).
+    fn web_place(&self, s: &Setting, target: usize, now: Option<&str>) -> serde_json::Map<String, Value> {
+        let (menu, tab, group) = self.jump_place(s, target, now);
+        let mut out = serde_json::Map::new();
+        out.insert("open_tab".into(), json!(tab));
+        out.insert("open_group".into(), json!(group));
+        if let Some(m) = menu {
+            let shown = self.listed_record(s, target, &m).key;
+            if shown != s.key {
+                out.insert("open_key".into(), json!(shown));
+            }
+            out.insert("open_menu".into(), json!(m));
+        }
+        out
+    }
+
+    /// Where Compare's Open in Edit on its row of `s` lands in set `target`, Compare showing menu `menu`, as the window's
+    /// (`open_in_edit_from_compare`): where that menu lists the setting's row, that row there (`open_key` where it shows
+    /// another record than `s`), else where a jump to `s` lands (`web_place`).
+    fn compare_place(&self, s: &Setting, target: usize, menu: Option<&str>) -> serde_json::Map<String, Value> {
+        match menu.and_then(|m| self.row_in_menu(s, target, m).map(|row| (m, row))) {
+            Some((m, row)) => {
+                let mut out = self.web_place(&row, target, Some(m));
+                if row.key != s.key {
+                    out.insert("open_key".into(), json!(row.key));
+                }
+                out
+            }
+            None => self.web_place(s, target, menu),
+        }
+    }
+
+    /// `v`, an object, with the link to setting `s` that `web_place` gives.
+    fn with_place(&self, mut v: Value, s: &Setting, target: usize, now: Option<&str>) -> Value {
+        if let Some(o) = v.as_object_mut() {
+            o.extend(self.web_place(s, target, now));
+        }
+        v
+    }
+
+    /// Whether set `target` holds `s` as `settings_in` lists it (the memory sets their settings, the live settings the
+    /// global ones; Expert mode's own settings in Expert mode only).
+    fn web_kept(&self, target: usize, s: &Setting) -> bool {
+        (if target != 0 { s.in_sets } else { s.area == "global" }) && (self.prefs.expert || !Self::expert_only(s))
+    }
+
+    /// `web_linked` in the camera's menu `menu` (None: as before menus): the records of the row that menu shows for
+    /// setting `key` in set `target`, as it lays them out (`listed`: titled as the camera draws the row, showing the
+    /// record for that menu), the leading one first; a key the menu shows in another's row (a copy in its setting's
+    /// row) finds that row. A key the menu does not list: `web_linked`.
+    pub(crate) fn web_linked_in(&self, target: usize, menu: Option<&str>, key: &str) -> Option<Vec<Setting>> {
+        let Some(m) = menu.filter(|m| self.menu_named(m).is_some()) else { return self.web_linked(target, key) };
+        let listed = self.listed(m, &self.bind_for(target));
+        let row = listed.rows.iter().find(|s| s.key == key).or_else(|| listed.by_key.get(key).map(|&i| &listed.rows[i]));
+        let Some(s) = row.filter(|s| self.web_kept(target, s)) else { return self.web_linked(target, key) };
+        Some(listed.rows.iter().filter(|o| self.web_kept(target, o) && self.same_row(o, s)).cloned().collect())
+    }
+
+    /// The settings of `s`'s camera group (`menu_rows::camera_group`) on its tab's page (`layout_tab`), for set `target`,
+    /// where its row's sub-choices and owner are (`beside_in` lists the same): as the menu that laid `s` out lists them
+    /// (`Setting::shown_in`), else as before menus.
+    fn web_camera_group(&self, target: usize, s: &Setting) -> Vec<Setting> {
+        let (tab, group) = (self.layout_tab(s), menu_rows::camera_group(s));
+        match s.shown_in.as_deref().filter(|m| self.menu_named(m).is_some()) {
+            // the tab's entry (`settings_in_menu(.., Some(tab))`), without copying the menu's other rows
+            Some(m) => self.listed(m, &self.bind_for(target)).rows.iter()
+                .filter(|o| menu_rows::camera_group(o) == group && self.layout_tab(o) == tab && self.web_kept(target, o) && !self.off_menu(o))
+                .cloned().collect(),
+            None => self.settings_in(target, Some(tab)).filter(|o| menu_rows::camera_group(o) == group).cloned().collect(),
+        }
+    }
+
     /// A compare column as the page names it, `["a" | "b" | "base", section]`: None unless that
     /// file is open and the section is one the window offers as a column (`shown_sections`).
     fn col_from_json(&self, v: &Value) -> Option<Col> {
@@ -1058,10 +1328,20 @@ impl App {
         (self.set_for(src).is_some() && self.shown_sections().contains(&section)).then_some(Col { src, section })
     }
 
-    /// One setting as the page draws it: its value, how it may be changed, and what stands in the way.
+    /// One setting as the page draws it: its value, how it may be changed, and what stands in the way (`web_row_in`, its
+    /// links in the menu set `target` opens on).
     pub(crate) fn web_row(&self, target: usize, linked: &[Setting]) -> Value {
+        self.web_row_in(target, None, linked)
+    }
+
+    /// `web_row` on a page showing the camera's menu `menu` (None: the one a link opens): its links land where a jump
+    /// of the window does from there (`web_place`). A row a menu laid out (`Setting::shown_in`) is titled as the camera
+    /// draws it there, with the setting's full name (`full_name`) where that is other; its sub-choices, owner and pages
+    /// are that menu's.
+    pub(crate) fn web_row_in(&self, target: usize, menu: Option<&str>, linked: &[Setting]) -> Value {
         let s = &linked[0];
         let Some(doc) = &self.doc else { return Value::Null };
+        let now = menu.or(s.shown_in.as_deref());
         let (cur, orig) = (doc.value(target, s.slot()), doc.original_value(target, s.slot()));
         // every record in its mapped shape, and none view only outside Expert mode (a setting no menu writes:
         // `locked_why`, whose words the row carries)
@@ -1075,6 +1355,11 @@ impl App {
             "changed": cur != orig,
             "label": Self::describe(s, cur), "original": Self::describe(s, orig),
         });
+        // in a camera's menu, the row is titled as the camera draws it: the setting's own name, for its details
+        let full = self.full_name(s);
+        if full != s.name {
+            row["full_name"] = json!(full);
+        }
         // what puts it back where the camera keeps it, where the plain Revert changes nothing, in the window's words
         // (`put_back_choice`) and with its hover (`put_back_hover`), for the page's button ("restore")
         if let Some((words, _)) = self.put_back_choice(linked, target) {
@@ -1212,16 +1497,18 @@ impl App {
         if let Some(w) = menu_rows::place_words(s) {
             row["place"] = json!(w);
         }
-        let group = || self.settings_in(target, Some(self.layout_tab(s))).filter(|o| menu_rows::camera_group(o) == menu_rows::camera_group(s));
+        // its camera group, in the menu that laid it out (`web_camera_group`)
+        let in_menu = s.shown_in.as_deref().filter(|m| self.menu_named(m).is_some());
         if menu_rows::is_own(s) {
             // every choice beside its options (`menu_rows::sub_choices`), each a row of its own to change it with; the
             // page shows the chosen option's ("now"), and any other edited or opened from elsewhere, as the window
-            let subs = menu_rows::sub_choices(s, group());
+            let group = self.web_camera_group(target, s);
+            let subs = menu_rows::sub_choices(s, group.iter());
             if !subs.is_empty() {
                 let mut options: Vec<&str> = subs.iter().map(|(_, o)| o.as_str()).collect();
                 options.dedup();
                 let rows: Vec<Value> = subs.iter().filter_map(|(sub, o)| {
-                    let mut r = self.web_row(target, &self.web_linked(target, &sub.key)?);
+                    let mut r = self.web_row_in(target, now, &self.web_linked_in(target, in_menu, &sub.key)?);
                     r["option"] = json!(o);
                     // a family's setting (a look's parameter) is counted in its family's table, not again here
                     if self.family_of(std::slice::from_ref(*sub)).is_some() {
@@ -1237,21 +1524,30 @@ impl App {
             }
             // the options that open a whole page of rows (`menu_rows::pages`), each with where its page is shown and
             // the link's words, as the window's option list has them
-            let pages: Vec<Value> = menu_rows::pages(s, self.settings_in(target, None)).into_iter().filter_map(|p| {
-                let on = self.settings_in(target, None).find(|o| o.key == p.key)?;
-                Some(json!({ "option": p.option, "count": p.count, "key": p.key, "open_tab": self.entry_of(on), "open_group": self.shown_group_of(on),
-                    "words": App::page_link_words(&p.option, self.camera_layout()) }))
-            }).collect();
+            // the link's words, as the window's option list has them; in a menu, the pages that menu lists
+            let page = |p: menu_rows::Page, on: &Setting| self.with_place(json!({ "option": p.option, "count": p.count, "key": p.key,
+                "words": App::page_link_words(&p.option, self.camera_layout()) }), on, target, now);
+            let pages: Vec<Value> = match in_menu {
+                Some(m) => {
+                    let listed = self.listed(m, &self.bind_for(target));
+                    let among = || listed.rows.iter().filter(|o| self.web_kept(target, o));
+                    menu_rows::pages(s, among()).into_iter().filter_map(|p| { let on = among().find(|o| o.key == p.key)?; Some(page(p, on)) }).collect()
+                }
+                None => menu_rows::pages(s, self.settings_in(target, None)).into_iter().filter_map(|p| {
+                    let on = self.settings_in(target, None).find(|o| o.key == p.key)?;
+                    Some(page(p, on))
+                }).collect(),
+            };
             if !pages.is_empty() {
                 row["pages"] = json!(pages);
             }
-        } else if self.camera_layout() {
+        } else if self.camera_layout() && s.under_option.is_some() {
             // as on the camera a sub-choice is no row of its own: its owner's row ("beside") opens it, where the Menu
             // shows it (a search lists it as a row, with a link there)
-            if let Some(own) = menu_rows::beside_owner(group(), s) {
-                row["beside"] = json!({ "owner": own.key, "name": own.name, "option": s.under_option, "tab": s.tab, "group": s.group,
-                    // where its owner's row is (a family's setting is listed in its table, not there)
-                    "open_tab": self.entry_of(own), "open_group": self.shown_group_of(own) });
+            let group = self.web_camera_group(target, s);
+            if let Some(own) = menu_rows::beside_owner(group.iter(), s) {
+                // where its owner's row is (a family's setting is listed in its table, not there)
+                row["beside"] = self.with_place(json!({ "owner": own.key, "name": own.name, "option": s.under_option, "tab": s.tab, "group": s.group }), own, target, now);
             }
         }
         if self.prefs.expert {
@@ -1299,16 +1595,21 @@ impl App {
     /// checks it: editing on, the record's shape as mapped, and a value the setting offers. A refusal
     /// carries the row as it still is ("row", and "value"), so the page puts its control back; a change
     /// answers the row ("row"), every row it changes on the page ("rows": that one, then those it greys
-    /// out or brings back), the new "rev" and the edit counts, so the page patches them in place.
+    /// out or brings back), the new "rev" and the edit counts, so the page patches them in place. In the page's camera
+    /// menu (`menu`) the rows are that menu's (`web_linked_in`: titled as the camera draws them, showing the record for
+    /// it); from Compare (`col`), the cell's own records.
     fn web_set(&mut self, target: usize, body: &Value, from: &str) -> WebReply {
         let key = body["key"].as_str().unwrap_or("");
-        let Some(mut linked) = self.web_linked(target, key) else { return WebReply::error(404, "No such setting here.") };
+        let menu = self.web_menu(body, target);
+        let menu = menu.as_deref();
+        let in_menu = if body.get("col").is_some_and(|c| !c.is_null()) { None } else { self.web_linked_in(target, menu, key).filter(|l| l.iter().any(|o| o.key == key)) };
+        let Some(mut linked) = in_menu.or_else(|| self.web_linked(target, key)) else { return WebReply::error(404, "No such setting here.") };
         // the record asked for first, as the page drew it (a Main tile keyed to another record of the row than its
         // first): the value is that record's own number, and its other records follow it (`apply`)
         linked.sort_by_key(|o| o.key != key);
         let s = &linked[0];
         let cur = self.doc.as_ref().and_then(|d| d.value(target, s.slot()));
-        let refuse = |app: &Self, status: u16, why: &str| WebReply::refused(status, why, json!({ "row": app.web_row(target, &linked), "value": cur }));
+        let refuse = |app: &Self, status: u16, why: &str| WebReply::refused(status, why, json!({ "row": app.web_row_in(target, menu, &linked), "value": cur }));
         if !self.editable() {
             return refuse(self, 409, &self.view_only_why(true));
         }
@@ -1378,7 +1679,7 @@ impl App {
                     }
                     self.apply_untick(acts, &ask, like_camera)
                 }
-                Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask, "row": self.web_row(target, &linked), "value": cur })),
+                Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask, "row": self.web_row_in(target, menu, &linked), "value": cur })),
                 Err(Err(why)) => return refuse(self, 409, &why),
             };
             if let Some(why) = why {
@@ -1386,31 +1687,34 @@ impl App {
             }
             shown = Self::describe(s, Some(v));
             // another record of the setting with no value of that name, left as it was: said, as the window says it; and
-            // a limit moved to keep two in order (`limit_moves`), as the window's status says it
-            message = self.twins_left(s, v, target);
+            // a limit moved to keep two in order (`limit_moves`), as the window's status says it. Worked out for the
+            // definition's own setting (`def_of`): a menu's row is the setting as that menu lays it out, which no record
+            // of the definition is a twin of
+            message = self.twins_left(self.def_of(s), v, target);
             if let Some(m) = &self.limits_moved.1 {
                 message = Some(message.map_or_else(|| m.clone(), |t| format!("{t} {m}")));
             }
         }
-        self.status = format!("{} set to {shown} {from}", s.name);
+        // by the setting's own name, as the window's status names it, not the camera's title of a menu's row
+        self.status = format!("{} set to {shown} {from}", self.def_of(s).name);
         if let Some(m) = &message {
             self.status = format!("{} {m}", self.status);
         }
-        let row = self.web_row(target, &linked);
+        let row = self.web_row_in(target, menu, &linked);
         // the rows greyed out (or no longer) by a record this change wrote, each once
         let ids: Vec<u16> = linked.iter().map(|l| l.id).collect();
         let mut keys: Vec<String> = Vec::new();
         for o in self.settings_in(target, None) {
             if o.inactive_when.as_ref().is_some_and(|r| ids.contains(&r.record)) && !linked.iter().any(|l| l.key == o.key) {
-                let first = self.web_linked(target, &o.key).and_then(|l| l.first().map(|f| f.key.clone()));
+                let first = self.web_linked_in(target, menu, &o.key).and_then(|l| l.first().map(|f| f.key.clone()));
                 if let Some(k) = first.filter(|k| !keys.contains(k)) {
                     keys.push(k);
                 }
             }
         }
         // the row whose option this setting is the choice for: its detail shows the choice
-        if let Some(own) = menu_rows::owner(self.settings_in(target, Some(self.layout_tab(s))).filter(|o| menu_rows::camera_group(o) == menu_rows::camera_group(s)), s) {
-            let first = self.web_linked(target, &own.key).and_then(|l| l.first().map(|f| f.key.clone()));
+        if let Some(own) = menu_rows::owner(self.web_camera_group(target, s).iter(), s) {
+            let first = self.web_linked_in(target, menu, &own.key).and_then(|l| l.first().map(|f| f.key.clone()));
             if let Some(k) = first.filter(|k| !keys.contains(k)) {
                 keys.push(k);
             }
@@ -1436,8 +1740,14 @@ impl App {
                 keys.push(k);
             }
         }
+        // in a menu, each row once as the page shows it (a copy in its setting's row is that row)
+        let mut drawn = vec![linked[0].key.clone()];
+        let once = menu.is_some();
         let rows: Vec<Value> = std::iter::once(row.clone())
-            .chain(keys.iter().filter_map(|k| self.web_linked(target, k)).map(|l| self.web_row(target, &l)))
+            .chain(keys.iter().filter_map(|k| self.web_linked_in(target, menu, k)).filter(|l| {
+                let first = l[0].key.clone();
+                !once || (!drawn.contains(&first) && { drawn.push(first); true })
+            }).map(|l| self.web_row_in(target, menu, &l)))
             .collect();
         let edits = self.doc.as_ref().map_or(0, |d| d.changes().len());
         WebReply::json(json!({ "row": row, "rows": rows, "rev": self.web_rev(), "edits": edits,
@@ -1615,14 +1925,15 @@ impl App {
 
     /// What the compare page and the record map share: the columns as headed (`col_name`, the
     /// file's letter and whether it takes values; the page colours a file by its letter), the files,
-    /// the sets a column can show (`shown_sections`: [set, short name, name]) and the dial memories
-    /// for the Whole sets row.
-    fn web_compare_frame(&self, cols: &[Col]) -> Value {
+    /// the sets the column picker offers in the camera's menu `menu` and those of the columns chosen (`picker_sets`, as
+    /// the window's picker: [set, short name, name]) and the dial memories for the Whole sets row.
+    fn web_compare_frame(&self, cols: &[Col], menu: Option<&str>) -> Value {
+        let sets = self.picker_sets(menu, cols);
         let cols: Vec<Value> = cols.iter().map(|c| json!({
             "src": Self::web_src(c.src), "section": c.section, "name": self.col_name(*c), "letter": c.src.letter(),
             "short": self.schema.camera.short_name(c.section), "editable": c.editable(),
         })).collect();
-        let sections: Vec<Value> = self.shown_sections().into_iter()
+        let sections: Vec<Value> = sets.into_iter()
             .map(|s| json!([s, self.schema.camera.short_name(s), self.schema.camera.target_name(s)])).collect();
         let dial: Vec<Value> = self.dial_sets().into_iter().map(|s| json!([s, self.schema.camera.target_name(s)])).collect();
         // in the window's words; the page's own "Only the rows shown" box says when a copy is narrowed
@@ -1639,28 +1950,40 @@ impl App {
     }
 
     /// The compare matrix as the window's `matrix_view` draws it for the page's columns (the first
-    /// is the baseline), search `q`, tab, "Only rows that differ", "Show raw values" and three-way
-    /// filter: the counts over the table, the three-way summary, and each row shown with its cells
-    /// (text, highlights, whether it takes a value in place), the arrows between its columns and its mark on the
+    /// is the baseline), search `q`, entry of the Menu in the camera's menu (`entry_rows`), "Only rows that differ",
+    /// "Show raw values" and three-way filter: the counts over the table, the three-way summary, and each row shown with
+    /// its cells (text, highlights, whether it takes a value in place), the arrows between its columns and its mark on the
     /// change map. The row of setting `keep` (the one last changed from the page's compare) stays shown whatever
     /// "Only rows that differ" and the three-way filter say, as the window's does (`cmp_kept`), so the rows and the
-    /// cursor do not move under the person's hand.
-    fn web_compare(&self, cols: &[Col], q: &str, tab: Option<&str>, (only_diff, keep): (bool, Option<&str>), raw: bool, three_filter: ThreeFilter) -> Value {
-        let mut out = self.web_compare_frame(cols);
-        for (k, v) in [("total", json!(0)), ("shown", json!(0)), ("diffs", json!(0)), ("three", Value::Null), ("counts", json!([])), ("rows", json!([]))] {
+    /// cursor do not move under the person's hand. The Menu as the window's Compare bar has it (`entries`: `compare_bar`,
+    /// each entry's rows and how many of them differ), the entry shown (`entry`: the one asked for while the bar lists
+    /// it, else "All settings") and, where the definition lists menus, each menu's rows that differ (`menus`:
+    /// `menu_differences`). The rows are the window's (`compare_rows`), which of them differ its too (`row_differs`).
+    fn web_compare(&self, cols: &[Col], q: &str, (menu, entry): (Option<&str>, &BarKey), (only_diff, keep): (bool, Option<&str>), raw: bool, three_filter: ThreeFilter) -> Value {
+        let mut out = self.web_compare_frame(cols, menu);
+        for (k, v) in [("total", json!(0)), ("shown", json!(0)), ("diffs", json!(0)), ("three", Value::Null), ("counts", json!([])), ("rows", json!([])), ("entries", json!([]))] {
             out[k] = v;
         }
+        let menu = menu.filter(|m| self.menu_named(m).is_some());
+        let entry = if self.bar_keys(true, 0, menu, q, false).contains(entry) { entry.clone() } else { BarKey::All };
+        out["entry"] = json!(Self::web_entry_key(&entry));
         let Some(doc) = &self.doc else { return out };
+        let stored = |c: &Col, s: &Setting| c.section == 0 || s.in_sets;
+        let differs = |s: &Setting| self.row_differs(cols, s);
+        // the bar of Compare and each menu's differences, the window's own functions (`compare_bar`, `menu_differences`)
+        out["entries"] = json!(self.compare_bar(menu, q, &differs).into_iter().map(|e| json!({
+            "key": Self::web_entry_key(&e.key), "name": e.label, "color": e.color.map(css_color), "count": e.count, "differ": e.badge, "title": e.hover,
+        })).collect::<Vec<_>>());
+        if menu.is_some() {
+            let counts = self.menu_differences(q, &differs);
+            out["menus"] = json!(self.menus().iter().zip(counts).map(|(m, n)| json!({ "name": m.name, "differ": n })).collect::<Vec<_>>());
+        }
         if cols.len() < 2 {
             return out;
         }
         let base = cols[0];
-        let rows = self.matrix_rows_for(q, tab);
-        let stored = |c: &Col, s: &Setting| c.section == 0 || s.in_sets;
-        let differs = |s: &Setting| {
-            let b = self.col_value(base, s);
-            cols[1..].iter().any(|c| self.col_value(*c, s) != b && stored(c, s))
-        };
+        // the entry's rows, the window's (`compare_rows`): in a camera's menu in its layout, each holding the record for it
+        let rows = self.compare_rows(menu, &entry, q);
         let counts: Vec<usize> = cols.iter().map(|c| rows.iter().filter(|r| {
             let s = &r.2[0];
             stored(c, s) && self.col_value(*c, s) != self.col_value(base, s)
@@ -1737,6 +2060,8 @@ impl App {
                 let file_a = st && c.editable();
                 let why: Vec<String> = self.unnamed_why(s, v).filter(|_| st).into_iter()
                     .chain(self.locked_why(s, c.section).filter(|_| file_a).map(|(w, _)| w))
+                    .chain(self.compare_why(s).filter(|_| file_a))
+                    .chain(self.fraction_words(s).filter(|_| file_a))
                     .chain(self.copy_note(s, c.section).filter(|_| file_a).map(|(w, _)| w)).collect();
                 if !why.is_empty() {
                     cell["why"] = json!(why.join("\n\n"));
@@ -1754,14 +2079,21 @@ impl App {
             diffs += usize::from(d);
             // the sets of file A where the setting is view only outside Expert mode (`locked_why`): no copy goes there,
             // as the window's right-click menu offers none (`copy_targets`)
-            let locked: Vec<usize> = (0..self.n_sections()).filter(|&si| self.locked(s, si)).collect();
-            json!({
-                "tab": t, "group": g, "open_group": self.shown_group_of(s), "open_tab": self.entry_of(s), "color": css_color(tab_color(&self.schema.camera, t)),
-                "key": s.key, "name": self.setting_title(s), "record": format!("0x{:04x}", s.id), "in_sets": s.in_sets, "locked": locked,
-                // the name's hover, as the window's (the record number in Expert mode only)
-                "where": self.where_kept(s),
+            let locked: Vec<usize> = (0..self.n_sections()).filter(|&si| self.locked(s, si) || self.compare_why(s).is_some()).collect();
+            // its name opens it in Edit in the first column of file A that keeps it (the page's `cmpOpenInEdit`), where
+            // the window's Open in Edit lands from this menu (`compare_place`)
+            let into = cols.iter().find(|c| c.editable() && stored(c, s)).map_or(0, |c| c.section);
+            let mut row = json!({
+                "tab": t, "group": g, "color": css_color(tab_color(&self.schema.camera, t)),
+                "key": s.key, "name": self.compare_title(&(t.clone(), g.clone(), linked.clone())), "record": format!("0x{:04x}", s.id), "in_sets": s.in_sets, "locked": locked,
+                // the name's hover, as the window's (the record number in Expert mode only), by the setting's own name
+                "where": self.where_kept(self.def_of(s)),
                 "three": class.map(word), "differs": d, "mark": mark, "arrows": arrows, "cells": cells,
-            })
+            });
+            if let Some(o) = row.as_object_mut() {
+                o.extend(self.compare_place(s, into, menu));
+            }
+            row
         }).collect();
         out["total"] = json!(rows.len());
         out["shown"] = json!(list.len());
@@ -1773,9 +2105,10 @@ impl App {
 
     /// The compare's record map as the window's `records_matrix` draws it: every record of the
     /// baseline column's set in file order, with its offset in the file, shape and setting (null
-    /// for one not mapped), and each column's value, marked where it differs from the baseline.
-    fn web_compare_records(&self, cols: &[Col], q: &str, only_diff: bool, raw: bool) -> Value {
-        let mut out = self.web_compare_frame(cols);
+    /// for one not mapped), and each column's value, marked where it differs from the baseline; a setting's link lands
+    /// where Edit shows it in the page's camera menu `menu` (`web_place`).
+    fn web_compare_records(&self, cols: &[Col], q: &str, only_diff: bool, raw: bool, menu: Option<&str>) -> Value {
+        let mut out = self.web_compare_frame(cols, menu);
         out["total"] = json!(0);
         out["rows"] = json!([]);
         let Some(&base) = cols.first() else { return out };
@@ -1814,7 +2147,7 @@ impl App {
             }
             rows.push(json!({
                 "offset": format!("{off:06x}"), "id": id, "shape": format!("{}×{}", r.elem_size, r.count),
-                "setting": setting.map(|s| json!({ "key": s.key, "name": s.name, "tab": s.tab, "group": s.group, "open_group": self.shown_group_of(s), "open_tab": self.entry_of(s), "note": s.note_shown(self.prefs.expert) })),
+                "setting": setting.map(|s| self.with_place(json!({ "key": s.key, "name": s.name, "tab": s.tab, "group": s.group, "note": s.note_shown(self.prefs.expert) }), s, base.section, menu)),
                 "cells": values.iter().map(|(v, d)| json!({ "text": v, "differs": d })).collect::<Vec<_>>(),
             }));
         }
@@ -1917,7 +2250,9 @@ impl App {
     /// Recall a dial memory into the live settings, or register the live settings into it, as the
     /// window's buttons do: every setting the memories keep, whatever the page's search and tab show
     /// (`memory_rows`), through `copy_row` and `apply`, so it is one step to undo and shows in All
-    /// edits. Only a request that says `shown: true` copies just the rows its search `q` and `tab` leave.
+    /// edits. Only a request that says `shown: true` copies just the rows its search `q` and `tab` leave, or, from
+    /// Compare, the rows its entry of the Menu (`entry`) shows in the camera's menu the request names (`compare_rows`;
+    /// `web_answer` refuses one that names none where the definition lists menus), never a menu of the editor's own.
     fn web_recall(&mut self, recall: bool, body: &Value, from: &str) -> WebReply {
         if !self.editable() {
             return WebReply::error(409, &self.view_only_why(true));
@@ -1927,13 +2262,16 @@ impl App {
         };
         let (live, memory) = (Col::a(0), Col::a(m));
         let (src, dst) = if recall { (memory, live) } else { (live, memory) };
+        let q = body["q"].as_str().unwrap_or("").trim();
+        // the rows the page's Compare shows: its entry of the Menu (All settings where it names none) in its menu
         let rows = if body["shown"].as_bool() == Some(true) {
-            let tab = body["tab"].as_str().filter(|t| !t.is_empty());
-            self.matrix_rows_for(body["q"].as_str().unwrap_or("").trim(), tab).into_iter().filter(|r| r.2[0].in_sets).collect()
+            let menu = self.web_menu(body, body["target"].as_u64().unwrap_or(0) as usize);
+            self.compare_rows(menu.as_deref(), &Self::web_entry(body), q).iter().filter(|r| r.2[0].in_sets).cloned().collect()
         } else {
             self.memory_rows()
         };
         self.rows_set.take();
+        self.copying_over(rows.iter());
         let mut actions: Vec<Action> = rows.iter().flat_map(|r| self.copy_row(&r.2, src, dst)).collect();
         let n = actions.len();
         self.pin_families(Some(src.section), dst.section, &mut actions);
@@ -1946,8 +2284,8 @@ impl App {
         }
         let from = format!(" {from}");
         let (_, _, said) = if recall { self.recall_words(m, "", &from) } else { self.register_words(m, "", &from) };
-        self.status = self.with_moved(with_left(&said, left));
-        WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
+        self.status = self.with_moved(self.with_left(&said, left));
+        WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": self.left_alone(left) }))
     }
 
     /// One row's arrow on the Memories page: a memory's value into the live settings (⬅) or the live
@@ -1978,16 +2316,17 @@ impl App {
         }
         let cam = &self.schema.camera;
         let said = format!("{}: the value from {} put into {} {from}", linked[0].name, cam.target_name(a), cam.target_name(b));
-        self.status = self.with_moved(with_left(&said, left));
-        WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
+        self.status = self.with_moved(self.with_left(&said, left));
+        WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": self.left_alone(left) }))
     }
 
     /// The Exposure page as the window's (`exposure_view`, from the same helpers): per column (the
     /// live settings and each dial memory) the exposure mode and who sets what, the three sides with
     /// what the page draws their stop scales from, compensation and the EV they expose for; then the
     /// "What decides …" lists. Whether each of those settings was proved comes only while the
-    /// proof lines are on (Settings), as in the window.
-    fn web_exposure(&self) -> Value {
+    /// proof lines are on (Settings), as in the window. A setting's link lands where Edit shows it in the page's camera
+    /// menu `menu` (`web_place`).
+    fn web_exposure(&self, menu: Option<&str>) -> Value {
         use super::exposure::{proved_words, EFFECTS, EV_HOVER, INTRO, SIDES};
         use camset_editor::stops::Side;
         let Some(ex) = self.schema.camera.exposure.clone() else { return Value::Null };
@@ -2022,14 +2361,14 @@ impl App {
         }
         let decides: Vec<Value> = EFFECTS.iter().map(|(side, name, effect)| json!({
             "side": word(*side), "name": name, "effect": effect,
-            "settings": self.ex_decides(&ex, *side).iter().map(|s| json!({
-                "key": s.key, "name": s.name, "tab": s.tab, "group": s.group, "open_group": self.shown_group_of(s), "open_tab": self.entry_of(s),
+            "settings": self.ex_decides(&ex, *side).iter().map(|s| self.with_place(json!({
+                "key": s.key, "name": s.name, "tab": s.tab, "group": s.group,
                 // a setting the memory sets only keep shows in the menu while a memory is edited
                 "live": s.area == "global",
                 "proved": self.shows_proof().then_some(s.proved.is_some()),
                 // its proof in the window's words (`proved_words`: a list proved partly on another setting says so)
                 "proved_words": self.shows_proof().then(|| proved_words(s)),
-            })).collect::<Vec<_>>(),
+            }), s, 0, menu)).collect::<Vec<_>>(),
         })).collect();
         json!({
             "title": Self::ex_title(&ex), "intro": INTRO,
@@ -2072,7 +2411,7 @@ impl App {
             "records" => {
                 let open: Option<Vec<u16>> = body["open"].as_array().map(|a| a.iter().filter_map(|v| v.as_u64().and_then(|i| u16::try_from(i).ok())).collect());
                 let (unmapped, edited) = (body["only_unmapped"].as_bool().unwrap_or(false), body["only_edited"].as_bool().unwrap_or(false));
-                WebReply::json(self.web_records(target, &q, unmapped, edited, open.as_deref()))
+                WebReply::json(self.web_records(target, &q, unmapped, edited, open.as_deref(), self.web_menu(body, target).as_deref()))
             }
             "raw_set" => {
                 let (Some(id), Some(v)) = (body["id"].as_u64().and_then(|i| u16::try_from(i).ok()), body["value"].as_i64()) else {
@@ -2416,8 +2755,8 @@ impl App {
     }
 
     /// Export CSV: Edit mode's set with the page's search and Only edited, or (`compare`) the columns the page's
-    /// Compare shows, its search and tab, only the rows that differ and the raw values as asked; named as the
-    /// window names it.
+    /// Compare shows, its search and its entry of the Menu in its camera's menu, only the rows that differ and the raw
+    /// values as asked; named as the window names it.
     fn web_csv(&mut self, target: usize, q: &str, body: &Value, from: &str) -> WebReply {
         let compare = body["compare"].as_bool().unwrap_or(false);
         let cols: Vec<Col> = match body["cols"].as_array() {
@@ -2432,9 +2771,12 @@ impl App {
             return WebReply::error(400, "Show at least two columns to export a comparison.");
         }
         let (only_diff, raw) = (body["only_diff"].as_bool().unwrap_or(self.matrix_only_diff), self.prefs.expert && body["raw"].as_bool().unwrap_or(self.show_raw));
-        let tab = body["tab"].as_str().filter(|t| compare && !t.is_empty());
+        // the rows the page's Compare shows, as the window exports its own (`csv_text_in`): its entry of the Menu
+        // (`entry`) in its camera's menu (`menu`)
+        let entry = Self::web_entry(body);
+        let menu = self.web_menu(body, target);
         let only = !compare && body["only"].as_bool().unwrap_or(false);
-        let (text, n) = self.csv_text(compare.then_some((cols.as_slice(), only_diff, raw)), target, q, tab, only);
+        let (text, n) = self.csv_text_in(menu.as_deref(), compare.then_some((cols.as_slice(), only_diff, raw)), target, q, &entry, only);
         let stem = self.doc.as_ref().and_then(|d| d.path.file_stem()).map_or_else(|| "CAMSET".into(), |s| s.to_string_lossy().to_string());
         let name = if compare { format!("{stem}_compare.csv") } else { format!("{stem}_{}.csv", self.schema.camera.target_name(target).replace(' ', "_").to_lowercase()) };
         self.status = format!("Exported {n} rows as {name} {from}");
@@ -2546,18 +2888,25 @@ impl App {
     /// and whether it can move up or down, and whether it has the item picker (an item's place, and the place a new
     /// item goes to: on a packed page its first empty one); every item a place can hold (`mymenu_items`), with the
     /// tab of the setting that carries it and where it is in My Menu, and what the picker says of the items it leaves
-    /// out; then the settings of My Menu's own tab by group, as rows.
-    fn web_mymenu(&self, target: usize) -> Value {
+    /// out; then the settings of My Menu's own tab by group, as rows. An item's setting opens where Edit shows it in the
+    /// page's camera menu `menu` (`web_place`), and says so (`where_in`).
+    fn web_mymenu(&self, target: usize, menu: Option<&str>) -> Value {
         let name = self.schema.camera.text.my_menu_name();
         let doc = self.doc.as_ref();
         let packed = self.schema.camera.my_menu.as_ref().is_some_and(|m| m.packed);
         let place = |p: usize, i: usize, x: &MyMenuPlace, first_empty: Option<usize>| {
             let opens = x.settings.first().map(|s| {
                 let held = s.text.is_some() || doc.is_some_and(|d| d.value(0, s.slot()).is_some());
-                json!({ "key": s.key, "name": s.name, "tab": s.tab, "group": self.shown_group_of(s), "open_group": self.shown_group_of(s), "open_tab": self.entry_of(s), "where": self.where_shown(s),
-                    "value": if held { self.row_value_in(0, s) } else { "not held in this file".to_string() }, "held": held })
+                let at = self.web_place(s, 0, menu);
+                let mut o = json!({ "key": s.key, "name": s.name, "tab": s.tab, "group": at["open_group"].clone(), "where": self.where_in(s, 0, menu),
+                    "value": if held { self.row_value_in(0, s) } else { "not held in this file".to_string() }, "held": held });
+                if let Some(m) = o.as_object_mut() { m.extend(at); }
+                o
             });
-            json!({ "code": x.code, "empty": x.empty, "name": x.name, "edited": x.edited, "was": x.edited.then_some(&x.was), "opens": opens,
+            // the place's own key, which Compare's Open in Edit opens it by (the page marks it, as the window does)
+            let key = self.schema.camera.my_menu.as_ref().and_then(|mm| self.schema.settings.iter().find(|s| self.is_mymenu_place(s) && Some(&s.id) == mm.records.get(p) && s.index == u16::try_from(i).ok()))
+                .map(|s| s.key.clone());
+            json!({ "key": key, "code": x.code, "empty": x.empty, "name": x.name, "edited": x.edited, "was": x.edited.then_some(&x.was), "opens": opens,
                 "more": x.settings.iter().skip(1).map(|s| format!("{} > {} > {}", s.tab, s.group, s.name)).collect::<Vec<_>>(),
                 "up": self.mymenu_move(p, i, -1).is_some(), "down": self.mymenu_move(p, i, 1).is_some(),
                 "pick": !x.empty || !packed || first_empty == Some(i) })
@@ -2574,7 +2923,7 @@ impl App {
         let items: Vec<Value> = self.mymenu_items().into_iter().map(|x| json!({ "code": x.code, "name": x.name, "tab": x.tab, "in": at(x.code) })).collect();
         let groups: Vec<Value> = self.mymenu_groups().into_iter().map(|(g, rows)| json!({
             "name": g, "color": css_color(tab_color(&self.schema.camera, name)), "tab": name,
-            "rows": rows.iter().map(|r| self.web_row(0, r)).collect::<Vec<_>>(),
+            "rows": rows.iter().map(|r| self.web_row_in(0, menu, r)).collect::<Vec<_>>(),
         })).collect();
         json!({
             "name": name, "pages": pages, "groups": groups, "editable": self.editable(),
@@ -2585,8 +2934,9 @@ impl App {
     }
 
     /// One family (Picture Profiles, Creative Looks) as the window's table (`pp_table`): a row per parameter, a
-    /// column per profile; each cell is a row of the page (`rows`), named by its key.
-    fn web_family(&self, target: usize, title: &str, pp: &[Setting]) -> Value {
+    /// column per profile; each cell is a row of the page (`rows`), named by its key, its links in the page's camera
+    /// menu `menu`.
+    fn web_family(&self, target: usize, menu: Option<&str>, title: &str, pp: &[Setting]) -> Value {
         let mut params: Vec<&str> = Vec::new();
         for s in pp {
             if !params.contains(&s.name.as_str()) {
@@ -2601,7 +2951,7 @@ impl App {
             let line: Vec<Option<String>> = (0..n).map(|i| {
                 let linked: Vec<Setting> = pp.iter().filter(|s| s.name == *name && s.index == Some(i as u16)).cloned().collect();
                 let (id, key) = linked.first().map(|s| (s.id, s.key.clone()))?;
-                let mut row = self.web_row(target, &linked);
+                let mut row = self.web_row_in(target, menu, &linked);
                 row["cell_title"] = json!(format!("{} {name}: record 0x{id:04x}[{i}]", profiles[i]));
                 rows.push(row);
                 Some(key)
@@ -2637,8 +2987,9 @@ impl App {
 
     /// The record map (`records_view`): every record of the set in file order with its byte offset, shape, the
     /// setting it belongs to and its value; a record longer than 8 bytes carries its bytes (all of them, or those
-    /// in `open`) with the fields the definition knows in it.
-    fn web_records(&self, target: usize, q: &str, only_unmapped: bool, only_edited: bool, open: Option<&[u16]>) -> Value {
+    /// in `open`) with the fields the definition knows in it; a setting's link lands where Edit shows it in the page's
+    /// camera menu `menu` (`web_place`).
+    fn web_records(&self, target: usize, q: &str, only_unmapped: bool, only_edited: bool, open: Option<&[u16]>, menu: Option<&str>) -> Value {
         let Some(doc) = &self.doc else { return json!({ "rows": [] }) };
         let in_set = target != 0;
         // fields the definition knows inside array records (16-bit fields at byte offsets): id -> [(offset, name, index)]
@@ -2695,8 +3046,8 @@ impl App {
             });
             let raw = r.display_value();
             let short = if raw.chars().count() > 24 { format!("{}…", raw.chars().take(24).collect::<String>()) } else { raw.clone() };
-            let setting = setting.map(|s| json!({ "key": s.key, "name": s.name, "tab": s.tab, "group": s.group, "open_group": self.shown_group_of(s), "open_tab": self.entry_of(s), "note": s.note_shown(self.prefs.expert),
-                "title": match fields.get(&r.id) { Some(fs) if fs.len() > 1 => format!("{} known fields ({}, …)", fs.len(), s.name), _ => s.name.clone() } }));
+            let setting = setting.map(|s| self.with_place(json!({ "key": s.key, "name": s.name, "tab": s.tab, "group": s.group, "note": s.note_shown(self.prefs.expert),
+                "title": match fields.get(&r.id) { Some(fs) if fs.len() > 1 => format!("{} known fields ({}, …)", fs.len(), s.name), _ => s.name.clone() } }), s, target, menu));
             rows.push(json!({ "offset": format!("{off:06x}"), "id": r.id, "hex": hex, "shape": format!("{}×{}", r.elem_size, r.count), "big": big,
                 "setting": setting, "value": value, "raw": short, "raw_full": raw, "edited": edited, "bytes": bytes }));
         }
@@ -2894,6 +3245,8 @@ pub(crate) mod tests {
     #[test]
     fn columns_and_rows_for_the_page() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         assert_eq!(app.col_from_json(&json!(["a", 0])), Some(Col::a(0)));
         for bad in [json!(["b", 0]), json!(["base", 0]), json!(["a", 99]), json!(["a", -1]), json!(["c", 0]), json!(["a"]), json!("a"), Value::Null] {
@@ -2906,11 +3259,12 @@ pub(crate) mod tests {
             assert_eq!(app.col_from_json(&json!(["b", m])), Some(Col::b(m)));
         }
         let names = |rows: Vec<(String, String, Vec<Setting>)>| rows.into_iter().map(|(t, g, l)| (t, g, l.iter().map(|s| s.key.clone()).collect::<Vec<_>>())).collect::<Vec<_>>();
-        let rows = app.matrix_rows_for("", None);
+        // Compare's All: the rows as before menus and the records a Main tile shows that those leave out
+        let rows = (*app.compare_rows(None, &BarKey::All, "")).clone();
         let (tab, word) = (rows[0].0.clone(), rows[0].2[0].name.split(' ').next().unwrap().to_uppercase());
         let all = names(rows);
         assert_eq!(names(app.matrix_rows()), all, "the window's rows with no search and every tab");
-        (app.search, app.compare_tab) = (word.clone(), Some(tab.clone()));
+        (app.search, app.compare_entry) = (word.clone(), BarKey::Tab(tab.clone()));
         let some = names(app.matrix_rows_for(&word, Some(&tab)));
         assert!(!some.is_empty() && some.len() < all.len());
         assert!(some.iter().all(|(t, _, _)| *t == tab));
@@ -2999,10 +3353,13 @@ pub(crate) mod tests {
     }
 
     /// The compare page's rows are the window's: the rows that differ, the baseline's counts, the
-    /// arrows into file A, and the search and tab filters; columns of files not open are refused.
+    /// arrows into file A, and the search and the Menu column's entries (`entry_rows`, as the window's Compare bar has
+    /// them: `compare_bar`); columns of files not open are refused.
     #[test]
     fn compare_rows_as_the_window_has_them() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let (b, s, other) = changed_sample(&app);
         ask_upload(&mut app, "open_b", &b, "wsa_rows_B.DAT");
@@ -3031,17 +3388,41 @@ pub(crate) mod tests {
         let raw = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": true, "raw": true }));
         let r = raw["rows"].as_array().unwrap().iter().find(|r| r["key"] == s.key.as_str()).unwrap();
         assert_eq!(r["cells"][1]["text"], format!("{}  [{other}]", App::describe(&s, Some(other))).as_str());
-        // every row, then the window's tab filter and search
+        // every row (All settings, the entry shown when the page names none), then an entry of the Menu and a search, each
+        // the rows the window's Compare shows with the same columns, entry and search (`matrix_rows`)
+        let keys = |j: &Value| j["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        let window = |app: &mut App, entry: BarKey, q: &str| {
+            (app.mode, app.cols, app.compare_entry, app.search) = (Mode::Compare, vec![Col::a(0), Col::b(0)], entry, q.to_string());
+            app.matrix_rows().iter().map(|r| r.2[0].key.clone()).collect::<Vec<_>>()
+        };
         let all = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false }));
-        assert_eq!(all["total"], app.matrix_rows_for("", None).len());
+        assert_eq!((all["entry"].as_str(), keys(&all)), (Some("all"), window(&mut app, BarKey::All, "")));
+        assert_eq!(all["total"], app.compare_rows(None, &BarKey::All, "").len(), "without menus, the rows Compare always had and the records a Main tile shows that those leave out");
         assert_eq!(all["shown"], all["total"]);
-        let t = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false, "tab": s.tab }));
-        assert_eq!(t["total"], app.matrix_rows_for("", Some(&s.tab)).len());
-        assert!(t["rows"].as_array().unwrap().iter().all(|r| r["tab"] == s.tab.as_str()));
+        let tab = app.layout_tab(&s).to_string();
+        let t = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false, "entry": format!("tab:{tab}") }));
+        assert_eq!((t["entry"].as_str(), keys(&t)), (Some(format!("tab:{tab}").as_str()), window(&mut app, BarKey::Tab(tab.clone()), "")));
+        assert!(t["rows"].as_array().unwrap().iter().all(|r| r["tab"] == tab.as_str()));
         let word = s.name.split(' ').next().unwrap().to_uppercase();
         let q = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false, "q": word }));
-        assert_eq!(q["total"], app.matrix_rows_for(&word, None).len());
+        assert_eq!(keys(&q), window(&mut app, BarKey::All, &word));
         assert!(q["rows"].as_array().unwrap().iter().any(|r| r["key"] == s.key.as_str()));
+        // an entry the Menu column does not list shows All settings, and says so
+        assert_eq!(ask(&mut app, "compare", json!({ "cols": cols, "entry": "tab:No such tab" }))["entry"], "all");
+        // the Menu column is the window's Compare bar with the same columns (`compare_side_bar` calls `compare_bar` with
+        // the window's menu and search), and the window draws each entry as "Label  (rows)"
+        window(&mut app, BarKey::All, "");
+        let drawn = crate::test_support::texts(&egui::Context::default().run(egui::RawInput::default(), |ctx| eframe::App::update(&mut app, ctx, &mut eframe::Frame::_new_kittest())).shapes);
+        let wcols = app.cols.clone();
+        let bar = app.compare_bar(app.compare_menu().as_deref(), &app.search, &|x| app.row_differs(&wcols, x));
+        let want: Vec<Value> = bar.iter().map(|e| json!([App::web_entry_key(&e.key), e.label, e.count, e.badge])).collect();
+        let got: Vec<Value> = all["entries"].as_array().unwrap().iter().map(|e| json!([e["key"], e["name"], e["count"], e["differ"]])).collect();
+        assert_eq!(got, want);
+        for e in &bar {
+            assert!(drawn.contains(&format!("{}  ({})", e.label, e.count.unwrap())), "the window draws {} so", e.label);
+        }
+        assert!(got.iter().any(|e| e[0] == "all" && e[3].as_u64() >= Some(1)), "the change counted under All settings: {got:?}");
+        assert!(all.get("menus").is_none(), "no camera menus in this definition");
         // the window's own columns when the page names none; a file not open, a set not shown
         assert_eq!(ask(&mut app, "compare", json!({}))["cols"].as_array().unwrap().len(), app.cols.len());
         for bad in [json!([["a", 0], ["base", 0]]), json!([["a", 0], ["b", 99]]), json!("a")] {
@@ -3142,6 +3523,8 @@ pub(crate) mod tests {
     #[test]
     fn copy_and_merge() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         let sample: &[u8] = include_bytes!("../../definitions/ILCE-1M2_fw4.00.DAT");
         ask_upload(&mut app, "open", sample, "wsa_copy_A.DAT");
         let (b, s, other) = changed_sample(&app);
@@ -3256,6 +3639,8 @@ pub(crate) mod tests {
     #[test]
     fn state_for_the_frame() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         let s = ask(&mut app, "state", json!({}));
         assert!(s["file"].is_null());
         assert_eq!(s["edits"], 0);
@@ -3316,6 +3701,8 @@ pub(crate) mod tests {
     #[test]
     fn main_page_as_the_window_has_it() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let Some(pages) = app.schema.camera.main_tiles.clone() else { return };
         for (i, page) in pages.0.iter().enumerate() {
@@ -3384,7 +3771,7 @@ pub(crate) mod tests {
         // U-37: the window's words for the whole sets, on Memories and in Compare alike
         let (label, hover, _) = app.recall_words(dial[0], "", "");
         assert_eq!((&j["buttons"][0]["recall"], &j["buttons"][0]["recall_tip"]), (&json!(label), &json!(hover)));
-        let frame = app.web_compare_frame(&[Col::a(0), Col::a(dial[0])]);
+        let frame = app.web_compare_frame(&[Col::a(0), Col::a(dial[0])], None);
         assert_eq!(frame["whole_sets"][0]["recall"], json!(label));
         assert_eq!(frame["whole_sets"][0]["register"], j["buttons"][0]["register"]);
         // a setting kept in the memories, made to differ in the first memory
@@ -3597,7 +3984,8 @@ pub(crate) mod tests {
         let j = ask(&mut app, "tab", json!({ "target": 0, "q": word }));
         for g in j["groups"].as_array().unwrap() {
             let tab = g["tab"].as_str().unwrap();
-            assert!(g["name"].as_str().unwrap().starts_with(&format!("{tab} › ")));
+            // a search's groups are headed with the window's words for the place, ">" between them (page file, B9)
+            assert!(g["name"].as_str().unwrap().contains(" > ") && !g["name"].as_str().unwrap().contains('›'), "{}", g["name"]);
             assert_eq!(g["color"], css_color(tab_color(&app.schema.camera, tab)).as_str());
         }
     }
@@ -3792,6 +4180,8 @@ pub(crate) mod tests {
     #[test]
     fn rows_say_whose_help_they_show() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let tab = app.schema.tabs[0].clone();
         let keys: Vec<String> = tab_rows(&mut app, &tab).iter().take(2).map(|r| r["key"].as_str().unwrap().to_string()).collect();
@@ -3891,6 +4281,8 @@ pub(crate) mod tests {
     #[test]
     fn options_nested_as_on_the_camera() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         app.allow_unobserved = true;
         let fa = app.schema.settings.iter().find(|s| s.key == "global:0x0f46").unwrap().clone();
@@ -4021,10 +4413,14 @@ pub(crate) mod tests {
     /// The page follows the layout in use as the window does: as on the camera, Recall Custom hold 1's settings are in
     /// Shooting Mode under Reg. Custom Shoot Set (the hold's own group gone from the tab), TC/UB opens with "In Movie
     /// mode" and comes where the Movie menu has it, and every link to a setting (the record map, Compare, My Menu)
-    /// names the group that shows it now ("open_group"); in the flat list, the setting's own group, as before.
+    /// names the group that shows it now ("open_group"); in the flat list, the setting's own group, as before. Without
+    /// the camera's menus Compare's rows are the ones it always had, each in its setting's own group (in a menu they are
+    /// grouped as Edit groups them there: `compare_has_edits_entries_with_the_rows_that_differ`).
     #[test]
     fn the_page_follows_the_layout_in_its_groups_and_links() {
         let mut app = App::new(vec![], Prefs { expert: true, ..Prefs::default() });
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let hold = app.schema.settings.iter().find(|s| s.group == "Recall Custom hold 1" && s.name == "Shoot Mode" && s.area == "global").unwrap().clone();
         let fn1 = app.schema.settings.iter().find(|s| s.group == "Fn Menu" && s.area == "global" && s.row_group.is_some()).unwrap().clone();
@@ -4055,7 +4451,8 @@ pub(crate) mod tests {
         ask(&mut app, "prefs", json!({ "name": "flat_list", "value": true }));
         let j = ask(&mut app, "tab", json!({ "target": 0, "tab": "Shooting" }));
         assert!(names(&j).contains(&"Recall Custom hold 1".to_string()));
-        assert_eq!(link(&mut app).0, "Fn Menu");
+        let (rec, cmp) = link(&mut app);
+        assert_eq!((rec, cmp), (json!("Fn Menu"), Some((json!("Fn Menu"), json!("Fn Menu")))), "the flat list: its own group in Compare too");
         app.set_flat_list(false);
     }
 
@@ -4219,13 +4616,15 @@ pub(crate) mod tests {
     #[test]
     fn csv_and_layout_downloads() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let a = answer(&mut app, "csv", json!({ "target": 0 }));
         assert_eq!((a.status, a.content_type), (200, "text/csv"));
         assert!(a.download.as_deref().unwrap().ends_with("_live_settings.csv"));
         let text = String::from_utf8(a.body).unwrap();
         assert!(text.starts_with("\u{feff}Tab,Group,Setting,Value,Original\n"), "no record numbers or notes outside Expert mode");
-        let (want, n) = app.csv_text(None, 0, "", None, false);
+        let (want, n) = app.csv_text(None, 0, "", &BarKey::All, false);
         assert_eq!(text, want);
         let shown: Vec<&Setting> = app.settings_in(0, None).collect();
         assert_eq!(n, shown.iter().enumerate().filter(|(i, s)| !shown[..*i].iter().any(|o| o.twin_of(s))).count(), "one line per setting shown");
@@ -4242,8 +4641,8 @@ pub(crate) mod tests {
             let c = answer(&mut app, "csv", json!({ "compare": true, "cols": [["a", 0], ["a", m]], "only_diff": false }));
             assert!(c.download.as_deref().unwrap().ends_with("_compare.csv"));
             let t = String::from_utf8(c.body).unwrap();
-            assert_eq!(t, app.csv_text(Some((&[Col::a(0), Col::a(m)], false, app.show_raw)), 0, "", None, false).0);
-            assert_eq!(t.matches("\n\"").count(), app.matrix_rows_for("", None).len());
+            assert_eq!(t, app.csv_text(Some((&[Col::a(0), Col::a(m)], false, app.show_raw)), 0, "", &BarKey::All, false).0);
+            assert_eq!(t.matches("\n\"").count(), app.compare_rows(None, &BarKey::All, "").len(), "Compare's All, the tiles' memory records too");
         }
         let l = answer(&mut app, "layout", json!({}));
         assert_eq!(l.status, 200);
@@ -4977,6 +5376,517 @@ pub(crate) mod tests {
         let s = settings.iter().find(|s| s.not_on_camera()).expect("a setting not on the camera's menu");
         assert!(app.web_row(0, std::slice::from_ref(s)).get("not_on_camera").is_none());
     }
+
+    /// The setting a link object of the page names: an owner's row (`owner`), else its own `key`.
+    fn link_key(v: &Value) -> Option<String> {
+        v.get("owner").or_else(|| v.get("key")).and_then(Value::as_str).map(str::to_string)
+    }
+
+    /// Every link object (one with `open_tab`) in `v`, at any depth: its setting (`key_of`), `open_menu`, `open_tab`,
+    /// `open_group`.
+    fn links_in(v: &Value, key_of: &dyn Fn(&Value) -> Option<String>, out: &mut Vec<(String, Option<String>, String, String)>) {
+        match v {
+            Value::Object(o) => {
+                if let (Some(k), Some(t), Some(g)) = (o.get("open_tab").and(key_of(v)), o.get("open_tab").and_then(Value::as_str), o.get("open_group").and_then(Value::as_str)) {
+                    out.push((k, o.get("open_menu").and_then(Value::as_str).map(str::to_string), t.to_string(), g.to_string()));
+                }
+                o.values().for_each(|x| links_in(x, key_of, out));
+            }
+            Value::Array(a) => a.iter().for_each(|x| links_in(x, key_of, out)),
+            _ => {}
+        }
+    }
+
+    /// Every link in `v` lands where the window's own jump to its setting lands (`go_to`) for set 0 while the window
+    /// shows menu `m`: the menu it then shows, the page (a tab's, or the page a tab without an entry goes to: `routes`)
+    /// and the group. The window is put back on `m` after each. Answers how many links it checked.
+    fn links_as_the_windows_jumps(app: &mut App, v: &Value, m: &str) -> usize {
+        let mut links = Vec::new();
+        links_in(v, &link_key, &mut links);
+        for (key, menu, tab, group) in &links {
+            let s = app.schema.settings.iter().find(|s| s.key == *key).cloned().expect("a setting of the definition");
+            app.target = 0;
+            app.set_menu(m);
+            app.go_to(&s);
+            assert_eq!((app.menu_shown(), &app.view, app.group.as_deref()), (menu.clone(), &app.shown_view(View::Tab(tab.clone())), Some(group.as_str())), "the link to {key} from {m}");
+        }
+        app.set_menu(m);
+        links.len()
+    }
+
+    /// The page in each of the camera's menus (the design of 2026-11-20) is what the window shows with the same set and
+    /// menu: the state names the menus in the definition's order with their hovers, the one shown (without one named,
+    /// the one the set edited opens on) and the selector's words; the Menu column's entries, counts and edits are the
+    /// window's side bar's (`side_bar` calls `edit_entries` with the window's set, menu, search and Only edited) and it
+    /// draws each tab as "Shooting  (n)"; the Editing row is the window's (`editing_sets`); each entry's groups and rows
+    /// are those the window's menu view lists (`tab_groups`, laid out by `group_lines`), each row titled as the camera
+    /// draws it there with the full name for its details; Main shows the window's tile set and offers buttons where the
+    /// window does (`main_tile_set`); every link lands where the window's own jump lands (`go_to`). A setting placed
+    /// otherwise in one menu (`row_places`) is under its row there; a row of a setting the camera keeps a copy of per mode
+    /// shows, and changes, the record for the menu.
+    #[test]
+    fn the_page_lists_each_camera_menu_as_the_window() {
+        use crate::test_support::{done, sample_app, stub_menus_and_a_place};
+        let (mut app, dir, user) = sample_app("web_menus", Some(stub_menus_and_a_place));
+        let names: Vec<String> = app.menus().iter().map(|m| m.name.clone()).collect();
+        assert_eq!(names.len(), 3, "the stub's three menus");
+        let s = ask(&mut app, "state", json!({ "target": 0 }));
+        assert_eq!(s["menu"].as_str(), app.menu_shown().as_deref(), "the menu the window opens the live settings on");
+        assert_eq!(s["menus"], json!(names.iter().map(|n| json!({ "name": n, "title": app.menu_hover(n) })).collect::<Vec<_>>()));
+        assert!(names.iter().any(|n| app.menu_hover(n).contains("This file was saved in")), "the file's own menu says so");
+        assert_eq!((s["menus_label"].as_str(), s["menus_hover"].as_str()), (Some(app.schema.camera.text.menus_label()), Some(app.schema.camera.text.menus_hover())));
+        assert!(s["opened"].is_string());
+        assert_eq!(s["column_sets"], json!(app.shown_sections()), "Compare's columns may show every menu's sets");
+        let ctx = egui::Context::default();
+        let mut frame = eframe::Frame::_new_kittest();
+        let mut rows_seen = 0;
+        let mut links = 0;
+        for m in &names {
+            // the window on the live settings in this menu, on its first tab
+            (app.target, app.mode) = (0, Mode::Edit);
+            app.set_menu(m);
+            let s = ask(&mut app, "state", json!({ "target": 0, "menu": m }));
+            assert_eq!(s["menu"], m.as_str());
+            app.view = View::Tab(s["tabs"][0].as_str().unwrap().to_string());
+            let drawn = crate::test_support::texts(&ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(&mut app, ctx, &mut frame)).shapes);
+            assert_eq!(app.menu_shown().as_deref(), Some(m.as_str()));
+            // the Menu column: the window's side bar's entries, their counts and edits, and its words for each tab
+            let side = app.edit_entries(app.target, app.menu_shown().as_deref(), &app.search, app.only_changed);
+            let want: Vec<Value> = side.iter().filter_map(|e| match &e.key { BarKey::Tab(t) => Some(json!([t, e.count, e.badge, e.hover])), _ => None }).collect();
+            let got: Vec<Value> = s["tab_info"].as_array().unwrap().iter().map(|t| json!([t["name"], t["count"], t["edited"], t["title"]])).collect();
+            assert_eq!(got, want, "{m}");
+            assert_eq!(s["tabs"], json!(want.iter().map(|w| w[0].clone()).collect::<Vec<_>>()));
+            for t in s["tab_info"].as_array().unwrap() {
+                assert!(drawn.contains(&format!("{}  ({})", t["name"].as_str().unwrap(), t["count"])), "{m}: the window draws {} so: {drawn:?}", t["name"]);
+            }
+            // the Editing row: the window's
+            let sets: Vec<usize> = s["targets"].as_array().unwrap().iter().map(|t| t[0].as_u64().unwrap() as usize).collect();
+            assert_eq!(sets, app.editing_sets(), "{m}");
+            assert!(s["targets"].as_array().unwrap().iter().all(|t| t[2] == true));
+            // each entry's groups and rows, as the window's menu view lists them in this menu
+            for t in s["tabs"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()) {
+                let j = ask(&mut app, "tab", json!({ "target": 0, "menu": m, "tab": t }));
+                let window = app.tab_groups(&t);
+                let groups = j["groups"].as_array().unwrap();
+                assert_eq!(groups.iter().map(|g| g["name"].as_str().unwrap()).collect::<Vec<_>>(), window.iter().map(|g| g.0.as_str()).collect::<Vec<_>>(), "{m} > {t}");
+                for (g, (name, family, rows)) in groups.iter().zip(&window) {
+                    if *family {
+                        assert_eq!(g["family"], true, "{name}");
+                        continue;
+                    }
+                    let lines = app.group_lines(rows);
+                    let order: Vec<&Setting> = menu_rows::order(&lines).into_iter().map(|i| &rows[i][0]).collect();
+                    let page: Vec<&Value> = g["rows"].as_array().unwrap().iter().collect();
+                    assert_eq!(page.iter().map(|r| r["key"].as_str().unwrap()).collect::<Vec<_>>(), order.iter().map(|s| s.key.as_str()).collect::<Vec<_>>(), "{m} > {t} > {name}");
+                    for (r, s) in page.iter().zip(&order) {
+                        assert_eq!(r["name"], s.name.as_str(), "titled as the camera draws it in {m}");
+                        let full = app.full_name(s);
+                        assert_eq!(r.get("full_name").and_then(Value::as_str), (full != s.name).then_some(full.as_str()), "{}", s.key);
+                    }
+                    rows_seen += page.len();
+                }
+                links += links_as_the_windows_jumps(&mut app, &j, m);
+            }
+            // Main: the window's tile set in this menu, and its own buttons where the window offers them
+            let (at, buttons) = app.main_tile_set();
+            let set = app.main_set;
+            let main = ask(&mut app, "main", json!({ "target": 0, "menu": m, "set": set }));
+            assert_eq!((main["set"].as_u64(), !main["sets"].as_array().unwrap().is_empty()), (Some(at as u64), buttons), "{m}");
+            links += links_as_the_windows_jumps(&mut app, &main, m);
+            // the other answers' links: My Menu's items, the exposure page's settings
+            let mm = ask(&mut app, "mymenu_page", json!({ "target": 0, "menu": m }));
+            links += links_as_the_windows_jumps(&mut app, &mm, m);
+            let ex = ask(&mut app, "exposure", json!({ "menu": m }));
+            links += links_as_the_windows_jumps(&mut app, &ex, m);
+        }
+        assert!(rows_seen > 500 && links > 50, "{rows_seen} rows, {links} links");
+        // a menu not in the definition: the state answers in the one the set opens on (it is how the page learns them)
+        assert_eq!(ask(&mut app, "state", json!({ "target": 0, "menu": "No such menu" }))["menu"].as_str(), app.opening_menu(0).as_deref());
+        // the record map's links (Expert mode) land where the window's jump does from each menu
+        app.prefs.expert = true;
+        for m in &names {
+            let rec = ask(&mut app, "records", json!({ "target": 0, "menu": m, "q": "0x02" }));
+            assert!(links_as_the_windows_jumps(&mut app, &rec, m) > 10);
+        }
+        app.prefs.expert = false;
+        // placed otherwise in one menu (`row_places`): Audio Recording under its row "Audio Settings" in S&Q's, alone there
+        let audio = app.schema.settings.iter().find(|s| s.key == "global:0x02e9").cloned().unwrap();
+        let sq = names.iter().find(|n| audio.row_places.contains_key(n.as_str())).unwrap().clone();
+        let tab = app.layout_tab(&app.listed_record(&audio, 0, &sq)).to_string();
+        let j = ask(&mut app, "tab", json!({ "target": 0, "menu": sq, "tab": tab }));
+        let g = j["groups"].as_array().unwrap().iter().find(|g| g["rows"].as_array().unwrap().iter().any(|r| r["key"] == audio.key.as_str())).unwrap();
+        let layout = g["layout"].as_array().unwrap();
+        let at = layout.iter().position(|l| l["key"] == audio.key.as_str()).unwrap();
+        assert_eq!((&layout[at]["depth"], &layout[at - 1]["head"]), (&json!(1), &json!("Audio Settings")), "under its row in {sq}");
+        assert_eq!(g["rows"].as_array().unwrap().iter().find(|r| r["key"] == audio.key.as_str()).unwrap()["name"], "Audio Recording");
+        // a setting the camera keeps a copy of per shooting mode: in a menu of another mode than the file's, its row
+        // shows the copy's record (`row_record`), and a change there changes that record
+        let file_menu = app.opening_menu(0).unwrap();
+        let (other, main, copy) = names.iter().filter(|n| **n != file_menu).find_map(|n| {
+            app.schema.settings.iter().filter(|s| s.copy_of.is_none() && s.area == "global" && !s.expert && app.menus_of(s).contains(n))
+                .find_map(|s| app.copy_for_menu(s, n).filter(|c| app.locked_why(c, 0).is_none() && c.scalar && c.range.is_none() && c.offered(false).len() >= 2)
+                    .map(|c| (n.clone(), s.clone(), c.clone())))
+        }).expect("a setting with a copy for another menu than the file's");
+        let shown = app.listed_record(&main, 0, &other);
+        assert_eq!(shown.key, copy.key, "the row in {other} shows the copy for it");
+        let tab = app.layout_tab(&shown).to_string();
+        let j = ask(&mut app, "tab", json!({ "target": 0, "menu": other, "tab": tab }));
+        let row = j["groups"].as_array().unwrap().iter().flat_map(|g| g["rows"].as_array().unwrap().clone()).find(|r| r["key"] == copy.key.as_str()).expect("the copy's row");
+        assert_eq!((row["name"].as_str(), row["full_name"].as_str()), (Some(shown.name.as_str()), (app.full_name(&shown) != shown.name).then(|| app.full_name(&shown)).as_deref()));
+        let cur = row["value"].as_i64().unwrap();
+        let want = row["options"].as_array().unwrap().iter().map(|o| o[0].as_i64().unwrap()).find(|v| *v != cur).unwrap();
+        let r = ask(&mut app, "set", json!({ "target": 0, "menu": other, "key": copy.key, "value": want }));
+        assert_eq!((r["row"]["key"].as_str(), r["row"]["value"].as_i64(), r["row"]["name"].as_str()), (Some(copy.key.as_str()), Some(want), Some(shown.name.as_str())),
+            "the copy changed, its row as {other} shows it");
+        assert_eq!(app.doc.as_ref().unwrap().value(0, copy.slot()), Some(want));
+        let _ = main;
+        done(&dir, &user);
+    }
+
+    /// A hit of the page's search where the definition lists the camera's menus names the menu it opens in: each row
+    /// once, under its menu's name, in the menu `search_hits_in` gives it, with the way there (`open`: `where_in`'s
+    /// words and `jump_place`'s entry and group). This compares nothing with the window's search view: that the page's
+    /// hits are the window's is another test's (one search path for both).
+    #[test]
+    fn a_search_hit_on_the_page_names_the_camera_menu_it_opens_in() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let (mut app, dir, user) = sample_app("web_menus_search", Some(stub_menus));
+        let now = app.opening_menu(0).unwrap();
+        for q in ["iso", "audio", "white balance"] {
+            let j = ask(&mut app, "tab", json!({ "target": 0, "q": q }));
+            let hits = app.search_hits_in(0, Some(&now), q);
+            let rows: Vec<(String, Value)> = j["groups"].as_array().unwrap().iter()
+                .flat_map(|g| g["rows"].as_array().unwrap().iter().map(|r| (g["menu"].as_str().unwrap().to_string(), r.clone())).collect::<Vec<_>>()).collect();
+            assert!(!rows.is_empty(), "{q}");
+            for g in j["groups"].as_array().unwrap() {
+                // the window's words for the place, ">" between them (page file, B9)
+                assert!(g["name"].as_str().unwrap().starts_with(&format!("{} > ", g["menu"].as_str().unwrap())), "{}", g["name"]);
+            }
+            for (m, r) in &rows {
+                let open = &r["open"];
+                let (s, hm) = hits.iter().find(|(s, _)| open["key"] == s.key.as_str()).expect("each row a hit");
+                assert_eq!((hm.as_deref(), open["open_menu"].as_str()), (Some(m.as_str()), Some(m.as_str())), "{q}: {}", s.key);
+                assert_eq!(open["where"], app.where_in(s, 0, Some(&now)).as_str());
+                let (_, tab, group) = app.jump_place(s, 0, Some(&now));
+                assert_eq!((open["open_tab"].as_str(), open["open_group"].as_str()), (Some(tab.as_str()), Some(group.as_str())));
+            }
+            // one row per hit, as the window's search page lists them (page file, B9)
+            assert_eq!(rows.len(), hits.len(), "{q}: one row per hit");
+        }
+        done(&dir, &user);
+    }
+
+    /// Compare on the page in each of the camera's menus is what the window draws, the two built by the same functions:
+    /// the Menu column is the window's Compare bar in that menu (`compare_bar`: All settings, Main, My Menu, the tabs,
+    /// each with how many rows it lists and how many differ, drawn as "Label  (rows)"), the rows the window's
+    /// (`compare_rows`: that menu's in the camera's layout, each holding the record for the menu), the selector's counts
+    /// the window's (`menu_differences`), and every row's link lands where the window's jump does from that menu.
+    #[test]
+    fn the_pages_compare_in_each_camera_menu() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let (mut app, dir, user) = sample_app("web_menus_compare", Some(stub_menus));
+        let names: Vec<String> = app.menus().iter().map(|m| m.name.clone()).collect();
+        let (b, _, _) = changed_sample(&app);
+        ask_upload(&mut app, "open_b", &b, "wsa_menus_B.DAT");
+        let cols = json!([["a", 0], ["b", 0]]);
+        // the window in Compare with the same columns, in each menu in turn
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::b(0)], false);
+        let ctx = egui::Context::default();
+        let mut frame = eframe::Frame::_new_kittest();
+        for m in &names {
+            app.set_menu(m);
+            let drawn = crate::test_support::texts(&ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(&mut app, ctx, &mut frame)).shapes);
+            let wcols = app.cols.clone();
+            let j = ask(&mut app, "compare", json!({ "cols": cols, "menu": m, "only_diff": false }));
+            let bar = app.compare_bar(app.compare_menu().as_deref(), &app.search, &|x| app.row_differs(&wcols, x));
+            let want: Vec<Value> = bar.iter().map(|e| json!([App::web_entry_key(&e.key), e.label, e.count, e.badge])).collect();
+            let got: Vec<Value> = j["entries"].as_array().unwrap().iter().map(|e| json!([e["key"], e["name"], e["count"], e["differ"]])).collect();
+            assert_eq!(got, want, "{m}");
+            for e in &bar {
+                assert!(drawn.contains(&format!("{}  ({})", e.label, e.count.unwrap())), "{m}: the window draws {} so: {drawn:?}", e.label);
+            }
+            let keys: Vec<&str> = j["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap()).collect();
+            let window = app.matrix_rows();
+            assert_eq!(keys, window.iter().map(|r| r.2[0].key.as_str()).collect::<Vec<_>>(), "{m}: the window's rows");
+            let counts = app.menu_differences(&app.search, &|x| app.row_differs(&wcols, x));
+            assert_eq!(j["menus"], json!(names.iter().zip(&counts).map(|(n, c)| json!({ "name": n, "differ": c })).collect::<Vec<_>>()));
+            // (the columns' first of file A is the live settings: a row opens there)
+            for r in j["rows"].as_array().unwrap().iter().take(300) {
+                let s = app.schema.settings.iter().find(|s| r["key"] == s.key.as_str()).unwrap();
+                let (menu, tab, group) = app.jump_place(s, 0, Some(m));
+                assert_eq!((r["open_menu"].as_str(), r["open_tab"].as_str(), r["open_group"].as_str()), (menu.as_deref(), Some(tab.as_str()), Some(group.as_str())), "{}", s.key);
+            }
+            // an entry of the Menu column: its rows only
+            let tab = got.iter().find_map(|e| e[0].as_str().filter(|k| k.starts_with("tab:")).map(str::to_string)).unwrap();
+            let t = ask(&mut app, "compare", json!({ "cols": cols, "menu": m, "entry": tab, "only_diff": false }));
+            let entry = App::web_entry(&json!({ "entry": tab }));
+            assert_eq!(t["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap()).collect::<Vec<_>>(),
+                app.compare_rows(Some(m), &entry, "").iter().map(|r| r.2[0].key.as_str()).collect::<Vec<_>>());
+        }
+        // a row of a setting the camera keeps a copy of per mode holds the copy for each menu (two files saved in
+        // different modes compared like for like)
+        let (m, main, copy) = names.iter().find_map(|n| app.schema.settings.iter().filter(|s| s.copy_of.is_none() && s.area == "global" && !s.expert && app.menus_of(s).contains(n))
+            .find_map(|s| app.copy_for_menu(s, n).map(|c| (n.clone(), s.clone(), c.clone())))).expect("a setting with a copy for a menu");
+        let j = ask(&mut app, "compare", json!({ "cols": cols, "menu": m, "only_diff": false }));
+        let keys: Vec<&str> = j["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap()).collect();
+        assert!(keys.contains(&copy.key.as_str()) && !keys.contains(&main.key.as_str()), "{m}: {} shows {}", main.key, copy.key);
+        done(&dir, &user);
+    }
+
+    /// Without the camera's menus in the definition (or with them and the flat list) the page's answers carry none of
+    /// the selector's keys and no menu in a link or a row, a request with no menu named lists what one naming none
+    /// does, and one naming a menu the definition does not have is refused in plain words. The state names the opening
+    /// of the file in any case (`opened`, new at each opening and in each run of the editor), so the page lets go of a
+    /// menu picked for another file also while no menu is shown. (That the page's answers without menus are the ones
+    /// main gave is a one-time check of the dump, not this test.)
+    #[test]
+    fn without_camera_menus_the_page_names_no_menu_and_refuses_one_named() {
+        use crate::test_support::{done, sample_app, strip_menus, stub_menus};
+        let (mut app, dir0, user0) = sample_app("web_menus_none", Some(strip_menus));
+        assert!(app.menus().is_empty());
+        let s = ask(&mut app, "state", json!({ "target": 0 }));
+        for k in ["menus", "menu", "menus_label", "menus_hover", "column_sets"] {
+            assert!(s.get(k).is_none(), "{k}");
+        }
+        let opened = s["opened"].clone();
+        assert!(opened.is_string(), "the file's opening, without menus too: {opened}");
+        let text = |v: &Value| v.to_string();
+        let tab = app.schema.tabs[0].clone();
+        for (name, body) in [("tab", json!({ "target": 0, "tab": tab })), ("tab", json!({ "target": 0, "q": "iso" })), ("main", json!({ "target": 0, "set": 1 })),
+            ("mymenu_page", json!({ "target": 0 })), ("exposure", json!({}))] {
+            let plain = ask(&mut app, name, body.clone());
+            let mut none = body.clone();
+            none["menu"] = Value::Null;
+            assert_eq!(text(&ask(&mut app, name, none)), text(&plain), "{name}: no menu named, as none sent");
+            for k in ["\"open_menu\"", "\"full_name\"", "\"open_key\""] {
+                assert!(!text(&plain).contains(k), "{name}: {k}");
+            }
+            let mut named = body.clone();
+            named["menu"] = json!("Movie");
+            let refused = answer(&mut app, name, named);
+            assert_eq!(refused.status, 400, "{name}: a menu the definition does not have");
+            assert!(String::from_utf8_lossy(&refused.body).contains("no camera menu named \\\"Movie\\\""), "{name}: {}", String::from_utf8_lossy(&refused.body));
+        }
+        // the state is how the page learns the menus: it never refuses one, it answers without it
+        assert_eq!(ask(&mut app, "state", json!({ "target": 0, "menu": "Movie" }))["opened"], opened);
+        // another file opened: another opening
+        let (b, _, _) = changed_sample(&app);
+        ask_upload(&mut app, "open", &b, "wsa_opened_again.DAT");
+        assert_ne!(ask(&mut app, "state", json!({}))["opened"], opened);
+        done(&dir0, &user0);
+        // the definition's menus with the flat list: none shown, a menu the definition has is no refusal
+        let (mut app, dir, user) = sample_app("web_menus_flat", Some(stub_menus));
+        app.prefs.flat_list = true;
+        let s = ask(&mut app, "state", json!({ "target": 0, "menu": "Movie" }));
+        assert!(s.get("menus").is_none() && s.get("menu").is_none() && s["opened"].is_string());
+        let first = app.schema.tabs[0].clone();
+        assert_eq!(answer(&mut app, "tab", json!({ "target": 0, "tab": first, "menu": "Movie" })).status, 200);
+        done(&dir, &user);
+    }
+
+    /// The set of the open file the stub's menus open on (the first memory set of `menu`'s first mode), and that menu.
+    fn a_set_of(app: &App, mode: &str) -> (usize, String) {
+        let set = (1..app.n_sections()).find(|&s| app.schema.camera.memory_mode(s) == Some(mode)).expect("a memory set of the mode");
+        (set, app.opening_menu(set).expect("its menu"))
+    }
+
+    /// Picking a camera menu that does not hold the memory set edited keeps that set on the Editing row, as the window's
+    /// row keeps it (`editing_sets`, in the same state), so the page's `keepViewValid` keeps editing it.
+    #[test]
+    fn picking_another_camera_menu_keeps_the_set_edited_as_the_window() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let (mut app, dir, user) = sample_app("web_menus_sets", Some(stub_menus));
+        let (set, movie) = a_set_of(&app, "Movie");
+        let other = app.menus().iter().map(|m| m.name.clone()).find(|n| *n != movie && !app.menu_sets(Some(n.as_str())).contains(&set)).unwrap();
+        // the window editing that set, the other menu shown
+        app.target = set;
+        app.set_menu(&other);
+        assert_eq!(app.menu_shown().as_deref(), Some(other.as_str()));
+        let window = app.editing_sets();
+        assert!(window.contains(&set), "the window keeps the set edited: {window:?}");
+        let s = ask(&mut app, "state", json!({ "target": set, "menu": other }));
+        let page: Vec<usize> = s["targets"].as_array().unwrap().iter().map(|t| t[0].as_u64().unwrap() as usize).collect();
+        assert_eq!((page, s["target"].as_u64()), (window, Some(set as u64)), "the page's Editing row in {other}, as the window's");
+        done(&dir, &user);
+    }
+
+    /// A change made in a camera menu says what it left, and the status names the setting, as in the flat list: the
+    /// definition's own setting is what the warnings are worked out for (`twins_left`), not the row as the menu laid it
+    /// out (the review's case: Drive Mode set to Continuous Shooting, the camera keeping it in two places). And every
+    /// row a menu shows says what the same records say as the definition's own (its value, list, locks, notes and
+    /// put-backs): only its title, place and the menu's sub-choices and links are the menu's.
+    #[test]
+    fn a_change_in_a_camera_menu_says_what_it_left_as_the_flat_list() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let (mut app, dir, user) = sample_app("web_menus_twins", Some(stub_menus));
+        let drive = app.schema.settings.iter().find(|s| s.key == "global:0x02b5").cloned().unwrap();
+        let cur = app.doc.as_ref().unwrap().value(0, drive.slot());
+        let v = app.offered_values(&drive, 0).into_iter().map(|(v, _)| v).find(|v| Some(*v) != cur && app.twins_left(&drive, *v, 0).is_some())
+            .expect("a value one of its records has no name for");
+        app.prefs.flat_list = true;
+        let flat = ask(&mut app, "set", json!({ "target": 0, "key": drive.key, "value": v }));
+        let (words, status) = (flat["message"].clone(), app.status.clone());
+        assert!(words.as_str().is_some_and(|w| w.contains("places in this file")), "{words}");
+        ask(&mut app, "undo", json!({}));
+        app.prefs.flat_list = false;
+        let m = app.menus_of(&drive)[0].clone();
+        let laid = ask(&mut app, "set", json!({ "target": 0, "menu": m, "key": drive.key, "value": v }));
+        assert_eq!((&laid["message"], &app.status), (&words, &status), "in {m} as in the flat list");
+        ask(&mut app, "undo", json!({}));
+        // every row of every menu: what the records say is the definition's (a copy's note words the row by its title, as
+        // the window's detail panel does, so it is left out here)
+        let same = ["value", "label", "original", "changed", "kind", "options", "editable", "locked", "put_back", "unnamed", "warn", "inactive", "proof", "help", "stored"];
+        let mut rows = 0;
+        let mut retitled = None;
+        for m in app.menus().iter().map(|m| m.name.clone()).collect::<Vec<_>>() {
+            let s = ask(&mut app, "state", json!({ "target": 0, "menu": m }));
+            for t in s["tabs"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()) {
+                let j = ask(&mut app, "tab", json!({ "target": 0, "menu": m, "tab": t }));
+                for r in j["groups"].as_array().unwrap().iter().filter(|g| g["family"] != true).flat_map(|g| g["rows"].as_array().unwrap().clone()) {
+                    let own = app.web_linked(0, r["key"].as_str().unwrap()).expect("the definition's records");
+                    let want = app.web_row_in(0, Some(&m), &own);
+                    for f in same {
+                        assert_eq!(r.get(f), want.get(f), "{m} > {t}: {} {f}", r["key"]);
+                    }
+                    // a row the menu titles otherwise than the setting's own name, that a change can be made on
+                    if retitled.is_none() && r["full_name"].is_string() && r["editable"] == true && r["kind"] == "choice" && r["options"].as_array().is_some_and(|o| o.len() >= 2) {
+                        retitled = Some((m.clone(), r.clone()));
+                    }
+                    rows += 1;
+                }
+            }
+        }
+        assert!(rows > 500, "{rows} rows");
+        // a change on such a row: the status names the setting by its own name, as the window's, not by the row's title
+        let (m, r) = retitled.expect("a row titled as the camera draws it, otherwise than its setting's name");
+        let v = r["options"].as_array().unwrap().iter().map(|o| o[0].as_i64().unwrap()).find(|v| Some(*v) != r["value"].as_i64()).unwrap();
+        ask(&mut app, "set", json!({ "target": 0, "menu": m, "key": r["key"], "value": v }));
+        let full = r["full_name"].as_str().unwrap();
+        assert!(app.status.starts_with(&format!("{full} set to ")), "{m}: {} ({} is the row's title)", app.status, r["name"]);
+        done(&dir, &user);
+    }
+
+    /// The stub's menus, the last of them naming no tiles of its own: a definition that mixes menus with and without.
+    fn stub_menus_some_tiles(v: &mut Value) {
+        crate::test_support::stub_menus(v);
+        v["camera"]["menus"][2].as_object_mut().unwrap().remove("main_tiles");
+    }
+
+    /// Main in a definition that mixes camera menus with tiles of their own and one without: in a menu that names its
+    /// tiles, those and no buttons; in one that names none, the Main page's own buttons and the tile set last picked
+    /// with them, as the window shows it there (`main_tile_set`, in the same state).
+    #[test]
+    fn main_in_menus_with_and_without_tiles_of_their_own_as_the_window() {
+        use crate::test_support::{done, sample_app};
+        let (mut app, dir, user) = sample_app("web_menus_tiles", Some(stub_menus_some_tiles));
+        app.main_set = 1;
+        for m in app.menus().iter().map(|m| m.name.clone()).collect::<Vec<_>>() {
+            app.set_menu(&m);
+            let (at, buttons) = app.main_tile_set();
+            let set = app.main_set;
+            let j = ask(&mut app, "main", json!({ "target": 0, "menu": m, "set": set }));
+            assert_eq!((j["set"].as_u64(), !j["sets"].as_array().unwrap().is_empty()), (Some(at as u64), buttons), "{m}");
+        }
+        assert!(app.menus().iter().any(|m| app.menu_tile_set(&m.name).is_none()) && app.menus().iter().any(|m| app.menu_tile_set(&m.name).is_some()));
+        done(&dir, &user);
+    }
+
+    /// Each entry of Compare's Menu column counts the rows the page lists under it, each once: without menus and in
+    /// each of the camera's menus, the count beside an entry is the number of rows its page shows, none listed twice.
+    #[test]
+    fn compares_entry_counts_are_the_rows_it_lists_once_each() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let check = |app: &mut App, menu: Option<&str>| {
+            let mut body = json!({ "cols": [["a", 0], ["a", 1]], "only_diff": false });
+            if let Some(m) = menu { body["menu"] = json!(m); }
+            let all = ask(app, "compare", body.clone());
+            for e in all["entries"].as_array().unwrap() {
+                body["entry"] = e["key"].clone();
+                let j = ask(app, "compare", body.clone());
+                let keys: Vec<&str> = j["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap()).collect();
+                let unique: std::collections::HashSet<&&str> = keys.iter().collect();
+                assert_eq!((e["count"].as_u64(), unique.len()), (Some(keys.len() as u64), keys.len()), "{menu:?} > {}: counted as listed, each once", e["key"]);
+            }
+        };
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample();
+        check(&mut app, None);
+        let (mut app, dir, user) = sample_app("web_menus_counts", Some(stub_menus));
+        for m in app.menus().iter().map(|m| m.name.clone()).collect::<Vec<_>>() {
+            check(&mut app, Some(&m));
+        }
+        done(&dir, &user);
+    }
+
+    /// Recall or Register of "only the rows shown" from the page's Compare copies the rows the page showed: those of the
+    /// camera menu the request names, never a menu the editor works out for itself (the review's scenario: editing a
+    /// Movie memory, no menu picked, Compare on a tab, Recall the first dial memory, only the rows shown: Movie's rows
+    /// the memories keep are recalled, and a setting that only another menu's rows hold is left as it was). A request
+    /// that names its rows by a filter (recall and register of the rows shown, a merge, a copy, the comparison's
+    /// export) without a menu, where the definition lists them, is refused and changes nothing; so is any request that
+    /// names a menu the definition does not have.
+    #[test]
+    fn a_copy_of_the_rows_shown_takes_the_rows_of_the_menu_the_page_names() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let (mut app, dir, user) = sample_app("web_menus_recall", Some(stub_menus));
+        let (set, movie) = a_set_of(&app, "Movie");
+        let live = app.opening_menu(0).unwrap();
+        assert_ne!(movie, live, "the live settings open on another menu than the set edited");
+        let dial = app.dial_sets()[0];
+        // a tab both menus list, whose rows the memories keep differ between the menus
+        let tabs = |app: &App, m: &str| app.bar_keys(true, 0, Some(m), "", false).into_iter().filter_map(|k| match k { BarKey::Tab(t) => Some(t), _ => None }).collect::<Vec<_>>();
+        let slots = |app: &App, m: &str, t: &str| app.compare_rows(Some(m), &BarKey::Tab(t.to_string()), "").iter().filter(|r| r.2[0].in_sets)
+            .flat_map(|r| r.2.iter().map(|s| s.slot())).collect::<std::collections::HashSet<Slot>>();
+        // a tab both menus list, with rows only the live settings' menu shows
+        let tab = tabs(&app, &movie).into_iter().filter(|t| tabs(&app, &live).contains(t))
+            .find(|t| slots(&app, &live, t).iter().any(|s| !slots(&app, &movie, t).contains(s))).expect("a tab whose rows differ between the menus");
+        let mine = slots(&app, &movie, &tab);
+        // file A with the first dial memory holding other values than the live settings, in one record of the rows
+        // shown in the Movie menu and one only the other menu's rows hold
+        // a plain record (no copies, kept by no copy rule, alone in its place), the first in the records' order, so the
+        // recall copies it as it is and the test picks the same one in every run
+        let changeable = |slot: &Slot| app.schema.settings.iter().filter(|x| x.slot() == *slot).count() == 1 && app.schema.settings.iter()
+            .find(|x| x.slot() == *slot && x.scalar && x.text.is_none() && x.range.is_none() && x.values.len() >= 2 && x.copies.is_empty() && x.copy_of.is_none()
+                && x.area == "global" && x.in_sets && !x.expert && !app.locked(x, 0) && app.shape_ok_in(x, 0)).is_some();
+        let sorted = |set: std::collections::HashSet<Slot>| { let mut v: Vec<Slot> = set.into_iter().collect(); v.sort(); v };
+        let of = |slot: Slot| app.schema.settings.iter().find(|x| x.slot() == slot).cloned().unwrap();
+        let theirs = of(sorted(slots(&app, &live, &tab)).into_iter().filter(|s| !mine.contains(s)).find(changeable).expect("a record of the other menu's rows alone"));
+        let ours = of(sorted(mine.clone()).into_iter().find(changeable).expect("a record of the Movie menu's rows"));
+        let mut c = test_parse(crate::test_support::SAMPLE_BYTES).unwrap();
+        for x in [&theirs, &ours] {
+            let v = c.sections[dial].get(x.id).and_then(|r| r.get(x.index)).unwrap();
+            let other = x.values.iter().map(|(o, _)| *o).find(|o| *o != v).unwrap();
+            c.sections[dial].get_mut(x.id).unwrap().put(x.index, other).unwrap();
+        }
+        ask_upload(&mut app, "open", &c.to_bytes(), "wsa_menus_recall_A.DAT");
+        let differs = |app: &App, slot: Slot| { let d = app.doc.as_ref().unwrap(); d.value(dial, slot) != d.value(0, slot) };
+        assert!(differs(&app, theirs.slot()) && differs(&app, ours.slot()));
+        let other = [theirs.slot()];
+        let body = json!({ "memory": dial, "shown": true, "q": "", "entry": format!("tab:{tab}"), "menu": movie, "target": set });
+        // without the menu, where the definition lists them: refused, nothing changed
+        let mut none = body.clone();
+        none.as_object_mut().unwrap().remove("menu");
+        let before = app.doc.as_ref().unwrap().changes().len();
+        for (name, b) in [("recall", none.clone()), ("register", none.clone()),
+            ("copy_rows", json!({ "from": ["a", dial], "to": ["a", 0], "keys": [], "entry": format!("tab:{tab}"), "target": set })),
+            ("merge", json!({ "base": ["a", 0], "a": ["a", 0], "b": ["a", 0], "kind": "b_into_a", "entry": format!("tab:{tab}"), "target": set })),
+            ("csv", json!({ "compare": true, "cols": [["a", 0], ["a", dial]], "entry": format!("tab:{tab}"), "target": 0 }))] {
+            let r = answer(&mut app, name, b);
+            assert_eq!(r.status, 400, "{name}: {}", String::from_utf8_lossy(&r.body));
+            assert!(String::from_utf8_lossy(&r.body).contains("camera menu"), "{name}: says why: {}", String::from_utf8_lossy(&r.body));
+        }
+        assert_eq!(app.doc.as_ref().unwrap().changes().len(), before, "nothing changed");
+        // with it: the menu's rows, and no other
+        ask(&mut app, "recall", body);
+        let d = app.doc.as_ref().unwrap();
+        assert!(mine.iter().all(|s| d.value(0, *s) == d.value(dial, *s) || app.schema.settings.iter().any(|x| x.slot() == *s && (app.locked(x, 0) || !app.shape_ok_in(x, 0)))),
+            "every record of the rows shown in {movie} recalled");
+        assert!(!other.is_empty() && other.iter().all(|s| d.value(0, *s) != d.value(dial, *s)), "no record of {live}'s rows alone");
+        // a menu the definition does not have
+        let r = answer(&mut app, "recall", json!({ "memory": dial, "shown": true, "entry": "all", "menu": "No such menu", "target": set }));
+        assert_eq!(r.status, 400);
+        done(&dir, &user);
+    }
 }
 
 /// Safety from the page: the window's rules for writing to the camera, for replacing unsaved edits and for copying
@@ -5197,15 +6107,16 @@ mod safety_tests {
     #[test]
     fn the_page_recalls_the_whole_memory() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         app.open_sample();
         let m = app.dial_sets()[0];
-        let tab = app.memory_rows()[0].0.clone();
         let differ = |app: &App| app.memory_rows().iter().flat_map(|r| r.2.clone())
             .filter(|l| app.shape_ok_in(l, 0) && app.shape_ok_in(l, m) && app.locked_why(l, 0).is_none() && app.col_value(Col::a(0), l) != app.col_value(Col::a(m), l)).count();
         assert!(differ(&app) > 0, "Memory 1 differs from the live settings in the sample");
-        let r = json_of(&request(&mut app, "recall", json!({ "memory": m, "shown": true, "q": "no such setting anywhere", "tab": tab }), None));
+        let r = json_of(&request(&mut app, "recall", json!({ "memory": m, "shown": true, "q": "no such setting anywhere" }), None));
         assert_eq!(r["n"], 0, "asked for the rows shown, and none are");
-        let r = json_of(&request(&mut app, "recall", json!({ "memory": m, "q": "no such setting anywhere", "tab": tab }), None));
+        let r = json_of(&request(&mut app, "recall", json!({ "memory": m, "q": "no such setting anywhere" }), None));
         assert!(r["n"].as_u64().unwrap() > 0);
         assert_eq!(differ(&app), 0, "the whole memory recalled");
     }
@@ -5215,6 +6126,8 @@ mod safety_tests {
     #[test]
     fn the_page_leaves_other_shapes_alone() {
         let mut app = App::new(vec![], Prefs::default());
+        // as before menus, whatever the shipped definition lists (this test is not about the menus)
+        crate::test_support::as_before_menus(&mut app);
         let mut older = other_firmware();
         for b in older.sections[1].get_mut(0x0cde).unwrap().value.iter_mut() { *b = b.wrapping_add(1); }
         assert_eq!(request(&mut app, "open", json!({}), Some((&older.to_bytes(), false))).status, 200);

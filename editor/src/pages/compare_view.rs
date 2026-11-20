@@ -4,9 +4,11 @@ use crate::*;
 
 impl App {
     /// The column picker shared by the settings matrix and the record map: one row of section
-    /// toggles per open file.
+    /// toggles per open file, the sets the camera's menu shown offers and any column chosen already (`picker_sets`, the
+    /// page's too).
     fn column_picker(&mut self, ui: &mut egui::Ui) {
         self.prune_cols();
+        let sections = self.picker_sets(self.compare_menu().as_deref(), &self.cols);
         let mut sources = vec![Src::A];
         if self.compare.is_some() { sources.push(Src::B); }
         if self.base.is_some() { sources.push(Src::Base); }
@@ -14,7 +16,7 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 let file = self.file_name_of(src);
                 ui.label(RichText::new(format!("{} {file}:", src.letter())).strong().color(src.tone(ui.visuals())));
-                for section in self.shown_sections() {
+                for &section in &sections {
                     let c = Col { src, section };
                     let mut on = self.cols.contains(&c);
                     let short = self.schema.camera.short_name(section);
@@ -110,12 +112,14 @@ impl App {
             }
         });
         if let Some(s) = jump {
+            // as every jump: in the camera's menu Compare shows where it lists the setting (`go_to`)
+            let menu = self.compare_menu();
             self.mode = Mode::Edit;
             self.target = base.section;
-            self.view = self.view_of(&s);
-            self.group = Some(self.shown_group_of(&s));
-            self.item = Some(s.name.clone());
-            self.focus = Focus::Items;
+            if let Some(m) = &menu {
+                self.set_menu(m);
+            }
+            self.go_to(&s);
         }
         actions
     }
@@ -145,7 +149,7 @@ impl App {
                 }
                 if !on {
                     ui.allocate_exact_size(Self::ARROW, egui::Sense::hover());
-                } else if Self::arrow_button(ui, glyph, &Self::arrow_words(&self.col_name(from), &self.col_name(to))).clicked() {
+                } else if Self::arrow_button(ui, glyph, &[Some(Self::arrow_words(&self.col_name(from), &self.col_name(to))), self.fraction_words(&linked[0])].into_iter().flatten().collect::<Vec<_>>().join("\n\n")).clicked() {
                     out.extend(self.copy_row(linked, from, to));
                 }
             }
@@ -240,7 +244,8 @@ impl App {
         if self.editable() && !self.dial_sets().is_empty() {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("Whole sets:").strong());
-                let every = self.whole_set_note(!self.search.trim().is_empty() || self.compare_tab.is_some());
+                // narrowed by the search, an entry of the Menu, or one of the camera's menus
+                let every = self.whole_set_note(!self.search.trim().is_empty() || self.compare_entry != BarKey::All || self.compare_menu().is_some());
                 for section in self.dial_sets() {
                     let m = Col::a(section);
                     let live = Col::a(0);
@@ -269,7 +274,8 @@ impl App {
             return actions;
         }
         let cols = self.cols.clone();
-        let rows = self.matrix_rows_shared(&self.search, self.compare_tab.as_deref());
+        // the rows of the Menu's entry chosen, in the camera's menu shown, each bound to the record for that menu
+        let rows = self.compare_rows(self.compare_menu().as_deref(), &self.compare_key(), &self.search);
         let editable = self.editable();
         let three = self.three_cols();
         // each row's values and standing, worked out once a frame for the counts, the filters, the change map and the cells
@@ -309,25 +315,16 @@ impl App {
                 if editable {
                     let mergeable = count(Three::BOnly);
                     if ui.add_enabled(mergeable > 0, egui::Button::new(format!("Merge B into A ({mergeable})"))).on_hover_text("Take every change B made where A kept the base value. Conflicts are left alone.").clicked() {
-                        for (r, c) in rows.iter().zip(&classes) {
-                            if *c == Three::BOnly { actions.extend(self.copy_row(&r.2, tbb, ta)); }
-                        }
-                        self.pin_families(None, ta.section, &mut actions);
+                        actions.extend(self.merge_rows(&rows, tc, Three::BOnly, tbb).0);
                         self.status = format!("{mergeable} of B's changes merged into A; save the file to keep them");
                     }
                     let conflicts = count(Three::Conflict);
                     if ui.add_enabled(conflicts > 0, egui::Button::new("Conflicts: take B")).on_hover_text("Where A and B changed a setting differently, use B's value").clicked() {
-                        for (r, c) in rows.iter().zip(&classes) {
-                            if *c == Three::Conflict { actions.extend(self.copy_row(&r.2, tbb, ta)); }
-                        }
-                        self.pin_families(None, ta.section, &mut actions);
+                        actions.extend(self.merge_rows(&rows, tc, Three::Conflict, tbb).0);
                         self.status = format!("{conflicts} conflicts resolved with B's values; save the file to keep them");
                     }
                     if ui.add_enabled(conflicts > 0, egui::Button::new("Conflicts: take Base")).on_hover_text("Where A and B changed a setting differently, go back to the base value").clicked() {
-                        for (r, c) in rows.iter().zip(&classes) {
-                            if *c == Three::Conflict { actions.extend(self.copy_row(&r.2, tb, ta)); }
-                        }
-                        self.pin_families(None, ta.section, &mut actions);
+                        actions.extend(self.merge_rows(&rows, tc, Three::Conflict, tb).0);
                         self.status = format!("{conflicts} conflicts reset to the base values; save the file to keep them");
                     }
                 }
@@ -389,7 +386,7 @@ impl App {
         // fixed column widths, so the columns stay put while rows off screen are skipped: the setting names' widest,
         // and one width for every value column (a longer value is cut short, in full on hover)
         let body = egui::TextStyle::Body.resolve(ui.style());
-        let name_w = ui.fonts(|f| shown.iter().map(|r| f.layout_no_wrap(self.setting_title(&r.2[0]), body.clone(), Color32::WHITE).size().x)
+        let name_w = ui.fonts(|f| shown.iter().map(|r| f.layout_no_wrap(self.compare_title(r), body.clone(), Color32::WHITE).size().x)
             .fold(130.0_f32, f32::max)).min(460.0) + 2.0;
         let cell_w = 190.0;
         // a row's height as last drawn, for the rows off screen, which only keep their place
@@ -414,6 +411,7 @@ impl App {
                     }
                     for t in cols.iter().filter(|t| t.editable() && *t != c) {
                         if editable && ui.button(format!("Copy all shown rows to {}", self.col_name(*t))).clicked() {
+                            self.copying_over(shown.iter().copied());
                             for (_, _, linked) in &shown { actions.extend(self.copy_row(linked, *c, *t)); }
                             self.pin_families((c.src == Src::A).then_some(c.section), t.section, &mut actions);
                             ui.close_menu();
@@ -466,7 +464,7 @@ impl App {
                     continue;
                 }
                 let on_cursor = cursor == Some(ri);
-                let title = self.setting_title(s);
+                let title = self.compare_title(&(tab.clone(), group.clone(), linked.clone()));
                 let name = if on_cursor { RichText::new(title).strong().color(cursor_color) } else { RichText::new(title) };
                 // the name is a link, underlined under the pointer: a click opens the setting in Edit, in the first
                 // column of file A that keeps it (else the live settings)
@@ -513,6 +511,10 @@ impl App {
                     // a value of file A that is view only outside Expert mode says why it takes none (`locked_why`), and
                     // one the camera keeps in more than one record what changing it changes (`copy_note`)
                     let r = match self.locked_why(s, c.section).filter(|_| c.editable()) { Some((why, _)) => r.on_hover_text(why), None => r };
+                    // one of My Menu's places says where it is changed instead (`place_why`)
+                    let r = match self.compare_why(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
+                    // a fraction's part says it goes with its other part (`fraction_words`)
+                    let r = match self.fraction_words(s).filter(|_| c.editable()) { Some(why) => r.on_hover_text(why), None => r };
                     let r = match self.copy_note(s, c.section).filter(|_| c.editable()) { Some((note, _)) => r.on_hover_text(note), None => r };
                     // a value of file A that can change opens Compare's picker on a click (or the menu's "Change…",
                     // the frame after its menu closes)
@@ -536,6 +538,9 @@ impl App {
                     r.context_menu(|ui| {
                         if can_copy {
                             ui.label(RichText::new(format!("Copy {} from {}", s.name, self.col_name(*c))).color(tone::weak(ui.visuals())).small());
+                            if let Some(w) = self.fraction_words(s) {
+                                ui.label(RichText::new(w).color(tone::weak(ui.visuals())).small());
+                            }
                             for t in &targets {
                                 // the arrow points from this cell's column toward the column the value goes into
                                 let arrow = if cols.iter().position(|x| x == t).is_some_and(|p| p < i) { "◀" } else { "▶" };
@@ -562,9 +567,14 @@ impl App {
                             open_edit = Some((s.clone(), c.section));
                             ui.close_menu();
                         }
-                        if edited && ui.button("Revert").clicked() {
-                            for l in linked.iter() { actions.push(Action::Revert(c.section, l.slot())); }
-                            ui.close_menu();
+                        // one of My Menu's places, outside Expert mode: all of My Menu back as opened, never one place
+                        // (`cell_revert`)
+                        if edited {
+                            let (words, acts) = self.cell_revert(linked, c.section);
+                            if ui.button(words).clicked() {
+                                actions.extend(acts);
+                                ui.close_menu();
+                            }
                         }
                         // where the plain Revert does not serve: back where the camera keeps it (`put_back_choice`)
                         if editable && c.editable() {
@@ -767,6 +777,17 @@ pub(crate) mod screen_reader_tests {
         let said = spoken(&mut app);
         assert!(has(&said, Role::Button, "Smaller text") && has(&said, Role::Button, "Larger text"), "{said:?}");
         assert!(said.iter().all(|(_, l)| !l.trim().is_empty()));
+        // the camera's menus, where the definition lists them: a button per menu by its name, in Edit and in Compare
+        // (their pressed state: `menus_window_tests`)
+        let (mut app, dir, user) = crate::test_support::sample_app("named_menus", Some(crate::test_support::stub_menus));
+        for mode in [Mode::Edit, Mode::Compare] {
+            app.mode = mode;
+            let said = spoken(&mut app);
+            for m in app.menus().to_vec() {
+                assert!(has(&said, Role::Button, &m.name), "{}: {said:?}", m.name);
+            }
+        }
+        crate::test_support::done(&dir, &user);
     }
 
     /// The status bar names the editor and its short version at its right end, on the welcome page (the only version

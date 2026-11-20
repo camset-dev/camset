@@ -108,12 +108,13 @@ def test_sub_choices_beside_their_option_not_rows():
 
 
 def test_a_page_under_an_option():
-    def on(key, name, row_, at):
-        return s(key, name, ["Profile", "P1", *row_], [29, 1, *at], "P1", group="Profile P1", row_group="Profile P1")
-    page = rows(on("bl", "Black Level", ["Black Level"], [0]), on("bls", "Black Level (stills)", ["Black Level"], [0]),
+    def on(key, name, row_, at, **more):
+        return s(key, name, ["Profile", "P1", *row_], [29, 1, *at], "P1", group="Profile P1", row_group="Profile P1", **more)
+    # a copy the camera keeps of a parameter (copy_of) is one row with it, whatever its name
+    page = rows(on("bl", "Black Level", ["Black Level"], [0]), on("bls", "Black Level (stills)", ["Black Level"], [0], copy_of="bl"),
                 on("bgl", "Black Gamma Level", ["Black Gamma", "Level"], [2, 1]), on("bgr", "Black Gamma Range", ["Black Gamma", "Range"], [2, 0]),
                 on("km", "Knee Mode", ["Knee", "Mode"], [3, 0]), on("kmp", "Knee Auto Set Max Point", ["Knee", "Auto Set", "Max Point"], [3, 1, 0]),
-                on("kmps", "Knee Auto Set Max Point (stills)", ["Knee", "Auto Set", "Max Point"], [3, 1, 0]))
+                on("kmps", "Copy of the max point", ["Knee", "Auto Set", "Max Point"], [3, 1, 0], copy_of="kmp"))
     assert all(mr.on_page(x[0]) for x in page) and mr.page_prefix(page[0][0]) == 2
     assert mr.lay_out(page) == [row(0, 0), row(1, 0),
                                 head("Black Gamma", 0, ["Black Gamma"]), row(3, 1), row(2, 1),
@@ -121,6 +122,90 @@ def test_a_page_under_an_option():
     two = page + [[{**page[0][0], "key": "p2", "under_option": "P2", "row": ["Profile", "P2", "Black Level"], "row_at": [29, 2, 0]}]]
     lines = mr.lay_out(two)
     assert lines[0] == head("P1", 0, ["P1"]) and lines[-1] == row(7, 1)
+
+
+MENUS = [{"name": "Still", "modes": ["Stills"]}, {"name": "Movie", "modes": ["Movie"]}, {"name": "S&Q", "modes": ["S&Q", "Time-lapse"]}]
+
+
+def test_a_setting_in_the_cameras_menus():
+    """editor/src/schema.rs's a_setting_in_the_cameras_menus: the menus that hold a setting's row, and the setting as a
+    menu lays it out."""
+    doc = {"camera": {"menus": MENUS}, "settings": []}
+    audio = s("a", "Audio", ["Audio"], [5], row_mode="Movie",
+              row_places={"S&Q": {"row": ["Audio Settings", "Audio"], "row_at": [3, 0], "row_group": "Sound"}})
+    assert mr.menus_of(doc, s("n", "Audio", ["Audio"], [5], row_menus=["Movie", "S&Q", "Gone"])) == ["Movie", "S&Q"]
+    assert mr.menus_of(doc, audio) == ["Movie", "S&Q"]
+    assert mr.menus_of(doc, s("p", "Audio", ["Audio"], [5])) == ["Still"]
+    assert mr.menus_of(doc, s("u", "Audio", [], [])) == []
+    p = mr.place_in(audio, "S&Q")
+    assert (p["row"], p["row_at"], p.get("row_group"), p.get("row_tab"), p.get("row_mode")) == (["Audio Settings", "Audio"], [3, 0], "Sound", None, None)
+    assert (p["row_menus"], p["shown_in"], mr.place_in(p, "S&Q")["row"]) == (["S&Q"], "S&Q", p["row"])
+    assert mr.place_in(audio, "Movie")["row"] == ["Audio"] and "row_mode" not in mr.place_in(audio, "Movie")
+    a, b = s("a", "Audio", ["Audio"], [5], row_menus=["Still"]), s("b", "Audio", ["Audio"], [5], row_menus=["Movie"])
+    # one row whichever menus name them (what an edit writes together does not depend on the menus); laid out for two
+    # menus, two rows (review finding 8)
+    assert mr.same_row(a, b) and mr.links_with(a, b)
+    assert not mr.same_row(mr.place_in(a, "Still"), mr.place_in(b, "Movie")) and mr.same_row(mr.place_in(a, "Still"), mr.place_in(b, "Still"))
+    assert mr.menu_list({"camera": {"menus": MENUS[:1]}}) == []
+
+
+def test_a_menus_place_with_no_option_above_it():
+    """editor/src/schema.rs's a_setting_in_the_cameras_menus (page file, finding C1): an under_option given as null in
+    a menu's row_places says that place has no option above it, where the setting's own place is under one; a field
+    left out keeps the top-level one."""
+    pp = s("pp", "Black Level", ["Picture Profile", "PP2", "Black Level"], [3, 1, 7], under="PP2",
+           row_places={"S&Q": {"row": ["Black Level"], "row_at": [7], "under_option": None}, "Movie": {"row": ["Black Level"], "row_at": [7]}})
+    assert [mr.place_in(pp, m)["under_option"] for m in ("S&Q", "Movie", "Still")] == [None, "PP2", "PP2"]
+
+
+def test_what_one_menu_lists():
+    """App::listed: the rows a menu holds; a setting the camera keeps a copy of per mode as its copy for the menu, in a
+    menu not of the mode the file was saved in, under the setting's name; its copies no rows; a row alone on its place
+    titled as the camera draws it; a setting placed nowhere with its group. Expert mode: every record a row, by name."""
+    doc = {"tabs": ["Shooting"], "camera": {"menus": MENUS[:2]}, "settings": [
+        s("iso", "ISO", ["ISO"], [2], row_menus=["Still", "Movie"], copies=["iso_s", "iso_m"], group="Exposure"),
+        s("iso_s", "ISO (stills)", ["ISO"], [2], copy_of="iso", copy_for=["Stills"], group="Exposure"),
+        s("iso_m", "ISO (movie)", ["ISO"], [2], copy_of="iso", copy_for=["Movie", "S&Q"], group="Exposure"),
+        s("ss", "SteadyShot", ["SteadyShot"], [5], row_menus=["Still"], group="Stabilization"),
+        s("ssm", "SteadyShot (Movie)", ["SteadyShot"], [5], row_menus=["Movie"], group="Stabilization"),
+        s("loose", "Loose", [], [], group="Stabilization")]}
+    menu = mr.Menu(doc)
+    rows = lambda m, mode=None, expert=False: [(x["key"], x["name"]) for x in menu.listed(m, mode, expert)]          # noqa: E731
+    assert rows("Movie", "Stills") == [("iso_m", "ISO"), ("ssm", "SteadyShot"), ("loose", "Loose")]
+    assert rows("Still", "Stills") == [("iso", "ISO"), ("ss", "SteadyShot"), ("loose", "Loose")]
+    assert rows("Still", "Movie")[0] == ("iso_s", "ISO") and rows("Movie", None)[0] == ("iso", "ISO")
+    assert rows("Movie", "Stills", True) == [("iso", "ISO"), ("iso_s", "ISO (stills)"), ("iso_m", "ISO (movie)"), ("ssm", "SteadyShot (Movie)"), ("loose", "Loose")]
+    listed = menu.listed("Movie", "Stills")
+    assert [e for e, _ in menu.entries(listed, in_menu=True)] == ["Shooting"]
+    assert all(x["row_menus"] == ["Movie"] for x in listed)
+
+
+def test_rows_titled_alike_under_one_heading_keep_their_names():
+    """editor/src/pages/menu.rs's test of the same name: a row alone on its place keeps its full name where another row
+    under the same heading would be titled alike; a label told apart by `#n` is drawn without it, in a title and a
+    heading, and told apart with it."""
+    doc = {"tabs": ["Shooting"], "camera": {"menus": MENUS[:2]}, "settings": [
+        s("rm", "Recording Media", ["Rec. Media Settings#1", "Recording Media"], [16, 0], row_menus=["Still", "Movie"], group="Media"),
+        s("rmm", "Recording Media (Movie)", ["Rec. Media Settings#1", "Recording Media#1"], [16, 1], row_menus=["Movie"], group="Media"),
+        s("adj", "SteadyShot Adjust", ["SteadyShot Adjust.#1"], [64], row_menus=["Still"], group="Media")]}
+    menu = mr.Menu(doc)
+    names = lambda m: {x["key"]: x["name"] for x in menu.listed(m, "Stills")}          # noqa: E731
+    assert names("Movie") == {"rm": "Recording Media", "rmm": "Recording Media (Movie)"}
+    assert names("Still") == {"rm": "Recording Media", "adj": "SteadyShot Adjust."}
+    lines = mr.lay_out([[x] for x in menu.listed("Still", "Stills")])
+    assert ("heading", "Rec. Media Settings", 0, ["Rec. Media Settings#1"]) in lines
+    assert mr.drawn("Fn Menu Settings#12") == "Fn Menu Settings" and mr.drawn("#1") == "#1" and mr.drawn("A#b") == "A#b"
+
+
+def test_a_copy_in_its_settings_row_sits_in_its_settings_tab_and_group():
+    """editor/src/pages/menu.rs's test of the same name: a copy shown in its setting's row takes the setting's tab and
+    group, whatever its own say (White Balance's fine-tune movie copy, its own place Shooting > Other settings)."""
+    doc = {"tabs": ["Shooting", "Exposure/Color"], "camera": {"menus": MENUS[:2]}, "settings": [
+        s("wb", "WB fine-tune", ["White Balance"], [22], row_menus=["Still", "Movie"], copies=["wb_m"], tab="Exposure/Color", group="White Balance"),
+        s("wb_m", "WB fine-tune (movie)", ["White Balance"], [22], copy_of="wb", copy_for=["Movie"], tab="Shooting", group="Other settings")]}
+    row = mr.Menu(doc).listed("Movie", "Stills")[0]
+    assert (row["key"], row["tab"], row["group"]) == ("wb_m", "Exposure/Color", "White Balance")
+    assert mr.camera_tab(row) == "Exposure/Color" and mr.camera_group(row) == "White Balance"
 
 
 def test_a_row_without_its_own_setting_is_a_heading_and_nothing_placed_is_the_flat_list():
@@ -137,6 +222,10 @@ def test_the_a1s_public_definition_has_every_setting_in_one_entry():
     keys = [x["key"] for _, settings in entries for x in settings]
     assert sorted(keys) == sorted(x["key"] for x in doc["settings"])
     assert [e for e, _ in entries][:len(doc["tabs"])] == [t for t in doc["tabs"] if t != "My Menu"]
+    # My Menu's places are its page's (App::entry_here), never under the entry for what the menus do not hold
+    records = set(doc["camera"]["my_menu"]["records"])
+    places = {x["key"] for x in doc["settings"] if x["area"] == "global" and x["id"] in records}
+    assert places and places <= {x["key"] for e, settings in entries if e == menu.my_menu for x in settings}
     for entry, settings in entries:
         held = {x["key"] for _, _, rows in menu.groups(entry, settings) for r in rows for x in r}
         assert held == {x["key"] for x in settings}, entry
@@ -145,13 +234,24 @@ def test_the_a1s_public_definition_has_every_setting_in_one_entry():
 GOLDEN = definitions.ROOT / "editor" / "tests" / "data" / "menu_ILCE-1M2_fw4.00.json"
 
 
-def golden_shape(doc, expert: bool = False) -> list:
-    """The Menu as editor/src/pages/menu.rs's the_default_menu_is_the_golden_one writes it: each entry the side bar
-    lists (My Menu's tab has the My Menu page there), its groups, a family's table by its keys, every other group's
-    lines (a row by its records' keys)."""
+def golden_shape(doc, expert: bool = False, in_menu: str | None = None, mode: str | None = None) -> list:
+    """The Menu as editor/src/pages/menu.rs's the_default_menu_is_the_golden_one writes it (golden_entries): each entry
+    the side bar lists (My Menu's tab has the My Menu page there), its groups, a family's table by its keys, every other
+    group's lines (a row by its records' keys); in one of the camera's menus (`in_menu`, the live settings saved in
+    `mode`), as that menu lists them, a row titled otherwise than its setting with that title last."""
     menu = mr.Menu(doc)
+    if in_menu is None:
+        entries = menu.entries(mr.shown(doc, expert))
+    else:
+        listed = [s for s in menu.listed(in_menu, mode, expert) if expert or (s.get("area") == "global" and not s.get("expert"))]
+        entries = menu.entries(listed, in_menu=True)
+
+    def row_line(x, rows):
+        lead = rows[x[1]][0]
+        line = ["row", [y["key"] for y in rows[x[1]]], x[2]]
+        return line + [lead["name"]] if in_menu is not None and lead["name"] != menu.by_key[lead["key"]]["name"] else line
     out = []
-    for entry, settings in menu.entries(mr.shown(doc, expert)):
+    for entry, settings in entries:
         if menu.has_my_menu and entry == menu.my_menu:
             continue
         groups = []
@@ -159,7 +259,7 @@ def golden_shape(doc, expert: bool = False) -> list:
             if fam:
                 groups.append({"group": name, "family": True, "keys": [x["key"] for x in rows[0]]})
                 continue
-            lines = [["heading", x[1], x[2]] if x[0] == "heading" else ["row", [y["key"] for y in rows[x[1]]], x[2]] if x[0] == "row"
+            lines = [["heading", x[1], x[2]] if x[0] == "heading" else row_line(x, rows) if x[0] == "row"
                      else list(x) for x in mr.lay_out(rows)]
             groups.append({"group": name, "family": False, "lines": lines})
         out.append({"entry": entry, "groups": groups})
@@ -172,14 +272,29 @@ def test_the_default_menu_is_the_editors():
     again (CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one, in editor/) and this one must then agree."""
     want = json.loads(GOLDEN.read_text(encoding="utf-8"))
     assert want["definition"] == paths.A1II
-    got = golden_shape(definitions.load_public(paths.A1II))
+    compare_with_golden(definitions.load_public(paths.A1II), want)
+
+
+def compare_with_golden(doc, want: dict) -> None:
+    """The kit's Menu of `doc` is the golden one `want`: without the camera's menus its entries; with them, each menu's
+    in the definition's order, laid out for the live settings saved in the golden's mode."""
     bless = ("cd editor && CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one, then look at the diff and make "
              "kit/camkit/menu_rows.py agree")
-    assert [e["entry"] for e in got] == [e["entry"] for e in want["entries"]], f"not the editor's entries (after a change on purpose: {bless})"
-    for g, w in zip(got, want["entries"], strict=True):
-        assert [x["group"] for x in g["groups"]] == [x["group"] for x in w["groups"]], f"{g['entry']} (after a change on purpose: {bless})"
-        for a, b in zip(g["groups"], w["groups"], strict=True):
-            assert a == b, f"{g['entry']} > {a['group']}: the kit's layout is not the editor's (after a change on purpose: {bless})"
+    menus = mr.menu_list(doc)
+    if "menus" not in want:
+        assert not menus, f"the definition lists the camera's menus, the golden file none (after a change on purpose: {bless})"
+        plans = [(None, None, want["entries"])]
+    else:
+        assert [m["name"] for m in menus] == [m["menu"] for m in want["menus"]], f"not the editor's menus (after a change on purpose: {bless})"
+        plans = [(m["menu"], m["mode"], m["entries"]) for m in want["menus"]]
+    for in_menu, mode, entries in plans:
+        got = golden_shape(doc, in_menu=in_menu, mode=mode)
+        where = f"{in_menu} > " if in_menu else ""
+        assert [e["entry"] for e in got] == [e["entry"] for e in entries], f"{where}not the editor's entries (after a change on purpose: {bless})"
+        for g, w in zip(got, entries, strict=True):
+            assert [x["group"] for x in g["groups"]] == [x["group"] for x in w["groups"]], f"{where}{g['entry']} (after a change on purpose: {bless})"
+            for a, b in zip(g["groups"], w["groups"], strict=True):
+                assert a == b, f"{where}{g['entry']} > {a['group']}: the kit's layout is not the editor's (after a change on purpose: {bless})"
 
 
 def test_a_definition_that_places_nothing_keeps_its_tabs_and_groups():

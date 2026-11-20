@@ -305,8 +305,7 @@ impl App {
                 self.back_to_compare_ui(ui);
                 ui.label("Editing:");
                 let others: Vec<usize> = (1..self.n_sections()).filter(|s| !self.schema.camera.is_dial(*s)).collect();
-                let dial: Vec<usize> = std::iter::once(0).chain(self.dial_sets()).collect();
-                for s in dial {
+                for s in self.editing_sets() {
                     ui.selectable_value(&mut self.target, s, self.schema.camera.target_name(s));
                 }
                 if self.prefs.expert && !others.is_empty() {
@@ -357,16 +356,8 @@ impl App {
                     self.export_csv(ui.ctx());
                 }
                 ui.separator();
+                // which settings are compared is the Menu's on the left (`compare_side_bar`), as in Edit
                 named(ui.add(egui::TextEdit::singleline(&mut self.search).id(egui::Id::new(SEARCH_ID)).hint_text(RichText::new("🔍 Search settings or values").color(tone::weak(ui.visuals()))).desired_width(220.0)), "Search settings or values");
-                let r = egui::ComboBox::from_id_salt("compare_tab")
-                    .selected_text(self.compare_tab.clone().unwrap_or_else(|| "All tabs".into()))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.compare_tab, None, "All tabs");
-                        for t in self.schema.tabs.clone() {
-                            ui.selectable_value(&mut self.compare_tab, Some(t.clone()), t);
-                        }
-                    });
-                named(r.response, "Tab compared");
                 if ui.checkbox(&mut self.matrix_only_diff, "Only rows that differ").changed() {
                     self.cmp_kept = None;
                     self.prefs.matrix_only_diff = self.matrix_only_diff;
@@ -411,6 +402,12 @@ impl App {
         if let Some(model) = self.foreign_a() {
             ui.label(RichText::new(format!("⚠ {}", self.foreign_words(&model))).color(tone::bad(ui.visuals())));
         }
+    }
+
+    /// The sets the "Editing:" row offers as buttons, the window's: `editing_sets_in` for the set edited and the menu
+    /// shown, as the page's row has them.
+    pub(crate) fn editing_sets(&self) -> Vec<usize> {
+        self.editing_sets_in(self.target, self.menu_shown().as_deref())
     }
 
     /// The File menu: opening (and the recent files), saving, exporting, the kept copies, the edit history, closing.

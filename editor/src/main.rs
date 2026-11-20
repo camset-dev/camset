@@ -146,6 +146,9 @@ struct App {
     review_rev: Option<u64>,
     /// Settings a copy left alone, by why (`copy_row`, `Left`); `apply` says how many.
     copy_skipped: std::cell::Cell<Left>,
+    /// The keys of the rows a copy over rows goes over (`copying_over`), until `apply`: a fraction's part whose other part
+    /// is not among them is left (`copy_row`).
+    copy_shown: std::cell::RefCell<Option<std::collections::HashSet<String>>>,
     /// The actions `apply` takes next are a copy of several rows at once (`pin_families`), from another file (`Some(None)`)
     /// or from a set of file A (`Some(Some(set))`: a memory recalled or registered): only then does a Set to the value a
     /// record holds pass the lock guard, and a refusal says what to do about the copy.
@@ -191,8 +194,14 @@ struct App {
     target: usize,
     mode: Mode,
     view: View,
-    /// Compare mode: show only this tab (None = all tabs).
-    compare_tab: Option<String>,
+    /// Compare mode: the Menu's entry shown, by its key (All settings, Main, My Menu, or a tab by its name), so a tab named
+    /// as the Main page or My Menu is never taken for them.
+    compare_entry: BarKey,
+    /// The camera's menu the window shows, as last picked (`set_menu`, a jump) for a set and an opening of the file;
+    /// None, or picked for another, the one the set edited opens on (`menu_shown`).
+    menu: Option<MenuChoice>,
+    /// What is worked out per camera menu (`listed`, `rank_in`), kept until what it was worked out for changes.
+    menus_cache: std::cell::RefCell<MenuCache>,
     /// Main page: movie tiles instead of stills, and the tile last clicked.
     main_set: usize,
     main_focus: Option<String>,
@@ -337,6 +346,7 @@ impl App {
             close_ok: false,
             review_rev: None,
             copy_skipped: Default::default(),
+            copy_shown: Default::default(),
             rows_copied: Default::default(),
             rows_set: Default::default(),
             limits_moved: Default::default(),
@@ -360,7 +370,9 @@ impl App {
             target: 0,
             mode: Mode::Edit,
             view: View::Tab(first_tab),
-            compare_tab: None,
+            compare_entry: BarKey::All,
+            menu: None,
+            menus_cache: Default::default(),
             main_set: 0,
             main_focus: None,
             group: None,
@@ -620,6 +632,8 @@ impl eframe::App for App {
             if undo { self.undo(); }
             if redo { self.redo(); }
         }
+        // Up and Down through the Menu's own entries, before the columns' keys (`bar_nav`)
+        self.bar_nav(ctx);
         self.keyboard_nav(ctx);
         // compare view: F3 / Shift+F3 (also Alt+Down / Alt+Up) step through the differences
         if self.mode == Mode::Compare && !ctx.wants_keyboard_input() {
@@ -671,6 +685,8 @@ impl eframe::App for App {
         // a jump to a setting names its tab: the page that shows that tab's settings is the one shown (`shown_view`)
         let view = std::mem::replace(&mut self.view, View::Main);
         self.view = self.shown_view(view);
+        // the row a jump chose, in the camera's menu that shows it; another set or file, its own menu (`follow_selection`)
+        self.follow_selection();
         let session = (self.mode == Mode::Compare, self.target, self.view.clone());
         if closing || (self.prefs.compare_mode, self.prefs.target) != (session.0, session.1)
             || self.prefs.view.as_deref() != Some(session.2.key())
@@ -724,8 +740,12 @@ impl eframe::App for App {
                 });
             });
         });
-        if self.mode == Mode::Edit && self.doc.is_some() {
-            egui::SidePanel::left("tabs").resizable(true).default_width(190.0).show(ctx, |ui| self.side_bar(ui));
+        // the Menu on the left, Edit's and Compare's (not beside Compare's record map)
+        if self.doc.is_some() && (self.mode == Mode::Edit || !self.compare_records) {
+            egui::SidePanel::left("tabs").resizable(true).default_width(190.0).show(ctx, |ui| match self.mode {
+                Mode::Edit => self.side_bar(ui),
+                Mode::Compare => self.compare_side_bar(ui),
+            });
         }
         if self.mode == Mode::Compare && !self.compare_records && self.doc.is_some() && self.cols.len() >= 2 {
             egui::SidePanel::right("minimap").resizable(false).exact_width(20.0).show_separator_line(false)

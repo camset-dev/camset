@@ -205,6 +205,10 @@ select option { background: var(--panel); color: var(--text); }
 #file strong { white-space: nowrap; }
 #side { border-right: 1px solid var(--sep); overflow: auto; padding: 8px; }
 #side .menu-title { margin-bottom: 6px; }
+/* the camera's menus to pick one of, heading the Menu column: its words, then a button per menu */
+#side .menus { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--sep); }
+#side .menus-label { flex: 1 1 100%; color: var(--weak); }
+#side .menus button .badge { margin-left: 4px; }
 .mi { display: flex; align-items: center; gap: 6px; margin: 5px 0; }
 .mi .mark { width: 6px; height: 20px; border-radius: 2px; flex: none; }
 .mi button { white-space: pre-wrap; }
@@ -288,10 +292,13 @@ table.egrid { border-collapse: collapse; }
    that differs from the baseline and for an edited one, the copy arrows between the columns, the
    three-way tags), a cell's or a column header's menu, and the change map at the right. The
    window's colours; where egui keeps its dark-theme colour on light, a darker counterpart */
-/* the window in Compare mode: no Menu column, no Editing row; the top row keeps the mode switch and
-   (as a phone has no Cmd/Ctrl+Z) Undo and Redo, the files are on the Compare bar below it */
-#app.compare #side, #app.compare #bar2, #app.compare #memnote { display: none; }
-#app.compare #central { grid-column: 1 / -1; padding-right: 30px; }
+/* the window in Compare mode: the Menu column as Edit has it (its entries filter the rows), no Editing row; the top
+   row keeps the mode switch and (as a phone has no Cmd/Ctrl+Z) Undo and Redo, the files are on the Compare bar below it */
+#app.compare #bar2, #app.compare #memnote { display: none; }
+#app.compare #central { padding-right: 30px; }
+/* Compare's record map: no Menu column, as in the window */
+#app.cmp-records #side { display: none; }
+#app.cmp-records #central { grid-column: 1 / -1; }
 #app.compare #bar1 > :not(#mode, #b-undo, #b-redo, #b-more, .right, .vsep) { display: none; }
 #app.compare #bar1 > .vsep:not(#mode + .vsep) { display: none; }
 .cmp-src-a { color: var(--strong); } .cmp-src-b { color: var(--file-b); } .cmp-src-base { color: var(--cmp-base); }
@@ -532,6 +539,9 @@ td.mm-do button + button { margin-left: 4px; }
   .fam .scrollx :is(td, th):first-child { min-width: 7rem; max-width: 10rem; white-space: normal; overflow-wrap: anywhere; }
   #side .menu-title, #side hr { display: none; }
   #side .mi { margin: 0; flex: none; }
+  /* the camera's menus first in the strip, on one line */
+  #side .menus { flex: none; flex-wrap: nowrap; margin: 0 6px 0 0; padding: 0 6px 0 0; border-bottom: 0; border-right: 1px solid var(--sep); }
+  #side .menus-label { flex: none; }
   #side .mi button { white-space: pre; }
   #side .foot { flex: none; padding: 0 8px; }
   #side .foot > div { display: inline; margin-right: 8px; }
@@ -657,7 +667,6 @@ td.mm-do button + button { margin-left: 4px; }
           <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l4.5 4.5"/></svg>
           <input id="cmp-q" type="search" placeholder="Search settings or values" aria-label="Search settings or values" autocomplete="off">
         </span>
-        <span class="combo narrow"><select id="cmp-tab" aria-label="Tab shown"></select></span>
         <label class="check"><input id="cmp-only" type="checkbox"> Only rows that differ</label>
         <label class="check"><input id="cmp-raw" type="checkbox"> Show raw values</label>
         <label class="check" title="Every record in file order, mapped or not, so unmapped records can be compared next to their neighbours"><input id="cmp-records" type="checkbox"> Record map</label>

@@ -108,6 +108,14 @@ impl App {
         }
     }
 
+    /// All of My Menu's places back as the file was opened, in one step (`Action::Revert` of each), and its words: the
+    /// Revert of a place outside Expert mode, which never puts back one place alone (`cell_revert`).
+    pub(crate) fn mymenu_revert_all(&self) -> (String, Vec<Action>) {
+        let name = self.schema.camera.text.my_menu_name();
+        let acts = self.schema.settings.iter().filter(|s| self.is_mymenu_place(s)).map(|s| Action::Revert(0, s.slot())).collect();
+        (format!("Revert {name} (all its items, as the file was opened)"), acts)
+    }
+
     /// Edits to My Menu, as its Menu entry counts them: the places changed and the settings of its own tab changed, in
     /// the live settings.
     pub(crate) fn mymenu_edits(&self) -> usize {
@@ -410,6 +418,9 @@ impl App {
         let mut put: Option<(usize, usize, i64)> = None;
         let items = self.mymenu_items();
         let packed = self.schema.camera.my_menu.as_ref().is_some_and(|m| m.packed);
+        // the place a jump chose (Compare's Open in Edit on a place): its page and number, marked and brought into view once
+        let chosen = self.item_key.as_ref().and_then(|k| self.schema.settings.iter().find(|s| &s.key == k && self.is_mymenu_place(s)))
+            .and_then(|s| Some((self.schema.camera.my_menu.as_ref()?.records.iter().position(|&r| r == s.id)?, usize::from(s.index?))));
         match self.mymenu_places() {
             None => { ui.label(self.mymenu_missing()); }
             Some(pages) => {
@@ -425,7 +436,16 @@ impl App {
                             let ink = if place.edited { tone::edit(ui.visuals()) } else { ui.visuals().text_color() };
                             let mark = if place.edited { format!("{EDIT_MARK} ") } else { String::new() };
                             let was = if place.edited { format!("\nWas: {}", place.was) } else { String::new() };
-                            ui.label(RichText::new((i + 1).to_string()).color(weak));
+                            if chosen == Some((p, i)) {
+                                let r = ui.label(RichText::new(format!("▶ {}", i + 1)).strong()).on_hover_text("The place opened from Compare");
+                                let key = egui::Id::new(("mymenu_place_shown", p, i));
+                                if ui.data(|d| d.get_temp::<bool>(key)).is_none() {
+                                    r.scroll_to_me(Some(egui::Align::Center));
+                                    ui.data_mut(|d| d.insert_temp(key, true));
+                                }
+                            } else {
+                                ui.label(RichText::new((i + 1).to_string()).color(weak));
+                            }
                             if place.empty {
                                 ui.label(RichText::new(format!("{mark}{}", place.name)).italics().color(if place.edited { ink } else { weak })).on_hover_text(format!("An empty place{was}"));
                                 ui.label("");
@@ -476,7 +496,7 @@ impl App {
         }
         // the settings of My Menu's own tab, by group, as the camera lists them after its pages
         let groups = self.mymenu_groups();
-        let mut pick: Option<(String, String)> = None;
+        let mut pick: Option<(String, Setting)> = None;
         if !groups.is_empty() {
             ui.add_space(12.0);
             ui.separator();
@@ -498,7 +518,7 @@ impl App {
                             r.scroll_to_me(Some(egui::Align::Center));
                             ui.data_mut(|d| d.insert_temp(scrolled, key));
                         }
-                        if r.clicked() { pick = Some((group.clone(), s.name.clone())); }
+                        if r.clicked() { pick = Some((group.clone(), s.clone())); }
                         // a setting kept in several records changes in all of them, as in its tab (`apply`)
                         self.compact_editor_in(ui, 0, s, editable, &mut actions);
                         if edited && ui.small_button("Revert").clicked() {
@@ -524,8 +544,8 @@ impl App {
                 Err(why) => self.status = why,
             }
         }
-        if let Some((g, i)) = pick {
-            (self.group, self.item) = (Some(g), Some(i));
+        if let Some((g, s)) = pick {
+            self.select(None, Some(g), Some((&s.name, &s.key)));
         }
         if let Some(s) = go {
             self.open_in_menu(&s);

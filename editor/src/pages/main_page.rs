@@ -98,19 +98,32 @@ impl App {
         });
     }
 
+    /// The tile set the Main page shows (an index into `camera.main_tiles`), and whether the page offers its own buttons
+    /// to pick one: the set the camera's menu shown names (`menu_tile_set`), and no buttons, where the definition ties
+    /// one to it; else the one last picked with those buttons (`main_set`).
+    pub(crate) fn main_tile_set(&self) -> (usize, bool) {
+        match self.menu_shown().and_then(|m| self.menu_tile_set(&m)) {
+            Some(i) => (i, false),
+            None => (self.main_set, true),
+        }
+    }
+
     pub(crate) fn main_view(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
         let mut actions = Vec::new();
+        let (at, buttons) = self.main_tile_set();
         ui.horizontal(|ui| {
             ui.heading(self.schema.camera.text.main_title());
             ui.add_space(12.0);
-            let names: Vec<String> = self.schema.camera.main_tiles.as_ref().map(|t| t.0.iter().map(|s| s.name.clone()).collect()).unwrap_or_default();
+            let names: Vec<String> = self.schema.camera.main_tiles.as_ref().filter(|_| buttons).map(|t| t.0.iter().map(|s| s.name.clone()).collect()).unwrap_or_default();
             for (i, n) in names.iter().enumerate() {
                 ui.selectable_value(&mut self.main_set, i, n);
             }
         });
         ui.add_space(6.0);
+        // a button clicked just now picks the set at once
+        let at = if buttons { self.main_set } else { at };
         let tiles: Vec<Tile> = match &self.schema.camera.main_tiles {
-            Some(t) => t.0.get(self.main_set).or_else(|| t.0.first()).map(|s| s.tiles.clone()).unwrap_or_default(),
+            Some(t) => t.0.get(at).or_else(|| t.0.first()).map(|s| s.tiles.clone()).unwrap_or_default(),
             None => Vec::new(),
         };
         if tiles.is_empty() {
@@ -126,7 +139,7 @@ impl App {
         // tiles
         let mut pick = None;
         let editable_doc = self.editable();
-        egui::Grid::new(("main_tiles", self.main_set)).spacing([6.0, 6.0]).show(ui, |ui| {
+        egui::Grid::new(("main_tiles", at)).spacing([6.0, 6.0]).show(ui, |ui| {
             for (n, tile) in tiles.iter().enumerate() {
                 let caption = tile.caption.as_str();
                 let text = self.tile_text(doc, target, tile);
@@ -229,7 +242,7 @@ impl App {
         ui.label(RichText::new("All Main settings").strong());
         ui.add_space(4.0);
         let editable = self.editable();
-        egui::Grid::new(("main_rows", self.main_set, target)).striped(true).num_columns(3).spacing([18.0, 4.0]).show(ui, |ui| {
+        egui::Grid::new(("main_rows", at, target)).striped(true).num_columns(3).spacing([18.0, 4.0]).show(ui, |ui| {
             for tile in tiles.iter() {
                 let caption = tile.caption.as_str();
                 for s in self.tile_settings(tile) {
@@ -246,8 +259,9 @@ impl App {
                     if self.main_focus.as_deref() == Some(caption) { name = name.strong().underline(); }
                     ui.label(name).on_hover_text(self.where_kept(&s));
                     self.compact_editor(ui, &s, editable, &mut actions);
+                    // a fraction tile's part goes back with its other part (`revert_actions`)
                     if self.changed(&s) && ui.small_button("Revert").clicked() {
-                        actions.push(Action::Revert(target, s.slot()));
+                        actions.extend(self.revert_actions(std::slice::from_ref(&s), target));
                     } else {
                         ui.label("");
                     }

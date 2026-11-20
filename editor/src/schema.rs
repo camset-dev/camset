@@ -44,6 +44,19 @@ pub struct Setting {
     /// row: listed after its group's other rows, under the mode's name (`menu_rows::Line::Mode`).
     #[serde(default)]
     pub row_mode: Option<String>,
+    /// The camera's menus (`camera.menus`, by name) whose rows hold this setting, read only where the definition lists
+    /// its menus: each shows it, the others do not. Empty where the definition does not say (`Camera::menus_of` then
+    /// takes `row_mode`'s menu, or the first). A copy (`copy_of`) carries none: it follows its setting.
+    #[serde(default)]
+    pub row_menus: Vec<String>,
+    /// Where the setting sits in one menu, by the menu's name, where it sits other than `row`, `row_at`, `row_tab`,
+    /// `row_group` and `under_option` say (`place_in`): each field it gives is read before the top-level one.
+    #[serde(default)]
+    pub row_places: std::collections::BTreeMap<String, RowPlace>,
+    /// Not in the definition: the menu this copy of the setting was laid out for (`in_menu`), its place there in
+    /// `row`… and, as the camera draws its row there, its title in `name`; None for the definition's own setting.
+    #[serde(skip)]
+    pub shown_in: Option<String>,
     /// Known (file value, label) pairs. Only these are offered for editing by default.
     pub values: Vec<(i64, String)>,
     /// The same values as the camera lays them out when it nests them (`option_tree` in the definition): its main
@@ -181,6 +194,40 @@ pub struct Setting {
     /// has one for that value (`option_help_from_file`).
     #[serde(default)]
     pub option_help: Vec<(i64, String)>,
+}
+
+/// Where a setting sits in one of the camera's menus (`Setting::row_places`), where that is not where its top-level
+/// `row`, `row_at`, `row_tab`, `row_group` and `under_option` say: each field given here is read in their place for
+/// that menu, each left out is the top-level one. `under_option` given as null says the place there has no option
+/// above it (`Some(None)`), where the setting's own place is under one.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct RowPlace {
+    pub row: Option<Vec<String>>,
+    pub row_at: Option<Vec<i64>>,
+    pub row_tab: Option<String>,
+    pub row_group: Option<String>,
+    #[serde(deserialize_with = "given")]
+    pub under_option: Option<Option<String>>,
+}
+
+/// A field that may be given as null, told from one left out (with `#[serde(default)]`, None): given, it is `Some`,
+/// null or not.
+fn given<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Option<T>, D::Error> {
+    T::deserialize(d).map(Some)
+}
+
+/// One of the camera's menus (`Camera::menus`): one position of its switch of shooting modes, whose menu shows other
+/// rows. `name` is its button's label and the name settings give it (`Setting::row_menus`); `modes` the shooting modes
+/// it is the menu of, as `memory_sets.modes` and `live_mode` name them; `main_tiles` the tile set of `main_tiles` the
+/// Main page shows in it; `hover` plain words for its button.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct MenuDef {
+    pub name: String,
+    pub modes: Vec<String>,
+    pub main_tiles: Option<String>,
+    pub hover: Option<String>,
 }
 
 /// What a switch keeps apart (`Setting::keeps_apart`): the family's setting (`setting`, a key; one that lists its
@@ -598,9 +645,41 @@ impl Setting {
         self.page_prefix().is_some_and(|n| own.row == self.row[..n - 1] && own.row_at == self.row_at[..n - 1])
     }
 
-    /// On the same row of the camera's menu as `o`, in the same mode's menu (both unplaced counts as the same).
+    /// On the same row of the camera's menu as `o`, in the same mode's menu (both unplaced counts as the same). Which of
+    /// the camera's menus name the records (`row_menus`, `row_places`) is compared only inside one menu, where both are
+    /// laid out (`shown_in`, `place_in`): rows laid out for two menus are two rows. So what an edit writes together
+    /// (`twin_of`, `App::apply`) never depends on them.
     pub fn same_row(&self, o: &Setting) -> bool {
         self.row == o.row && self.row_at == o.row_at && self.row_mode == o.row_mode
+            && (self.shown_in.is_none() || o.shown_in.is_none() || (self.shown_in == o.shown_in && self.row_menus == o.row_menus && self.row_places == o.row_places))
+    }
+
+    /// Whether the definition places the setting on a row of any of the camera's menus: its own `row`, or one of
+    /// `row_places`.
+    pub fn placed_anywhere(&self) -> bool {
+        self.placed() || self.row_places.keys().any(|m| self.place_in(m).placed())
+    }
+
+    /// The setting as menu `menu` lays it out (`row_places[menu]` before the top-level place, field by field), with
+    /// no other mode's menu named (`row_mode`) and that menu alone in `row_menus`, marked as laid out for it
+    /// (`shown_in`). Its name, key and record stay the definition's. Laid out already for `menu`: itself.
+    pub fn place_in(&self, menu: &str) -> Setting {
+        let mut s = self.clone();
+        if self.shown_in.as_deref() == Some(menu) {
+            return s;
+        }
+        if let Some(p) = self.row_places.get(menu) {
+            if let Some(r) = &p.row { s.row = r.clone(); }
+            if let Some(r) = &p.row_at { s.row_at = r.clone(); }
+            if p.row_tab.is_some() { s.row_tab = p.row_tab.clone(); }
+            if p.row_group.is_some() { s.row_group = p.row_group.clone(); }
+            if let Some(u) = &p.under_option { s.under_option = u.clone(); }
+        }
+        s.row_mode = None;
+        s.row_menus = vec![menu.to_string()];
+        s.row_places.clear();
+        s.shown_in = Some(menu.to_string());
+        s
     }
 
     /// In the same place as `o`: the same row and the same option, so the two can be one setting kept in several
@@ -948,6 +1027,10 @@ pub struct Camera {
     /// The exposure page: which records hold each side of the exposure triangle and who sets it
     /// in each exposure mode. None = no exposure page.
     pub exposure: Option<Exposure>,
+    /// The camera's menus, one per position of its switch of shooting modes, in the switch's order (`MenuDef`): the
+    /// Menu shows one at a time where there are two or more (`menu_list`). Empty: one menu, the Stills rows with the
+    /// other modes' after them (`Setting::row_mode`).
+    pub menus: Vec<MenuDef>,
 }
 
 /// The exposure page's definition. Keys are setting keys from the schema; an empty key means the
@@ -1080,6 +1163,9 @@ pub struct CameraText {
     pub my_menu_name: Option<String>,
     /// The Menu's entry for the settings the camera's menus do not hold (the editor's "Not in the menus" without it).
     pub off_menu_name: Option<String>,
+    /// The words before the buttons that pick one of the camera's menus (`Camera::menus`), and their hover.
+    pub menus_label: Option<String>,
+    pub menus_hover: Option<String>,
 }
 
 impl CameraText {
@@ -1096,6 +1182,17 @@ impl CameraText {
     /// The Menu's entry for the settings the camera's menus do not hold ("Not in the menus").
     pub fn off_menu_name(&self) -> &str {
         self.off_menu_name.as_deref().filter(|t| !t.is_empty()).unwrap_or("Not in the menus")
+    }
+
+    /// The words before the buttons that pick one of the camera's menus ("Camera menu:").
+    pub fn menus_label(&self) -> &str {
+        self.menus_label.as_deref().filter(|t| !t.is_empty()).unwrap_or("Camera menu:")
+    }
+
+    /// The hover of the buttons that pick one of the camera's menus, window and page alike.
+    pub fn menus_hover(&self) -> &str {
+        self.menus_hover.as_deref().filter(|t| !t.is_empty())
+            .unwrap_or("The camera's menu shows other settings in each shooting mode. Pick one to see the menu as the camera shows it. This changes nothing in the file.")
     }
 }
 
@@ -1380,6 +1477,50 @@ impl Camera {
             }
         }
         v
+    }
+
+    /// The camera's menus the Menu shows one at a time (`menus`): all of them where the definition lists two or more,
+    /// none otherwise (one menu: no choice of menu, the rows as before menus).
+    pub fn menu_list(&self) -> &[MenuDef] {
+        if self.menus.len() >= 2 { &self.menus } else { &[] }
+    }
+
+    /// The menu of `menu_list` named `name`.
+    pub fn menu_named(&self, name: &str) -> Option<&MenuDef> {
+        self.menu_list().iter().find(|m| m.name == name)
+    }
+
+    /// The menu of `menu_list` whose shooting modes hold `mode` (the first, should two).
+    pub fn menu_of_mode(&self, mode: &str) -> Option<&MenuDef> {
+        self.menu_list().iter().find(|m| m.modes.iter().any(|x| x == mode))
+    }
+
+    /// The menus of `menu_list` whose rows hold setting `s` (in their order): its `row_menus` that name one, else
+    /// `row_mode`'s menu where it names one, else the first menu; and those its `row_places` place it in. None for a
+    /// setting placed on no row, or without menus. A copy follows its setting (`App::menus_of`), not this.
+    pub fn menus_of(&self, s: &Setting) -> Vec<&str> {
+        let list = self.menu_list();
+        if list.is_empty() || !s.placed_anywhere() {
+            return Vec::new();
+        }
+        let named: Vec<&str> = s.row_menus.iter().filter_map(|n| self.menu_named(n)).map(|m| m.name.as_str()).collect();
+        let mut out: Vec<&str> = if !named.is_empty() {
+            named
+        } else if !s.placed() {
+            Vec::new()
+        } else if let Some(m) = s.row_mode.as_deref().and_then(|m| self.menu_named(m)) {
+            vec![m.name.as_str()]
+        } else {
+            vec![list[0].name.as_str()]
+        };
+        for (m, _) in s.row_places.iter().filter(|(m, _)| s.place_in(m).placed()) {
+            if let Some(d) = self.menu_named(m) {
+                if !out.contains(&d.name.as_str()) {
+                    out.push(d.name.as_str());
+                }
+            }
+        }
+        list.iter().map(|m| m.name.as_str()).filter(|n| out.contains(n)).collect()
     }
 
     /// The first two shooting modes' names, for the switch that adds the second's memories to Compare's columns;
@@ -2402,6 +2543,49 @@ mod tests {
         assert!(!d.is_sample(&later), "another save time: a camera's own file");
         assert!(!d.is_sample(&CamSet::parse(&retitled(&sample_bytes(), b"ILCE-0X0", [4, 0, 0]), &block).unwrap()), "another model");
         let _ = (std::fs::remove_dir_all(ship), std::fs::remove_dir_all(user));
+    }
+
+    /// The camera's menus (`camera.menus`): which hold a setting's row, the setting as a menu lays it out field by field
+    /// (`place_in`, a null `under_option` too), records of one name on one row, and one menu or none: no choice.
+    #[test]
+    fn a_setting_in_the_cameras_menus() {
+        let s = |more: serde_json::Value| -> Setting {
+            let mut v = serde_json::json!({ "key": "global:0x0001", "area": "global", "id": 1, "name": "Audio", "tab": "Shooting", "group": "Audio",
+                "order": 1, "in_sets": false, "scalar": true, "values": [], "row": ["Audio"], "row_at": [5] });
+            v.as_object_mut().unwrap().extend(more.as_object().unwrap().clone());
+            serde_json::from_value(v).unwrap()
+        };
+        let menus = serde_json::json!([{ "name": "Still", "modes": ["Stills"] }, { "name": "Movie", "modes": ["Movie"] }, { "name": "S&Q", "modes": ["S&Q", "Time-lapse"] }]);
+        let cam: Camera = serde_json::from_value(serde_json::json!({ "menus": menus })).unwrap();
+        assert_eq!(cam.menu_list().len(), 3);
+        assert_eq!(cam.menu_of_mode("Time-lapse").map(|m| m.name.as_str()), Some("S&Q"));
+        // the menus that hold its row: its row_menus; without them row_mode's menu, else the first; and its row_places'
+        let named = s(serde_json::json!({ "row_menus": ["Movie", "S&Q", "Gone"] }));
+        assert_eq!(cam.menus_of(&named), ["Movie", "S&Q"], "a name of no menu left out");
+        let audio = s(serde_json::json!({ "row_mode": "Movie", "row_places": { "S&Q": { "row": ["Audio Settings", "Audio"], "row_at": [3, 0], "row_group": "Sound" } } }));
+        assert_eq!(cam.menus_of(&audio), ["Movie", "S&Q"]);
+        assert_eq!(cam.menus_of(&s(serde_json::json!({}))), ["Still"]);
+        assert!(cam.menus_of(&s(serde_json::json!({ "row": [], "row_at": [] }))).is_empty(), "placed nowhere");
+        // as a menu lays it out: its place there field by field, no other mode's menu named, that menu alone
+        let p = audio.place_in("S&Q");
+        assert_eq!((p.row.clone(), p.row_at.clone(), p.row_group.as_deref(), p.row_tab.as_deref(), p.row_mode.as_deref()), (vec!["Audio Settings".to_string(), "Audio".into()], vec![3, 0], Some("Sound"), None, None));
+        assert_eq!((p.row_menus.clone(), p.shown_in.as_deref(), p.name.as_str(), p.key.as_str()), (vec!["S&Q".to_string()], Some("S&Q"), "Audio", "global:0x0001"));
+        assert_eq!(p.place_in("S&Q").row, p.row, "laid out once");
+        let q = audio.place_in("Movie");
+        assert_eq!((q.row.clone(), q.row_mode.as_deref()), (vec!["Audio".to_string()], None));
+        // a menu's place with no option above it (`"under_option": null`) where its own place is under one; a field left
+        // out keeps the top-level one (page file, finding C1)
+        let pp = s(serde_json::json!({ "under_option": "PP2", "row_places": { "S&Q": { "row": ["Black Level"], "row_at": [7], "under_option": null }, "Movie": { "row": ["Black Level"], "row_at": [7] } } }));
+        assert_eq!((pp.place_in("S&Q").under_option, pp.place_in("Movie").under_option.as_deref(), pp.place_in("Still").under_option.as_deref()), (None, Some("PP2"), Some("PP2")));
+        // two records of one name on one row are one row, whichever menus name them (what an edit writes together does
+        // not depend on the menus); laid out for two menus, two rows
+        let (a, b) = (s(serde_json::json!({ "row_menus": ["Still"] })), s(serde_json::json!({ "key": "global:0x0002", "id": 2, "row_menus": ["Movie"] })));
+        assert!(a.same_row(&b) && a.links_with(&b));
+        assert!(!a.place_in("Still").same_row(&b.place_in("Movie")) && a.place_in("Still").same_row(&b.place_in("Still")));
+        // one menu, or none: no choice of menu
+        let one: Camera = serde_json::from_value(serde_json::json!({ "menus": [{ "name": "Still", "modes": ["Stills"] }] })).unwrap();
+        assert!(one.menu_list().is_empty() && one.menus_of(&a).is_empty() && Camera::default().menu_list().is_empty());
+        assert_eq!((one.text.menus_label(), one.text.menus_hover().ends_with("This changes nothing in the file.")), ("Camera menu:", true));
     }
 
     /// `not_offered`: a value the camera's menus never offer is left out of the choice whatever "Offer values…" says,

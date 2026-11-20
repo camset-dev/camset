@@ -300,10 +300,8 @@ impl App {
         }
         ui.data_mut(|d| d.insert_temp(egui::Id::new("rm_expanded"), expanded));
         if let Some(s) = jump {
-            self.view = self.view_of(&s);
-            self.group = Some(self.shown_group_of(&s));
-            self.item = Some(s.name.clone());
-            self.focus = Focus::Items;
+            // as every jump: the camera's menu, page, group and row that show it (`go_to`)
+            self.go_to(&s);
         }
         actions
     }

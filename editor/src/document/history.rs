@@ -168,7 +168,7 @@ impl App {
     /// The History window's lines for undo step `i` (`current`: the file as edited now): every setting the step
     /// changed (`edit_lines`), with its value before and after, a memory set's named before it. Worked out once per step
     /// and kept (`HistKey`).
-    fn history_lines(&self, i: usize, current: &CamSet) -> std::rc::Rc<Vec<EditLine>> {
+    pub(crate) fn history_lines(&self, i: usize, current: &CamSet) -> std::rc::Rc<Vec<EditLine>> {
         let before = &self.undo[i];
         let after: &CamSet = if i + 1 < self.undo.len() { &self.undo[i + 1] } else { current };
         // the last step's "after" is the file as edited now, which a drag joined to that step changes in place (the same
@@ -296,6 +296,24 @@ impl App {
                     out.push(record_line(None));
                 }
             }
+        }
+        // a fraction tile's two parts changed together are one line (`fraction_of`), whose Revert, here and in History,
+        // puts back both, so no list offers a pair of values no camera wrote
+        let mut i = 0;
+        while i < out.len() {
+            let parts = out[i].key.as_deref().and_then(|k| self.index_of_key(k)).and_then(|at| self.fraction_of(&self.schema.settings[at]));
+            if let Some((n, d, _)) = parts {
+                let si = out[i].si;
+                let other = if out[i].slots.contains(&n.slot()) { d.slot() } else { n.slot() };
+                if let Some(j) = (0..out.len()).find(|&j| j != i && out[j].si == si && out[j].slots.contains(&other)) {
+                    let o = out.remove(j);
+                    let i = if j < i { i - 1 } else { i };
+                    let l = &mut out[i];
+                    l.slots.extend(o.slots);
+                    (l.name, l.before, l.after) = (format!("{} and {}", l.name, o.name), format!("{} / {}", l.before, o.before), format!("{} / {}", l.after, o.after));
+                }
+            }
+            i += 1;
         }
         out
     }

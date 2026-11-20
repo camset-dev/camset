@@ -4,9 +4,11 @@ folding, where the Menu shows a tab (`menuPlace`, the editor's routes) and how a
 options (`treeAt`, `treePick`, `treeControls`), Compare's "Open in Edit" and its back button, whose words a help text
 is, the My Menu picker, numbers put on their steps, the keyboard (its shortcuts' guard, the focus kept through a
 change, Enter and Space on what acts as a button, the menus' keys, Compare's column headers as one Tab stop the arrows
-move along, greyed-out toolbar buttons that stay reachable and say why), and how the page holds up when the editor
-refuses a page, ends the session or answers out of order. Two tests need no node: every element the script asks
-for by id is in the page, and only the status bar, the toast and the editor-closed notice speak up by themselves.
+move along, greyed-out toolbar buttons that stay reachable and say why), the camera's menus heading the Menu column
+(its buttons, `aria-pressed`, what a click asks for, links into another menu) and that column in Compare, and how the
+page holds up when the editor refuses a page, ends the session or answers out of order. Three tests need no node:
+every element the script asks for by id is in the page, only the status bar, the toast and the editor-closed notice
+speak up by themselves, and the Compare bar has no tab list.
 
 Run: .venv/bin/python -m pytest kit/tests/test_page_script.py -q
 kit/tests/page_harness.js loads the whole script as the browser does, in a small made-up DOM with no editor behind
@@ -38,6 +40,7 @@ act = async (what, body) => { sent.push([what, body]); return { message: "done" 
 const pageRender = render;
 render = () => {};
 refresh = async () => {};
+const pageDrawSide = drawSide;
 drawSide = () => {};
 const row = (key, name, extra = {}) => ({ key, name, kind: "shown", label: "one", editable: true, ...extra });
 const names = (box) => box.querySelectorAll(".row > .name").map((n) => n.textContent);
@@ -277,6 +280,23 @@ def test_open_in_edit_opens_the_section_that_keeps_the_setting(tmp_path):
 
 
 @needs_node
+def test_open_in_edit_opens_another_menus_memory_set(tmp_path):
+    """cmpOpenInEdit from a column of another camera menu's memory set (one the Editing row of the menu shown does not
+    offer): Edit on that set, as the window opens it, and the Editing row the editor then answers (which keeps the set
+    edited) keeps it."""
+    got = run(tmp_path, COMPARE + """
+(async () => {
+  state.targets = [[0, "Live", true], [1, "Memory 1", true]];
+  cmp.last = { cols: [{ editable: true, section: 0 }, { editable: true, section: 4 }] };
+  const opened = await edit(r(), 4, false);
+  keepViewValid({ ...state, tabs: ["Shoot"], targets: [[0, "Live", true], [1, "Memory 1", true], [4, "Movie Memory 1", true]] });
+  console.log(JSON.stringify({ opened: opened.target, kept: view.target }));
+})();
+""")
+    assert got == {"opened": 4, "kept": 4}
+
+
+@needs_node
 def test_the_back_to_compare_button_lasts_while_the_setting_is_shown(tmp_path):
     """"← Back to Compare" heads the tab "Open in Edit" opened while that tab is shown in that set, again when the
     person comes back to it, never on another tab, set or page; it takes the page back to Compare on the row it was
@@ -362,6 +382,22 @@ def test_the_my_menu_picker_filters_and_refuses(tmp_path):
     assert got["add"] == [["Add to My Menu", False, ""]]
     assert got["held"] == [["In My Menu: page 2, item 3", None, ""], ["Remove from My Menu", False, ""]]
     assert got["locked"] == [["Add to Shelf", True, ""]]
+
+
+@needs_node
+def test_open_in_edit_marks_the_place_of_my_menu_it_opens(tmp_path):
+    """Compare's Open in Edit on a place of My Menu opens My Menu's page with that place marked "▶ n" and found by its key
+    (`data-key`, which `openSetting` brings into view), as the window marks it; another place is not marked."""
+    got = run(tmp_path, MYMENU + """
+(async () => {
+  xp.subFocus = "global:0x0c8a[1]";
+  const place = (i, key, empty) => myMenuPlace(j, 0, i, { key, code: empty ? 2 : 11, name: empty ? "(empty)" : "Alpha", empty, edited: false, was: null,
+    opens: null, more: [], up: false, down: false, pick: true });
+  const rows = [place(0, "global:0x0c8a[0]", false), place(1, "global:0x0c8a[1]", false), place(2, "global:0x0c8a[2]", true)];
+  console.log(JSON.stringify(rows.map((r) => [r.getAttribute("data-key"), r.children[0].textContent, r.classList.contains("mm-here")])));
+})();
+""")
+    assert got == [["global:0x0c8a[0]", "1", False], ["global:0x0c8a[1]", "▶ 2", True], ["global:0x0c8a[2]", "3", False]]
 
 
 @needs_node
@@ -1854,3 +1890,398 @@ console.log(JSON.stringify({ lines }));
 """)
     assert got["lines"] == ["proved on the camera, partly on another setting of the same kind", "proved on the camera",
                             "not proved on the camera yet", None]
+
+
+# the camera's menus as the editor's state names them (`menus`, `menu`, the selector's words), on a definition with three;
+# the page's own `api` runs (it says where the page is: `placed`), and the editor behind `fetch` keeps each request's name
+# and the body it went out with (`bodies`, `sentTo`), answering from `replies` by name
+MENUS = """
+state = { ...state, menus: [{ name: "Still", title: "" }, { name: "Movie", title: "Movies. This file was saved in Movie mode." }, { name: "S&Q", title: "Slow" }],
+  menu: "Movie", menus_label: "Camera menu:", menus_hover: "The camera's menu shows other settings in each shooting mode.", edits: 0, known: 1 };
+drawSide = pageDrawSide;
+const bodies = [];
+const replies = {};
+fetch = async (url, init) => {
+  const name = String(url).replace("/api/", "");
+  bodies.push([name, typeof init.body === "string" ? JSON.parse(init.body) : null]);
+  const j = (replies[name] || (() => ({ groups: [], sets: [], tiles: [], rows: [] })))();
+  return { status: 200, ok: true, statusText: "OK", headers: { get: (k) => (k === "Content-Type" ? "application/json" : null) }, json: async () => j };
+};
+const sentTo = (name) => bodies.filter(([n]) => n === name).map(([, b]) => b);
+let refreshed = 0;
+refresh = async () => { refreshed += 1; };
+const selector = () => $("side").children[0];
+const buttons = () => selector().querySelectorAll("button");
+const pressed = () => buttons().map((b) => [b.textContent, b.getAttribute("aria-pressed"), b.title]);
+"""
+
+
+@needs_node
+def test_the_camera_menu_selector_heads_the_menu_column(tmp_path):
+    """The camera's menus head the Menu column (the window's selector): a group named by the definition's words, its
+    words seen but not read twice, one button per menu in the definition's order with its hover (the selector's where
+    the menu has none of its own, as the window), the one shown pressed (`aria-pressed`). A click shows that menu: the
+    state is asked for again and each page that lists rows asks in it, and nothing that changes the file is sent; Enter
+    on a button does the same, as the buttons are in the Tab order. Another set picked on the Editing row follows its
+    own menu again. With fewer than two menus there is no selector."""
+    got = run(tmp_path, MENUS + """
+(async () => {
+  const out = {};
+  pageDrawSide();
+  const g = selector();
+  out.group = { tag: g.tagName, role: g.getAttribute("role"), label: g.getAttribute("aria-label"), title: g.title,
+    words: g.children[0].textContent, hidden: g.children[0].getAttribute("aria-hidden"), first: $("side").children[1].textContent };
+  out.before = pressed();
+  buttons()[2].click();
+  out.after = { menu: view.menu, cur: curMenu(), refreshed, pressed: pressed().map((p) => p[1]), sent: sent.length };
+  await pages.tab.load(); await pages.main.load(); await pages.search.load(); await pages.mymenu.load(); await pages.exposure.load();
+  out.asked = bodies.map(([n, b]) => [n, b.menu]);
+  // the keyboard: each button in the Tab order, Enter on it picks it
+  out.reach = buttons().map((b) => [b.tagName, b.disabled, b.getAttribute("tabindex")]);
+  viaKeys(); buttons()[0].focus(); buttons()[0].dispatchEvent({ type: "keydown", key: "Enter" });
+  out.enter = { menu: view.menu, pressed: pressed().map((p) => p[1]) };
+  // the same one again asks for nothing more
+  const n = refreshed; buttons()[0].click(); out.again = refreshed - n;
+  // another set edited: its own menu again (the editor's, `state.menu`)
+  state.targets = [[0, "Live", true], [4, "Memory 4", true]];
+  drawTargets();
+  $("targets").querySelectorAll("button").find((b) => b.textContent === "Memory 4").click();
+  out.target = { target: view.target, menu: view.menu, cur: curMenu() };
+  // one menu, or none: no selector
+  state.menus = [{ name: "Still", title: "" }]; $("side").dataset.key = ""; pageDrawSide();
+  out.one = selector().getAttribute("role");
+  delete state.menus; $("side").dataset.key = ""; pageDrawSide();
+  out.none = selector().getAttribute("role");
+  console.log(JSON.stringify(out));
+})();
+""")
+    assert got["group"] == {"tag": "DIV", "role": "group", "label": "Camera menu", "title": "The camera's menu shows other settings in each shooting mode.",
+                            "words": "Camera menu:", "hidden": "true", "first": "Menu"}
+    assert got["before"] == [["Still", "false", "The camera's menu shows other settings in each shooting mode."],
+                             ["Movie", "true", "Movies. This file was saved in Movie mode."], ["S&Q", "false", "Slow"]]
+    assert got["after"] == {"menu": "S&Q", "cur": "S&Q", "refreshed": 1, "pressed": ["false", "false", "true"], "sent": 0}
+    assert got["asked"] == [["tab", "S&Q"], ["main", "S&Q"], ["tab", "S&Q"], ["mymenu_page", "S&Q"], ["exposure", "S&Q"]]
+    assert got["reach"] == [["BUTTON", False, None]] * 3
+    assert got["enter"] == {"menu": "Still", "pressed": ["true", "false", "false"]}
+    assert got["again"] == 0
+    assert got["target"] == {"target": 4, "menu": None, "cur": "Movie"}
+    assert got["one"] != "group" and got["none"] != "group"
+
+
+@needs_node
+def test_compare_has_the_menu_column_of_edit(tmp_path):
+    """Compare shows the Menu column as Edit has it, the window's Compare bar: the camera's menus first, each saying how
+    many of its rows differ, then the entries the editor sends (All settings, Main, My Menu, the tabs), each with its
+    rows and how many differ, the one shown marked; a click shows that entry's rows: the compare is asked for again with
+    the entry and the camera's menu, nothing else is sent. The entry the editor showed is the page's next one. Copies
+    from Compare's rows name the entry and the menu. As the window draws it: an entry's words say how many rows it lists
+    whatever "Only rows that differ" says, the badges' hovers are the window's ("rows that differ in the Movie menu",
+    "rows that differ between the columns"), and the record map has no Menu column."""
+    got = run(tmp_path, MENUS + """
+view.mode = "compare";
+cmp.cols = [["a", 0], ["b", 0]];
+cmp.last = { entries: [{ key: "all", name: "All settings", color: null, count: 20, differ: 3, title: null },
+  { key: "main", name: "Main", color: null, count: 5, differ: 1, title: null },
+  { key: "tab:Shooting", name: "Shooting", color: "#d64550", count: 12, differ: 2, title: null },
+  { key: "tab:Not in the menus", name: "Not in the menus", color: "#a0a0a0", count: 3, differ: 0, title: "Settings the file holds that Camset can't place in the camera's menus." }],
+  menus: [{ name: "Still", differ: 0 }, { name: "Movie", differ: 3 }, { name: "S&Q", differ: 1 }] };
+const entries = () => $("side").querySelectorAll(".mi button").map((b) => [b.textContent, b.classList.contains("on"), b.title]);
+let drawn = 0;
+maybeDraw = () => { drawn += 1; };
+(async () => {
+  const out = {};
+  pageDrawSide();
+  out.menus = pressed().map((p) => [p[0], p[1]]);
+  out.entries = entries();
+  out.badges = $("side").querySelectorAll(".badge").map((b) => b.title);
+  $("side").querySelectorAll(".mi button").find((b) => b.textContent.startsWith("Shooting")).click();
+  out.picked = { entry: cmp.entry, drawn, sent: sent.length, on: entries().filter((e) => e[1]).map((e) => e[0]) };
+  cmp.only = true; pageDrawSide();
+  out.onlyDiffer = entries().map((e) => e[0]);
+  cmp.only = null;
+  view.menu = "S&Q";
+  await pages.compare.load();
+  out.body = sentTo("compare")[0];
+  await api("copy", cmpWhere({ from: ["a", 0], to: ["a", 3], key: "k:a" }));
+  out.where = sentTo("copy")[0];
+  // the record map: no Menu column
+  cmp.records = true; cmpRender(state, state.file);
+  out.records = $("app").classList.contains("cmp-records");
+  cmp.records = false; cmpRender(state, state.file);
+  out.back = $("app").classList.contains("cmp-records");
+  // the entry the editor showed (one the menu does not list gives All settings)
+  drawCompare = () => [];
+  drawCompareAnswer({ ...cmp.last, entry: "all", rows: [] });
+  out.answered = cmp.entry;
+  // a column of another menu's set stays: the Editing row offers this menu's sets, a column any (`column_sets`)
+  state.targets = [[0, "Live", true]];
+  state.column_sets = [0, 1, 4];
+  cmp.files = { a: undefined, b: null, base: null };
+  cmp.cols = [["a", 0], ["a", 4]];
+  cmpSync(state);
+  out.columns = cmp.cols;
+  delete state.column_sets;
+  cmpSync(state);
+  out.without = cmp.cols;
+  console.log(JSON.stringify(out));
+})();
+""")
+    assert got["menus"] == [["Still", "false"], ["Movie3", "true"], ["S&Q1", "false"]]
+    assert [e[0] for e in got["entries"]] == ["All settings  (20)3", "Main  (5)1", "Shooting  (12)2", "Not in the menus  (3)"]
+    assert got["entries"][0][1] is True and got["entries"][3][2] == "Settings the file holds that Camset can't place in the camera's menus."
+    assert got["badges"] == ["rows that differ in the Movie menu", "rows that differ in the S&Q menu"] + ["rows that differ between the columns"] * 3
+    assert got["picked"] == {"entry": "tab:Shooting", "drawn": 1, "sent": 0, "on": ["Shooting  (12)2"]}
+    assert got["onlyDiffer"] == ["All settings  (20)3", "Main  (5)1", "Shooting  (12)2", "Not in the menus  (3)"], "the rows each lists, as the window"
+    assert (got["body"]["entry"], got["body"]["menu"], got["body"]["target"]) == ("tab:Shooting", "S&Q", 0)
+    assert "tab" not in got["body"]
+    assert got["where"] == {"from": ["a", 0], "to": ["a", 3], "key": "k:a", "entry": "tab:Shooting", "target": 0, "menu": "S&Q"}
+    assert got["answered"] == "all"
+    assert (got["records"], got["back"]) == (True, False)
+    assert "#app.cmp-records #side { display: none; }" in PAGE.read_text(encoding="utf-8")
+    assert got["columns"] == [["a", 0], ["a", 4]] and got["without"] == [["a", 0]]
+
+
+def test_the_compare_bar_has_no_tab_list_and_the_toggles_say_so():
+    """The Compare bar's tab list is gone (the Menu column's entries do its work) and the Menu column shows in Compare;
+    the page's toggles say whether they are on: the camera's menus, Main's own tile pages and the layout switch
+    (`aria-pressed`)."""
+    page, script = PAGE.read_text(encoding="utf-8"), APP.read_text(encoding="utf-8")
+    assert 'id="cmp-tab"' not in page and '"cmp-tab"' not in script and "cmp.tab" not in script
+    assert "#app.compare #side" not in page, "the Menu column shows in Compare"
+    assert '"aria-pressed": String(on), "data-menu"' in script
+    assert '"aria-pressed": String(i === j.set)' in script
+
+
+@needs_node
+def test_main_pages_and_the_layout_switch_say_which_is_shown(tmp_path):
+    """Main's buttons for its tile pages and the layout switch's two buttons each say whether they are the one shown
+    (`aria-pressed`); in a camera's menu that names its tiles the editor sends no pages, Main has no buttons, and the
+    tile set last picked with them stays the page's choice for a menu without tiles of its own (the window's
+    `main_set`): the menu's own set does not take its place."""
+    got = run(tmp_path, """
+const main = drawMain({ sets: ["Stills", "Movie"], set: 1, tiles: [], rows: [] })[0].querySelectorAll("button").map((b) => [b.textContent, b.getAttribute("aria-pressed")]);
+const tied = drawMain({ sets: [], set: 2, tiles: [], rows: [] })[0].querySelectorAll("button").length;
+const layout = layoutSwitch(false).querySelectorAll("button").map((b) => [b.textContent, b.getAttribute("aria-pressed")]);
+const flat = layoutSwitch(true).querySelectorAll("button").map((b) => b.getAttribute("aria-pressed"));
+console.log(JSON.stringify({ main, tied, layout, flat, set: view.set }));
+""")
+    assert got["main"] == [["Stills", "false"], ["Movie", "true"]]
+    assert got["tied"] == 0 and got["set"] == 1, "a menu's own tiles leave the set picked with Main's buttons"
+    assert got["layout"] == [["As on the camera", "true"], ["Flat list", "false"]] and got["flat"] == ["false", "true"]
+
+
+@needs_node
+def test_a_link_opens_the_camera_menu_that_shows_the_setting(tmp_path):
+    """A link the editor names a camera's menu for (`open_menu`: a search's hit, Compare's Open in Edit, a page link)
+    shows that menu, asks for the state again once the page is drawn, and finds the row that shows the setting there
+    (`open_key`: a copy shown in its setting's row); a link in the menu shown changes no menu. A row titled as the
+    camera draws it in a menu has the setting's full name in its details, and a search's hit the way into its menu."""
+    got = run(tmp_path, MENUS + LAYOUT + """
+drawContent = async () => {
+  const where = view.page === "tab" ? view.tab : view.page;
+  $("content").replaceChildren(...drawGroups([drive, other], where, false));
+};
+(async () => {
+  const out = {};
+  const before = refreshed;
+  const at = await openSetting({ key: "k:copy", open_key: "k:b", open_menu: "S&Q", open_tab: "Shoot", open_group: "Drive" });
+  out.moved = { menu: view.menu, tab: view.tab, row: at && at.dataset.key, detail: xp.detail.has("k:b"), refreshed: refreshed - before };
+  const n = refreshed;
+  await openSetting({ key: "k:a", open_menu: "S&Q", open_tab: "Shoot", open_group: "Drive" });
+  out.same = { menu: view.menu, refreshed: refreshed - n };
+  const d = rowDetail(row("k:a", "SteadyShot", { full_name: "SteadyShot (Movie)",
+    open: { key: "k:a", open_menu: "Movie", open_tab: "Shoot", open_group: "Drive", where: "Movie > Shoot > Drive" } }));
+  out.detail = d.map((x) => x.textContent);
+  console.log(JSON.stringify(out));
+})();
+""")
+    assert got["moved"] == {"menu": "S&Q", "tab": "Shoot", "row": "k:b", "detail": True, "refreshed": 1}
+    assert got["same"] == {"menu": "S&Q", "refreshed": 0}
+    assert got["detail"][:2] == ["SteadyShot (Movie)", "Open in Movie > Shoot > Drive"]
+
+
+@needs_node
+def test_every_request_names_the_camera_menu_the_page_drew_with_and_its_set(tmp_path):
+    """Every request but the state's goes out naming the camera's menu the page drew with (`curMenu`: the editor's when
+    none was picked) and the set it edits, unless it names its own set (a row's, a cell's column), so the editor never
+    works a menu out for itself for rows the page showed (the review's case: editing a Movie memory, no menu picked,
+    Compare on a tab, Recall of only the rows shown). A change, a Revert, a page of rows, Recall of the rows shown, a
+    merge, the comparison's export and the picker's row each say it; Recall, the merge and the export also name the
+    Menu column's entry. The state names only a menu picked (none here: the editor then names the set's own)."""
+    got = run(tmp_path, MENUS + """
+act = pageAct;
+view.target = 4; view.menu = null;
+state.targets = [[0, "Live", true], [1, "Memory 1", true], [4, "Memory 4", true]];
+replies.set = () => ({ row: row("k:a", "Alpha"), rows: [], rev: "r2" });
+replies.compare_cell = () => ({ row: row("k:a", "Alpha", { target: 1 }) });
+replies.state = () => ({ ...state });
+const settle = async () => { for (let i = 0; i < 6; i++) await tick(); };
+(async () => {
+  await setSetting(row("k:a", "Alpha", { target: 0 }), { value: 2 });
+  await act("revert", { target: rowTarget({}), key: "k:a" });
+  await pages.tab.load();
+  // Compare on a tab, only the rows shown: Recall, a merge, the export, the picker's row
+  view.mode = "compare"; cmp.entry = "tab:Shooting"; cmp.q = ""; cmp.cols = [["a", 0], ["a", 1]];
+  wholeSets.onlyShown = true;
+  cmp.last = { cols: [{ src: "a", section: 0, name: "A · Live", editable: true }, { src: "a", section: 1, name: "A · M1", editable: true }], editable: true,
+    dial: [[1, "Memory 1"]], whole_sets: [{ section: 1, recall: "Recall Memory 1", recall_tip: "", register: "Register Memory 1", register_tip: "" }],
+    sections: [], rows: [], shown: 0, total: 0, entries: [], counts: [0, 2],
+    three: { cols: [["base", 0], ["a", 0], ["b", 0]], a: 0, b: 2, both: 0, conflict: 0, against: "", tags: {}, filters: [["all", "All rows"]] } };
+  $("content").replaceChildren(...drawCompare());
+  const button = (t) => $("content").querySelectorAll("button").find((b) => b.textContent.startsWith(t));
+  button("Recall Memory 1").click(); await settle();
+  button("Merge B into A").click(); await settle();
+  $("b-csv-cmp").click(); await settle();
+  cmp.pick = { box: el("div"), key: "k:a", col: ["a", 1], name: "A · M1", x: 0, y: 0, keys: false, from: null, focused: false };
+  await cmpPickRefresh();
+  $("app").hidden = false;
+  await poll();
+  const one = (name) => sentTo(name)[0];
+  console.log(JSON.stringify({ set: one("set"), revert: one("revert"), tab: one("tab"), recall: one("recall"), merge: one("merge"), csv: one("csv"),
+    cell: one("compare_cell"), state: sentTo("state").pop() }));
+})();
+""")
+    assert got["set"] == {"target": 0, "key": "k:a", "value": 2, "menu": "Movie"}, "a change names the menu, its row its own set"
+    assert got["revert"] == {"target": 4, "key": "k:a", "menu": "Movie"}
+    assert (got["tab"]["menu"], got["tab"]["target"]) == ("Movie", 4)
+    assert got["recall"] == {"memory": 1, "q": "", "entry": "tab:Shooting", "shown": True, "target": 4, "menu": "Movie"}, "the rows shown, in the menu shown"
+    assert (got["merge"]["entry"], got["merge"]["menu"], got["merge"]["target"], got["merge"]["kind"]) == ("tab:Shooting", "Movie", 4, "b_into_a")
+    assert (got["csv"]["entry"], got["csv"]["menu"], got["csv"]["target"], got["csv"]["compare"]) == ("tab:Shooting", "Movie", 4, True)
+    assert got["cell"] == {"target": 1, "key": "k:a", "menu": "Movie"}, "the picker's row in the cell's set, its links in the menu shown"
+    assert got["state"] == {"target": 4}, "the state names only a menu picked"
+
+
+@needs_node
+def test_a_menu_picked_lasts_for_its_file_and_while_the_definition_has_it(tmp_path):
+    """A camera menu picked on the page is kept for the file it was picked for: polls of the same opening keep it; a
+    file opened since (another `opened`, the flat list on or not) lets go of it, and the state is asked for again
+    without it so the page opens on the set's own menu, as the window does. A pick the camera's menus no longer hold
+    (another definition) is not the menu shown (`curMenu` gives the editor's), and the next state lets go of it."""
+    got = run(tmp_path, MENUS + """
+$("app").hidden = false;
+const base = { ...state };
+(async () => {
+  const out = {};
+  replies.state = () => ({ ...base, opened: "7:1" });
+  await poll();
+  view.menu = "S&Q";
+  replies.state = () => ({ ...base, opened: "7:1", menu: "S&Q" });
+  await poll();
+  out.kept = view.menu;
+  replies.state = () => ({ ...base, opened: "7:2", menu: "Still" });
+  await poll();
+  out.reset = view.menu;
+  out.asks = sentTo("state").map((b) => b.menu ?? null);
+  view.menu = "Gone";
+  out.cur = curMenu();
+  await poll();
+  out.gone = view.menu;
+  // the flat list: no menus in the state, the file's opening told all the same
+  view.menu = "S&Q";
+  replies.state = () => ({ ...base, menus: undefined, menu: undefined, opened: "7:3" });
+  await poll();
+  out.flat = view.menu;
+  console.log(JSON.stringify(out));
+})();
+""")
+    assert got["kept"] == "S&Q"
+    assert got["reset"] is None and got["asks"] == [None, "S&Q", "S&Q", None], "another file: asked again without the pick"
+    assert got["cur"] == "Still" and got["gone"] is None
+    assert got["flat"] is None, "a file opened while no menu is shown lets go of the pick too"
+
+
+@needs_node
+def test_compares_open_in_edit_and_a_page_link_go_where_the_editor_names(tmp_path):
+    """Compare's Open in Edit and the link to the page an option opens hand `openSetting` the place the editor named:
+    the camera's menu (`open_menu`) and the row that shows the setting there (`open_key`), besides its tab and group."""
+    got = run(tmp_path, MENUS + """
+const opened = [];
+openSetting = async (s) => { opened.push(s); return null; };
+cmp.last = { cols: [{ editable: true, section: 0 }] };
+(async () => {
+  await cmpOpenInEdit({ key: "k:copy", tab: "Shoot", group: "Drive", in_sets: true, open_tab: "Shoot", open_group: "Drive", open_menu: "S&Q", open_key: "k:b", cells: [{ edited: false }] }, 0);
+  const r = row("k:own", "Picture Profile", { label: "PP1", pages: [{ option: "PP1", count: 9, key: "k:pp1", open_tab: "Shoot", open_group: "PP1", open_menu: "Movie", open_key: "k:pp1m", words: "Open the PP1 page" }] });
+  pageLinks(r).querySelector("a").click();
+  await tick();
+  const place = (s) => [s.key, s.open_menu, s.open_key, s.open_tab, s.open_group];
+  console.log(JSON.stringify({ edit: place(opened[0]), page: place(opened[1]) }));
+})();
+""")
+    assert got["edit"] == ["k:copy", "S&Q", "k:b", "Shoot", "Drive"]
+    assert got["page"] == ["k:pp1", "Movie", "k:pp1m", "Shoot", "PP1"]
+
+
+@needs_node
+def test_the_menu_column_keeps_the_keyboard_and_its_place_in_the_strip(tmp_path):
+    """The Menu column drawn anew after a camera menu or a Compare entry is pressed keeps the keyboard on that button
+    (as the window keeps its focus), named by what it is, not its words, which hold a count. On a phone the strip brings
+    the page shown into view, the entry's pressed button, not the camera menu's, which heads the strip."""
+    got = run(tmp_path, MENUS + """
+const out = {};
+pageDrawSide();
+viaKeys(); buttons()[2].focus();
+buttons()[2].click();
+const a = document.activeElement;
+out.menu = { on: a.getAttribute("data-menu"), inSide: $("side").contains(a), pressed: a.getAttribute("aria-pressed") };
+view.mode = "compare";
+cmp.last = { entries: [{ key: "all", name: "All settings", count: 20, differ: 3 }, { key: "tab:Shooting", name: "Shooting", color: "#d64550", count: 12, differ: 2 }],
+  menus: [{ name: "Still", differ: 0 }, { name: "Movie", differ: 3 }, { name: "S&Q", differ: 1 }] };
+maybeDraw = () => {};
+pageDrawSide();
+const shooting = () => $("side").querySelectorAll(".mi button").find((b) => b.textContent.startsWith("Shooting"));
+viaKeys(); shooting().focus(); shooting().click();
+const b = document.activeElement;
+out.entry = { on: b.textContent, inSide: $("side").contains(b), chosen: b.classList.contains("on") };
+// the strip: the entry shown in view (a phone's offsets: the menu buttons at the start, the chosen entry far along)
+Object.defineProperty(__Element.prototype, "offsetLeft", { configurable: true, get() { return this.getAttribute("data-menu") ? 10 : this.classList.contains("on") ? 500 : 0; } });
+const side = $("side");
+side.scrollWidth = 2000; side.clientWidth = 300; side.dataset.at = "elsewhere"; side.dataset.key = "";
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+state.tab_info = [{ name: "Shoot", color: "#123456", count: 3, edited: 0 }];
+pageDrawSide();
+out.scroll = side.scrollLeft;
+console.log(JSON.stringify(out));
+""")
+    assert got["menu"] == {"on": "S&Q", "inSide": True, "pressed": "true"}
+    assert got["entry"] == {"on": "Shooting  (12)2", "inSide": True, "chosen": True}
+    assert got["scroll"] == 400, "the chosen entry brought into view, not the camera menu's pressed button"
+
+
+@needs_node
+def test_the_page_is_fetched_again_for_the_menu_shown(tmp_path):
+    """The page's content is drawn for the camera's menu it shows, picked or the editor's: when the editor's changes
+    (an edit that moves the set into another mode, another set) the page is fetched again, though nothing was picked."""
+    got = run(tmp_path, MENUS + """
+view.menu = null; view.page = "tab"; view.tab = "Shoot";
+state.menu = "Still";
+const a = contentKey();
+state.menu = "Movie";
+const b = contentKey();
+view.menu = "S&Q";
+const c = contentKey();
+console.log(JSON.stringify({ a, b, c }));
+""")
+    assert got["a"] != got["b"], "the editor's menu changed: fetched again"
+    assert got["b"] != got["c"] and got["c"].endswith("|S&Q")
+
+
+@needs_node
+def test_picking_another_menu_keeps_the_set_edited(tmp_path):
+    """A camera menu picked while a memory set of another menu is edited keeps that set: the editor lists it on the
+    Editing row (as the window's, `editing_sets`), the page keeps editing it (`keepViewValid`), and the next requests
+    name the menu picked and that set."""
+    got = run(tmp_path, MENUS + """
+view.target = 4; view.menu = null; $("app").hidden = false;
+state.targets = [[0, "Live", true], [4, "Memory 4", true]];
+replies.state = () => ({ ...state, tabs: ["Shoot"], menu: "Still", targets: [[0, "Live", true], [1, "Memory 1", true], [4, "Memory 4", true]] });
+(async () => {
+  pickMenu("Still");
+  await poll();
+  keepViewValid(state);
+  await pages.tab.load();
+  console.log(JSON.stringify({ target: view.target, menu: curMenu(), state: sentTo("state").pop(), tab: sentTo("tab").pop() }));
+})();
+""")
+    assert (got["target"], got["menu"]) == (4, "Still")
+    assert got["state"] == {"target": 4, "menu": "Still"}
+    assert (got["tab"]["target"], got["tab"]["menu"]) == (4, "Still")
