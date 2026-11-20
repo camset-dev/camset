@@ -1193,21 +1193,30 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
 NEW_QUESTION_NAMES = re.compile(r'\.v[23]["\']|\bicon_left_out\(|\bwithout_icon\(|\bfind=True\b|\breading\.region\('
                                 r'|\bQUESTIONS\b|\bask_named_reader\(|\bwith_options\(|\breading\.read\('
                                 r'|\bCliReader\b|claude-cli')
-# proving/greyed.py asks a kind's ".grey" question (QUESTIONS) for its "greyed" alone, beside its pixel test, and only
-# to be more careful (2026-11-19); it reads no option by it, and its own test below holds it to that one question
-MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader_census.py", "kit/proving/greyed.py"}
+MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader_census.py"}
+# proving/greyed.py names QUESTIONS, and nothing else of the list: it asks a kind's ".grey" version for its "greyed"
+# alone, beside its pixel test, and only to be more careful (2026-11-19); it reads no option by it, and its own test
+# holds it to that one question (test_greyed_asks_a_grey_question_for_its_grey_alone)
+MAY_NAME_QUESTIONS = {"kit/proving/greyed.py"}
+BUT_QUESTIONS = re.compile(NEW_QUESTION_NAMES.pattern.replace(r"|\bQUESTIONS\b", ""))
 
 
 def test_no_caller_asks_the_new_questions_or_reads_by_the_rule_yet():
     """Every caller still asks the questions it asked before 2026-11-13: none names a ".v2" question, QUESTIONS,
     reading.region, reading.read, vlm.with_options or vlm.ask_named_reader (provers/pp_reset_run.py's own ask_reader is
-    another function, asking the old questions); proving/greyed.py names QUESTIONS for a ".grey" question's grey alone
-    (test_greyed_asks_a_grey_question_for_its_grey_alone)."""
-    found = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "kit").rglob("*.py")
-                   if "tests" not in p.parts and "__pycache__" not in p.parts
-                   and p.relative_to(ROOT).as_posix() not in MAY_NAME_THEM
-                   and NEW_QUESTION_NAMES.search(p.read_text(encoding="utf-8")))
-    assert found == [], f"these name the new questions or read through camkit.reading.read: {found}"
+    another function, asking the old questions); proving/greyed.py may name QUESTIONS alone."""
+    assert BUT_QUESTIONS.pattern != NEW_QUESTION_NAMES.pattern and "QUESTIONS" not in BUT_QUESTIONS.pattern
+    found = []
+    for p in (ROOT / "kit").rglob("*.py"):
+        name = p.relative_to(ROOT).as_posix()
+        if "tests" in p.parts or "__pycache__" in p.parts or name in MAY_NAME_THEM:
+            continue
+        names = BUT_QUESTIONS if name in MAY_NAME_QUESTIONS else NEW_QUESTION_NAMES
+        if names.search(p.read_text(encoding="utf-8")):
+            found.append(name)
+    assert sorted(found) == [], f"these name the new questions or read through camkit.reading.read: {found}"
+    assert BUT_QUESTIONS.search("reading.read(") and BUT_QUESTIONS.search('"lit.v2"') and \
+        not BUT_QUESTIONS.search("reading.QUESTIONS[kind]")
 
 
 def test_no_reader_a_camera_run_builds_is_the_census_claude_command_line(monkeypatch):
