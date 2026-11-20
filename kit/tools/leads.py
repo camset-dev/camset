@@ -49,7 +49,7 @@ from collections import Counter, OrderedDict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import paths  # noqa: E402
+from camkit import paths, row_names  # noqa: E402
 
 CLASSES = ("NEVER", "BETWEEN", "SPECIFIC", "SEVERAL", "BROAD", "ALONE")
 BROAD_ROWS = 3                      # a step whose changed records are more rows than this, and no proof names, is broad
@@ -90,7 +90,7 @@ def proof_rows(run: Path) -> dict:
         where, _, name = dat.replace("\\", "/").rpartition("/")
         if where and where.rsplit("/", 1)[-1] != Path(run).name:
             continue
-        out[name] = " > ".join(str(x) for x in path)
+        out[name] = " > ".join(str(x) for x in row_names.renamed(path))     # as the camera draws it
     return out
 
 

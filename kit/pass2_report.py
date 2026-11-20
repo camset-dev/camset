@@ -751,7 +751,8 @@ def state_items(r: dict) -> list:
 def walked_rows(proofs: list) -> dict:
     """{norm(name): name} of every menu row the proofs walk (each part of their paths, a context aside): the rows a
     context item can name the state of in words (state_row)."""
-    return {norm(n): n for r in proofs for p in r.get("path") or [] if (n := re.split(r" \[", p)[0].strip())}
+    return {norm(n): n for r in proofs for p in row_names.renamed(r.get("path") or [])
+            if (n := re.split(r" \[", p)[0].strip())}
 
 
 def state_row(item: str, rows: dict) -> str | None:
@@ -1927,7 +1928,7 @@ def own_name(o: dict) -> str:
     ("File Format" of "Image Quality Settings / File Format / SLOT 1"), its context aside."""
     if o.get("kind") == "table" and o.get("screen", "table") == "table" and o.get("option"):
         return str(o["option"]).rpartition(" / ")[0] or str(o["option"])
-    return str(o["path"][-1]).split(" [")[0]
+    return str(row_names.renamed(o["path"])[-1]).split(" [")[0]          # as the camera draws it (camkit.row_names)
 
 
 def start_lines(opts: dict) -> frozenset:
@@ -2050,7 +2051,9 @@ def main():
     cut = sorted({row_name(proofs[i]) for i in skip})
     if cut:
         print(f"left out: {len(skip)} proofs of {len(cut)} rows, from attempts that did not finish", flush=True)
-    ROW_NAMES.update(norm(re.split(r" \[", p)[0]) for r in proofs for p in r.get("path") or [])
+    # each row by its older name and as the camera draws it (camkit.row_names): a reading of either names a row
+    ROW_NAMES.update(norm(re.split(r" \[", p)[0]) for r in proofs
+                     for p in (*(r.get("path") or []), *row_names.renamed(r.get("path") or [])))
     MENU_NAMES.update(menu_names(definitions.menu_tree_file(target.stem) if target.exists() else None))
     hand = hand_rules(cam)
     readouts = frozenset(k for k, x in schema.items() if "view only" in (x.get("note") or "").lower())

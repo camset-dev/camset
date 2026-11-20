@@ -728,7 +728,7 @@ def not_offered_marks(doc: dict, entries: list, report: list, tables: dict, run_
                 refused.append((entry["key"], v, why))
                 continue
             mark = {"value": v, "label": dict((x, lab) for x, lab in s["values"])[v], "why": entry["why"],
-                    "menu": entry["menu"]}
+                    "menu": row_names.renamed_name(entry["menu"])}       # as the camera draws it (camkit.row_names)
             if entry.get("evidence"):               # the hand evidence's (writer/hand_evidence.py), when it is here
                 mark["evidence"] = entry["evidence"]
             if entry.get("held"):

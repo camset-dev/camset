@@ -396,3 +396,30 @@ def test_a_lit_bar_is_measured_by_the_label_it_reads_never_by_its_renaming(tmp_p
                                  {"Px Proxy Recording", "Proxy Recording"}, None, {}, None)
     assert (why, row) == ("", ("Proxy Settings", "Proxy Recording"))
     row_names.forget()
+
+
+def test_the_viewer_the_leads_the_reports_own_names_and_a_not_offered_mark_take_the_cameras_name(named, tmp_path,
+                                                                                                monkeypatch):
+    """The places a row's name was still compared or written as written (the review of 2026-11-20, finding 5): the proof
+    viewer's row (report.get(row) found an older-name line nowhere), kit/tools/leads.py's rows of a proof run, the
+    report's walked rows and own name of a row, and the public not_offered mark's "menu", which a NOT_OFFERED entry
+    written before the rename names by its older path."""
+    import leads
+    import pass2_report
+    import proof_viewer
+    from writer import offered
+    line = {"path": ["Proxy Settings", "Px Proxy Recording"], "kind": "list", "context": "Movie mode"}
+    assert proof_viewer.row_name(line) == "Proxy Settings > Proxy Recording [Movie mode]"
+    run = tmp_path / "kit2_proofs_x"
+    run.mkdir()
+    (run / "proofs.jsonl").write_text(json.dumps({**line, "dat": "00002_x.DAT", "base": "00001_y.DAT"}) + "\n",
+                                      encoding="utf-8")
+    assert leads.proof_rows(run) == {"00002_x.DAT": "Proxy Settings > Proxy Recording"}
+    assert pass2_report.own_name(line) == "Proxy Recording"
+    assert set(pass2_report.walked_rows([line]).values()) == {"Proxy Settings", "Proxy Recording"}
+    monkeypatch.setattr(offered, "why_not", lambda *a, **k: None)
+    doc = {"settings": [{"key": "global:0x0284", "values": [[0, "On"], [3, "Held"]]}]}
+    entry = {"key": "global:0x0284", "values": [3], "walk": "^Proxy Settings > Px Proxy Recording", "why": "No menu choice.",
+             "menu": "Proxy Settings > Px Proxy Recording"}
+    offered.not_offered_marks(doc, [entry], [], {}, tmp_path, [])
+    assert [m["menu"] for m in doc["settings"][0]["not_offered"]] == ["Proxy Settings > Proxy Recording"]

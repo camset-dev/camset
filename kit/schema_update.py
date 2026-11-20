@@ -801,7 +801,8 @@ def attach_help(doc, report, proofs=(), frame_proofs=None) -> tuple:
             # a greyed row's guide ends with the camera's state, not the setting's help (2026-11-01)
             r["text"] = DISABLED_RE.sub("", r["text"])
             ctx = r.get("context") or "Stills mode"
-            path = tuple(key_text(x).lower() for x in (r.get("path") or [r["label"]]))
+            # the row as the camera draws it (camkit.row_names), as the definition's proof rows name it
+            path = tuple(key_text(x).lower() for x in row_names.renamed(r.get("path") or [r["label"]]))
             if r.get("index", -1) >= 0:
                 opts[(ctx, path, key_text(r["label"].translate(LOOKALIKES)).lower())] = r["text"]
             else:
@@ -828,7 +829,8 @@ def attach_help(doc, report, proofs=(), frame_proofs=None) -> tuple:
     if (HELP / "field_help.jsonl").exists():
         for r in jsonl.read(HELP / "field_help.jsonl"):
             text = reads.get(r["frames"][0], r["text"])
-            fields[(r["context"], tuple(key_text(x).lower() for x in r["path"]), r["field"])] = f"{r['label']}: {text}"
+            fields[(r["context"], tuple(key_text(x).lower() for x in row_names.renamed(r["path"])), r["field"])] = \
+                f"{r['label']}: {text}"
     for e in report:
         m = re.search(r" \[field (\d+)\]", e["row"])
         text = m and find(fields, *menu_place(e["row"]), int(m.group(1)))

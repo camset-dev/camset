@@ -117,6 +117,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import ROOT, camset, datafiles, definitions, help_files, jsonl, menu_rows, paths, placement  # noqa: E402
+from camkit import row_names  # noqa: E402
 from camkit.placement import norm  # noqa: E402
 from camkit.runs import POLL_LEFT  # noqa: E402
 from camkit.vlm import LOCAL_MARKER, NO_READER_MARKER  # noqa: E402
@@ -193,7 +194,8 @@ def local_only(run: Path) -> bool:
 
 
 def row_name(r) -> str:
-    name = " > ".join(r["path"])
+    """A proof line's row as the report names it, its path as the camera draws it (camkit.row_names)."""
+    name = " > ".join(row_names.renamed(r["path"]))
     if r.get("kind") == "fields" and isinstance(r.get("index"), list):
         name += f" [field {r['index'][0]}]"
     if r.get("context"):
