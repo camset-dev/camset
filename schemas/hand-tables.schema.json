@@ -391,7 +391,7 @@
   },
   "UNPROVED": {
    "type": "object",
-   "description": "Why no proof can reach a record, by setting key: [kind, null, why], the kind one the definition's unproved_reason lists and the why in a photographer's words; the day it was settled is the hand evidence's (null here).",
+   "description": "Why no proof can reach a record, by setting key: [kind, null, why], the kind one the definition's unproved_reason lists and the why in a photographer's words; the day it was settled is the hand evidence's (null here). On a setting a proof reached, it says why no menu choice proves the values that proof does not list (values no menu writes, a fact of the model: the a1 II's Base Look copies): the definition then keeps no reason, and the coverage ledger reads those values as no proof possible.",
    "propertyNames": {
     "$ref": "#/$defs/key"
    },

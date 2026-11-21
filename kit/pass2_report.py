@@ -931,8 +931,17 @@ def stood_rows(proofs: list, skip: set = frozenset(), modes=()) -> dict:
     modes = list(modes or ())
 
     def menu_mode(r):
-        """The shooting mode a line's context names, None for the top menu's (none named, or the first mode)."""
-        m = placement.mode_of(f"x [{r.get('context') or ''}]", modes) if modes else None
+        """The shooting mode a line's context names, None for the top menu's (none named, or the first mode); an item
+        with more than one trailing parenthetical is read bare of all of them ("S&Q mode (S&Q Motion) (dial set with
+        the menu)" is "S&Q mode": placement.context_items strips one, and 415 such lines counted as Stills)."""
+        if not modes:
+            return None
+        items = []
+        for w in placement.context_items(r.get("context") or ""):
+            while (bare := placement.TRAILING.sub("", w).strip()) != w:
+                w = bare
+            items.append(w)
+        m = placement.mode_of(f"x [{', '.join(items)}]", modes)
         return None if m is None or m == modes[0] else m
 
     def option(r):

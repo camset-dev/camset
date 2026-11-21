@@ -468,19 +468,28 @@ def hidden_changes(looks: list) -> list:
     that changed 0x13f3 and 0x13f5, 2026-11-19). A retraction withdraws its key's looks before it; a lap is no row's."""
     last, _laps = _last_looks(looks)
     kept = {line for line, _lk in last.values()}
+    since = {}                      # the latest retraction of each (row, mode, did, option); mode None: every mode
+    for line, lk in looks:
+        if lk.get("did") != "lap" and lk.get("result") == "retract":
+            since[_look_key(lk)] = line
 
-    def key(lk):                    # (row, did, option): a retraction withdraws the row's looks in every mode
+    def withdrawn(line, lk):
         k = _look_key(lk)
-        return k[0], k[2], k[3]
-    since = {key(lk): line for line, lk in looks if lk.get("did") != "lap" and lk.get("result") == "retract"}
+        return line < max(since.get((k[0], None, k[2], k[3]), 0), since.get(k, 0) if k[1] else 0)
     return [(line, lk) for line, lk in looks if lk.get("did") != "lap" and line not in kept
-            and lk.get("result") != "retract" and lk.get("records_changed") and line > since.get(key(lk), 0)]
+            and lk.get("result") != "retract" and lk.get("records_changed") and not withdrawn(line, lk)]
 
 
 def retracted(looks: list) -> list:
     """[(row labels compared plain, did)] of the looks file's retractions that stand (each the latest of its key)."""
+    return [(row, did) for row, _mode, did in retractions(looks)]
+
+
+def retractions(looks: list) -> list:
+    """[(row labels compared plain, mode, did)] of the looks file's retractions that stand, each with the mode it names
+    (None: every mode)."""
     last, _laps = _last_looks(looks)
-    return [(k[0], k[2]) for k, (_line, lk) in last.items() if lk.get("result") == "retract"]
+    return [(k[0], k[1], k[2]) for k, (_line, lk) in last.items() if lk.get("result") == "retract"]
 
 
 # ---------------------------------------------------------------- the sources
@@ -1093,10 +1102,11 @@ def _seen_paths(src: Sources, led: Ledger) -> list:
         for sub in r.get("submenu") or []:
             if isinstance(sub, dict) and sub.get("label"):
                 out.append(([r.get("decided") or r.get("label") or "", sub["label"]], None, tab))
-    gone = {labels for labels, did in retracted(src.looks) if did == "open"}
+    # a retraction naming no mode takes the row out in every mode; one naming a mode, only a look's row in that mode
+    gone = {(labels, mode) for labels, mode, did in retractions(src.looks) if did == "open"}
     return [(list(row_names.renamed(p, src.camera)), m, t) for p, m, t in out
-            if all(isinstance(x, str) and x for x in p) and tuple(plain(x) for x in p) not in gone
-            and not named_placeholder(src, p)]
+            if all(isinstance(x, str) and x for x in p) and not named_placeholder(src, p)
+            and not {(tuple(plain(x) for x in p), None), (tuple(plain(x) for x in p), m or None)} & gone]
 
 
 def placeholder_label(label) -> bool:
