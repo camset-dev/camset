@@ -184,10 +184,37 @@ def look_open(row: dict, seen=None, path=()) -> str | None:
     return None
 
 
+# The rows a run names to leave unopened (kit/crawl_run.py --leave PATH), each a tuple of labels from the top-level row:
+# visit_row presses nothing on such a row, so nothing under it is reached either, and its outcome is "skipped: LEFT",
+# which the run's rows.jsonl keeps and the menu tree reads as a row left on purpose ("never", LEFT), not one missed.
+# For File Settings without Title Name Settings, whose entries open keyboards (2026-11-20)
+LEAVE: tuple = ()
+LEFT = "left unopened by the run (--leave)"
+
+
+def left_by_run(path, row=None) -> str:
+    """LEFT where the row at `path` (labels from the top-level row) is one the run named with --leave (LEAVE), else "":
+    each label compared as the scan's rows are found (page_model.same_text: case, spacing, an icon read as letters in
+    front), the row's own label or any reading kept beside it (row_readings) for the last."""
+    if not LEAVE:
+        return ""
+    from page_model import same_text
+    path = [str(x) for x in path]
+    lasts = [path[-1], *(row_readings(row) if row else [])] if path else []
+    for leave in LEAVE:
+        if len(leave) == len(path) and all(same_text(a, b) for a, b in zip(path[:-1], leave[:-1], strict=True)) \
+                and any(same_text(x, leave[-1]) for x in lasts):
+            return LEFT
+    return ""
+
+
 def left_unopened(page: dict, row: dict, network=frozenset(), first=None, look: bool = False) -> bool:
-    """Whether visit_row leaves the top-level row unopened, nothing pressed, by a rule known before its Right: never-open
-    with no network decision opening it (closed_row), or not seen opened on this body where a first open's rule skips
-    it (camkit.first_open.FirstOpens.skips). A refusal at the press itself (safety.RowRefused) is known only then."""
+    """Whether visit_row leaves the top-level row unopened, nothing pressed, by a rule known before its Right: a row the
+    run named with --leave (left_by_run), never-open with no network decision opening it (closed_row), or not seen
+    opened on this body where a first open's rule skips it (camkit.first_open.FirstOpens.skips). A refusal at the
+    press itself (safety.RowRefused) is known only then."""
+    if left_by_run((row.get("label") or "",), row):
+        return True
     why, decided = closed_row(page, row, network, look, seen_of(first))
     if why and decided is None:
         return True
@@ -337,6 +364,13 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     no decision names opens as one a decision opened with no option named, its class safety.look_class's."""
     label = row.get("label") or ""
     r = RowResult(page.get("page", ""), slot, label, "")
+    left = left_by_run((*path, label), row)
+    if left:
+        r.outcome = f"skipped: {left}"          # nothing pressed: the row and every row under it stay unread
+        log = getattr(getattr(cam, "run", None), "log", None)
+        if callable(log):
+            log("left_unopened", path=[*path, label])
+        return r
     why, decided = closed_row(page, row, network, look, seen_of(first), path)
     if why and decided is None:
         r.outcome = f"skipped: {why}"

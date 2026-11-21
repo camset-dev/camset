@@ -769,6 +769,9 @@ def test_crawl_run_goes_on_without_the_statement_and_says_how_many_it_skips(tmp_
     scope(BLANK)
     code, out = crawl_main(tmp_path, monkeypatch, argv=["--panels"])
     assert code in (0, None) and "--panels commits options" in out
+    # --no-first-open: with the statement in scope all the same, a row never seen opened is skipped and recorded
+    code, out = crawl_main(tmp_path, monkeypatch, argv=["--no-first-open"])
+    assert code in (0, None) and "each is skipped and recorded, since --no-first-open" in out
     code, out = crawl_main(tmp_path, monkeypatch, argv=["--first-open-check", "page"])
     assert "each opens under the link-loss procedure, checked once per page" in out and "the owner said on" in out
     scope.file.write_text("{", encoding="utf-8")                        # a scope that cannot be read: no first open
