@@ -469,7 +469,9 @@ def test_one_reading_of_a_proofs_context_for_placement_and_the_report():
 def test_with_no_menu_tree_the_definitions_menus_stay_as_they_are(tmp_path, monkeypatch, table):
     """A fresh clone or CI (no private menu tree): from_data cannot rebuild a setting's menus, so it touches none of
     them, camera.menus included, whatever the MENUS table says now (a menu renamed, or the table gone): the
-    definition's menus, row_menus and row_places stay exactly as they were, and check_public finds nothing."""
+    definition's menus, row_menus and row_places stay exactly as they were, and check_public finds nothing. The settings
+    with a grey_in keep their own row_menus in the made-up shape: a grey_in names modes of the menus that list its row,
+    which the writer holds (camkit.grey_rules), and a clone keeps them as the definition has them."""
     import shutil
     import schema_update as S
     key = definitions.key(json.loads((definitions.ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8")))
@@ -490,8 +492,9 @@ def test_with_no_menu_tree_the_definitions_menus_stay_as_they_are(tmp_path, monk
     menus = [{"name": "Still", "modes": ["Stills"]}, {"name": "Movie", "modes": ["Movie"]}, {"name": "S&Q", "modes": ["S&Q", "Time-lapse"]}]
     doc["camera"]["menus"] = menus
     for s in doc["settings"]:          # the definition's own menus out, with menus or without: the made-up ones below
-        s.pop("row_menus", None), s.pop("row_places", None)
-    placed = [s for s in doc["settings"] if s.get("row") and not s.get("copy_of")]
+        if not s.get("grey_in"):       # a grey_in keeps its own: it names modes its row's menus serve (grey_rules)
+            s.pop("row_menus", None), s.pop("row_places", None)
+    placed = [s for s in doc["settings"] if s.get("row") and not s.get("copy_of") and not s.get("grey_in")]
     rows = {}                                  # one row in the editor (one name, one place): one set of menus
     for s in placed:
         k = rows.setdefault((s["name"], tuple(s["row"]), tuple(s["row_at"]), s.get("under_option")), len(rows))

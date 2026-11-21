@@ -540,3 +540,28 @@ def test_the_a1_iis_six_rows_fit_against_its_records_and_its_shoot_mode_pair_doe
     assert row_names.standing(row_names.read(SIX), runs, tree) == []
     pair = row_names.standing(row_names.read({"S&Q Shoot Mode": "Shoot Mode"}), runs, tree)
     assert pair and any(where == "kit2_diffset_movie_scan's page model, page 8/59" for _, _, where in pair)
+
+
+def test_placement_reads_the_placed_definitions_own_row_names_whatever_camera_the_kit_works_on(unnamed):
+    """Inside placement.placing(camera) (writer/fromdata.from_data sets it to the definition's own key), placement
+    renames a proof path and a tree's labels by THAT camera's ROW_NAMES, not by the camera the kit works on: a test's
+    made-up camera, or a clone that names none, gave the a1 II's Fixed Speed REC no S&Q row, and the a1 pass on a
+    made-up run refused a lost menu (pass 12's suite, 2026-11-21). Outside it, the camera the kit works on, as before."""
+    from camkit import placement
+    other = "OTHER-CAM_fw1.00"
+    p = datafiles.hand_tables_file(other)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"camera": other, "ROW_NAMES": {
+        "Remote Zoom Speed > 1 Fixed Speed REC": "Remote Zoom Speed > Fixed Speed REC"}}), encoding="utf-8")
+    row_names.forget()
+    path = "Remote Zoom Speed > 1 Fixed Speed REC [S&Q mode]"
+    assert placement.split(path) == ["Remote Zoom Speed", "1 Fixed Speed REC"], "the made-up camera names none"
+    with placement.placing(other):
+        assert placement.split(path) == ["Remote Zoom Speed", "Fixed Speed REC"]
+        assert placement.steps(path)[-1] == (">", "Fixed Speed REC")
+        tree = {"tabs": [{"tab": "Shooting", "pages": [{"page": "1/9", "group": "Zoom", "rows": [
+            {"label": "Remote Zoom Speed", "state": "submenu", "children": [{"label": "1 Fixed Speed REC",
+                                                                            "state": "walked"}]}]}]}]}
+        node = placement.Tree({"tabs": ["Shooting"], "menu": []}, tree).tabs[0]["groups"][0]["rows"][0]
+        assert node["kids"][0]["l"] == "Fixed Speed REC"
+    assert placement.split(path) == ["Remote Zoom Speed", "1 Fixed Speed REC"], "outside: as before"

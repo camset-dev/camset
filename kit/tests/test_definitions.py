@@ -3916,6 +3916,10 @@ def altered_pass(tmp: Path, mp) -> tuple:
     definitions.evidence_path(target).write_text(json.dumps(evidence, indent=1), encoding="utf-8")
     mp.setattr(S, "UNPROVED", {k: (kind, None, why) for k, (kind, _, why) in S.UNPROVED.items()})
     mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
+    # the made-up hand evidence stands for the UNPROVED days alone: the grey entries' looks are the private evidence's,
+    # which a clone or CI lacks (where the evidence is, they are put back and pass all the same); the look check is
+    # test_the_a1_pass_stops_on_a_grey_entry_its_looks_do_not_prove's
+    mp.setattr(S.hand_facts, "grey_look_gaps", lambda *a, **k: [])
     mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
     said = io.StringIO()
     with contextlib.redirect_stdout(said):
@@ -3998,8 +4002,9 @@ def grey_look(mode, drawn, blocker=None, kit=("mode",), **more):
 def test_the_a1_pass_writes_grey_in_and_inactive_if_and_takes_a_nulled_rule_out(tmp_path, monkeypatch):
     """RECORD_FIXES' grey_in and inactive_if reach the a1 II's written definition as the entries give them, the looks
     that prove them (the hand evidence's, put back into each entry) reach neither the definition nor its evidence
-    file, and "inactive_when": null takes the definition's rule out (Aspect Marker Level's, true only with a device on
-    the HDMI socket, comes back as inactive_if). Made-up entries and looks on the altered pass."""
+    file, and "inactive_when": null takes the definition's rule out: one the committed definition carries with no
+    table entry (Aspect Marker Level's, true only with a device on the HDMI socket, went so in pass 12 and is
+    inactive_if since). Made-up entries and looks on the altered pass."""
     import schema_update as S
     both = ("mode", "blocker")
     rf = S.RECORD_FIXES
@@ -4012,10 +4017,12 @@ def test_the_a1_pass_writes_grey_in_and_inactive_if_and_takes_a_nulled_rule_out(
     monkeypatch.setitem(rf, "global:0x1476", dict(rf["global:0x1476"], inactive_when=None, inactive_if=GREY_HDMI, looks=[
         grey_look("Stills", "grey", 0, both, hdmi="in"), grey_look("Stills", "white", 1, both, hdmi="in"),
         grey_look("Stills", "white", 0, both, hdmi="out")]))
-    assert "inactive_when" in PUB_BY["global:0x1476"]
+    gone = next(k for k, s in sorted(PUB_BY.items()) if s.get("inactive_when") and k not in rf)
+    monkeypatch.setitem(rf, gone, {"name": PUB_BY[gone]["name"], "inactive_when": None})
     _, by, ev = altered_pass(tmp_path, monkeypatch)
     assert by["global:0x02e9"]["grey_in"] == ["S&Q", "Time-lapse"]
     assert by["global:0x02ff"]["inactive_if"] == GREY_FAMILY
+    assert "inactive_when" not in by[gone], gone
     assert by["global:0x1476"]["inactive_if"] == GREY_HDMI and "inactive_when" not in by["global:0x1476"]
     assert not [k for k, s in by.items() if "looks" in s] and '"looks"' not in ev and "made_up" not in ev
 

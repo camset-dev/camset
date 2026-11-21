@@ -491,6 +491,17 @@ def with_place(s: dict, place: dict) -> dict:
 
 
 def from_data(doc: dict, rebuild: bool | str = None) -> dict:
+    """_from_data, the definition's own camera placed (camkit.placement.placing): its ROW_NAMES rename the records' older
+    row names whatever camera the kit works on, so another owner's clone gives the same definition (decision 16)."""
+    try:
+        camera = definitions.key(doc)
+    except (KeyError, IndexError, TypeError, ValueError):
+        camera = None
+    with placement.placing(camera):
+        return _from_data(doc, rebuild)
+
+
+def _from_data(doc: dict, rebuild: bool | str = None) -> dict:
     """The parts of a definition the kit takes from data/ alone, whatever the runs hold: the format and the camera
     section, the memory copies named from it, the project's own help, the menu list (with_menu) and each setting's
     place on the camera's menus; and the kit's own rules over it, the Expert marks, the photographer's words (with_plain_words), each note tidy (with_tidy_note) and its evidence apart (shown in
