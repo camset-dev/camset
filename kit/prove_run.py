@@ -113,13 +113,15 @@ from runner import (EXIT_UNRESTORED, add_allow_argument, add_network_argument, a
                     changes_of, end_session, known_groups, known_labels, known_values, label_readings, load_scan,
                     log_network_decided, menu_from_shooting, network_decided_or_exit, network_readings, network_values,
                     read_json, restoring, row_values, values_withheld)
-from runner import add_info_ok_argument, definition, info_ok_or_exit, row_labels, session_start  # noqa: E402
+from runner import (add_info_ok_argument, definition, info_ok_or_exit, row_labels, row_questions_or_exit,  # noqa: E402
+                    session_start)
 # the run's settings live with their readers, and main() sets them there (proving.base.MAP, proving.jobs.HELP_TEXT,
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
 import proving.base  # noqa: E402
 import proving.checklists  # noqa: E402
 from proving import greyed  # noqa: E402
 import proving.jobs  # noqa: E402
+import proving.screens  # noqa: E402
 import proving.sidelists  # noqa: E402
 import proving.tables  # noqa: E402,F401
 # every name of the parts, under its old place (the walkers, the provers and the tests import them from here)
@@ -1064,6 +1066,9 @@ def main():
         sys.exit("--info-ok passes no notice with --help-text, which reads the help and passes none")
     allowance = allowed_or_exit(a.allow)
     proving.jobs.ALLOWED.update(a.allow)
+    if a.allow and a.network and row_questions_or_exit(a.allow):
+        sys.exit("--allow answers no question on a --network run: its rows are looked at, or chosen in, only")
+    proving.screens.ROW_QUESTION.update(row_questions_or_exit(a.allow))     # a row's own question, on its path alone
     network = {}
     if a.network:
         network, chosen, words = network_rows_or_exit(a.rows)

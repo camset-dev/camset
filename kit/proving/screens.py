@@ -28,6 +28,10 @@ BAR_X = {"menu": (140, 470), "submenu": (55, 470), "list": (110, 556),   # label
 # flag (kit/prove_run.py, kit/provers/mode_switch.py, afreg_run.py, framepos_run.py): pass_note and the checklist prover
 # (proving.checklists.INFO_OK, the same dict) pass a notice before a row's screen only as it names it
 INFO_OK: dict = {}
+# The rows whose own question (safety.ROW_QUESTIONS: Exposure Std. Adjust's on the a1 II) a run's --allow answers with
+# OK (runner.row_questions_or_exit), whichever runner takes the flag (kit/crawl_run.py, kit/prove_run.py): only
+# pass_row_question answers it, on that row's path alone; every other row's notice is left as ever
+ROW_QUESTION: set = set()
 
 
 def refuse_or_fail(cam, name: str, what: str):
@@ -45,6 +49,45 @@ def refuse_or_fail(cam, name: str, what: str):
             leave_notice(cam)                   # MENU; OK back to the row only where MENU is refused (the a1 II's)
             raise Blocked(f"{name}: blocked by {reason!r}", reason)
     raise Failed(f"{name}: Right opened {s.kind}, {what}")
+
+
+def screen_text(cam) -> str:
+    """All the text OCR reads on the frame on show."""
+    return ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
+
+
+def _reads_ok(lit) -> bool:
+    return safety.fold(lit or "").strip().casefold() == "ok"
+
+
+def pass_row_question(cam, name: str, lit_before: str) -> dict | None:
+    """The question a row asks before it opens, answered with OK on the run's word for that row alone (--allow ROW, the
+    owner's word: ROW_QUESTION; Exposure Std. Adjust on the a1 II, 2026-11-21). None where the row (`name`'s last label)
+    is not one the run named: its notice is the caller's, as ever. Otherwise Enter goes out once, and only when all hold:
+    the screen is a notice; the lit bar read before Right (`lit_before`) is the row (safety.bar_on_row); the screen's
+    whole text is that row's own question (safety.row_question: its words as measured on the camera's frames, its two
+    buttons OK and Cancel, nothing else); and OK is lit, after at most one Up, which moves the cursor from Cancel onto OK
+    above it (nothing is chosen by it). The press carries ("row_question", ROW), so the camera's own Enter check judges it
+    again on the screen read afresh (camkit.live's row_question_passed). Returns {"row", "frame", "by"} once passed, else
+    {"refused": why}, no Enter sent (the caller leaves the notice with MENU, which cancels the row's opening)."""
+    row = name.split(" > ")[-1]
+    if row not in ROW_QUESTION:
+        return None
+    frame = cam.frame.path.name
+    if cam.read().kind != "notice":
+        return {"refused": f"not a notice ({cam.read().kind}, {frame})"}
+    if not safety.bar_on_row(lit_before, row):
+        return {"refused": "the lit bar read before Right is not the row named"}
+    why = safety.row_question(screen_text(cam), row)
+    if why:
+        return {"refused": f"not {row}'s own question ({why}, {frame})"}
+    if not _reads_ok(notice_lit(cam)):
+        cam.press("up")                     # the cursor from Cancel onto OK, above it: a move, nothing chosen
+        if cam.read().kind != "notice" or not _reads_ok(notice_lit(cam)):
+            return {"refused": f"OK could not be lit on {row}'s question ({cam.frame.path.name})"}
+    cam.confirm_once = ("row_question", row)
+    cam.press("enter")
+    return {"row": name, "frame": frame, "by": f"--allow {row!r}"}
 
 
 def to_notice_ok(cam) -> None:

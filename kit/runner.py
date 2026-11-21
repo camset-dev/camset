@@ -1560,6 +1560,23 @@ def info_ok_or_exit(values, rows=None, labels=None) -> dict:
     return out
 
 
+def row_questions_or_exit(labels, only: bool = False) -> set:
+    """The rows of a run's --allow whose own question the kit may answer with OK (safety.ROW_QUESTIONS: Exposure Std.
+    Adjust's on the a1 II), the owner's word carried by the run (proving.screens.ROW_QUESTION, pass_row_question). With
+    `only` (kit/crawl_run.py, whose --allow names such a row and nothing else) any other label exits before anything
+    connects; without it (kit/prove_run.py, whose --allow also names never-open rows) the others are left to
+    allowed_or_exit. Each row taken is said."""
+    rows = {x for x in labels or () if x in safety.ROW_QUESTIONS}
+    other = [x for x in labels or () if x not in safety.ROW_QUESTIONS]
+    if only and other:
+        sys.exit(f"--allow {other[0]!r}: no question the kit may answer (this run's --allow names only a row whose own "
+                 f"question the kit knows: {', '.join(sorted(safety.ROW_QUESTIONS))}); nothing was sent to the camera")
+    for row in sorted(rows):
+        print(f"--allow {row!r}: the question it asks before it opens is answered with OK, on that row alone, where the "
+              "screen reads as that question word for word", flush=True)
+    return rows
+
+
 def confirm_phrase_or_exit(value, flag: str = "--confirm") -> str:
     """A run's --confirm "SCREEN TEXT" without --owner (kit/drive.py, kit/tools/card_actions.py) as the phrase's words
     (notice_words): the whole text of the one screen the run will answer, compared as --info-ok compares a notice's

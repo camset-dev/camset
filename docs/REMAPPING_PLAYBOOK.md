@@ -105,6 +105,10 @@ your owner, and the default is no.
      docstring has the whole list, and the few named ways past the check.
    - Never press Enter on table buttons ("Set All", "Rec. Media Settings") or on a "Don't show
      this again" box.
+   - A row's own question before it opens is answered only on your owner's word for the run, `--allow "ROW"` to
+     `crawl_run.py` or `prove_run.py`, where the kit knows its words (`safety.ROW_QUESTIONS`). (The a1 II's owner allowed
+     OK on Exposure Std. Adjust's question on 2026-11-21: "Exposure adjust is ok, just put it back to where it was at
+     the end." Ask yours: the default is no.)
    - A dial turns only on a screen a regex names (rule 14).
 9. **Never act on a stale picture.** An HDMI frame older than 2 s raises an error. When HDMI goes black, the kit
    checks the SDK's OSD image instead.

@@ -16,6 +16,7 @@ from camkit.session import kind_seen, osd_shooting, playback_kind
 from crawl_run import go_to
 from camkit.live import menu_from_shooting
 
+from . import screens
 from .base import LOCK_S, Failed, LockSeen, lock_log, lock_measured, lock_over
 from .screens import (SEEN, at_label, bar_text, carousel_text, closest_row, glued, option_key, place, run_tmp_png,
                       same_place, title_settled)
@@ -75,9 +76,17 @@ def find_row(cam, label, at=None) -> bool:
 
 def enter_path(cam, path, start: int, at=None):
     """From path[start]'s row on screen, Right into each submenu and Down to the next label; the last by its place
-    `at` where this run knows it (find_row)."""
+    `at` where this run knows it (find_row). A row whose own question the run's --allow answers (screens.ROW_QUESTION:
+    Exposure Std. Adjust's on the a1 II) has it answered by screens.pass_row_question, the lit bar read before Right as
+    the row; any other notice, or that question refused, fails as before (its MENU is the caller's)."""
     for k, label in enumerate(path[start + 1:], start + 1):
+        asks = path[k - 1] in screens.ROW_QUESTION
+        lit = live.lit_text(cam.frame.image, cam.frame.path) if asks else ""
         cam.press("right")
+        if asks and cam.read().kind == "notice":
+            got = screens.pass_row_question(cam, " > ".join(path[:k]), lit) or {}
+            if "refused" in got:
+                raise Failed(f"Right on {path[k - 1]!r} opened its question, not answered: {got['refused']}")
         if cam.read().kind != "submenu":
             raise Failed(f"Right on {path[start]!r} opened {cam.read().kind}, not its submenu")
         if not find_row(cam, label, at=at if k == len(path) - 1 else None):
