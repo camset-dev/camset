@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, paths, placement, row_names
+from camkit import ROOT, datafiles, definitions, grey_rules, help_files, jsonl, models, paths, placement, row_names
 from runner import read_json
 
 from . import hand_tables
@@ -499,7 +499,9 @@ def from_data(doc: dict, rebuild: bool | str = None) -> dict:
     (without_written_with: it told how the camera was set).
     The camera's menus (camera.menus from the MENUS table, each setting's row_menus and row_places) are rebuilt only
     where the places are (places: the menu tree and the proof paths here); elsewhere (a fresh clone, CI) they stay
-    exactly as the definition has them, what the writer cannot rebuild left untouched. `rebuild`: places_as_read of the
+    exactly as the definition has them, what the writer cannot rebuild left untouched. A grey_in, inactive_if or
+    inactive_when out of camkit.grey_rules' shapes (a mode the row's menus do not serve, a rule on the live-mode record)
+    stops it, nothing written. `rebuild`: places_as_read of the
     definition as the pass read it, before its proofs (schema_update.main and the plain pass give it), else of `doc`.
     main() ends the same way, so on the committed data this gives the committed definition."""
     rebuild = places_as_read(doc) if rebuild is None else rebuild
@@ -535,6 +537,12 @@ def from_data(doc: dict, rebuild: bool | str = None) -> dict:
         raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: prove the row in the mode of each "
                                   "menu the records share, or give them rows by hand (HAND_PLACES), then run the "
                                   "command again.")
+    grey = grey_rules.problems(doc)          # grey_in, inactive_if (RECORD_FIXES): the camera's modes, the row's menus
+    if grey:
+        raise hand_tables.Refused(f"{definitions.key(doc)}: {'; '.join(grey[:6])}"
+                                  f"{f' (and {len(grey) - 6} more)' if len(grey) > 6 else ''}. Nothing was written: "
+                                  "correct those RECORD_FIXES entries (docs/DATA_CONTRACTS.md, \"When the camera greys a "
+                                  "row\"), then run the command again.")
     hit = main_tile_expert(doc)
     if hit is not None:
         s = hit[2]

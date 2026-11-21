@@ -387,6 +387,11 @@ def generic_main(target: Path, run: Path, write: bool, force: bool = False, acce
     gaps = hand_facts.hand_proof_gaps(E)
     if gaps:
         sys.exit(hand_facts.hand_proof_stop(camera, gaps))
+    # a grey_in or inactive_if rests on the kit's looks of each side, in the hand evidence (camkit.grey_rules): checked
+    # where that evidence is (a clone without it writes the public entries as they stand)
+    gaps = hand_facts.grey_look_gaps(T.RECORD_FIXES, E, hand_facts.camera_modes(camera)) if T.HAND_EVIDENCE else []
+    if gaps:
+        sys.exit(hand_facts.grey_look_stop(camera, gaps))
     if missing:                                 # a look goes on, and says what --write would stop on
         print(f"note, before --write: {missing}")
     if E.get("MY_MENU_EMPTY"):                  # evidence for a table only the ILCE-1M2's pass reads

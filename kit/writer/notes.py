@@ -91,7 +91,11 @@ def fix_differs(item: dict, fix: dict) -> bool:
 
 
 def apply_fix(item: dict, fix: dict) -> None:
-    item.update({f: v for f, v in fix.items() if f != "note"})
+    """A table's fix put on the setting: each field set, but one the fix gives as null taken out (RECORD_FIXES'
+    "inactive_when": null, a rule found wrong), and the note written whole where it differs."""
+    item.update({f: v for f, v in fix.items() if f != "note" and v is not None})
+    for f in [f for f, v in fix.items() if v is None and f != "note"]:
+        item.pop(f, None)
     if "note" in fix and not note_is(item, fix["note"]):
         put_note(item, fix["note"])
 

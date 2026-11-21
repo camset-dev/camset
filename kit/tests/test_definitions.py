@@ -3937,6 +3937,78 @@ def test_the_a1_pass_puts_its_tables_on_the_look_copies_and_the_record_fixes(alt
     assert "name: 'Unknown camera state (8 after a reset)' -> 'Unknown camera state (8 after a reset)'" not in said
 
 
+GREY_FAMILY = {"record": 584, "name": "S&Q Frame Rate", "values": [0, 2], "unlock": 4, "unlock_label": "60fps",
+               "family": ["S&Q"]}
+GREY_HDMI = {"record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off",
+             "hdmi_device": True}
+
+
+def grey_look(mode, drawn, blocker=None, kit=("mode",), **more):
+    """A made-up look of a grey row, in the hand evidence's shape (camkit.grey_rules)."""
+    return dict({"run": "made_up", "line": 1, "mode": mode, "drawn": drawn, "kit_set": list(kit)},
+                **({"blocker": blocker} if blocker is not None else {}), **more)
+
+
+def test_the_a1_pass_writes_grey_in_and_inactive_if_and_takes_a_nulled_rule_out(tmp_path, monkeypatch):
+    """RECORD_FIXES' grey_in and inactive_if reach the a1 II's written definition as the entries give them, the looks
+    that prove them (the hand evidence's, put back into each entry) reach neither the definition nor its evidence
+    file, and "inactive_when": null takes the definition's rule out (Aspect Marker Level's, true only with a device on
+    the HDMI socket, comes back as inactive_if). Made-up entries and looks on the altered pass."""
+    import schema_update as S
+    both = ("mode", "blocker")
+    rf = S.RECORD_FIXES
+    monkeypatch.setitem(rf, "global:0x02e9", dict(rf["global:0x02e9"], grey_in=["S&Q", "Time-lapse"], looks=[
+        grey_look("S&Q", "grey", help="shoot mode"), grey_look("Time-lapse", "grey", help="shoot mode"),
+        grey_look("Movie", "white")]))
+    monkeypatch.setitem(rf, "global:0x02ff", {"name": PUB_BY["global:0x02ff"]["name"], "inactive_if": GREY_FAMILY,
+                                              "looks": [grey_look("S&Q", "grey", 2, both), grey_look("S&Q", "white", 4, both),
+                                                        grey_look("Movie", "white", 2)]})
+    monkeypatch.setitem(rf, "global:0x1476", dict(rf["global:0x1476"], inactive_when=None, inactive_if=GREY_HDMI, looks=[
+        grey_look("Stills", "grey", 0, both, hdmi="in"), grey_look("Stills", "white", 1, both, hdmi="in"),
+        grey_look("Stills", "white", 0, both, hdmi="out")]))
+    assert "inactive_when" in PUB_BY["global:0x1476"]
+    _, by, ev = altered_pass(tmp_path, monkeypatch)
+    assert by["global:0x02e9"]["grey_in"] == ["S&Q", "Time-lapse"]
+    assert by["global:0x02ff"]["inactive_if"] == GREY_FAMILY
+    assert by["global:0x1476"]["inactive_if"] == GREY_HDMI and "inactive_when" not in by["global:0x1476"]
+    assert not [k for k, s in by.items() if "looks" in s] and '"looks"' not in ev and "made_up" not in ev
+
+
+def test_the_a1_pass_stops_on_a_grey_entry_its_looks_do_not_prove(monkeypatch):
+    """A grey_in whose looks the hand evidence does not give whole stops the a1 II's pass before it reads the
+    definition, naming the entry and the side missing (the plain pass stops alike: hand_facts.grey_look_gaps). Made-up
+    entry; a look, so nothing is written."""
+    import schema_update as S
+    monkeypatch.setitem(S.RECORD_FIXES, "global:0x02e9", dict(S.RECORD_FIXES["global:0x02e9"], grey_in=["S&Q"],
+                                                              looks=[grey_look("S&Q", "grey", help="none")]))
+    monkeypatch.setattr(S, "HAND_EVIDENCE", Path("/nowhere") / "made-up hand evidence")
+    monkeypatch.setattr(S, "RUN_ROOT", Path("/nowhere") / A1)
+    monkeypatch.setattr(sys, "argv", ["schema_update.py"])
+    monkeypatch.setattr(definitions, "load", lambda *a, **k: pytest.fail("the definition was read"))
+    with pytest.raises(SystemExit) as e:
+        S.main()
+    said = str(e.value.code)
+    assert "global:0x02e9 grey_in: no look reads the row grey in S&Q with Help naming the shoot mode" in said
+    assert "global:0x02e9 grey_in: no look reads the row white in a mode grey_in leaves out" in said
+    assert "nothing done" in said
+
+
+def test_from_data_refuses_a_grey_in_outside_the_rows_menus_and_a_rule_on_the_live_mode():
+    """The writer refuses a definition whose grey_in names a mode no menu of the row serves, or whose inactive_when
+    stands on the live-mode record, nothing written (camkit.grey_rules.problems); the committed definition passes."""
+    from writer.fromdata import from_data
+    doc = json.loads(json.dumps(PUB))
+    by = {s["key"]: s for s in doc["settings"]}
+    by["global:0x02e9"]["grey_in"] = ["Stills"]
+    by["global:0x02f4"]["inactive_when"] = {"record": 5055, "name": "Shooting family", "values": [2], "unlock": 1,
+                                            "unlock_label": "Movie"}
+    with pytest.raises(hand_tables.Refused) as e:
+        from_data(doc)
+    said = str(e.value)
+    assert "global:0x02e9: grey_in names 'Stills', which no menu that lists the row serves (Movie, S&Q, Time-lapse)" in said
+    assert "global:0x02f4: inactive_when stands on the live-mode record" in said and "Nothing was written" in said
+
+
 def test_the_a1_pass_stops_on_a_hand_proof_without_its_run_day_or_row(monkeypatch):
     """A hand proof the hand evidence gives (FRAME_PROOFS with "proved" or "sampled") names its run, day and menu row
     there: the a1 II's pass stops before it reads the definition on one that does not, or names one empty, naming the

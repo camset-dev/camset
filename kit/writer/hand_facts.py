@@ -39,7 +39,7 @@ import re
 import sys
 from pathlib import Path
 
-from camkit import paths
+from camkit import grey_rules, paths
 
 from .labels import clean
 from .mirror import mirror_key, mirror_of
@@ -411,18 +411,65 @@ def value_fixes(by_key: dict, tables, over: dict, changed: list) -> None:
 
 def record_fixes(by_key: dict, tables, ev: dict, changed: list) -> None:
     """RECORD_FIXES: a setting's name, tab, group, range or unit the camera proved wrong, or when it leaves it out
-    (inactive_when), put on it, and its note, word for word, its evidence into note_evidence alone (hand_note); one the
-    definition does not hold yet is said."""
+    (inactive_when, null taking the definition's out; inactive_if and grey_in, camkit.grey_rules, never the entry's
+    looks), put on it, and its note, word for word, its evidence into note_evidence alone (hand_note); one the
+    definition does not hold yet is said; an inactive_if or grey_in no entry gives any more goes (grey_out)."""
     for k, fix in tables.RECORD_FIXES.items():
         if k not in by_key:
             print(f"  record fix  {k} {fix['name'][:40]!r}: the definition has no such setting yet, not applied")
             continue
-        rest = {f: x for f, x in fix.items() if f != "note"}
+        rest = {f: x for f, x in public_fix(fix).items() if f != "note"}
         if fix_differs(by_key[k], rest):
             changed.append((k, by_key[k]["name"], "name", by_key[k]["name"], fix["name"]))
             apply_fix(by_key[k], _copy(rest))
         if "note" in fix:
             hand_note(by_key[k], fix["note"], evidence_words(ev, ("RECORD_FIXES",), k), changed)
+    grey_out(by_key, tables.RECORD_FIXES, changed)
+
+
+def public_fix(fix: dict) -> dict:
+    """A RECORD_FIXES entry as its setting takes it: without its looks (the hand evidence's, put back into the entry by
+    the ILCE-1M2's pass), which never reach the definition (camkit.grey_rules)."""
+    return {f: x for f, x in fix.items() if f not in grey_rules.EVIDENCE}
+
+
+def grey_out(by_key: dict, fixes: dict, changed: list) -> None:
+    """grey_in and inactive_if are the hand tables' alone (RECORD_FIXES): a setting whose entry no longer gives one
+    loses it, said."""
+    for k, s in by_key.items():
+        for f in grey_rules.FIELDS:
+            if f in s and f not in (fixes.get(k) or {}):
+                print(f"  record fix  {k} {f}: taken out, RECORD_FIXES no longer gives it")
+                changed.append((k, s["name"], f, s[f], None))
+                del s[f]
+
+
+def grey_look_gaps(fixes: dict, ev: dict, names: list) -> list:
+    """Each side of a RECORD_FIXES entry's grey_in or inactive_if its looks do not prove (camkit.grey_rules.
+    look_problems; `ev`, the hand evidence by table and key, gives the looks; `names`, the camera's shooting modes),
+    "<key> <what is missing>" each."""
+    return [f"{k} {p}" for k, fix in fixes.items()
+            for p in grey_rules.look_problems(fix, part(ev, "RECORD_FIXES", k).get("looks"), names)]
+
+
+def camera_modes(camera: str) -> list:
+    """The camera's names for its shooting modes, from its camera file (camera.live_mode); [] where it gives none."""
+    from camkit import definitions
+    try:
+        return grey_rules.live_names(json.loads(definitions.camera_file(camera).read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return []
+
+
+def grey_look_stop(camera: str, gaps: list) -> str:
+    """Either pass's stop, before the definition is read and nothing written, on grey_in or inactive_if entries whose
+    looks the hand evidence does not give whole (`gaps`, grey_look_gaps')."""
+    from . import hand_evidence
+    return (f"schema_update: nothing done. The hand evidence, {paths.shown(hand_evidence.path(camera))}, does not prove "
+            f"every side of these RECORD_FIXES entries: {'; '.join(gaps)}. Each grey_in or inactive_if rests on looks "
+            "the kit made (\"looks\" in the entry's RECORD_FIXES part; docs/DATA_CONTRACTS.md, \"When the camera greys a "
+            "row\"): add the looks that prove the missing side, or take the entry out of the tables until they exist, "
+            "then run the command again.")
 
 
 def state_proofs_out(by_key: dict, reasons: dict, by_hand: set, changed: list) -> list:

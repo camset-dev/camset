@@ -164,6 +164,26 @@ here to tell, a ruling of kind "one value short" in the accepted file accepts by
 never accepted, and `--write` refuses until the value is proved from another start, a held `not_offered` mark says the
 camera holds it from the factory and no list chooses it back, or a reason keeps the setting out.
 
+### When the camera greys a row (`inactive_when`, `inactive_if`, `grey_in`)
+
+- **`inactive_when`:** the camera greys the row while another record holds certain values.
+- **`inactive_if`:** the same rule, true only in some shooting modes (`family`) or only with a device on the HDMI
+  socket (`hdmi_device`). It is a key of its own: an editor that predates it ignores it rather than showing a false
+  grey.
+- **`grey_in`:** the shooting modes in which the camera draws the row grey whatever the file holds.
+- **Mode names:** both name modes as `camera.live_mode` does, never menus, since one menu (the a1 II's S&Q) serves two
+  modes. A menu's view dims a row only where the rule holds in every mode the view stands for: the file's own mode when
+  it is one of the menu's, else all of the menu's modes. Otherwise the view says the condition beside the row, and it
+  never dims on a cable it cannot see.
+- **Where they come from:** all three come from `RECORD_FIXES` alone. `"inactive_when": null` takes a rule found wrong
+  out, and a `grey_in` or `inactive_if` the tables stop giving leaves the definition.
+- **What the writer refuses:**
+  - any rule on the live-mode record;
+  - a mode the row's menus do not serve;
+  - on the mapper's computer, an entry whose `looks` in the hand evidence miss a side.
+
+  `kit/camkit/grey_rules.py` says each check.
+
 ### A picker's list walked whole (`PICKER_LISTS`)
 
 A first kit gave every function picker of a camera one list, the union of every function code it met in any of them.
@@ -348,6 +368,10 @@ What each table's evidence holds (`tables`):
 A `FRAME_PROOFS` entry's evidence:
 
 {{ schema_fields("hand-evidence", "properties/tables/properties/FRAME_PROOFS/additionalProperties") }}
+
+A look behind a `RECORD_FIXES` entry's `grey_in` or `inactive_if`:
+
+{{ schema_fields("hand-evidence", "properties/tables/properties/RECORD_FIXES/additionalProperties/properties/looks/items") }}
 
 ## The menu tree: the camera's menus
 

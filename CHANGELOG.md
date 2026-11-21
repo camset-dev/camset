@@ -228,6 +228,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A definition can say a grey the record alone does not tell:** `grey_in` names the shooting modes where the camera
+  greys a row whatever the file holds, and `inactive_if` is a rule true only in some modes or only with a device on the
+  HDMI socket. Both come from `RECORD_FIXES`, rest on the kit's looks of each side in the hand evidence, and
+  `"inactive_when": null` takes a rule found wrong out.
 - **`mode_switch.py --set` sets Picture Profile's side-strip dialog, and never a row its owner sets by hand:** only the
   dialog rows `DIALOG_ROWS` names are chosen in, by their title and the mode's map. Every flash, sound, light, motion,
   USB, language, NTSC/PAL, area, date and network row is refused before the link opens.

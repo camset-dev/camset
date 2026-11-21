@@ -739,6 +739,76 @@
      },
      "description": "The camera greys this setting out while another record (record, named name) holds one of values, or any value but those in except; unlock and unlock_label are the value that turns the setting on again, where a proof found it."
     },
+    "inactive_if": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "record",
+      "name",
+      "values",
+      "unlock",
+      "unlock_label"
+     ],
+     "properties": {
+      "record": {
+       "type": "integer"
+      },
+      "name": {
+       "type": "string"
+      },
+      "values": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       }
+      },
+      "except": {
+       "type": "array"
+      },
+      "unlock": {
+       "type": "integer"
+      },
+      "unlock_label": {
+       "type": "string"
+      },
+      "family": {
+       "type": "array",
+       "minItems": 1,
+       "uniqueItems": true,
+       "items": {
+        "type": "string"
+       },
+       "description": "The rule holds only while the camera is in one of these shooting modes, the camera's own names for its shooting modes (camera.live_mode's: the a1 II's Stills, Movie, S&Q and Time-lapse), never menu names; never all of them (that is inactive_when)."
+      },
+      "hdmi_device": {
+       "type": "boolean",
+       "const": true,
+       "description": "The rule holds only while a device is connected to the camera's HDMI socket, which no record of the file tells: the editor never dims the row on it, it says the condition beside the reason."
+      }
+     },
+     "anyOf": [
+      {
+       "required": [
+        "family"
+       ]
+      },
+      {
+       "required": [
+        "hdmi_device"
+       ]
+      }
+     ],
+     "description": "Like inactive_when, but the rule holds only under a further condition the record alone does not say: in some shooting modes (family) or only with a device on the HDMI socket (hdmi_device), one or both. Its own key, so an editor that predates it ignores it whole and never shows its grey. The editor dims the row only where the condition is known to hold in the menu's view (never on hdmi_device) and says the condition beside the reason otherwise (camkit/grey_rules.py)."
+    },
+    "grey_in": {
+     "type": "array",
+     "minItems": 1,
+     "uniqueItems": true,
+     "items": {
+      "type": "string"
+     },
+     "description": "The shooting modes in which the camera draws the setting's row grey whatever the file holds, the camera's own names for its shooting modes (camera.live_mode's: the a1 II's Stills, Movie, S&Q and Time-lapse), never menu names: each a mode of a menu that lists the row (row_menus), never every one; a fact that differs between two modes of one menu (the S&Q menu's S&Q and Time-lapse) names only the mode it holds in. The editor dims the row in a menu's view only where every mode the view stands for is named, and says the modes beside it where some are (camkit/grey_rules.py, docs/DATA_CONTRACTS.md)."
+    },
     "proved": {
      "type": "object",
      "description": "Proved on the camera: each option chosen in its own menu and the settings file compared, as a lean definition says it: the values a proof checked (values), whether some of them were named from another setting's proof (shared) or, for a scale proved by samples, whether they lie on one line (sampled). Never the run, the day, the menu rows, where each name came from, which values were named from another setting, nor how many samples: that is the mapping's evidence (docs/decisions/0016, 0025).",
