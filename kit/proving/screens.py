@@ -613,10 +613,58 @@ def glued(label: str) -> str:
     return re.sub(r"^([A-Za-z0-9+]{1,3})\s+\(", r"\1(", (label or "").strip())
 
 
-def at_label(cam, kind, label) -> bool:
+LIT_ROWS_ALIKE = 2      # rows read alike on both frames, outside the two bars, that make the frame before the same page
+
+
+def _rows_outside(lines, x0, x1, bands) -> dict:
+    """{row centre's y in 10 px steps: text} of the OCR lines in the label column (x0..x1) outside every band."""
+    out = {}
+    for ln in lines:
+        cy = ln.y + ln.h / 2
+        if x0 <= ln.x + ln.w / 2 <= x1 and not any(t <= cy <= b for t, b in bands):
+            out[round(cy / 10)] = safety.plain(ln.text)
+    return out
+
+
+def lit_letter(cam, prev) -> str:
+    """The lit bar's label where OCR reads none on it (a lone white letter on the orange bar, which Apple Vision drops:
+    Color Depth's M and Y, kit2_pass2 304086 and 304087, 2026-11-21), resting on TWO signs that agree, else "": the
+    label OCR read at the bar's place on the frame before (`prev`: the cursor moved one row), on the same page (every
+    row both frames read outside the two bars reads alike, at least LIT_ROWS_ALIKE of them; a row one frame did not read
+    is no difference), AND the second reader's label for the lit bar (camkit.live.reader_label: the "second" role alone,
+    never the third readers). Where OCR reads the bar, or either sign is missing, or they differ: ""."""
+    from camkit import live as camlive
+    s = cam.read()
+    bar = getattr(s, "bar", None)
+    if prev is None or not bar or s.kind not in BAR_X or bar_text(cam):
+        return ""
+    x0, x1 = BAR_X[s.kind]
+    try:
+        before = screen.read(prev)
+        now_lines = ocr.read([cam.frame.path])[cam.frame.path]
+        before_lines = ocr.read([prev.path])[prev.path]
+    except Exception:
+        return ""
+    if getattr(before, "kind", None) != s.kind:
+        return ""
+    bands = [bar] + ([before.bar] if getattr(before, "bar", None) else [])
+    now_rows, before_rows = _rows_outside(now_lines, x0, x1, bands), _rows_outside(before_lines, x0, x1, bands)
+    both = set(now_rows) & set(before_rows)
+    if len(both) < LIT_ROWS_ALIKE or any(now_rows[y] != before_rows[y] for y in both):
+        return ""
+    was = ocr.text_in(before_lines, (x0, bar[0], x1, bar[1])).strip(" •")
+    said, _why = camlive.reader_label(cam.frame.path)
+    if not was or not said or safety.plain(was) != safety.plain(said):
+        return ""
+    return was
+
+
+def at_label(cam, kind, label, prev=None) -> bool:
+    """Whether the bar on the `kind` screen reads as `label`; where OCR reads nothing on the lit bar, its label by
+    lit_letter's two agreeing signs, given the frame before (`prev`, find_row's)."""
     if cam.read().kind != kind:
         return False
-    t = bar_text(cam)
+    t = bar_text(cam) or (lit_letter(cam, prev) if prev is not None else "")
     return (same_text(t, glued(label)) and keeps_lead(t, label)) or (label in SEEN and same_text(t, SEEN[label]))
 
 

@@ -3557,7 +3557,7 @@ def test_find_row_says_no_bar_text_on_a_network_or_owner_run(monkeypatch, capsys
     from camkit import vlm
     from proving import nav
     cam = SimpleNamespace(read=lambda: SimpleNamespace(kind="submenu"), press=lambda key: None)
-    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label: False)
+    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label, prev=None: False)
     monkeypatch.setattr(nav, "same_state", lambda a, b: True)
     monkeypatch.setattr(nav, "closest_row", lambda texts, label: 0)
     monkeypatch.setattr(nav, "bar_text", lambda cam: f"Row {UNKNOWN}")
