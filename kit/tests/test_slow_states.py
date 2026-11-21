@@ -64,7 +64,7 @@ def test_the_message_says_what_was_seen_why_and_what_to_do(monkeypatch):
     monkeypatch.setattr(slow_states, "file_reader", lambda path: reader(2, 15))
     why = slow_states.refusal(DOC, "x.DAT", doing="greyrow_run.py")
     assert why.startswith("greyrow_run.py found the camera in S&Q mode with S&Q Frame Rate at 1fps.")
-    for words in ("act on one button press twice", "Nothing was pressed",
+    for words in ("act on one button press twice", "Nothing more was pressed",
                   "set S&Q Frame Rate to any other rate on the camera by hand",
                   "MENU > S&Q Settings > Frame Rate Settings > Frame Rate", "kit/tools/upload_check.py FILE"):
         assert words in why

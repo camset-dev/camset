@@ -452,6 +452,21 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
     return ""
 
 
+def slow_choice_refused(doc: dict, path, key: str, lit: str) -> str:
+    """Why this Enter is refused, or "": on the --path's row or a row above it, with the lit option the value of a state
+    in which this camera acts on one press twice (camkit.slow_states.chosen: S&Q Frame Rate's 1fps on the a1 II), it
+    would put the camera there. drive.py downloads only at its start and end, so the link's check of every download
+    (camkit.link.Link.slow_guard) would come too late for the presses after such an Enter."""
+    from camkit import slow_states
+    if canonical_key(key) not in ENTERS or not (lit or "").strip():
+        return ""
+    st = slow_states.chosen(doc, list(path or ()), lit, within=True)
+    if st is None:
+        return ""
+    return (f"Enter on {lit.strip()!r} would set {st['setting']} to {st['label']} ({st['mode']} mode), a state where this "
+            f"camera has been seen to act on one button press twice ({st['seen']}): the kit never sets it")
+
+
 def press_decision(p: str, key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
                    on_shooting=(), network=frozenset(), screens: bool = False, values=None, readings=None, owner=None,
                    armed_row: str = "", labels=None, body=None, consent: str = "", notice_way: str = "",
@@ -2008,6 +2023,7 @@ def main():
                                                   consent=consent,
                                                   notice_way=f"--info-ok {notice_row}" if notice_row else "", lone=lone,
                                                   look=look, row=target)
+                    why = why or slow_choice_refused(definition(), a.path, key, lit)
                     if vouched:
                         print(f"Enter vouched by the operator on {shown(t)[0]}", flush=True)
                     if why:
