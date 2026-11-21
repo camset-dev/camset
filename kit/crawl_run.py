@@ -441,15 +441,59 @@ def tab_shown(text: str) -> str | None:
     return min(hits)[1] if hits else None
 
 
+# The Main tab's page (the a1 II's "Main 2/63", "Main 2/59" in Movie and S&Q): a status panel of tiles beside its group
+# headings, no rows, and no page scan holds it. The camera reopens its menu where it was last closed, so a run that
+# closed it there (tco_1fps_look's tab-column jump at S&Q 1fps, kit2_greyrow 04498, 2026-11-21) leaves it to the next
+# (kit2_pp_cd_sq 00004): its breadcrumb, then its page count, lead the screen's text
+MAIN_PAGE = re.compile(r"\s*main\s+\d+\s*/\s*\d+", re.I)
+
+
+def on_main(text: str) -> bool:
+    """Whether a menu screen's text (the breadcrumb leads it) is the Main tab's page."""
+    return bool(MAIN_PAGE.match(text or ""))
+
+
+def from_main(cam, cycle, model):
+    """Off the Main tab's page (on_main) by the columns, never an Enter and never a press on a tile (its tiles open
+    settings): Left only where a bar is lit (a heading of the page, kit2_pp_cd_sq 00005; Left from the group column to
+    the tab column, as kit2_greyrow 04492 to 04493), the screen then still the Main page with no bar lit; Down in the tab
+    column to the Shooting tab below Main, the breadcrumb then reading Shooting with no bar lit; Right into its group
+    column, a group's bar then lit; then from_groups, as for any menu opened in the group column. Each press only on a
+    screen read as the menu; anything else stops it there, nothing more pressed (the caller's MENU closes the menu).
+    Returns from_groups' position, or None."""
+    def lit():
+        return lit_text(cam.frame.image, cam.frame.path).strip()
+    if lit():
+        cam.press("left")
+        if cam.read().kind != "menu" or not on_main(menu_text(cam)) or lit():
+            print("off the Main page: Left did not leave the Main tab lit in the tab column; nothing more is pressed",
+                  flush=True)
+            return None
+    cam.press("down")
+    if cam.read().kind != "menu" or tab_shown(menu_text(cam)) != "Shooting" or lit():
+        print(f"off the Main page: Down in the tab column did not reach the Shooting tab ({said(cam, menu_text(cam)[:30])});"
+              " nothing more is pressed", flush=True)
+        return None
+    cam.press("right")
+    if cam.read().kind != "menu" or cam.read().focus != "groups" or not lit():
+        print("off the Main page: Right did not light a group of the Shooting tab; nothing more is pressed", flush=True)
+        return None
+    print("the menu opened on the Main page: off it by the columns, to the Shooting tab", flush=True)
+    return from_groups(cam, cycle, model)
+
+
 def find_position(cam, cycle, model):
     """The scan position the open menu shows. The menu opens on the page last used, and a value changed
     there since the scan (Bluetooth Function, 2026-11-02) matches no position: then by the columns to
     the Shooting tab's first group, which does. A menu that opens with the cursor in the group column (where a refused
     jump left it, 2026-11-13) is stepped into the rows of a group that may be entered first (from_groups), never by a
-    Right on a group refused."""
+    Right on a group refused. A menu that opens on the Main tab's page (on_main, 2026-11-21) is taken off it by the
+    columns first (from_main)."""
     j = next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
     if j is not None or cam.read().kind != "menu":
         return j
+    if cam.read().focus == "groups" and on_main(menu_text(cam)):    # the Main page reads so, its tab or a heading lit
+        return from_main(cam, cycle, model)
     if cam.read().focus == "groups":
         j = from_groups(cam, cycle, model)
         if j is not None or cam.read().kind != "menu" or cam.read().focus != "rows":

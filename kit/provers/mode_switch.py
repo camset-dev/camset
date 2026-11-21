@@ -61,7 +61,7 @@ from camkit.vlm import check_readers  # noqa: E402
 from camkit.match import clean  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
-from crawl_run import go_to  # noqa: E402
+from crawl_run import find_position, go_to, on_main  # noqa: E402
 from prove_run import Failed, bar_text, enter_any, info_notice_ok, option_key, to_shooting  # noqa: E402
 from proving.tables import (DIAL_ROW, cell_value, dial_cell, dial_option, dial_table, on_dial_cell,  # noqa: E402
                             to_dial_cell)
@@ -107,15 +107,20 @@ def text(cam) -> str:
 
 
 def find(cam, cycle, model, label: str):
-    """The menu open on the row labelled `label`, by the scan."""
+    """The menu open on the row labelled `label`, by the scan: from the position the screen shows, else from the one
+    crawl_run.find_position reaches (a page the scan does not match, the group column, the Main tab's page)."""
     j = scan_position(cam, cycle)
+    if j is None:
+        j = find_position(cam, cycle, model)
     if j is None or go_to(cam, cycle, model, j, label) is None:
         raise Failed(f"could not reach {label!r} by the scan ({cam.read().kind}, {cam.frame.path.name})")
 
 
 def open_menu(cam):
     menu_from_shooting(cam)              # MENU, once more if it went unanswered after a download
-    if cam.read().kind == "menu" and cam.read().focus == "groups":
+    # on the Main tab's page (crawl_run.on_main) a Right goes onto its headings or tiles: find takes it off the page by
+    # the columns instead (crawl_run.from_main, 2026-11-21)
+    if cam.read().kind == "menu" and cam.read().focus == "groups" and not on_main(text(cam)):
         # the menu reopens where a hand left it, the focus in the group column; a never-open group left lit there
         # (FTP Transfer, Accessibility) is stepped off first, since Right is refused on it (as prove_run's session)
         for key in ("up", "down", "down"):

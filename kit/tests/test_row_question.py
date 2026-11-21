@@ -235,6 +235,15 @@ def test_the_flag_names_only_a_row_whose_question_the_kit_knows():
     assert runner.row_questions_or_exit(["Camera Set. Memory", ROW]) == {ROW}     # prove_run's other --allow rows
 
 
+def test_prove_runs_allow_calls_the_rows_question_no_never_open_row(capsys):
+    import runner
+    runner.allowed_or_exit([ROW])
+    assert "never-open" not in capsys.readouterr().out
+    runner.allowed_or_exit([ROW, "Camera Set. Memory"])
+    out = capsys.readouterr().out
+    assert "never-open rows: 'Camera Set. Memory'" in out and ROW not in out
+
+
 def test_crawl_run_takes_the_flag_for_such_a_row_alone_and_never_on_a_look_lap():
     src = (ROOT / "kit" / "crawl_run.py").read_text(encoding="utf-8")
     assert "row_questions_or_exit(a.allow, only=True)" in src

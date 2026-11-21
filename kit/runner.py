@@ -1414,8 +1414,9 @@ def allowed_or_exit(labels) -> str:
         why = safety.allow_refused(label)
         if why:
             sys.exit(f"{label!r}: {why}")
-    if labels:
-        print(f"operator allowed these never-open rows: {', '.join(repr(x) for x in labels)}", flush=True)
+    shut = [x for x in labels if x not in safety.ROW_QUESTIONS]     # a row's own question is said by row_questions_or_exit
+    if shut:
+        print(f"operator allowed these never-open rows: {', '.join(repr(x) for x in shut)}", flush=True)
     return safety.allowance(labels)
 
 
