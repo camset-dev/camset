@@ -200,11 +200,31 @@ def title_reads(cam, labels: list, box_lit: bool = False) -> str | None:
     frame = getattr(getattr(getattr(cam, "frame", None), "path", None), "name", None)
     if i is not None and (not why or box_lit and short_title_stands(cam, t, labels[i], why)):
         TITLE_READ.update(title=labels[i], read=t, by="ocr", frame=frame)
+        log = getattr(getattr(cam, "run", None), "log", None)
+        if log:
+            log("title_read", frame=frame, ocr=t, reader=None, taken=labels[i])
         return labels[i]
     v = vlm_option(cam)
-    i = reading.choice_of(v, "label", labels) if v else None
-    TITLE_READ.update(title=labels[i] if i is not None else None, read=v, by="reader", ocr=t, frame=frame)
-    return labels[i] if i is not None else None
+    j = reading.choice_of(v, "label", labels) if v else None
+    log = getattr(getattr(cam, "run", None), "log", None)
+    if j is None and v and i is not None and short_exact(t, labels[i], why):
+        # the reader answered but named no option of the carousel (the movie Self-timer's title "On", its strip's "3 s"
+        # read instead: mv_selftimer_prove, kit2_pass2 277154, 2026-11-20): OCR's exact reading, short its only doubt,
+        # stands; a reader naming an option is taken, as below
+        TITLE_READ.update(title=labels[i], read=t, by="ocr", reader=v, frame=frame)
+        if log:
+            log("title_read", frame=frame, ocr=t, reader=v, taken=labels[i])
+        return labels[i]
+    TITLE_READ.update(title=labels[j] if j is not None else None, read=v, by="reader", ocr=t, frame=frame)
+    if log:
+        log("title_read", frame=frame, ocr=t, reader=v, taken=labels[j] if j is not None else None)
+    return labels[j] if j is not None else None
+
+
+def short_exact(text: str, label: str, why: list) -> bool:
+    """Whether OCR's reading `text` of a title is the option `label`'s name exactly (option_key, nothing loose) and every
+    doubt about it is its shortness (camkit.reading.doubts' "short word")."""
+    return option_key(text) == option_key(label) and bool(why) and all(str(w).startswith("short word") for w in why)
 
 
 TITLE_READ: dict = {}           # the last title read (title_reads): the option it names, the text, who read it, the frame
