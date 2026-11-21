@@ -297,7 +297,18 @@ def f_label(v: int) -> str:
     return f"F{v / 100:g}"
 
 
-def register_apertures(link, values: list, slot: str, section: int, register, download, stopped, say) -> tuple:
+BEYOND_WORD = ("the owner's word of 2026-11-20: \"if you can get the camera to do f-numbers out the range go for it, you "
+               "may need to infer as I may not have lens that cover the whole range\"")
+
+
+def beyond_lens(table: list, lens: list) -> list:
+    """The definition table's F-numbers (F x 100) the lens does not offer, its "—" (0) aside: --beyond-lens tries each
+    once (BEYOND_WORD)."""
+    return sorted(v for v in dict.fromkeys(table) if v and v not in set(lens))
+
+
+def register_apertures(link, values: list, slot: str, section: int, register, download, stopped, say,
+                       word: str = "not offered") -> tuple:
     """Each F-number of `values` set through the SDK (link.set("FNumber"): an exposure property camkit.safety.
     SET_PROPERTIES allows), read back, then the slot registered (`register()`) and a download made (`download(tag)`):
     the slot's two records (aperture_keys) must hold it. Between registrations only, `stopped()` (the run's STOP file)
@@ -312,13 +323,13 @@ def register_apertures(link, values: list, slot: str, section: int, register, do
         try:
             link.set("FNumber", v)
             back = (link.get("FNumber") or {}).get("current")
-        except Exception as e:              # the camera refused the set: not offered now, never forced
-            not_set.append({"value": v, "why": f"not offered: {type(e).__name__}: {e}"})
-            say(f"   {f_label(v)}: not offered (the camera refused it: {e}); nothing registered, nothing forced")
+        except Exception as e:              # the camera refused the set: never forced by another route
+            not_set.append({"value": v, "why": f"{word}: {type(e).__name__}: {e}"})
+            say(f"   {f_label(v)}: {word} (the camera refused it: {e}); nothing registered, nothing forced")
             continue
-        if back != v:
-            not_set.append({"value": v, "why": f"not offered: read back {back}"})
-            say(f"   {f_label(v)}: not offered (the camera reads back {back}); nothing registered, nothing forced")
+        if back != v:                       # a clamp, or another value kept: what it answered is kept
+            not_set.append({"value": v, "why": f"{word}: read back {back}"})
+            say(f"   {f_label(v)}: {word} (the camera reads back {back}); nothing registered, nothing forced")
             continue
         frames = register()
         dat, cs = download(f"aperture-{v}")
@@ -388,14 +399,22 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
         if not got.get("writable"):
             raise Failed("the camera does not take FNumber now (the shooting mode sets it: Stills A or M takes it)")
         held, lens = got.get("current"), list(got.get("values") or [])
-        todo = aperture_order(lens, held, only)
+        if a.beyond_lens:
+            table = [v for v, _ in next((s.get("values") or [] for s in doc.get("settings") or []
+                                         if s.get("key") == aperture_keys(section)[0]), [])]
+            todo = beyond_lens(table, lens)
+            say(f"--beyond-lens ({BEYOND_WORD}): {len(todo)} F-numbers of the table the lens does not offer, each tried "
+                "once through the same SDK set; one refused or read back otherwise is recorded, never forced")
+        else:
+            todo = aperture_order(lens, held, only)
+            missing = not_offered(lens, only)
+            if missing:
+                say(f"not offered by the attached lens, never set: {', '.join(f_label(v) for v in missing)}")
         if a.limit:
             todo = todo[:a.limit] + ([held] if held in todo[a.limit:] else [])
-        missing = not_offered(lens, only)
-        if missing:
-            say(f"not offered by the attached lens, never set: {', '.join(f_label(v) for v in missing)}")
         say(f"the lens offers {len(lens)} F-numbers ({f_label(min(lens)) if lens else '-'} to "
-            f"{f_label(max(lens)) if lens else '-'}); {len(todo)} to register, {f_label(held)} (held) last")
+            f"{f_label(max(lens)) if lens else '-'}); {len(todo)} to register"
+            + ("" if a.beyond_lens else f", {f_label(held)} (held) last"))
 
         def register():
             return register_slot(cam, cycle, model, a.slot, say, a.allow)
@@ -405,7 +424,11 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
             return p.name, camset.read(p)
         try:
             lines, not_set, stopped = register_apertures(link, todo, a.slot, section, register, dl,
-                                                         lambda: (run.dir / "STOP").exists(), say)
+                                                         lambda: (run.dir / "STOP").exists(), say,
+                                                         word="refused" if a.beyond_lens else "not offered")
+            if a.beyond_lens and not_set:
+                write_json(run.dir / "beyond_lens.json", {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "slot": a.slot,
+                                                          "lens": lens, "refused": not_set}, indent=1)
         finally:
             back = put_back_aperture(link, held, say)
         for line in lines:
@@ -416,7 +439,9 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
         applied = sum(1 for x in lines if x["applied"])
         say(f"{len(lines)} proof lines, {applied} applied; {len(not_set)} F-numbers not set"
             + ("; stopped by the STOP file between registrations" if stopped else ""))
-        status = 0 if back and lines and applied == len(lines) and not not_set and not stopped else 1
+        # beyond the lens a refusal is a result, not a failure: the run is whole where every value that took applied
+        status = 0 if back and applied == len(lines) and not stopped and (a.beyond_lens or (lines and not not_set)) \
+            else 1
     return status
 
 
@@ -680,9 +705,15 @@ def main(argv=None) -> int:
                     help="with --aperture: register the slot even where it is empty in the start file, which fills it "
                          f"for good: the slot stays registered after the run, its values the start file's ("
                          f"{FILL_EMPTY_WORD})")
+    ap.add_argument("--beyond-lens", action="store_true",
+                    help="with --aperture: instead of the lens's F-numbers, try each F-number of the definition's table "
+                         "the lens does not offer once through the same SDK set; one refused or read back otherwise is "
+                         f"recorded in beyond_lens.json, never forced, nothing registered on it ({BEYOND_WORD})")
     a = ap.parse_args(argv)
     if a.fill_empty_slot and not a.aperture:
         sys.exit("memreg_run: --fill-empty-slot is the aperture run's (the owner's word for it): give it with --aperture")
+    if a.beyond_lens and not a.aperture:
+        sys.exit("memreg_run: --beyond-lens is the aperture run's: give it with --aperture")
     root = paths.run_root()
     doc = definitions.with_evidence(read_json(definitions.active()), definitions.active())
     if a.aperture:

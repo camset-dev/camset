@@ -600,6 +600,22 @@ def test_the_f_numbers_asked_but_not_offered_are_said_and_never_set(M):
     assert M.not_offered([400, 450, 560], None) == []
 
 
+def test_beyond_the_lens_the_tables_other_f_numbers_are_tried_once_each(M):
+    """--beyond-lens (the owner's word of 2026-11-20: "if you can get the camera to do f-numbers out the range go for
+    it"): the definition table's F-numbers the lens does not offer, its "—" (0) aside, each tried once through the same
+    SDK set; one the camera refuses or reads back otherwise (a clamp) is recorded as refused with what it answered,
+    never forced, and no registration is made on it."""
+    table = [0, 95, 100, 400, 450, 560, 2500, 3200]
+    assert M.beyond_lens(table, [400, 450, 560]) == [95, 100, 2500, 3200]
+    link = ApertureLink(held=560, refuse={95}, drift={100})
+    done, said, register, download, stopped = aperture_world(link)
+    lines, refused, _ = M.register_apertures(link, [95, 100, 2500], "1", 1, register, download, stopped, said.append,
+                                             word="refused")
+    assert done == [2500] and len(lines) == 2
+    assert [(x["value"], x["why"].split(":")[0]) for x in refused] == [(95, "refused"), (100, "refused")]
+    assert "read back 110" in refused[1]["why"], "what the camera answered is kept"
+
+
 def test_aperture_needs_the_owners_word_and_lists_without_a_camera(M, monkeypatch, capsys):
     monkeypatch.setattr(M.definitions, "active", lambda *a, **k: "none.json")
     monkeypatch.setattr(M, "read_json", lambda path: {"model": "ILCE-1M2"})
