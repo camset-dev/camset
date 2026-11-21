@@ -3026,6 +3026,45 @@ def test_the_main_runs_report_reads_the_cameras_other_proof_runs(tmp_path):
     assert len(proofs) == 3 and [p["label"] for p in proofs] == ["A", "B", "C"] and skip == {2}
 
 
+def test_a_proof_line_struck_by_hand_is_left_out_said_and_held_to_its_bytes(tmp_path, monkeypatch, capsys):
+    """pass2_report.struck_lines: a private file in the camera's evidence folder strikes proof lines by run, line
+    number and the line's own SHA-256; report_proofs leaves each out as if it were not there and says so, with why,
+    every time. An entry whose line holds other bytes (a file that moved), or an entry out of its shape, stops the
+    report; one naming a line the run does not hold strikes nothing (another run: a test's made-up one, where the
+    mapper's file names the real run's lines). With no such file the report reads every line as before. Made-up
+    proofs."""
+    import hashlib
+    import pass2_report as R
+    run = write_run(tmp_path, [proof(lab, i, [("global:0x0001", 9, i)], frame=10 + 2 * i)
+                               for lab, i in (("A", 0), ("B", 1), ("C", 2))])
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", tmp_path / "evidence")
+    before = R.report_proofs(run)
+    assert [p["label"] for p in before[0]] == ["A", "B", "C"] and "struck" not in capsys.readouterr().out
+    raw = (run / "proofs.jsonl").read_text(encoding="utf-8").splitlines()
+    f = R.struck_file(run.parent.name)
+    f.parent.mkdir(parents=True)
+
+    def strike(*entries):
+        f.write_text(json.dumps({"struck": list(entries)}), encoding="utf-8")
+
+    def entry(n, line=None):
+        return {"run": run.name, "line": line or n, "sha256": hashlib.sha256(raw[n - 1].encode()).hexdigest(),
+                "why": "made up"}
+    strike(entry(2))
+    assert [p["label"] for p in R.report_proofs(run)[0]] == ["A", "C"]
+    assert f"left out: 1 proof lines struck by hand ({f.name}, private): made up" in capsys.readouterr().out
+    strike(entry(2, line=9))
+    assert [p["label"] for p in R.report_proofs(run)[0]] == ["A", "B", "C"], "a line the run does not hold"
+    for bad, words in (((entry(2, line=3),), "whose bytes are not the ones it names"),
+                       (({"run": run.name, "line": 2},), "cannot be read as struck proof lines")):
+        strike(*bad)
+        with pytest.raises(SystemExit) as e:
+            R.report_proofs(run)
+        assert words in str(e.value.code)
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", tmp_path / "no evidence")
+    assert R.report_proofs(run) == before
+
+
 def test_a_panels_slider_proved_where_the_camera_stood_gives_way_to_the_proofs_that_set_its_setup_row(tmp_path):
     """pass2_report.stood_rows/stood_out: a panel's slider is there in one state of its setup row only, so its lines
     made where the camera stood ("stills, as found", which the writer strips to the bare row) told that state; once

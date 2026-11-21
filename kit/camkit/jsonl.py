@@ -18,6 +18,12 @@ def read(path: Path, bad: str = "last") -> list[dict]:
     """The objects in a JSON Lines file, in order, blank lines left out; [] when the file is not there. bad: "last"
     leaves out a last line that does not parse (cut short) and raises ValueError on any other; "skip" leaves out every
     line that does not parse as an object."""
+    return [entry for _n, _raw, entry in read_numbered(path, bad)]
+
+
+def read_numbered(path: Path, bad: str = "last") -> list[tuple]:
+    """read()'s objects as (line number from 1, the line as written without its newline, the object): the same lines
+    left out, the same refusals."""
     p = Path(path)
     if not p.exists():
         return []
@@ -38,7 +44,7 @@ def read(path: Path, bad: str = "last") -> list[dict]:
                 if bad == "skip":
                     continue
                 raise ValueError(f"{p}: line {n} is not a JSON object")
-            out.append(entry)
+            out.append((n, line.rstrip("\n").rstrip("\r"), entry))
     return out
 
 

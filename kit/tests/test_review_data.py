@@ -526,6 +526,32 @@ def test_a_sampled_record_every_value_of_which_a_line_chose_is_proved(capsys):
     assert "global:0x0001" in capsys.readouterr().out
 
 
+def test_a_scale_on_a_line_walked_whole_stays_a_sample(capsys):
+    """A scale whose sample the line rule closed ("linear": true, Exposure Std. Adjust's sixths) stays in the sampled
+    form however much of it one mapper walked, a whole walk in another mode included: the definition's form never
+    depends on how much of a scale an owner happened to walk (decision 16), and the whole walk's options join the
+    sample's count. A sample with no line rule ("linear": null) walked whole is proved, each value listed, as before.
+    Made-up records and lines."""
+    from writer import proofs
+    k = "global:0x0001"
+    by_key = {k: {"key": k, "name": "Std", "values": [[v, f"{1 - v / 2:+g}"] for v in range(5)]}}
+    report = [{"row": "Std", "options": 4, "records": {k: {"proved": {"+1": 0, "+0": 2, "-1": 4}, "linear": True}}},
+              {"row": "Std [Movie mode]", "options": 5,
+               "records": {k: {"proved": {lab: v for v, lab in by_key[k]["values"]}, "linear": None}}}]
+    lines = [{"path": ["Std"], "kind": "list", "index": v, "label": lab, "applied": True, "context": "Movie mode",
+              "dat": f"{v}.DAT", "changes": [{"key": k, "before": 9, "after": v}]} for v, lab in by_key[k]["values"]]
+    by_row = proofs.written_by_row(lines, set())
+    assert by_row["Std [Movie mode]"][k] == {0, 1, 2, 3, 4}
+    sampled, proved = {k: {"proofs": 4, "linear": True}}, {}
+    assert proofs.walked_whole(report, by_row, sampled, by_key, proved) == []
+    assert sampled == {k: {"proofs": 9, "linear": True}} and proved == {}
+    assert "line rule" in capsys.readouterr().out
+    sampled, proved = {k: {"proofs": 4, "linear": None}}, {}         # no line rule: proved whole, as before
+    assert proofs.walked_whole(report, by_row, sampled, by_key, proved) == [k]
+    assert sampled == {} and proved == {k: {0, 1, 2, 3, 4}}
+    capsys.readouterr()
+
+
 def test_a_record_walked_whole_takes_its_names_only_from_what_a_reader_read(capsys):
     """The review of 2026-11-19: noting every label of a record walked whole as read gave ISO Range Limit's six
     records "one reader" for each of their 34 values, where the report names them "number" (the number the field

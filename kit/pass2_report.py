@@ -85,6 +85,7 @@ yet.
 import argparse
 import collections
 import difflib
+import hashlib
 import json
 import re
 import sys
@@ -299,6 +300,17 @@ def menu_names(tree) -> set:
                     names.update(norm(r.get("label")) for r in pg.get("rows") or [])
     names.discard("")
     return names
+
+
+# OCR's reading of the camera's ± ("‡0" for "±0", as camkit.live.VALUE_FOLD and SCALE_SIGNS take it)
+OCR_PLUS_MINUS = str.maketrans({"‡": "±"})
+
+
+def plus_minus_read(r: dict) -> dict:
+    """A proof line as report_proofs reads it: OCR's ‡ in its label and shown read as the camera's ± (OCR_PLUS_MINUS),
+    no other sign touched; the line itself, unchanged, where neither holds one."""
+    fix = {f: r[f].translate(OCR_PLUS_MINUS) for f in ("label", "shown") if isinstance(r.get(f), str) and "‡" in r[f]}
+    return {**r, **fix} if fix else r
 
 
 def name_of(o: dict) -> tuple:
@@ -519,6 +531,40 @@ def fail_key(r: dict) -> str:
     """The row a failures.jsonl line names, as still_failing keys it (a proof gives the same key)."""
     k = " > ".join(row_names.renamed(r["path"], placement.camera()))         # as the camera draws it (camkit.row_names)
     return k + f" / {r['option']}" if r.get("kind") in ("axis", "look", "lookbase", "wbgrid", "table") and r.get("option") else k
+
+
+def struck_file(camera: str) -> Path:
+    """private/evidence/<model>_fw<fw>/struck_proofs_<model>_fw<fw>.json: the proof lines struck by hand (struck_lines);
+    private, never committed."""
+    return definitions.EVIDENCE_DIR / camera / f"struck_proofs_{camera}.json"
+
+
+def struck_lines(camera: str) -> dict:
+    """{(run folder name, line number): entry} of the proof lines the mapper struck by hand, report_proofs leaving each
+    out as if it were not there, and saying so, each time, with why: {"struck": [{"run", "line" (from 1, as the file
+    numbers it), "sha256" (of the line's own bytes, its newline aside: a file that moved cannot strike another line),
+    "why"}]}. A line its run holds with other bytes stops the report; one its run does not hold strikes nothing there
+    (a proofs file only grows: a shorter one is another run, a test's made-up one). Lines stay in runs/ as evidence (nobody edits a run's line); a struck line is one whose proof the report
+    must not read (the a1 II's Intelligent Auto lines of 2026-11-21, whose rows then credited other rows' records to
+    every exposure-mode label). {} where there is no file; one out of its shape stops the report."""
+    p = struck_file(camera)
+    if not p.exists():
+        return {}
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        entries = doc["struck"]
+        out = {}
+        for e in entries:
+            ok = (isinstance(e, dict) and set(e) == {"run", "line", "sha256", "why"} and isinstance(e["run"], str)
+                  and e["run"] and isinstance(e["line"], int) and not isinstance(e["line"], bool) and e["line"] > 0
+                  and isinstance(e["sha256"], str) and re.fullmatch(r"[0-9a-f]{64}", e["sha256"])
+                  and isinstance(e["why"], str) and e["why"].strip())
+            if not ok or (e["run"], e["line"]) in out:
+                raise ValueError("an entry is not {run, line, sha256, why}, or names a line twice")
+            out[(e["run"], e["line"])] = e
+        return out
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        sys.exit(f"pass2_report: {p.name} cannot be read as struck proof lines ({e}): nothing reported")
 
 
 def proofs_of(run: Path) -> list:
@@ -821,12 +867,22 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
     _BASE_DIRS[:] = [run / "dat", run]
     _RUNS_ROOT[:] = [run.parent]
     proofs, skip, blocked, failed, reread, seen = [], set(), {}, {}, 0, set()
+    struck, gone = struck_lines(run.parent.name), []
     for part in proof_runs(run, alone):
         own = []
-        for r in jsonl.read(part / "proofs.jsonl"):
+        lines = jsonl.read_numbered(part / "proofs.jsonl")
+        for n, raw, r in lines:
+            hit = struck.get((part.name, n))
+            if hit is not None:
+                if hashlib.sha256(raw.encode("utf-8")).hexdigest() != hit["sha256"]:
+                    sys.exit(f"pass2_report: {struck_file(run.parent.name).name} strikes {part.name} line {n}, whose "
+                             "bytes are not the ones it names (the file moved or changed): nothing reported; correct "
+                             "the entry, or take it out")
+                gone.append(hit)
+                continue                       # struck by hand: as if the line were not there (struck_lines)
             if r.get("kind") == MIRROR_KIND:
                 continue                       # a registration's copy, no row's proof (mirror_lines reads it)
-            r = own_changes(qualified(r, part.name, run.name))
+            r = own_changes(qualified(plus_minus_read(r), part.name, run.name))
             key = same_proof(r)
             if key is not None and key in seen:
                 continue                       # the same proof read in another folder
@@ -840,6 +896,9 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
         blocked.update(b)
         failed.update(f)
         proofs += own
+    if gone:
+        print(f"left out: {len(gone)} proof lines struck by hand ({struck_file(run.parent.name).name}, private): "
+              + "; ".join(sorted({e["why"] for e in gone})), flush=True)
     tables = run.parent / "kit2_tables" / "tables.json"
     proofs, unwalked = match.cell_options(proofs, read_json(tables) if tables.exists() else None)
     UNWALKED_CELLS.clear()
