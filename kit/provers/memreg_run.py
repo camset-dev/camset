@@ -68,7 +68,9 @@ One session, bracketed as every run is (decision 15; runner.prover_session):
 Options: --allow (the owner's word for Camera Set. Memory; a camera run refuses to start without it), --rows
 (repeatable, a candidate's path with " > "; default: set_twins' picks), --limit, --list (no camera),
 --scan (the page scan of the menu the camera shows; default: the camera's latest Stills page scan, runner.latest_scan),
---slot (SLOTS' names; the rows' spot check registers a Stills slot, --aperture any SEEN_LIT slot), --look-tabs, --survey (the
+--slot (SLOTS' names; the rows' spot check registers a Stills slot, --aperture any SEEN_LIT slot), --in (the mode the
+camera is in, runner.add_in_argument: a Movie slot's run --in Movie, an S&Q or Time-lapse slot's --in S&Q, a look the
+family it looks in), --look-tabs, --survey (the
 set_twins.json to read), --run (default kit2_memtwins, beside the survey).
 """
 import argparse
@@ -83,8 +85,8 @@ sys.path.insert(1, str(Path(__file__).resolve().parent))
 sys.path.insert(2, str(Path(__file__).resolve().parents[1] / "tools"))
 from camkit import camset, definitions, match, paths, safety  # noqa: E402
 from camkit.not_by_file import FILLED_MARK, NOT_BY_FILE  # noqa: E402
-from runner import (LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, read_json,  # noqa: E402
-                    scan_dir, write_json)
+from runner import (LATEST_SCAN, add_allow_argument, add_in_argument, add_scan_argument,  # noqa: E402
+                    allowed_or_exit, in_mode, read_json, scan_dir, write_json)
 import set_twins  # noqa: E402
 
 MEMORY_ROW = "Camera Set. Memory"
@@ -147,6 +149,19 @@ def survey_rows(survey: dict, asked=None) -> list:
 def section_of(slot: str) -> int:
     """The file section of a slot (SLOTS: the camera file's memory_sets, section 1 Memory 1, 4 Movie Memory 1 ...)."""
     return SLOTS[slot][2]
+
+
+def menu_of(family: str) -> str:
+    """The shooting mode whose menu a family's memory screen is on, as --in names it (runner.SCAN_MODES): Time-lapse
+    is on the S&Q menu."""
+    return "S&Q" if family == "Time-lapse" else family
+
+
+def run_scan(a):
+    """--scan with the mode the run works in (--in, runner.in_mode): the page scan taken by default is that mode's, a
+    named one must be of it, and a kept switch to that mode does not refuse the run (runner.refuse_switched; 2026-11-21:
+    memreg_tab_looks2's three looks were refused, memreg_run working in Stills mode alone)."""
+    return in_mode(a.scan, a.in_mode)
 
 
 def slot_unseen(slot: str) -> str:
@@ -470,7 +485,7 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
     from runner import load_scan, proofs_file, prover_session
     model_name = doc.get("model") or definitions.key(doc).split("_fw")[0]
     section = section_of(a.slot)
-    cycle, model = load_scan(a.scan)
+    cycle, model = load_scan(run_scan(a))
     run = Run(a.run)
     hdmi = eyes_from_config(run)
     say = lambda m: print(m, flush=True)     # noqa: E731
@@ -546,7 +561,7 @@ def look_tabs(a, doc: dict) -> int:
     from prove_run import Failed
     from runner import load_scan, prover_session
     model_name = doc.get("model") or definitions.key(doc).split("_fw")[0]
-    cycle, model = load_scan(a.scan)
+    cycle, model = load_scan(run_scan(a))
     run = Run(a.run)
     hdmi = eyes_from_config(run)
     say = lambda m: print(m, flush=True)     # noqa: E731
@@ -787,7 +802,7 @@ def prove(a, doc: dict, todo: list, survey: dict, allowance: str) -> int:
     model_name = doc.get("model") or definitions.key(doc).split("_fw")[0]
     section = section_of(a.slot)
     expected = expected_keys(model_name, section)
-    cycle, model = load_scan(a.scan)
+    cycle, model = load_scan(run_scan(a))
     scan_name = scan_dir(a.scan).name           # the folder load_scan read, for the proof lines
     run = Run(a.run)
     hdmi = eyes_from_config(run)
@@ -877,6 +892,7 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=int, default=0, help="the first N rows only")
     ap.add_argument("--list", action="store_true", help="print the plan only; no camera")
     add_scan_argument(ap, default=LATEST_SCAN, mode="Stills")
+    add_in_argument(ap)
     ap.add_argument("--slot", choices=list(SLOTS), default="1",
                     help="the memory slot to register: 1, 2 or 3 (Stills), 'Movie 1', 'S&Q 1' ...; only one whose tab "
                          "has been seen lit on its family's memory screen (SEEN_LIT), with the camera in its family")
@@ -926,6 +942,10 @@ def main(argv=None) -> int:
             print(f"--fill-empty-slot: an empty slot is registered for good: {NOT_PUT_BACK} ({FILL_EMPTY_WORD})")
         if slot_unseen(a.slot):
             sys.exit(f"memreg_run: {slot_unseen(a.slot)}")
+        menu = menu_of(SLOTS[a.slot][0])
+        if a.in_mode != menu:
+            sys.exit(f"memreg_run: slot {a.slot!r} is on the {menu} menu: give --in {menu} (the camera switched there, "
+                     f"kit/provers/mode_switch.py --keep), not --in {a.in_mode}. Nothing was sent to the camera")
         if a.list:
             return 0
         if not memory_allowed(a.allow) or [x for x in a.allow if not memory_allowed([x])]:

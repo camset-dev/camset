@@ -949,3 +949,26 @@ def test_fnumber_is_read_again_before_the_run_gives_up_and_its_refusal_says_what
     with pytest.raises(Failed, match="ExposureProgramMode reads 32848"):
         M.fnumber_settable(movie_p, tries=1)
     assert M.fnumber_settable(FNumberLink([SETTABLE]), tries=1)["writable"] is True
+
+
+def test_the_run_works_in_the_mode_it_is_given_so_a_kept_switch_does_not_refuse_it(M, monkeypatch):
+    """2026-11-21: memreg_tab_looks2's three looks were refused before connecting ("left the camera in Movie mode, and
+    this run works in Stills mode"): memreg_run took no --in. It takes the runner's --in now, and its page scan goes
+    with that mode (run_scan: runner.in_mode); an aperture slot's family must be on that mode's menu (Movie on Movie,
+    S&Q and Time-lapse on S&Q), refused before anything connects otherwise."""
+    monkeypatch.setattr(M.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(M, "read_json", lambda path: {"model": "ILCE-1M2"})
+    monkeypatch.setattr(M.definitions, "with_evidence", lambda doc, *a, **k: doc)
+    seen = []
+    monkeypatch.setattr(M, "prove_apertures", lambda a, doc, allowance: seen.append(("aperture", a.in_mode)) or 0)
+    monkeypatch.setattr(M, "look_tabs", lambda a, doc: seen.append(("look", a.in_mode, M.run_scan(a).mode)) or 0)
+    allow = ["--allow", "Camera Set. Memory"]
+    assert M.main(["--aperture", "--slot", "Movie 1", "--in", "Movie"] + allow) == 0
+    assert M.main(["--aperture", "--slot", "S&Q 1", "--in", "S&Q"] + allow) == 0
+    assert M.main(["--look-tabs", "--in", "Movie", "--scan", "kit2_page_scan_movie_1118"] + allow) == 0
+    assert seen == [("aperture", "Movie"), ("aperture", "S&Q"), ("look", "Movie", "Movie")]
+    with pytest.raises(SystemExit, match="on the Movie menu: give --in Movie"):
+        M.main(["--aperture", "--slot", "Movie 1"] + allow)
+    with pytest.raises(SystemExit, match="on the Stills menu: give --in Stills"):
+        M.main(["--aperture", "--slot", "2", "--in", "S&Q"] + allow)
+    assert M.menu_of("Time-lapse") == "S&Q" and M.menu_of("Stills") == "Stills"
