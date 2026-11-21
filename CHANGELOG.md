@@ -232,6 +232,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A menu that opens on the Main tab's page is taken off it by the columns:** Left, Down to the Shooting tab, Right,
+  never an Enter or a press on its tiles, where `mode_switch.py` and every walk by `find_position` stopped before.
 - **A definition can say a grey the record alone does not tell:** `grey_in` names the shooting modes where the camera
   greys a row whatever the file holds, and `inactive_if` is a rule true only in some modes or only with a device on the
   HDMI socket. Both come from `RECORD_FIXES`, rest on the kit's looks of each side in the hand evidence, and
