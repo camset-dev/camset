@@ -35,7 +35,8 @@ The switch is a run of its own, bracketed as every run is (decision 15): the sta
 The switch navigates the menu of the mode the camera is in (--in, default Stills: its latest page scan by default,
 runner.latest_scan); --set, with a switch waiting, the menu of the mode the switch left it in (the kept record's
 "scan_mode", else its --to: a family, or P/A/S/M/Auto in Stills).
---set takes a list row ("ROW=OPTION", set_row) or a two-box row's box ("S&Q Settings > Frame Rate Settings > Rec
+--set takes a list row ("ROW=OPTION", set_row), a side-strip dialog row ("Picture Profile=PP11": its entries told by
+the title and the mode's map, choose_in_dialog) or a two-box row's box ("S&Q Settings > Frame Rate Settings > Rec
 Frame Rate=24p", 2026-11-18): a row the definition holds exactly two boxes under on that menu and boxes_run has proved
 (two_box; anything else stops before the link opens when the definition and those proofs have the row on another
 menu, or not that box). The box is set by boxes_run's own opening, look, stepping and OK (boxes_run.set_value: its
@@ -233,23 +234,80 @@ def shoot_mode(cam, cycle, model, family: int, mode: str | None, say) -> str:
     return got
 
 
-def list_labels(path: list, mode: str = "Stills") -> list | None:
-    """A list row's options as the map of the shooting `mode` names them (pass3_run.labels_of): pass 1's in Stills,
-    another mode's crawl as framepos_run.mode_map finds it for the row (kit2_crawl_movie for Movie's File Format, the
-    movie formats, a row pass 1's map has not); None where that map holds no list at `path` (or no map of the mode has
-    the row): set_row then compares the bar with the option alone."""
+def _map_labels(path: list, mode: str) -> tuple:
+    """(labels, kind) of the row at `path` in the map of the shooting `mode` (pass3_run.labels_of): pass 1's in Stills,
+    another mode's crawl as framepos_run.mode_map finds it for the row; (None, None) where no map of the mode has it."""
     from pass3_run import labels_of
     mp = None
     if mode != "Stills":
         from framepos_run import mode_map
         mp = mode_map(mode, path=list(path))
         if mp is None:
-            return None
+            return None, None
     try:
-        labels, kind = labels_of(list(path), mp)
+        return labels_of(list(path), mp)
     except (SystemExit, OSError, ValueError, KeyError):
-        return None
+        return None, None
+
+
+def list_labels(path: list, mode: str = "Stills") -> list | None:
+    """A list row's options as the map of the shooting `mode` names them (_map_labels: kit2_crawl_movie for Movie's
+    File Format, the movie formats, a row pass 1's map has not); None where that map holds no list at `path` (or no map
+    of the mode has the row): set_row then compares the bar with the option alone."""
+    labels, kind = _map_labels(path, mode)
     return labels if kind == "list" else None
+
+
+def dialog_labels(path: list, mode: str = "Stills") -> list | None:
+    """A dialog row's entries as the map of the shooting `mode` names them (_map_labels: Picture Profile's Off, PP1 ...
+    in kit2_crawl_movie), None where that map holds no dialog at `path`: set_row then chooses nothing in it."""
+    labels, kind = _map_labels(path, mode)
+    return labels if kind == "dialog" else None
+
+
+def dialog_at(cam, labels: list) -> int | None:
+    """Which of `labels` the open dialog's cursor is on, by its title (proving.options.option_index's dialog reading:
+    the orange line under the title, its side strip watched first; the reader where OCR names no one label)."""
+    from proving.options import option_index
+    return option_index(cam, labels, "dialog")
+
+
+def dialog_title(cam) -> str:
+    """What the open dialog's title line reads (proving.screens.carousel_text), for the run's events only."""
+    from proving.screens import carousel_text
+    return carousel_text(cam)
+
+
+def choose_in_dialog(cam, path: list, option: str, mode: str) -> None:
+    """The open dialog of the row at `path` brought onto `option`, nothing pressed after: Down until its title names
+    the option by the labels the map of `mode` gives the row (dialog_labels, dialog_at), one round and two more Downs
+    at most (a dialog wraps); then the entry judged on the frame Enter would go on (proving.greyed.choice_refused:
+    drawn grey, or a drawing no reading can tell, is no choice). Each refusal is a Failed after MENU alone closed the
+    dialog (proving.greyed.leave); what the title read is the run's events', never the message's (it can name the
+    owner's entry, the one the dialog opened on)."""
+    from proving import greyed
+    name = " > ".join(path)
+    labels = dialog_labels(path, mode)
+    want = match.index_of(labels, option) if labels else None
+    if want is None:
+        greyed.leave(cam, name)
+        missing = (f"{option!r} is not among the labels the {mode} menu's map gives it" if labels else
+                   f"no map of the {mode} menu holds {path[-1]!r} as a dialog, so its entries cannot be told")
+        raise Failed(f"{name!r} opened a dialog, and {missing}: nothing was chosen, MENU closed the dialog")
+    for _ in range(len(labels) + 2):
+        if dialog_at(cam, labels) == want:
+            break
+        cam.press("down")
+    else:
+        cam.run.log("set_row_missed", step=name, frame=cam.frame.path.name, title=dialog_title(cam))
+        frame = cam.frame.path.name
+        greyed.leave(cam, name)
+        raise Failed(f"{name!r}: {option!r} did not come round in its dialog ({frame}; what its title read is in the "
+                     "run's events.jsonl): nothing was chosen, MENU closed the dialog")
+    refused = greyed.choice_refused(cam, name, option)
+    if refused:
+        greyed.leave(cam, name)
+        raise Failed(f"{refused}; MENU closed the dialog")
 
 
 def definition(run) -> dict:
@@ -460,41 +518,49 @@ def set_row(cam, cycle, model, path: list, option: str, say, mode: str = "Stills
     kit2_hdmi_watch 02362 -> 02363), which is the choice made, no information to take. What a screen after the choice
     reads is never said nor put in a failure (it can show the owner's values: a panel's number, a notice): the frame is
     named and the words go to the run's events.jsonl.
+    A row whose Right opens a side-strip dialog instead (Picture Profile on the a1 II: its entries a column of icons,
+    the lit one's name in orange under the title; calib_grey_looks, kit2_calib_mv 00060_right.png) is brought onto
+    `option` by its title and the map's labels for the row (choose_in_dialog), then OK, as a list's option is.
     Nothing drawn grey is entered to choose it (the owner's rule): a row the lit bar reads drawn grey is not opened
     (row_drawn; its notice is kit/provers/greyrow_run.py's to ask, after the camera's Help), and the option under the
-    cursor is judged on the frame Enter would go on (grey_refused): drawn grey, or a drawing neither eye can tell, is
-    no choice; the run stops with status 1, the switch waiting for its --restore."""
+    cursor is judged on the frame Enter would go on (grey_refused; a dialog's entry by greyed.choice_refused): drawn
+    grey, or a drawing neither eye can tell, is no choice; the run stops with status 1, the switch waiting for its
+    --restore."""
     find(cam, cycle, model, path[0])
     row_refused(cam, path[:1])
     if len(path) > 1:
         enter_any(cam, path, 0)
         row_refused(cam, path)
     cam.press("right")
-    if cam.read().kind != "list":
-        raise Failed(f"Right on {' > '.join(path)!r} opened {cam.read().kind}, not a list ({cam.frame.path.name})")
-    labels = list_labels(path, mode)
-    for _ in range(24):
-        if bar_names(bar_text(cam), option, labels):
-            break
-        cam.press("down")
+    opened = cam.read().kind
+    if opened == "dialog":
+        choose_in_dialog(cam, path, option, mode)
+    elif opened != "list":
+        raise Failed(f"Right on {' > '.join(path)!r} opened {opened}, not a list or a dialog ({cam.frame.path.name})")
     else:
-        # the option the list was on can be the owner's: kept in the run's events, never in the message
-        cam.run.log("set_row_missed", step=" > ".join(path), frame=cam.frame.path.name, bar=bar_text(cam))
-        raise Failed(f"{' > '.join(path)!r}: {option!r} did not come round in its list ({cam.frame.path.name}; what "
-                     "its bar read is in the run's events.jsonl)")
-    refused = grey_refused(cam, path, option, labels)
-    if refused:
-        raise Failed(refused)
+        labels = list_labels(path, mode)
+        for _ in range(24):
+            if bar_names(bar_text(cam), option, labels):
+                break
+            cam.press("down")
+        else:
+            # the option the list was on can be the owner's: kept in the run's events, never in the message
+            cam.run.log("set_row_missed", step=" > ".join(path), frame=cam.frame.path.name, bar=bar_text(cam))
+            raise Failed(f"{' > '.join(path)!r}: {option!r} did not come round in its list ({cam.frame.path.name}; "
+                         "what its bar read is in the run's events.jsonl)")
+        refused = grey_refused(cam, path, option, labels)
+        if refused:
+            raise Failed(refused)
     say(f"{' > '.join(path)}: choosing {option!r}")
     cam.press("enter")
     kind = cam.read().kind
-    if kind == "list":
+    if kind == opened:
         # OK went unanswered (the press already waited for a late one, camkit.live.OK_LATE): one fresh look, and
         # then the step stops, as prove_run stops a row whose OK leaves the list open; no second OK (no run of the
-        # kit's has shown a list still open after OK on its option)
+        # kit's has shown a list or a dialog still open after OK on its option)
         kind = cam.refresh("after-ok").kind
-        if kind == "list":
-            raise Failed(f"{' > '.join(path)!r}: OK on {option!r} went unanswered, its list still open "
+        if kind == opened:
+            raise Failed(f"{' > '.join(path)!r}: OK on {option!r} went unanswered, its {opened} still open "
                          f"({cam.frame.path.name})")
     if len(path) > 1 and option_key(path[0]) in option_key(ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path],
                                                                        (0, 0, 640, 52))):
@@ -578,7 +644,8 @@ def main():
                          f"({', '.join(SHOWN_EXPOSURES)}): Movie, \"Stills M\", \"Movie Auto\"")
     ap.add_argument("--set", action="append", default=[], metavar="ROW=OPTION",
                     help="with a switch waiting (--keep): put this list row on OPTION and leave it, for the state a prove "
-                         "run needs (a submenu's row as 'Proxy Settings > Px Proxy Recording=On'), or a two-box row's "
+                         "run needs (a submenu's row as 'Proxy Settings > Px Proxy Recording=On'; a side-strip dialog "
+                         "row as 'Picture Profile=PP11', by the mode's map's labels for it), or a two-box row's "
                          "box, named as boxes_run names it ('S&Q Settings > Frame Rate Settings > Rec Frame Rate=24p'), "
                          "checked by a download that one of that box's records moved; --restore covers it")
     ap.add_argument("--scan", default=LATEST_SCAN, type=scan_arg,
