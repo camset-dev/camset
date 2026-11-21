@@ -262,6 +262,7 @@ def test_the_shoot_mode_prover_follows_the_mode_it_leaves_the_camera_in(monkeypa
                         ("look", lambda c, link, cycle, model, f: list(ModeCam.MODES)),
                         ("open_row", lambda c, cycle, model: c.open()), ("mode_name", lambda c: ModeCam.MODES[c.mode]),
                         ("vlm_option", lambda c: "made up"), ("close_screen", lambda c, link: None),
+                        ("choice_refused", lambda c, name, label, auto_allowed=False: ""),   # its own tests judge it
                         ("to_shooting", lambda link, hdmi, why: None), ("verify_restore", lambda run, start: 0)):
         monkeypatch.setattr(S, name, value)
     monkeypatch.setattr(S.time, "sleep", lambda s: None)

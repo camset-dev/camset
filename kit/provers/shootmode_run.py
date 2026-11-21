@@ -34,6 +34,7 @@ from camkit.session import verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, option_key, to_shooting, vlm_option  # noqa: E402
 from proving.commit import after_ok  # noqa: E402
+from proving.greyed import AUTO_ENTRY, choice_refused  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, changes_of, close_for_restore, definition, slow_or_exit,  # noqa: E402
                     close_screen, end_session, load_scan, menu_from_shooting, proofs_file, restore_checked,
@@ -70,6 +71,27 @@ def title_mode(text) -> str:
     return t
 
 
+def auto_allowed_or_exit(labels) -> bool:
+    """--allow's values (the owner's word for the run, kit/provers/mode_switch.py's and this prover's): "Intelligent
+    Auto" alone, which lets Shoot Mode's Intelligent Auto be chosen where its lit icon is drawn in its normal look
+    (proving.greyed.auto_look, 2026-11-21); True where it is given, False with none; any other value exits before
+    anything connects."""
+    other = [x for x in labels or () if x != AUTO_ENTRY]
+    if other:
+        sys.exit(f"--allow {other[0]!r}: this run's --allow names only {AUTO_ENTRY!r} (Shoot Mode's entry the owner "
+                 "allowed); nothing was sent to the camera")
+    if labels:
+        print(f"--allow {AUTO_ENTRY!r}: chosen only where its lit icon is drawn in its normal look (the owner's word)",
+              flush=True)
+    return bool(labels)
+
+
+def downs(f: int, opened: int = 0) -> int:
+    """The Downs from the family the carousel opens on (`opened`: Stills from the Stills menu, the camera's own family
+    from its own menu, a kept switch's) to family `f`, round the four (FAMILIES)."""
+    return (f - opened) % len(FAMILIES)
+
+
 def choosable(modes: list) -> list:
     """The places of a family's modes a proof may choose: those whose title is one of the five exposure modes (NAMES),
     never another, whatever it reads as: a memory recall rewrites dozens of settings, and a title read wrong is no
@@ -95,10 +117,10 @@ def open_row(cam, cycle, model):
         raise Failed(f"Right on Shoot Mode opened {cam.read().kind} ({head!r})")
 
 
-def look(cam, link, cycle, model, f: int) -> list:
+def look(cam, link, cycle, model, f: int, opened: int = 0) -> list:
     """The family's modes in Right order, from the one it remembers."""
     open_row(cam, cycle, model)
-    for _ in range(f):
+    for _ in range(downs(f, opened)):
         cam.press("down")
     modes = [mode_name(cam)]
     for _ in range(20):
@@ -126,7 +148,21 @@ def main():
                          "runs/<model>_fw<fw>/)")
     add_scan_argument(ap)
     ap.add_argument("--families", default="0,1,2,3", help="which families to prove (0 stills ... 3 Time-lapse)")
+    ap.add_argument("--only", action="append", default=[], metavar="MODE",
+                    help="prove only these of each family's modes (Intelligent Auto, Program Auto, ...; repeatable)")
+    ap.add_argument("--opened-on", choices=FAMILIES, default=FAMILIES[0],
+                    help="the family Shoot Mode's carousel opens on: Stills from the Stills menu (the default), or the "
+                         "camera's own family where a kept switch left it in another mode (its menu, its --scan)")
+    ap.add_argument("--allow", action="append", default=[], metavar="ENTRY",
+                    help=f"{AUTO_ENTRY!r} alone: the owner's word for this run that Shoot Mode's Intelligent Auto may be "
+                         "chosen where its lit icon is drawn in its normal look (proving.greyed.auto_look); without it "
+                         "its green icon cannot be told and it is refused, as every entry is that cannot be")
     a = ap.parse_args()
+    auto = auto_allowed_or_exit(a.allow)
+    bad = [x for x in a.only if x not in NAMES]
+    if bad:
+        sys.exit(f"--only {bad[0]!r}: one of {NAMES}")
+    opened = FAMILIES.index(a.opened_on)
     start = Path(a.start)
     # its proofs choose each family's entries, landing the camera in each family's state of the start file: none may be
     # one where the camera acts on one press twice (runner.slow_or_exit), judged before the link opens
@@ -152,7 +188,7 @@ def main():
             fams = [int(x) for x in a.families.split(",")]
             looked = None
             try:
-                modes = {f: look(cam, link, cycle, model, f) for f in fams}
+                modes = {f: look(cam, link, cycle, model, f, **({'opened': opened} if opened else {})) for f in fams}
             except Exception as e:
                 # a STOP, a refused press or the feed gone with the chooser open: closed with cleanup presses and
                 # the start file put back before the link closes, since a dropped session applies the dialog on screen
@@ -169,6 +205,8 @@ def main():
             todo = choosable(modes[f])
             if f == 0:                                 # stills: its remembered mode is the start's; last
                 todo = [m for m in todo if m != 0] + [0]
+            if a.only:
+                todo = [m for m in todo if modes[f][m] in a.only]
             recs = []
             for m in todo:
                 time.sleep(4)
@@ -179,7 +217,7 @@ def main():
                     failed, ch = None, []
                     try:
                         open_row(cam, cycle, model)
-                        for _ in range(f):
+                        for _ in range(downs(f, opened)):
                             cam.press("down")
                         for _ in range(m):
                             cam.press("right")
@@ -187,6 +225,13 @@ def main():
                         if got != modes[f][m] or got not in NAMES:          # never OK on any other entry
                             close_screen(cam, link)
                             raise Failed(f"{FAMILIES[f]}: the title reads {got!r}, not {modes[f][m]!r}")
+                        # never OK on a greyed entry, nor on one no reading can tell (proving.greyed); Intelligent
+                        # Auto's green icon only on the owner's word, drawn in its normal look
+                        refused = choice_refused(cam, "Shoot Mode", f"{FAMILIES[f]}, {got}",
+                                                 auto_allowed=auto and got == AUTO_ENTRY)
+                        if refused:
+                            close_screen(cam, link)
+                            raise Failed(refused)
                         chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
                         cam.press("enter")
                         # what the camera did with it (proving.commit.after_ok): a refusal or an information notice
@@ -207,6 +252,8 @@ def main():
                                "final": f == 0 and m == 0, "chosen_frame": chosen, "vlm": settled(seen_vlm),
                                "dat": dat.name, "base": start.name, "notice": notice, "applied": got.applied,
                                "changes": changes_of(ch)}
+                        if auto and got == AUTO_ENTRY:
+                            rec["allowance"] = safety.allowance([AUTO_ENTRY])
                         out.write(json.dumps(rec) + "\n")
                         out.flush()
                         recs.append(rec)

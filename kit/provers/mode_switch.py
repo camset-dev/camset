@@ -69,8 +69,9 @@ from runner import (EXIT_REFUSED, EXIT_UNRESTORED, LATEST_SCAN, SHOWN_EXPOSURES,
                     add_info_ok_argument, close_screen, end_session, forget_refused, in_mode, load_scan,
                     menu_from_shooting, notes_named_or_exit, read_json, restore_checked, restoring, scan_arg, scan_mode,
                     on_main, scan_position, session_start, shown_mode, switch_advice, switch_left, switch_waiting, write_json)
-from shootmode_run import FAMILIES, mode_name  # noqa: E402
+from shootmode_run import FAMILIES, auto_allowed_or_exit, mode_name  # noqa: E402
 from camkit import slow_states  # noqa: E402
+from proving.greyed import AUTO_ENTRY  # noqa: E402
 
 BY_MENU, BY_DIAL = "Set with Menu", "Set with Dial"
 SHOOTING_DIAL = "Shooting Mode Dial"           # the dial whose cell the table path puts on Set with Menu
@@ -223,9 +224,9 @@ def back_to_menu(cam, where: str):
                      f"{cam.frame.path.name})")
 
 
-def shoot_mode(cam, cycle, model, family: int, mode: str | None, say) -> str:
+def shoot_mode(cam, cycle, model, family: int, mode: str | None, say, auto: bool = False) -> str:
     """Shoot Mode's carousel: Down to the family, Right to the mode (or the family's remembered one), OK. Returns
-    the title chosen."""
+    the title chosen. auto: the owner's word for Intelligent Auto (auto_allowed_or_exit)."""
     find(cam, cycle, model, "Shoot Mode")
     cam.press("right")
     head = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 50))
@@ -248,7 +249,8 @@ def shoot_mode(cam, cycle, model, family: int, mode: str | None, say) -> str:
     if got.startswith("MR"):
         raise Failed(f"Shoot Mode: the {FAMILIES[family]} family is on {got!r}, a memory recall: never chosen")
     from proving.greyed import choice_refused
-    refused = choice_refused(cam, "Shoot Mode", f"{FAMILIES[family]}, {got}")       # never OK on a greyed entry
+    refused = choice_refused(cam, "Shoot Mode", f"{FAMILIES[family]}, {got}",       # never OK on a greyed entry
+                             auto_allowed=auto and got == AUTO_ENTRY)
     if refused:
         raise Failed(refused)
     say(f"Shoot Mode: {FAMILIES[family]} family, {got!r}: OK")
@@ -721,6 +723,10 @@ def main():
     ap.add_argument("--mode", default=None, help="with a family (--to Movie): its exposure mode, P, A, S, M or Auto, "
                                                  "instead of the one the family remembers")
     ap.add_argument("--keep", action="store_true", help="leave the camera in the new mode for the runs that follow")
+    ap.add_argument("--allow", action="append", default=[], metavar="ENTRY",
+                    help=f"{AUTO_ENTRY!r} alone: the owner's word for this run that Shoot Mode's Intelligent Auto, whose "
+                         "green icon the grey reading cannot judge, may be chosen where it is drawn in its normal look "
+                         "(proving.greyed.auto_look); without it --to Auto and --mode Auto are refused as before")
     ap.add_argument("--restore", action="store_true",
                     help="put the kept start file back and check it took: the settings from before the switch, so "
                          "whatever was changed on the camera since is undone too")
@@ -873,6 +879,7 @@ def main():
             sys.exit(f"A switch is still waiting in {paths.shown(f)} (it left the camera in {where}): a second kept "
                      "switch would leave the kit's record naming two modes, and every run would then refuse to start. "
                      f"Nothing was sent to the camera.\n{switch_advice(f)}")
+    auto = auto_allowed_or_exit(a.allow)
     if a.to in MODES:
         family, mode = 0, MODES[a.to]
     elif a.to in FAMILIES:
@@ -906,7 +913,7 @@ def main():
                 close_screen(cam, link)
                 time.sleep(1.0)
                 open_menu(cam)
-                title = shoot_mode(cam, cycle, model, family, mode, say)
+                title = shoot_mode(cam, cycle, model, family, mode, say, **({'auto': True} if auto else {}))
                 # the camera's mode is the switch's from here: the menu's lock after a download goes by it
                 # (camkit.session.MODE, which runner.load_scan set to the mode the run started in)
                 session.MODE = switched_mode(a.to)
