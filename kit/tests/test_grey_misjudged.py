@@ -44,7 +44,7 @@ def test_a_row_marked_misjudged_stays_so_until_a_measurement_says_otherwise(memo
     assert greyed.misjudged("Metering Mode / Spot", "icon") is None
     greyed.mark_measured("Drive Mode / Cont. Shooting", "icon", "calib_grey_looks: a greyed axis value measured")
     assert greyed.misjudged("Drive Mode / Cont. Shooting", "icon") is None
-    lines = memory.read_text().splitlines()
+    lines = memory.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2, "nothing is ever taken out: the latest line counts"
 
 
