@@ -241,6 +241,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **A lit one-letter row OCR cannot read (Color Depth's M, Y) is found when the frame before and the second reader
   agree on its label:** a proof made there carries `"row_by"` in `proofs.jsonl`, and the report takes its move of a
   record another row's proofs own as an open question, never as the row's setting.
+- **That lit letter is now found on a proof's second visit too:** the row's known place, and the first row of a walk,
+  are read with the frame before, and `events.jsonl` says why a letter got no label.
 - **A crawl given `--allow "Exposure Std. Adjust"` now answers the row's question:** the way past reached only the
   crawl's press counter, so the camera refused that Enter and the lap stopped.
 - **Placement reads the placed definition's own ROW_NAMES, whatever camera the kit works on:** a clone that names no
