@@ -241,8 +241,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **A proof line can be struck by hand, privately:** the pass-2 report leaves a line the mapper's
   `struck_proofs_<model>_fw<fw>.json` names (run, line, its own hash, why) out, says so each time, and refuses an
   entry that no longer matches its line.
-- **The pass-2 report reads OCR's ‡ in a proof's label as the camera's ±:** a step's "‡0" is the "±0" the second
-  reader saw, not a conflict with the definition's "±0 EV".
+- **The pass-2 report reads "‡" in a proof's label as the plus-minus sign, OCR's reading of "±":** a step's "‡0" is
+  the "±0" the second reader saw. The report already folds OCR's dashes into a minus (`scale_clean`), "‡" in a
+  scale's number (`scale_number`) and look-alike letters (`camkit.reading.agree`).
+- **A scale the line rule closed stays sampled however much of it was walked:** Exposure Std. Adjust, walked whole in
+  Movie and S&Q, keeps `{"sampled": {"linear": true}}`. Its whole walks add to the private count.
 - **A crawl walks the rows behind a question it answered with `--allow`:** Exposure Std. Adjust's five settings were
   left unwalked behind it, so its proofs had no map.
 - **A lit one-letter row OCR cannot read (Color Depth's M, Y) is found when the frame before and the second reader

@@ -302,7 +302,9 @@ def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved
     is no sample: it is proved, each value listed (`proved`), and taken out of `sampled`; none of its values is left
     that no line chose, so the list says nothing of the camera's own setting (docs/decisions/0016). A record with a
     value no line chose stays a sample (review 2026-11-18: ISO Range Limit, walked whole in one run and sampled again in
-    later ones). With `readers` (note_readers'), each such record's names take its rows' readings where a reader read
+    later ones). So does a scale the line rule closed ("linear": true: Exposure Std. Adjust's sixths, walked whole in
+    Movie and S&Q, 2026-11-21), however much of it was walked: the definition's form never depends on how much of a
+    scale its mapper walked (decision 16); a listed scale's whole walks add their options to its count. With `readers` (note_readers'), each such record's names take its rows' readings where a reader read
     them (read_by_a_reader), as a list's do: never a number field's own number, a box's or a grid's ("number", "box",
     "grid readout": ISO Range Limit's values keep the ISO table's names, "derived"), nor a row sampled from the option
     the camera held, which the writers count and never name from. Returns their keys, each printed."""
@@ -318,6 +320,16 @@ def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved
     out = []
     for k in sorted(sampled):
         codes = {v for v, _ in (by_key.get(k) or {}).get("values") or []}
+        if codes and codes <= chose[k] and (sampled[k] or {}).get("linear") is True:
+            # a scale the line rule closed stays a sample however much of it was walked (decision 16): its whole
+            # walks' options join the count, where a listed scale's (no range) went to the list, not to the sample
+            if not (by_key.get(k) or {}).get("range"):
+                sampled[k]["proofs"] = sampled[k].get("proofs", 0) + sum(
+                    e.get("options", 0) for e in report if (r := e["records"].get(k)) and r.get("linear") is not True
+                    and codes <= set((r.get("proved") or {}).values()))
+            print(f"  on a line     {k} {by_key[k]['name'][:44]}: each of its {len(codes)} values chosen; the line "
+                  "rule's scale, still a sample")
+            continue
         if codes and codes <= chose[k]:
             proved[k] = set(proved.get(k, ())) | codes
             del sampled[k]
