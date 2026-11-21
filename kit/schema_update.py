@@ -160,7 +160,7 @@ from writer.mirror import (mirror_key, mirror_names, mirror_of, mirror_place)  #
 from writer.notes import (ALLOWANCE, EVIDENCE, PAREN, TAIL, add_line, apply_fix, fix_differs, note_is,  # noqa: E402,F401
                           put_note, split_evidence, with_evidence_apart, with_tidy_note)
 from writer.fromdata import (BUTTON_WORD, EXPERT_WORDS, MAPPING_WORDS, PLACE_KEYS, RECORD_REF,  # noqa: E402,F401
-                             SETTING_GROUPS, expert, from_data, model_refused, mymenu_slots, own_help, places, places_rebuilt,
+                             SETTING_GROUPS, expert, from_data, model_refused, mymenu_slots, own_help, places, places_as_read,
                              plain_reason, refresh_from_data, reset_names, say_stale, text, with_camera,
                              with_expert, with_menu, with_place, with_plain_words, write_definition)
 from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis_value_rows,  # noqa: E402,F401
@@ -935,6 +935,9 @@ def main():
                     help="write although this run's reading set evidence aside that no longer fits the public "
                          "definition (a proof's, or more than a handful of settings'); it is kept in the evidence "
                          "file's \"stale\" section, never published")
+    ap.add_argument("--accept-lost-menus", type=int, default=None, metavar="N",
+                    help="write although N settings would no longer be listed in a camera menu they list now (the "
+                         "count the run says, so no steps file passes it by habit; writer.fromdata.lost_refusal)")
     ap.add_argument("--drop-stale", action="store_true",
                     help="only list the evidence file's \"stale\" section (setting keys and fields); with --write, "
                          "remove it")
@@ -944,7 +947,7 @@ def main():
                          "the marker names (the stop that finds the marker names this)")
     a = ap.parse_args()
     if a.from_data:
-        refresh_from_data(a.write and not a.dry_run, a.accept_stale)
+        refresh_from_data(a.write and not a.dry_run, a.accept_stale, a.accept_lost_menus)
         return
     target = definitions.path(RUN_ROOT.name) if paths.KEY.match(RUN_ROOT.name) else definitions.active()
     if a.drop_stale:
@@ -970,7 +973,8 @@ def main():
             say_stale(target)
         return
     if target.stem != paths.A1II:
-        generic_main(target, RUN, a.write and not a.dry_run, a.force, a.accept_stale)   # any other camera: the plain pass
+        generic_main(target, RUN, a.write and not a.dry_run, a.force, a.accept_stale,   # any other camera: the plain pass
+                     accept_lost=a.accept_lost_menus)
         return
     _hand()
     # the hand tables' evidence (writer/hand_evidence.py) is the mapper's, in the private overlay: without it the tables
@@ -985,8 +989,8 @@ def main():
         sys.exit(hand_facts.hand_proof_stop(paths.A1II, gaps))
     doc = definitions.load(target)
     # whether this write rebuilds the places, judged on the definition as read, before this pass's proofs: read without
-    # its evidence, it keeps every place it has (fromdata.places_rebuilt)
-    rebuild = places_rebuilt(doc)
+    # its proof paths, it keeps every place it has, and says why (fromdata.places_as_read)
+    rebuild = places_as_read(doc)
     writer_proofs.CONTEXT_WORDS.update(CONTEXT_WORDS)      # this body's contexts the runs reworded (menu_row)
     why = model_refused(RUN, doc)
     if why:
@@ -1938,7 +1942,7 @@ def main():
     gate(open_ones, target.stem, a.force, a.write and not a.dry_run)
     if a.write and not a.dry_run:
         # every refusal first, then the reset file, then this; a reason's day taken out on purpose is no evidence lost
-        write_definition(target, doc, a.accept_stale, taken_out=taken_out)
+        write_definition(target, doc, a.accept_stale, taken_out=taken_out, accept_lost=a.accept_lost_menus)
         print(f"wrote {target}")
         help_files.write(private, doc, sony, help_files.SONY_SOURCE)
         print(f"wrote {private}")

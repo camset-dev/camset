@@ -1208,6 +1208,39 @@ def check_nodes(rows, keys: set) -> None:
         check_nodes(x.get("kids", []), keys)
 
 
+def test_the_viewer_hangs_a_record_where_the_writer_places_it_on_made_up_data(tmp_path, monkeypatch):
+    """One placement for the viewer and the writer (placement.placing_paths), seen with no runs: a record whose row is
+    given by hand (HAND_PLACES) hangs on that row in the proof viewer, not on the row its proof path names; and a row the
+    camera tells from a row of its label beside it by its icon alone keeps the camera's label and carries the icon's
+    words beside it (ROW_ICONS), which the page draws "label (words)", as the definition's row_icons say."""
+    key = "TEST_fw1.00"
+    data = tmp_path / "data"
+    (data / key).mkdir(parents=True)
+    (data / key / f"hand_tables_{key}.json").write_text(json.dumps({
+        "camera": key, "HAND_PLACES": {"global:0x0002": {"row": "Setup > Operation Customize > Custom Key/Dial Set.#1"}},
+        "ROW_ICONS": {"Setup > Operation Customize > Custom Key/Dial Set.": "Still",
+                      "Setup > Operation Customize > Custom Key/Dial Set.#1": "Movie"}}), encoding="utf-8")
+    labels = ["Custom Key/Dial Set.", "Custom Key/Dial Set.", "Fn Menu Settings"]
+    tree = tmp_path / "tree.json"
+    tree.write_text(json.dumps({"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Setup", "pages": [
+        {"page": "1/1", "group": "Operation Customize", "rows": [{"label": x, "state": "walked", "why": ""} for x in labels]}]}]}),
+        encoding="utf-8")
+    monkeypatch.setattr(definitions, "DATA", data)
+    monkeypatch.setattr(datafiles, "menu_tree_file", lambda k: tree)
+    monkeypatch.setattr(pv, "RUN_ROOT", None)
+
+    def setting(k, name, path):
+        return {"key": k, "area": "global", "id": int(k[-4:], 16), "name": name, "tab": "Setup", "group": "Operation Customize",
+                "values": [], "proved": {"menu": [path]}}
+    doc = {"model": "TEST", "tabs": ["Setup"], "layouts": [{"model": "TEST", "firmware": "1.00"}],
+           "menu": [{"tab": "Setup", "group": "Operation Customize", "label": x, "order": i} for i, x in enumerate(labels)],
+           "settings": [setting("global:0x0001", "Custom Key (Still)", "Custom Key/Dial Set."),
+                        setting("global:0x0002", "Custom Key (Movie)", "Fn Menu Settings")]}          # its hand row wins
+    tabs = pv.menu(doc, pv.records(doc, {}), tmp_path)
+    where = {k: (x["l"], x.get("icon")) for x, _ in pv.menu_nodes(tabs) for k in x.get("recs") or []}
+    assert where == {"global:0x0001": ("Custom Key/Dial Set.", "Still"), "global:0x0002": ("Custom Key/Dial Set.", "Movie")}
+
+
 def test_every_cameras_data_holds_nothing_but_its_public_definition_and_sample(viewer):
     """Decision 16 for a page anyone can open: no network address, MAC, serial, e-mail or home folder (check_public's
     own patterns), no private/ path, no run's name or folder, no date in any camera's data, no settings file but the
@@ -1663,9 +1696,11 @@ const bytes = (k) => { const s = atob(FILES[k]); const u = new Uint8Array(s.leng
 const look = () => ({ camera: DATA.camera, foreign: !!DATA.foreign, file: $("file").textContent, title: $("file").title, notice: $("notice").textContent,
   intro: $("notice").classList.contains("intro"), msg: $("mainmsg").textContent, cams: $("camera").children.map((o) => o.textContent),
   tabs: $("tabs").children.map((li) => li.textContent), detail: $("dbody").textContent, records: Object.keys(R).length, open: $("openfile").textContent,
-  privacy: $("privacy").textContent, ready: !$("mainfile").disabled, expert: $("expert").getAttribute("aria-pressed"), loaded: [...window.__loaded] });
+  privacy: $("privacy").textContent, ready: !$("mainfile").disabled, expert: $("expert").getAttribute("aria-pressed"), loaded: [...window.__loaded],
+  mtitle: $("mtitle").textContent, mnote: $("mnote").hidden ? "" : $("mnote").textContent });
 const out = look();
 out.expert_on = (() => { $("expert").click(); const n = $("tabs").children.map((li) => li.textContent); $("expert").click(); return n; })();
+out.mnote_expert = (() => { $("expert").click(); const n = $("mnote").hidden ? "" : $("mnote").textContent; $("expert").click(); return n; })();
 setMode("layout");
 out.layout = $("tree").textContent + $("cmp-show").textContent + $("cmp-with").textContent;
 out.about = $("hbody").textContent;
@@ -1728,6 +1763,14 @@ def test_the_viewer_starts_on_the_first_camera_with_its_sample_and_the_editors_m
     entries = golden["menus"][0]["entries"] if "menus" in golden else golden["entries"]          # the first camera menu's
     assert [t.split("(")[0] for t in first["tabs"][1:len(entries) + 1]] == [e["entry"] for e in entries]
     assert first["expert"] == "false" and first["expert_on"] != first["tabs"]
+    # the camera menu the default Menu is, said where it is seen: the other menus' own settings are under Expert
+    menus = [m["menu"] for m in golden.get("menus") or []]
+    if menus:
+        assert first["mtitle"] == f"{menus[0]} menu" and first["mnote"] == (
+            f"The camera's {menus[0]} menu. Settings only its {' and '.join(menus[1:])} menus list are under Expert.")
+        assert first["mnote_expert"] == ""
+    else:
+        assert first["mtitle"] == "Menu" and first["mnote"] == ""
     assert "exist only for whoever mapped the camera with Camset's kit" in first["detail"]
     assert first["tries"]["garbage"]["msg"] == ("garbage.DAT: this is not a settings file this viewer can read: it reads files laid out like "
                                                 "those of the cameras it knows (ILCE-1M2 · α1 II, firmware 4.00; ILCE-7M4 · made up, firmware 3.00).")

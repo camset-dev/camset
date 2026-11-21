@@ -176,7 +176,10 @@ def with_option_trees(doc: dict, run: Path, audit: bool = False) -> int | None:
         print(f"option trees: {run} holds no proofs, so the definition's are left as they are")
         return None
     shared_from = {}
-    found, why_not = option_tree.trees(doc, proofs, shared_from)
+    from camkit import definitions
+    from . import hand_tables          # the rows given by hand, whose row lists no option of theirs (option_tree.BY_HAND)
+    hand = frozenset(hand_tables.load(definitions.key(doc), evidence=False).HAND_PLACES)
+    found, why_not = option_tree.trees(doc, proofs, shared_from, hand)
     doc["settings"] = [option_tree.with_tree(s, found.get(s["key"])) for s in doc["settings"]]
     print(f"option trees: {len(found)} settings with the camera's nested options ({len(shared_from)} sharing another's, "
           f"of the same values); {len(why_not)} on a carousel row or with labels of the shape \"Main: Sub\" without one")

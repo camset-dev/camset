@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 from camkit import ROOT, definitions, option_tree as O, paths
+from writer import hand_tables
 
 A1 = paths.A1II
 
@@ -182,11 +183,24 @@ def test_option_trees_command_prints_the_audit_and_writes_only_with_write(tmp_pa
     # AF Area Registration's Tracking start area (nested-looking labels): on no row until HAND_PLACES gave it its row
     # (2026-11-20), then on a row whose axis no proof walks; the audit says which, as the definition places it
     reg = next(s for s in definitions.load(A1)["settings"] if s["key"] == "global:0x0e74")
+    by_hand = "global:0x0e74" in hand_tables.load(A1, evidence=False).HAND_PLACES
     line = next(x for x in out.splitlines() if "none  global:0x0e74 " in x)
-    assert line.endswith("its row has no carousel axis in the proofs: the camera lists these options flat" if reg.get("row")
-                         else "not placed on a menu row"), line
+    assert line.endswith(O.BY_HAND if reg.get("row") and by_hand else "not placed on a menu row" if not reg.get("row")
+                         else "its row has no carousel axis in the proofs: the camera lists these options flat"), line
     assert target.read_bytes() == before, "shown, not written"
 
+
+
+def test_a_record_on_a_row_given_by_hand_gets_no_tree_for_that_reason():
+    """A nested-looking record placed by a row given by hand (HAND_PLACES: AF Area Registration's Tracking start area)
+    is said to be so: that row's function writes the record and the row lists none of its options, never "the camera
+    lists these options flat", which is what the audit says of a row of its own whose axis no proof walks."""
+    doc = {"settings": [{"key": "global:0x0001", "name": "Registered AF area: Tracking start area", "row": ["AF Area Registration"],
+                         "values": [[0, "Tracking: Wide"], [1, "Tracking: Zone"], [2, "Wide"]]}]}
+    assert O.trees(doc, [], hand=frozenset({"global:0x0001"}))[1] == {"global:0x0001": O.BY_HAND}
+    assert O.trees(doc, [])[1]["global:0x0001"].endswith("the camera lists these options flat")
+    doc["settings"][0].pop("row")
+    assert O.trees(doc, [], hand=frozenset({"global:0x0001"}))[1] == {"global:0x0001": "not placed on a menu row"}
 
 def test_the_shipped_definition_nests_focus_area_as_the_camera_does():
     doc = definitions.load(A1)

@@ -167,7 +167,7 @@ def with_plain_words(s: dict, names: list = ()) -> dict:
     return s
 
 
-PLACE_KEYS = ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode", "row_menus", "row_places")
+PLACE_KEYS = ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode", "row_menus", "row_places", "row_icons")
 # what a definition written without the camera's menu tree keeps (places, menu_list), said once (a fresh clone, CI)
 NO_TREE = "the definition's menu list and each setting's place on the camera stay as the definition has them"
 MENU_FIELDS = ("name", "modes", "main_tiles", "hover")          # a camera menu, as camera.menus holds it
@@ -184,11 +184,23 @@ def places_rebuilt(doc: dict) -> bool:
     return any("menu" in (s.get("proved") or {}) for s in settings) or not any("row" in s for s in settings)
 
 
-KEPT_PLACES = ("the definition was read without its proof paths (its evidence is not on this computer), so each "
-               "setting's place on the camera and the camera's menus stay as it has them, though this pass proves a few")
+# why a write keeps the places of a definition read without proof paths (places_as_read), then what that keeps
+NO_EVIDENCE = "its evidence is not on this computer"
+NO_PATHS = "its evidence is here but holds no proof path"
+KEPT_PLACES = ("the definition was read without its proof paths ({}), so each setting's place on the camera and the "
+               "camera's menus stay as it has them, though this pass proves a few")
 
 
-def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = True) -> dict | None:
+def places_as_read(doc: dict) -> bool | str:
+    """True where a write may rebuild the places of the definition `doc` as it was read (places_rebuilt), else why it
+    keeps them, in words: its evidence is not on this computer (no setting holds any: camkit.definitions.split), or it
+    is and holds no proof path (NO_EVIDENCE, NO_PATHS)."""
+    if places_rebuilt(doc):
+        return True
+    return NO_PATHS if definitions.split(doc)[1]["settings"] else NO_EVIDENCE
+
+
+def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool | str = True, icons: dict = None) -> dict | None:
     """Each setting's place on the camera, from the camera's menu tree (the Stills menu, and the other shooting modes'
     menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths, or its rows
     given by hand (`hand`: HAND_PLACES, {key: [row paths]}, camkit.placement.with_hand) (camkit.placement, the proof
@@ -197,12 +209,14 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = Tru
     "row_menus" and, where a menu places it otherwise, "row_places" too (camkit.placement.by_menu, the camera's Help Guide
     menu list telling records that differ by mode apart). None, so the places stay as they are, for a definition read without its
     evidence (no setting holds its proof paths, proved.menu, which are evidence: camkit.definitions; or `rebuild`
-    False: places_rebuilt said so of the definition as read, before the pass gave a few settings proof paths) or with no
-    menu tree on this computer (a fresh clone, CI: the places are what is public of the menus)."""
+    other than True: places_as_read said so of the definition as read, before the pass gave a few settings proof paths,
+    False or why) or with no menu tree on this computer (a fresh clone, CI: the places are what is public of the menus).
+    Once every place is found and every menu looked up, a row the camera tells from a row of its label beside it by
+    its icon alone takes that icon's words in its label (`icons`: ROW_ICONS, camkit.placement.with_icons)."""
     if not any("menu" in (s.get("proved") or {}) for s in doc["settings"]):
         return None
-    if not rebuild:
-        print(f"places: {KEPT_PLACES}")         # each write that keeps them says so, on the console
+    if rebuild is not True:          # each write that keeps them says so, and why, on the console
+        print("places: " + KEPT_PLACES.format(rebuild if isinstance(rebuild, str) else NO_EVIDENCE))
         return None
     tree = definitions.menu_tree_file(definitions.key(doc))
     if not tree.exists():
@@ -214,7 +228,14 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = Tru
     found = placement.settings(doc, tree, boxes, placement.placing_paths(doc, tree, hand, menus))
     for k in sorted(set(hand) - set(found)):
         print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
+    shifted = placement.hand_group_problems(doc, tree, hand)
+    if shifted:
+        raise hand_tables.Refused(f"{paths.shown(datafiles.hand_tables_file(definitions.key(doc)))}: HAND_PLACES names a "
+                                  "row by a group that no longer holds it, so the menu's page order changed: "
+                                  + "; ".join(shifted) + ". Nothing was written: name each row as the menu tree holds it "
+                                  "now, then run the command again.")
     if not menus:
+        icons_refusal(doc, placement.with_icons(doc, tree, found, icons or {}))
         return found
     why = placement.menus_refusal(tree, menus)
     if why:
@@ -225,25 +246,47 @@ def places(doc: dict, menus: list = None, hand: dict = None, rebuild: bool = Tru
     guide = jsonl.read(guide, bad="skip") if guide.exists() else []
     by = placement.by_menu(doc, tree, menus, boxes, hand, found, guide, modes)
     out = {k: {**v, **by.get(k, {})} for k, v in found.items()}
-    say_fewer_menus(placement.fewer_menus(doc, tree, menus, out), [m["name"] for m in menus])
+    opened = []
+    say_fewer_menus(placement.fewer_menus(doc, tree, menus, out, opened), [m["name"] for m in menus], opened)
+    icons_refusal(doc, placement.with_icons(doc, tree, out, icons or {}, menus))          # last: the camera's labels first
     return out
 
 
-def say_fewer_menus(short: list, order: list = ()) -> None:
+def icons_refusal(doc: dict, unused: list) -> None:
+    """Refused, in plain words, where ROW_ICONS names a row no other row of its label stands beside in the group the
+    entry names, in any menu of the tree (camkit.placement.with_icons' `unused`): a page order changed, or the entry
+    is mistyped; its words would be written on no row, or on another."""
+    if unused:
+        raise hand_tables.Refused(f"{paths.shown(datafiles.hand_tables_file(definitions.key(doc)))}: ROW_ICONS names "
+                                  f"{', '.join(map(repr, unused))}, but no row of the menu tree stands there beside another "
+                                  "row of its label (in that group). Nothing was written: name each row as the menu tree "
+                                  "holds it now (its tab, its top row's group, its labels, \"#n\" for the n-th), then run "
+                                  "the command again.")
+
+
+def say_fewer_menus(short: list, order: list = (), opened: list = ()) -> None:
     """On the console only (the tree is the mapper's own): how many settings, below how many top rows, are listed in
     fewer camera menus than their row stands in (camkit.placement.fewer_menus), and each row with the menus it lacks:
-    the open work, seen at every pass, never a stop."""
-    if not short:
-        return
-    rows = {}
-    for _, tab, row, lack in short:
-        n, missing = rows.get((tab, row), (0, []))
-        rows[(tab, row)] = (n + 1, missing + [m for m in lack if m not in missing])
-    print(f"menus: {len(short)} settings below {len(rows)} rows are listed in fewer menus than their row stands in: "
-          "prove or crawl them there")
-    for (tab, row), (n, missing) in sorted(rows.items()):
-        missing = sorted(missing, key=lambda m: list(order).index(m) if m in order else len(order))
-        print(f"  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, not in {', '.join(missing)}")
+    the open work, seen at every pass, never a stop. Then, apart, the settings left out of a menu's count only because a
+    row on their way opens nothing there (`opened`), one crawl's reading, so none of them goes unsaid."""
+    def rows_of(items):
+        rows = {}
+        for _, tab, row, lack in items:
+            n, missing = rows.get((tab, row), (0, []))
+            rows[(tab, row)] = (n + 1, missing + [m for m in lack if m not in missing])
+        return {k: (n, sorted(m, key=lambda x: list(order).index(x) if x in order else len(order))) for k, (n, m) in rows.items()}
+    if short:
+        rows = rows_of(short)
+        print(f"menus: {len(short)} settings below {len(rows)} rows are listed in fewer menus than their row stands in: "
+              "prove or crawl them there")
+        for (tab, row), (n, missing) in sorted(rows.items()):
+            print(f"  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, not in {', '.join(missing)}")
+    if opened:
+        rows = rows_of(opened)
+        print(f"menus: {len(opened)} settings below {len(rows)} rows are left out of a menu where a row on their way opens "
+              "nothing (by one crawl): look at that row there if in doubt")
+        for (tab, row), (n, where) in sorted(rows.items()):
+            print(f"  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, opens nothing in {', '.join(where)}, by one crawl")
 
 
 def hand_unplaced(doc: dict, key: str, rows: list) -> str:
@@ -447,7 +490,7 @@ def with_place(s: dict, place: dict) -> dict:
     return out if "order" in s else {**out, **place}
 
 
-def from_data(doc: dict, rebuild: bool = None) -> dict:
+def from_data(doc: dict, rebuild: bool | str = None) -> dict:
     """The parts of a definition the kit takes from data/ alone, whatever the runs hold: the format and the camera
     section, the memory copies named from it, the project's own help, the menu list (with_menu) and each setting's
     place on the camera's menus; and the kit's own rules over it, the Expert marks, the photographer's words (with_plain_words), each note tidy (with_tidy_note) and its evidence apart (shown in
@@ -456,11 +499,12 @@ def from_data(doc: dict, rebuild: bool = None) -> dict:
     (without_written_with: it told how the camera was set).
     The camera's menus (camera.menus from the MENUS table, each setting's row_menus and row_places) are rebuilt only
     where the places are (places: the menu tree and the proof paths here); elsewhere (a fresh clone, CI) they stay
-    exactly as the definition has them, what the writer cannot rebuild left untouched. `rebuild`: places_rebuilt of the
+    exactly as the definition has them, what the writer cannot rebuild left untouched. `rebuild`: places_as_read of the
     definition as the pass read it, before its proofs (schema_update.main and the plain pass give it), else of `doc`.
     main() ends the same way, so on the committed data this gives the committed definition."""
-    rebuild = places_rebuilt(doc) if rebuild is None else rebuild
+    rebuild = places_as_read(doc) if rebuild is None else rebuild
     had_row = {s["key"] for s in doc["settings"] if "row" in s}          # the rows the definition holds as read
+    was = {"settings": [{k: s[k] for k in ("key", "name", "row_menus") if k in s} for s in doc["settings"]]}
     kept = (doc.get("camera") or {}).get("menus")          # the definition's own, for a write that cannot rebuild them
     doc = with_menu(with_camera(doc))
     tables = hand_tables.load(definitions.key(doc), evidence=False)       # the public tables: MENUS, HAND_PLACES
@@ -471,7 +515,8 @@ def from_data(doc: dict, rebuild: bool = None) -> dict:
     mirror_names(doc)
     own_help(doc)
     doc["layouts"] = [with_evidence_apart(with_tidy_note(lay)) for lay in doc["layouts"]]
-    found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}, rebuild)
+    found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}, rebuild,
+                   tables.ROW_ICONS)
     if found is None and kept is None:
         kept = menus_named(doc, menus)
     if "camera" in doc:
@@ -484,6 +529,7 @@ def from_data(doc: dict, rebuild: bool = None) -> dict:
     by_hand = frozenset(tables.HAND_PLACES)
     doc["settings"] = [with_expert(placed(with_plain_words(with_evidence_apart(with_tidy_note(s)), names)), slots, mirror, by_hand)
                        for s in doc["settings"]]
+    say_lost_menus(lost_menus(was, doc))          # a write refuses it unless told the count (lost_refusal)
     why = linked_refusal(doc)
     if why:
         raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: prove the row in the mode of each "
@@ -494,13 +540,17 @@ def from_data(doc: dict, rebuild: bool = None) -> dict:
         s = hit[2]
         word = MAPPING_WORDS.search(s["name"])
         if s["key"] in had_row and "row" not in s and word:
-            # the row went in this write, for no proof path of it is here: the camera file is not the cause
+            # the row went in this write: no proof path of it is here, or its paths reach no row of today's menu tree; the
+            # camera file is not the cause
+            gone = ("its proof paths reach no row of the menu tree here (the tree changed since its place was written)"
+                    if placement.proof_paths(s) else "no proof path of it is here to place it")
             why = main_tile_refusal(doc, lambda x: (
-                f"it has no row in this write, for no proof path of it is here to place it, and on no row its name's "
-                f"{word.group(0)!r} reads as a word of how the kit found the record"))
-            raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: write where the definition's "
-                                      "evidence is (its proof paths place the setting), or prove that row again, then run "
-                                      "the command again.")
+                f"it has no row in this write, for {gone}, and on no row its name's {word.group(0)!r} reads as a word of "
+                "how the kit found the record"))
+            what = ("crawl or prove that row again, so a path of it reaches a row of the tree" if placement.proof_paths(s)
+                    else "write where the definition's evidence is (its proof paths place the setting), or prove that row again")
+            raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: {what}, then run the command "
+                                      "again.")
         because = expert_why(s, slots, mirror, by_hand)
         why = main_tile_refusal(doc, lambda x: because)
         if (because or "").startswith(NO_ROW):
@@ -562,22 +612,75 @@ def reset_names(doc: dict, write: bool) -> int:
     return n
 
 
-def refuse_before_writing(target, doc: dict, accept_stale: bool = False, taken_out=()) -> None:
+def lost_menus(old: dict, new: dict) -> list:
+    """[(key, name, [the camera menus it no longer lists])] of each setting the definition `old` lists in a camera menu
+    (row_menus) that `new` no longer lists it in, in old's order: a menu tree not rebuilt for a change in how the kit
+    reads it, a proof gone, a row a later scan names otherwise. A setting `new` lacks is no loss of a menu."""
+    now = {s["key"]: set(s.get("row_menus") or ()) for s in new.get("settings") or []}
+    return [(s["key"], s.get("name") or "", [m for m in s["row_menus"] if m not in now[s["key"]]])
+            for s in old.get("settings") or [] if s.get("row_menus") and s["key"] in now
+            and any(m not in now[s["key"]] for m in s["row_menus"])]
+
+
+def say_lost_menus(lost: list) -> None:
+    """On the console: how many settings lose a camera menu they listed, then each with the menus it loses."""
+    if lost:
+        print(f"menus: {len(lost)} settings no longer listed in a camera menu they listed before (the menus lost):")
+        for k, name, menus in lost:
+            print(f"  {k} {name[:60]}: {', '.join(menus)}")
+
+
+ACCEPT_LOST = "--accept-lost-menus"
+
+
+def lost_refusal(target, doc: dict, accepted=None) -> str | None:
+    """Why the definition `doc` must not be written over the one at `target`, in plain words, or None: it would list
+    settings in fewer camera menus than the definition there does (lost_menus), unless the run acknowledges exactly
+    that many (`accepted`: kit/schema_update.py's --accept-lost-menus N, a number so no steps file passes it by habit).
+    The words carry the rows themselves, grouped by row and the menus lost as the fewer-menus print groups them, and
+    give the flag only after what must be decided first: most often the menu tree was not rebuilt."""
+    if not Path(target).exists():
+        return None
+    old = definitions.load_public(target)
+    lost = lost_menus(old, doc)
+    if not lost or accepted == len(lost):
+        return None
+    by_key = {s["key"]: s for s in old["settings"]}
+    rows = {}
+    for k, _, menus in lost:
+        s = by_key[k]
+        at = (s.get("row_tab") or s.get("tab") or "Other", " > ".join(s.get("row") or []) or "(no row)", tuple(menus))
+        rows[at] = rows.get(at, 0) + 1
+    said = "".join(f"\n  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, no longer in {', '.join(menus)}"
+                   for (tab, row, menus), n in sorted(rows.items()))
+    return (f"{paths.shown(target)}: {len(lost)} settings would no longer be listed in a camera menu they list now:{said}\n"
+            "Nothing was written. Most often this means the camera's menu tree was not rebuilt with this kit: stop here, "
+            "rebuild it (kit/tools/menu_tree.py, each mode as the pass's steps say) and run the command again. Only if "
+            "you have looked at each row above and mean those settings to leave those menus (a reading of the camera that "
+            f"changed on purpose), run it again with {ACCEPT_LOST} {len(lost)}.")
+
+
+def refuse_before_writing(target, doc: dict, accept_stale: bool = False, taken_out=(), accept_lost=None) -> None:
     """Every refusal of a definition's write, before anything is written: evidence that went stale in this run's
-    reading (definitions.stale_refusal; accept_stale writes all the same, the evidence kept aside), and a definition
+    reading (definitions.stale_refusal; accept_stale writes all the same, the evidence kept aside), a definition
     that lacks the evidence its evidence file holds (definitions.check_write), but what the writer took out on purpose
-    and said (`taken_out`)."""
+    and said (`taken_out`), and a definition that would list settings in fewer camera menus than the one there
+    (lost_refusal, unless `accept_lost` names their count)."""
     why = None if accept_stale else definitions.stale_refusal(definitions.newly_stale(doc, target), target)
     if why:
         raise definitions.StaleStop(why)
+    why = lost_refusal(target, doc, accept_lost)
+    if why:
+        raise SystemExit(why)
     definitions.check_write(target, doc, taken_out)
 
 
-def write_definition(target, doc: dict, accept_stale: bool = False, reset: bool = True, taken_out=()) -> None:
+def write_definition(target, doc: dict, accept_stale: bool = False, reset: bool = True, taken_out=(), accept_lost=None) -> None:
     """The definition `doc` written to `target`, its refusals first (refuse_before_writing, and with reset the reset
     file's: reset_refusal), then (reset) the reset file's names and tabs from it, then the definition itself: no
-    refusal arrives after a file was written. `taken_out`: evidence the writer took out on purpose (check_write)."""
-    refuse_before_writing(target, doc, accept_stale, taken_out)
+    refusal arrives after a file was written. `taken_out`: evidence the writer took out on purpose (check_write);
+    `accept_lost`: how many settings may lose a camera menu (lost_refusal)."""
+    refuse_before_writing(target, doc, accept_stale, taken_out, accept_lost)
     if reset:
         why = reset_refusal(doc)
         if why:
@@ -593,7 +696,7 @@ def say_stale(target) -> None:
         print(line)
 
 
-def refresh_from_data(write: bool, accept_stale: bool = False) -> None:
+def refresh_from_data(write: bool, accept_stale: bool = False, accept_lost=None) -> None:
     """--from-data: every definition's parts from data/, shown, and written with --write: each definition read whole
     (its private evidence put back, where this computer has it), its public file and its evidence written apart. Every
     definition is checked before any is written (its camera's private files still in data/, its stale evidence, its
@@ -613,7 +716,7 @@ def refresh_from_data(write: bool, accept_stale: bool = False) -> None:
     if write:
         for p, new, _ev, same in planned:            # every refusal, for every definition, before anything is written
             if not same:
-                refuse_before_writing(p, new, accept_stale)
+                refuse_before_writing(p, new, accept_stale, accept_lost=accept_lost)
             why = reset_refusal(new)
             if why:
                 raise datafiles.Refused("nothing written: " + why)

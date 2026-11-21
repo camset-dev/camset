@@ -295,6 +295,18 @@
         },
         "description": "As the setting's \"row_at\", in this menu: the same merged numbering of a tab's top rows, so a row the menus share has one number; then each row's place among the rows this menu shows under its row."
        },
+       "row_icons": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "pattern": "^[A-Za-z][A-Za-z&-]*( [A-Za-z][A-Za-z&-]*)?$"
+        },
+        "description": "As the setting's \"row_icons\", for this menu's \"row\": given with it, or none there."
+       },
        "row_tab": {
         "type": "string",
         "description": "As the setting's \"row_tab\", in this menu."
@@ -313,6 +325,18 @@
       }
      },
      "description": "The setting's place in a menu of row_menus, by its name, only where it differs from the setting's own (\"row\", \"row_at\", \"row_tab\", \"row_group\", \"under_option\"): the rows this menu shows under a shared row in another order, or a row only this menu labels so. An editor reads it before the setting's own place for that menu. Names and places only: no row's state, option list, page counter or My Menu item is ever here (kit/tools/check_public.py)."
+    },
+    "row_icons": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "pattern": "^[A-Za-z][A-Za-z&-]*( [A-Za-z][A-Za-z&-]*)?$"
+     },
+     "description": "Beside \"row\", one item per label: what the icon the camera draws before that row's label means, in a word or two from the camera's ROW_ICONS hand table (\"Still\", \"Movie\", \"Playback\"), where the icon alone tells that row from a row of the same label beside it; null for a level with no such icon. Present only where one level has words. \"row\" keeps the camera's own labels; an editor draws a level as its label then the words in brackets (\"Custom Key/Dial Set. (Movie)\"), the label's \"#n\" left out."
     },
     "values": {
      "type": "array",

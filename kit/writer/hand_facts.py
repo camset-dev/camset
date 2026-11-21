@@ -50,7 +50,7 @@ from .proofs import box_numbers, sampled_scale
 PLAIN = ("RECORD_FIXES", "FILTER_FLAGS", "NEW_RECORDS", "NEW_LIKE", "NEW_WHOLE_LABELS", "FRAME_PROOFS", "CAROUSEL",
          "VALUE_FIXES", "PP7_VALUES", "KEEP_LABELS", "PICKER_LISTS", "NOT_OFFERED", "VIDEO_SYSTEM_VALUES", "COPIES",
          "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "LIMIT_PAIRS", "FRAME_TRAVEL", "UNPROVED", "CONTEXT_WORDS",
-         "MENUS", "HAND_PLACES")
+         "MENUS", "HAND_PLACES", "ROW_ICONS")
 # a table a prover reads for the camera it works on, which no pass of the writer reads
 PROVERS = {"ZONE": "kit/provers/framepos_run.py --zone-grid"}
 # a table every comparison of a row's name reads on every camera, the passes' among them (camkit.row_names): nothing the

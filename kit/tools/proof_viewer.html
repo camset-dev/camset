@@ -78,6 +78,7 @@ header.top h1 { font-size: 1.15rem; font-weight: 500; margin: 0; color: var(--st
 
 /* column 1: the tabs, each with its colour bar as in the editor */
 #menu h2 { color: var(--muted); font-size: 1.2rem; border: 0; }
+#menu .mnote { color: var(--muted); font-size: .85rem; margin: -4px 4px 8px; }
 .bar { width: 7px; align-self: stretch; border-radius: 2px; flex: 0 0 auto; }
 #menu .sel { font-size: 1rem; padding: 5px 6px; }
 
@@ -368,7 +369,7 @@ details.explain summary { cursor: pointer; color: var(--muted); font-size: .86re
 </header>
 <nav class="tabstrip" id="tabstrip" aria-label="Tabs"></nav>
 <div class="cols" id="cols" data-show="items">
-  <section class="col" id="menu" aria-label="Menu"><h2 id="mtitle">Menu</h2><ul class="list" id="tabs"></ul></section>
+  <section class="col" id="menu" aria-label="Menu"><h2 id="mtitle">Menu</h2><p class="mnote" id="mnote" hidden></p><ul class="list" id="tabs"></ul></section>
   <section class="col" id="groups" aria-label="Groups"><h2 id="gtitle"></h2><ul class="list" id="glist"></ul></section>
   <section class="col" id="items" aria-label="Rows"><h2><button class="back" id="back-groups">← Groups</button><span id="ititle"></span><span class="key" id="icount"></span></h2><div class="items" id="ilist"></div></section>
   <section class="col" id="detail" aria-label="The chosen row"><h2><button class="back" id="back-items">← Rows</button><span></span></h2><div id="dbody"></div></section>
@@ -605,6 +606,9 @@ function menuTitle(on) {
   $("mtitle").textContent = name ? `${name} menu` : "Menu";
   $("mtitle").title = name ? `The camera's ${name} menu, as the editor lays it out` +
     (others.length ? `; the editor shows its ${others.join(" and ")} menus too, and Expert lists every setting` : "") : "";
+  // said where it is seen, not only on hover: a setting only another menu lists is not missing, it is under Expert
+  $("mnote").textContent = name && others.length ? `The camera's ${name} menu. Settings only its ${others.join(" and ")} menus list are under Expert.` : "";
+  $("mnote").hidden = !$("mnote").textContent;
 }
 function setExpert(on, chosen = false) {
   if (!MENUS) return;
@@ -614,6 +618,9 @@ function setExpert(on, chosen = false) {
   if (chosen) store.set(EXPERT, on ? "1" : "0");          // a click on the switch; not a jump that needed it, nor a start
 }
 if (MENUS) setExpert(store.get(EXPERT) === "1");
+// a row's label as the page draws it: the camera's, and where its icon alone tells it from a row of its label beside it,
+// the icon's words after it ("Custom Key/Dial Set. (Movie)": the node's icon, the definition's row_icons)
+const drawnLabel = (n) => n.icon ? `${n.l} (${n.icon})` : n.l;
 const label = (r, v) => { if (v === null || v === undefined) return ""; const x = r.vals.find((p) => p[0] === v); return x ? x[1] : String(v); };
 
 // "Not proved" leaves out what no proof can reach (not on this camera, or skipped by the owner's choice)
@@ -903,7 +910,7 @@ function draw() {
     const na = it.rs.length && it.rs.every((r) => r.proved || r.why) && it.rs.some((r) => r.why);
     const st = it.node && !it.rec && !it.sub ? it.node.st : "";
     const off = ["greyed", "never", "button", "info"].includes(st) || (!!it.node && !it.sub && !it.rs.length);
-    const name = it.sub ? `${it.open ? "▾" : "▸"} ${it.sub.name}` : it.rec && it.rec.n !== (it.node && it.node.l) && !it.node ? it.rec.n : (it.node ? it.node.l : it.rec.n);
+    const name = it.sub ? `${it.open ? "▾" : "▸"} ${it.sub.name}` : it.rec && it.rec.n !== (it.node && it.node.l) && !it.node ? it.rec.n : (it.node ? drawnLabel(it.node) : it.rec.n);
     const value = it.rec ? fmt(it.rec, shownVal(it.rec)) : it.node && !it.sub && !it.rs.length ? ({ never: "action or by hand", greyed: "greyed", info: "notice" }[st] || "") : "";
     const d = cmpOn && it.rs.some(differs);
     return el("div", { class: `item d${Math.min(it.depth, 4)}${it.parent ? " parent" : ""}${off ? " off" : ""}${d ? " dif" : ""}`,
@@ -936,7 +943,7 @@ function detail(it, tab, group) {
     + (md ? ` · ${modeWords(md)}` : ""))];
   if (it.sub || (it.node && !it.rec)) {
     const node = it.node;
-    out.push(el("div", { class: "title" }, it.sub ? `${node.l}: ${it.sub.name}` : node.l));
+    out.push(el("div", { class: "title" }, it.sub ? `${drawnLabel(node)}: ${it.sub.name}` : drawnLabel(node)));
     if (!it.sub && node.st && !["walked", "submenu"].includes(node.st)) out.push(el("div", { class: "why" }, own(STATES, node.st) || node.st, node.why ? `: ${node.why}` : ""));
     if (!it.sub && node.help) out.push(helpBlock(node.help, node.hg, node.hs));
     if (!it.sub && node.opts.length) out.push(walkBlock(node));

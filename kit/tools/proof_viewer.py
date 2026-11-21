@@ -599,9 +599,14 @@ def menu(doc, recs, here: Path) -> list:
         for _, keys in subs.values():
             keys.sort(key=lambda k: placed.get(k, -1))          # an option page's rows in their places; a family's as read
     mode_rows(cam_tree, modes, tabs)
+    # a row the camera tells from a row of its label beside it by its icon alone: the icon's words beside its label, as
+    # the definition keeps them (ROW_ICONS, placement.icon_words; the definition's row_icons), its label the camera's
+    words = {i: w for m in [cam_tree] + [m for _, m in modes] for i, (_, w) in placement.icon_words(m, tables.ROW_ICONS).items()}
     for t in tabs:
         for g in t["groups"]:
             for x, _ in nodes(g["rows"]):
+                if x["id"] in words:
+                    x["icon"] = words[x["id"]]          # the page draws "label (words)"
                 if x["id"] in fams:
                     if x.get("fam"):
                         x["kids"] = []          # the profiles and looks come from their records

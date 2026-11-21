@@ -691,13 +691,14 @@ def places_of(d):
     return {s["key"]: {f: s.get(f) for f in fromdata.PLACE_KEYS} for s in d["settings"]}
 
 
-def test_a_definition_read_without_its_proof_paths_keeps_every_place_whatever_proofs_the_pass_adds(tmp_path, monkeypatch):
+def test_a_definition_read_without_its_proof_paths_keeps_every_place_whatever_proofs_the_pass_adds(tmp_path, monkeypatch, capsys):
     """With a menu tree on the computer, a write from a definition read without its proof paths (its evidence not
     there) keeps every setting's place and the camera's menus as the definition has them, though the pass gives a few
     settings proof paths: the writer never takes a place from a setting for want of evidence it cannot see (2026-11-20:
     a made-up pass of three rows took the row off 1,676 settings). The places are rebuilt where the definition as read
     held proof paths, and a row no path places then goes (a stale one, on the mapper's computer), or where it held no
-    place at all (a new camera's first pass places what its proofs reach)."""
+    place at all (a new camera's first pass places what its proofs reach). The console says which of the two keeps them:
+    the evidence not on this computer, or there and holding no proof path."""
     S = _test_camera(tmp_path, monkeypatch)
     whole = S.from_data(doc(*copy.deepcopy(SETTINGS)))                  # the mapper's write: places from the paths
     assert fromdata.places_rebuilt(whole)
@@ -705,8 +706,17 @@ def test_a_definition_read_without_its_proof_paths_keeps_every_place_whatever_pr
     assert not fromdata.places_rebuilt(public) and places_of(public) == places_of(whole)
     read = copy.deepcopy(public)
     read["settings"][0]["proved"] = {"menu": ["Drive Mode"]}             # the pass proves one row
-    kept = S.from_data(copy.deepcopy(read), fromdata.places_rebuilt(public))
+    capsys.readouterr()
+    kept = S.from_data(copy.deepcopy(read), fromdata.places_as_read(public))
     assert places_of(kept) == places_of(whole) and kept["camera"]["menus"] == whole["camera"]["menus"]
+    assert f"places: the definition was read without its proof paths ({fromdata.NO_EVIDENCE})" in capsys.readouterr().out
+    held = copy.deepcopy(whole)          # its evidence here (how a meaning was found), no proof path left in it
+    for s in held["settings"]:
+        (s.get("proved") or {}).pop("menu", None)
+    held["settings"][0]["source"] = "two readers"
+    assert fromdata.places_as_read(held) == fromdata.NO_PATHS and fromdata.places_as_read(whole) is True
+    S.from_data(copy.deepcopy(read), fromdata.places_as_read(held))
+    assert f"({fromdata.NO_PATHS})" in capsys.readouterr().out
     # the same read with its evidence: every place rebuilt, a row neither a path nor the tree reaches gone (Breathing
     # Comp., Movie's alone, whose path was its only way there)
     rebuilt = {s["key"]: s for s in S.from_data(copy.deepcopy(read), True)["settings"]}
@@ -731,6 +741,12 @@ def test_a_main_tile_whose_setting_lost_its_row_in_this_write_says_so_not_to_tak
     said = str(e.value.code)
     assert said.startswith("TEST_fw1.00: the Movie page's tile 'Record Setting' shows global:0x0030")
     assert "no proof path of it is here" in said and "'Record'" in said and "take the key off" not in said
+    # a path of it is here, but reaches no row of today's tree (the tree changed since its place was written)
+    lost = {**copy.deepcopy(rec), "proved": {"menu": ["Gone Row"]}}
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(doc(*copy.deepcopy(SETTINGS), lost))
+    said = str(e.value.code)
+    assert "its proof paths reach no row of the menu tree here" in said and "no proof path of it is here" not in said
     rec["proved"] = {"menu": ["Rec. Media Settings"]}
     got = {s["key"]: s for s in S.from_data(doc(*copy.deepcopy(SETTINGS), rec))["settings"]}
     assert got["global:0x0030"]["row"] == ["Rec. Media Settings"] and not got["global:0x0030"].get("expert")
@@ -773,6 +789,157 @@ def test_a_row_the_walk_found_a_notice_on_takes_no_options_from_its_twins_walk(t
     first, second = menu["tabs"][0]["pages"][0]["rows"]
     assert first["options"] == ["Program Auto", "Manual Exposure"] and first["state"] == "walked"
     assert second["state"] == "info" and "options" not in second and second["kind"] == "notice"
+
+
+def test_a_write_that_would_take_a_menu_off_a_setting_says_each_and_needs_their_count(tmp_path, monkeypatch, capsys):
+    """Any cause (a menu tree not rebuilt for a change in how the kit reads it, a proof gone, a row a later scan names
+    otherwise) that would leave a setting listed in fewer camera menus than the definition there lists it in is said,
+    counted, setting by setting with the menus it loses, by every pass; and a write over that definition refuses unless
+    the run names that count (--accept-lost-menus N), so a steps file followed by habit cannot pass it."""
+    S = _test_camera(tmp_path, monkeypatch)
+    whole = S.from_data(doc(*copy.deepcopy(SETTINGS)))
+    was = copy.deepcopy(whole)
+    by = {s["key"]: s for s in was["settings"]}
+    by["global:0x0001"]["row_menus"] = ["Still", "S&Q"]                 # Drive Mode: its tree reads it in Still alone
+    capsys.readouterr()
+    again = S.from_data(copy.deepcopy(was))
+    said = capsys.readouterr().out
+    assert "menus: 1 settings no longer listed in a camera menu they listed before (the menus lost):" in said
+    assert "  global:0x0001 Drive Mode: S&Q" in said
+    assert fromdata.lost_menus(was, again) == [("global:0x0001", "Drive Mode", ["S&Q"])]
+    target = tmp_path / "TEST_fw1.00.json"
+    target.write_text(json.dumps(definitions.split(was)[0]), encoding="utf-8")
+    why = fromdata.lost_refusal(target, again)
+    assert why and "1 settings would no longer be listed in a camera menu they list now:\n  Shooting > Drive Mode: 1 setting, " \
+        "no longer in S&Q\n" in why                                                 # the rows in the refusal itself
+    assert why.index("stop here, rebuild it") < why.index("Only if you have looked at each row above") < why.index(
+        "--accept-lost-menus 1")                                                    # the flag only after the decision
+    assert fromdata.lost_refusal(target, again, 1) is None and fromdata.lost_refusal(target, again, 2) == why
+    assert fromdata.lost_refusal(target, was) is None and fromdata.lost_refusal(tmp_path / "none.json", again) is None
+    with pytest.raises(SystemExit) as e:
+        fromdata.refuse_before_writing(target, again)
+    assert "--accept-lost-menus 1" in str(e.value.code)
+
+
+def _icon_camera(tmp_path, monkeypatch, hand_places, icons, dial_first=False):
+    """A made-up camera whose Setup tab has two Custom Key/Dial Set. rows (a still camera's icon, a movie camera's) in
+    Operation Customize, a Fn Menu Settings row there, and two more Custom Key/Dial Set. rows in Dial Customize, after
+    them (or before them: `dial_first`, a later scan's order); its HAND_PLACES and ROW_ICONS as given; returns
+    (schema_update, the definition)."""
+    S = _test_camera(tmp_path, monkeypatch)
+    key = "TEST_fw1.00"
+    hand = tmp_path / "data" / key / f"hand_tables_{key}.json"
+    tables = json.loads(hand.read_text(encoding="utf-8"))
+    tables["HAND_PLACES"], tables["ROW_ICONS"] = hand_places, icons
+    hand.write_text(json.dumps(tables), encoding="utf-8")
+    pages = [page("1/2", "Operation Customize", row("Custom Key/Dial Set.", row("Dial/Wheel")), row("Custom Key/Dial Set.", row("Dial/Wheel")),
+                  row("Fn Menu Settings")),
+             page("2/2", "Dial Customize", row("Custom Key/Dial Set."), row("Custom Key/Dial Set."))]
+    if dial_first:          # a later scan's order: the other pair first in the tab
+        pages = [pages[1], pages[0]]
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Setup", "pages": copy.deepcopy(pages)}],
+            "modes": [{"mode": m, "tabs": [{"tab": "Setup", "pages": copy.deepcopy(pages)}]} for m in ("Movie", "S&Q")]}
+    (tmp_path / "tree.json").write_text(json.dumps(tree), encoding="utf-8")
+    d = {**doc(), "tabs": ["Setup"], "menu": [{"tab": "Setup", "group": "Operation Customize", "label": lab, "order": i}
+                                                for i, lab in enumerate(["Custom Key/Dial Set.", "Custom Key/Dial Set.", "Fn Menu Settings"])],
+         "settings": [{**setting(k, name, "Operation Customize", *paths), "tab": "Setup"} for k, name, paths in (
+             ("global:0x0041", "Dial/Wheel (Still)", ["Custom Key/Dial Set. > Dial/Wheel"]),
+             ("global:0x0042", "Custom Key (Movie)", ["Custom Key/Dial Set."]),
+             ("global:0x0043", "Fn Menu (Still)", ["Fn Menu Settings"]))]}
+    return S, d
+
+
+ICONS = {"Setup > Operation Customize > Custom Key/Dial Set.": "Still", "Setup > Operation Customize > Custom Key/Dial Set.#1": "Movie"}
+MOVIE_KEYS = {"global:0x0042": {"row": "Setup > Operation Customize > Custom Key/Dial Set.#1"}}
+
+
+def test_two_rows_the_camera_tells_apart_by_an_icon_alone_carry_its_words_beside_their_labels(tmp_path, monkeypatch):
+    """Setup's two Custom Key/Dial Set. rows (a still camera's icon, a movie camera's) read alike everywhere but on the
+    camera: ROW_ICONS gives each icon's words by the row's path (its tab, its group, "#1" the second), and the definition
+    says them in row_icons beside row, one item a level, in its own place and in every menu's. row keeps the camera's
+    own labels, so every reader matching a setting's row to the camera's reads it as before; the movie records still
+    hang on "#1"; a setting on a row no other row of its label stands beside has no row_icons."""
+    S, d = _icon_camera(tmp_path, monkeypatch, MOVIE_KEYS, ICONS)
+    got = {s["key"]: s for s in S.from_data(d)["settings"]}
+    assert got["global:0x0041"]["row"] == ["Custom Key/Dial Set.", "Dial/Wheel"] and got["global:0x0041"]["row_icons"] == ["Still", None]
+    assert got["global:0x0042"]["row"] == ["Custom Key/Dial Set."] and got["global:0x0042"]["row_at"] == [1]
+    assert got["global:0x0042"]["row_icons"] == ["Movie"]
+    assert "row_icons" not in got["global:0x0043"]
+    assert check_public.menu_problems({**S.from_data(copy.deepcopy(d)), "settings": list(got.values())}) == []
+
+
+def test_check_public_holds_row_icons_to_the_cameras_icon_words(tmp_path, monkeypatch):
+    """row_icons says no place and no value: one item per label of its row, each null or one of the words the camera's
+    ROW_ICONS table gives (a short fixed vocabulary), one at least not null, in a place and in a menu's place alike."""
+    S, d = _icon_camera(tmp_path, monkeypatch, MOVIE_KEYS, ICONS)
+    good = S.from_data(d)
+    assert check_public.menu_problems(good) == []
+    bad = copy.deepcopy(good)
+    by = {s["key"]: s for s in bad["settings"]}
+    by["global:0x0041"]["row_icons"] = ["Still"]                                  # one item for two labels
+    by["global:0x0042"]["row_icons"] = ["My Custom Look"]                          # no word of the table
+    by["global:0x0043"]["row_icons"] = [None]                                      # names no word
+    by["global:0x0042"]["row_places"] = {"Movie": {"row": ["Custom Key/Dial Set."], "row_at": [1], "row_icons": ["S&Q"]}}
+    said = check_public.menu_problems(bad)
+    assert "global:0x0041: row_icons is not one item per label of its row" in said
+    assert "global:0x0042: row_icons holds 'My Custom Look', none of the camera's icon words (ROW_ICONS)" in said
+    assert "global:0x0043: row_icons names no word" in said
+    assert "global:0x0042: row_places['Movie']: row_icons holds 'S&Q', none of the camera's icon words (ROW_ICONS)" in said
+    # one row, its settings saying two things of its icon: the editor would draw no words on its heading
+    split = copy.deepcopy(good)
+    by = {s["key"]: s for s in split["settings"]}
+    by["global:0x0042"]["row_at"] = [0]                                            # on the first row, still "Movie"
+    assert check_public.menu_problems(split) == ["row Custom Key/Dial Set.: its settings disagree on row_icons (Movie, Still)"]
+
+
+def test_an_icon_entry_or_a_hand_row_whose_group_no_longer_holds_its_row_stops_the_write(tmp_path, monkeypatch):
+    """A later scan that puts Dial Customize's two Custom Key/Dial Set. rows first in the tab moves which row "#1" (a
+    tab's top rows counted, as locate counts them) names: a ROW_ICONS entry or a HAND_PLACES row that names its group
+    then names a row that group does not hold, and the write stops in plain words, never labelling or placing another
+    row of that label quietly. An entry naming a row no other row of its label stands beside stops it too."""
+    S, d = _icon_camera(tmp_path, monkeypatch, {}, {"Setup > Operation Customize > Fn Menu Settings": "Still"})
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(copy.deepcopy(d))
+    assert "ROW_ICONS names 'Setup > Operation Customize > Fn Menu Settings'" in str(e.value.code)
+    S, d = _icon_camera(tmp_path / "b", monkeypatch, {}, ICONS, dial_first=True)
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(copy.deepcopy(d))
+    assert "ROW_ICONS names" in str(e.value.code)
+    S, d = _icon_camera(tmp_path / "c", monkeypatch, {"global:0x0042": {"row": "Setup > Dial Customize > Custom Key/Dial Set.#1"}}, {})
+    with pytest.raises(hand_tables.Refused) as e:
+        S.from_data(copy.deepcopy(d))
+    said = str(e.value.code)
+    assert "HAND_PLACES names a row by a group that no longer holds it" in said and "stands in 'Operation Customize'" in said
+
+
+def test_an_options_icon_letters_are_left_out_only_where_another_reading_of_it_did(tmp_path):
+    """menu_tree.py: an option whose leading token (at most row_names.ICON_LEAD characters) another reading of that
+    same option left out (the crawl's options.jsonl: OCR read "W Rating", the vision reader "Rating") has its label as
+    the camera draws it in the row's drawn_options, the evidence placement.option_names takes; one every reading gives
+    whole ("Shot Mark") has none, whatever its first word's length. A fold takes it in as the tree's own walk does."""
+    scan, crawl = tmp_path / "scan", tmp_path / "crawl"
+    scan.mkdir()
+    crawl.mkdir()
+    (scan / "model.json").write_text(json.dumps([{"page": "30/59", "breadcrumb": "Playback > Selection/Search",
+                                                   "rows": [{"slot": 0, "label": "Playback Filter Condition"}]}]), encoding="utf-8")
+    (crawl / "rows.jsonl").write_text(json.dumps({"page": "30/59", "slot": 0, "label": "Playback Filter Condition",
+                                                  "outcome": "walked", "kind": "checklist"}) + "\n", encoding="utf-8")
+    (crawl / "map.json").write_text(json.dumps({"rows": [{"path": ["Playback Filter Condition"], "kind": "checklist", "options": [
+        {"index": 0, "label": "Date"}, {"index": 1, "label": "W Rating"}, {"index": 2, "label": "Shot Mark"}]}]}), encoding="utf-8")
+    (crawl / "options.jsonl").write_text("".join(json.dumps(x) + "\n" for x in [
+        {"path": ["Playback Filter Condition"], "index": 0, "label": "Date", "ocr": "Date", "vlm": {"selected": "Date"}},
+        {"path": ["Playback Filter Condition"], "index": 1, "label": "W Rating", "ocr": "W Rating", "vlm": {"selected": "Rating"}},
+        {"path": ["Playback Filter Condition"], "index": 2, "label": "Shot Mark", "ocr": "Shot Mark", "vlm": {"selected": "Shot Mark"}}]),
+        encoding="utf-8")
+    menu = menu_tree.tree(scan, [crawl], "TEST_fw1.00", "Movie")
+    pfc = menu["tabs"][0]["pages"][0]["rows"][0]
+    assert pfc["options"] == ["Date", "W Rating", "Shot Mark"] and pfc["drawn_options"] == {"W Rating": "Rating"}
+    folded = {"mode": "Movie", "tabs": [{"tab": "Playback", "pages": [{"page": "30/59", "group": "Selection/Search", "rows": [
+        {"label": "Playback Filter Condition", "state": "seen", "why": "not walked", "kind": ""}]}]}]}
+    menu_tree.fold(folded, crawl)
+    assert folded["tabs"][0]["pages"][0]["rows"][0]["drawn_options"] == {"W Rating": "Rating"}
+    assert menu_tree.check({"$schema": "x", "model": "TEST", "firmware": "1.00", "source": "made up", "tabs": [],
+                            "modes": [menu]}) == []
 
 
 def test_rows_a_menu_read_from_its_held_row_keep_the_settings_own_order():
@@ -1036,13 +1203,47 @@ def test_the_writer_says_which_settings_are_in_fewer_menus_than_their_row(tmp_pa
     assert placement.fewer_menus(two, tw, MENUS, placed) == []
 
 
+def test_a_row_that_opens_nothing_in_a_menu_keeps_the_settings_below_it_out_of_that_menus_count(capsys):
+    """The S&Q walk's Right on Recognition Target's target rows changed nothing (the rows draw no ›: kit2_crawl_sq_1120
+    00914, 00929, 00948), which the tree keeps as "unhandled: no response to Right": such a row opens nothing in that
+    menu, so the Still settings below the Still menu's targets are no open work there, with nobody proving a negative.
+    They are never dropped unsaid: the print names each such row apart, "opens nothing in S&Q, by one crawl", one
+    crawl's reading. A target row the walk never opened (seen, never, a notice) still leaves them listed."""
+    def target(state, why):
+        return {"label": "Human", "state": state, "why": why, "kind": "submenu", "options": [], "children": []}
+
+    def tree(human):
+        rt = lambda h: row("Recognition Target", h)          # noqa: E731
+        return {"model": "TEST", "firmware": "1.00",
+                "tabs": [{"tab": "Focus", "pages": [page("1/1", "Subject Recognition", rt(row("Human", row("Tracking Shift Range"))))]}],
+                "modes": [{"mode": "S&Q", "tabs": [{"tab": "Focus", "pages": [page("1/1", "Subject Recognition", rt(human))]}]}]}
+    d = {"model": "TEST", "tabs": ["Focus"], "menu": [{"tab": "Focus", "group": "Subject Recognition", "label": "Recognition Target", "order": 0}],
+         "settings": [{**setting("global:0x0001", "Tracking Shift Range", "Subject Recognition"), "tab": "Focus",
+                       "row": ["Recognition Target", "Human", "Tracking Shift Range"], "row_at": [0, 0, 0]}]}
+    placed = {"global:0x0001": {"row": ["Recognition Target", "Human", "Tracking Shift Range"], "row_at": [0, 0, 0], "row_menus": ["Still"]}}
+    menus = [MENUS[0], MENUS[2]]
+    opened = []
+    assert placement.fewer_menus(d, tree(target("unhandled", placement.OPENS_NOTHING)), menus, placed, opened) == []
+    assert opened == [("global:0x0001", "Focus", "Recognition Target", ["S&Q"])]
+    fromdata.say_fewer_menus([], [m["name"] for m in menus], opened)
+    said = capsys.readouterr().out
+    assert "menus: 1 settings below 1 rows are left out of a menu where a row on their way opens nothing (by one crawl)" in said
+    assert "  Focus > Recognition Target: 1 setting, opens nothing in S&Q, by one crawl" in said
+    for state, why in (("seen", "not walked"), ("never", "action: x"), ("info", "an information notice comes first"),
+                       ("unhandled", "unknown screen")):
+        assert placement.fewer_menus(d, tree(target(state, why)), menus, placed) == [
+            ("global:0x0001", "Focus", "Recognition Target", ["S&Q"])], state
+
+
 def test_a_menu_whose_walk_read_a_row_as_a_list_holds_the_rows_its_options_name():
     """Movie's Playback crawl read Playback Filter Condition as a checklist of its items, while the Stills menu holds
     those items as rows under it, grown from their proofs' paths. Where a menu's row at the setting's last level has no
-    rows read below it but its options name that last label (exactly, or after a leading token of icon letters, by
-    ROW_NAMES' rule: "W Rating" names Rating), the menu holds the setting there, at the setting's own place. An option
-    naming another label gives nothing; two options that both name it after the icon rule give nothing (no guess, unless
-    one names it exactly); a row with rows read below it is decided by those rows, as before."""
+    rows read below it but its options name that last label (exactly, or as the camera draws the option where the tree
+    has the evidence that its leading token is an icon's letters: "W Rating", which another reading gave as "Rating",
+    names Rating), the menu holds the setting there, at the setting's own place. A token is never an icon by its length
+    alone: without that evidence "W Rating" names no Rating, "Shot Mark" no Mark, and of "Front Dial" and "Rear Dial"
+    neither names Dial. An option naming another label gives nothing; two options that both name it as drawn give
+    nothing (no guess, unless one names it exactly); a row with rows read below it is decided by those rows, as before."""
     def trees(movie_row):
         stills = [{"tab": "Playback", "pages": [page("1/1", "Selection/Search", row("Playback Filter Condition"))]}]
         return {"model": "TEST", "firmware": "1.00", "tabs": stills,
@@ -1054,12 +1255,20 @@ def test_a_menu_whose_walk_read_a_row_as_a_list_holds_the_rows_its_options_name(
     menus = [MENUS[0], MENUS[1]]
     checklist = row("Playback Filter Condition", options=["Date", "Still Images/Movies", "W Rating", "Protect", "Cancel Filter"],
                     state="walked")
+    bare = placement.by_menu(copy.deepcopy(d), trees(checklist), menus)
+    assert bare["global:0x0002"] == {"row_menus": ["Still"]}                          # no evidence: "W" is no icon
+    checklist["drawn_options"] = {"W Rating": "Rating"}                                  # another reading: "Rating"
     got = placement.by_menu(copy.deepcopy(d), trees(checklist), menus)
     assert got["global:0x0001"] == {"row_menus": ["Still", "Movie"]}                  # named exactly
-    assert got["global:0x0002"] == {"row_menus": ["Still", "Movie"]}                  # "W Rating": the icon rule
+    assert got["global:0x0002"] == {"row_menus": ["Still", "Movie"]}                  # "W Rating", drawn "Rating"
     assert got["global:0x0003"] == {"row_menus": ["Still"]}                           # no option names Folder
     twice = row("Playback Filter Condition", options=["W Rating", "X Rating", "Protect"], state="walked")
+    twice["drawn_options"] = {"W Rating": "Rating", "X Rating": "Rating"}
     assert placement.by_menu(copy.deepcopy(d), trees(twice), menus)["global:0x0002"] == {"row_menus": ["Still"]}
+    # the reviewer's cases: a word of four letters or fewer is no icon without the evidence
+    assert not placement.option_names({"opts": ["Date", "Shot Mark"], "kids": []}, "Mark")
+    assert not placement.option_names({"opts": ["Front Dial", "Rear Dial"], "kids": []}, "Dial")
+    assert placement.option_names({"opts": ["Front Dial", "Rear Dial"], "kids": [], "drawn": {"Rear Dial": "Dial"}}, "Dial")
     exact = row("Playback Filter Condition", options=["W Rating", "Rating"], state="walked")
     assert placement.by_menu(copy.deepcopy(d), trees(exact), menus)["global:0x0002"] == {"row_menus": ["Still", "Movie"]}
     rows_too = row("Playback Filter Condition", row("Still Images/Movies"), row("Folder"), options=["Protect", "W Rating"], state="walked")

@@ -126,6 +126,13 @@
       "type": "string"
      }
     },
+    "drawn_options": {
+     "type": "object",
+     "description": "An option's label as the camera draws it, where another reading of that same option left out its leading token, an icon's letters (kit/tools/menu_tree.py drawn_options: \"W Rating\" -> \"Rating\").",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
     "fields": {
      "type": "array"
     },
