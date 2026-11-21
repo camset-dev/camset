@@ -232,6 +232,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A proof line's mode reads under any number of trailing parentheticals, and a retraction naming a mode withdraws
+  in that mode alone:** "S&Q mode (S&Q Motion) (dial set with the menu)" is S&Q, so those lines no longer count as
+  Stills.
 - **The ledger keeps a row's latest look in each mode, drops a retracted misreading, and reads `UNPROVED` for values no
   menu writes:** a later S&Q look no longer hides a Movie one, and the Base Look copies' unwritten values become "no
   proof possible". The pass-2 report no longer lets lines of one shooting mode stand for another's, so the Zebra Level

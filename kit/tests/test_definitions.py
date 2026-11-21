@@ -3143,13 +3143,15 @@ def test_a_row_that_names_less_state_gives_way_to_rows_of_the_same_row_that_name
 
 
 @needs_evidence
-def test_the_definition_lists_not_the_bare_registration_row():
-    """The ILCE-1M2's proofs' menu rows (evidence): not the bare AF Area Registration row, which gave way to the rows
-    of the same mode that name the state (stood_out, above); the registrations list the row that says Switch V/H AF
-    Area Off. Focus Area's Movie mode row is Movie's menu's own since 2026-11-21: Stills lines never stand for it
-    (stood_rows, by the camera's modes), so a write since lists it."""
+def test_the_definition_lists_focus_areas_movie_row_and_not_the_bare_registration_row():
+    """The ILCE-1M2's proofs' menu rows (evidence): Focus Area's Movie mode row is Movie's menu's own, so its records
+    list it (Stills lines never stand for it since pass 12: stood_rows, by the camera's modes); the bare AF Area
+    Registration row stays out, having given way to rows of the same mode that name the state (stood_out, above), and
+    the registrations list the row that says Switch V/H AF Area Off."""
     menu = ("AF Area Registration On, Fn held on the shooting screen",)
     menus = {s["key"]: (s.get("proved") or {}).get("menu") or [] for s in DOC["settings"]}
+    assert all("Focus Area [Movie mode]" in menus[k] for k in ("global:0x0e68", "global:0x0f46")), \
+        {k: menus[k] for k in ("global:0x0e68", "global:0x0f46")}
     assert not [k for k, m in menus.items() if menu[0] in m]
     assert all(f"{menu[0]} [Switch V/H AF Area Off]" in menus[k] for k in ("global:0x0e7a", "global:0x0f80",
                                                                            "global:0x0e74", "global:0x0f8c"))
@@ -3187,6 +3189,15 @@ def test_lines_made_in_another_shooting_mode_never_stand_for_the_top_menus(tmp_p
     assert R.stood_on(proofs, skip, None, modes) == {8, 9}
     assert R.camera_modes(paths.runs_top() / A1 / "kit2_made_up") == modes
     assert R.camera_modes(run) == []
+    # a mode named under two trailing parentheticals (prove_run's mode switch: "S&Q mode (S&Q Motion) (dial set with the
+    # menu)") is that mode all the same: 415 such lines of the a1 II counted as Stills, and Focus Area's S&Q Motion row
+    # gave way to the Stills lines naming Switch V/H AF Area (the reviewer, 2026-11-21)
+    tails = lines("S&Q mode (S&Q Motion) (dial set with the menu), Zebra Level Custom 1", 50)
+    run.joinpath("proofs.jsonl").write_text("".join(json.dumps(p) + "\n" for p in walked + still + tails),
+                                            encoding="utf-8")
+    proofs, skip, _, _, _ = R.report_proofs(run)
+    tailed = f"{name} [S&Q mode (S&Q Motion) (dial set with the menu), Zebra Level Custom 1]"
+    assert tailed in R.stood_rows(proofs, skip) and R.stood_rows(proofs, skip, modes) == {}
 
 
 def test_a_stated_line_backs_a_change_only_under_the_same_option(tmp_path):

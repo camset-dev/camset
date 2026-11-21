@@ -2243,3 +2243,25 @@ def test_values_no_menu_writes_are_no_proof_possible_by_the_hand_tables(camera):
     for public in (False, True):
         assert values(public, "not_on_camera") == {0: "proved", 1: "no proof possible", 2: "no proof possible"}
         assert values(public, "equipment") == {0: "proved", 1: "not yet tried", 2: "not yet tried"}
+
+
+def test_a_retraction_naming_a_mode_withdraws_the_row_in_that_mode_alone(camera):
+    """A retraction recorded with a mode (--record --mode S&Q ... --result retract) takes out the row's look and its
+    seen row in that mode only: a look of the row in another mode stands, its row with it, and so do the records it saw
+    change; one naming no mode takes them out in every mode (the reviewer's note on ledger-rows, 2026-11-21)."""
+    path = ["Kilo", "Lima"]
+    movie = look(path, mode="Movie", screen="list", result="looked", records_changed=["global:0x0202"])
+    sq = look(path, mode="S&Q", screen="list", result="looked")
+    moved = look(path, mode="Movie", screen="list", result="looked")
+    looks = [(1, movie), (2, sq), (3, look(path, mode="S&Q", result="retract")), (4, moved)]
+    assert coverage.retractions(looks) == [(("kilo", "lima"), "S&Q", "open")]
+    assert [x[0] for x in coverage.hidden_changes(looks)] == [1], "the Movie look's records stay seen"
+    assert [x[0] for x in coverage.hidden_changes(looks + [(5, look(path, result="retract"))])] == []
+
+    def seen():
+        return [(p, m) for p, m, _t in coverage._seen_paths(coverage.load_sources(CAM, records=RECORDS), None)
+                if p == path]
+    add_looks(camera, movie, sq, look(path, mode="S&Q", result="retract"))
+    assert seen() == [(path, "Movie")]
+    add_looks(camera, look(path, result="retract"))
+    assert seen() == []
