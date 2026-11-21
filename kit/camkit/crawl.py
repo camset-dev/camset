@@ -100,10 +100,21 @@ def _at(s, pos: dict) -> bool:
 
 
 class Counted:
-    """Wraps a camera to count presses."""
+    """Wraps a camera to count presses. Reads pass through to the camera, and so does every attribute a caller sets on
+    the wrapper but its own two (cam, presses): the words a caller gives the camera for its next press (confirm_once,
+    answer_once, may_open_exact, permit) are the camera's, spent by its press. Kept on the wrapper, pass_row_question's
+    way past never reached the camera, whose Enter check refused that Enter (expstd_movie_sqb, 2026-11-21:
+    kit2_crawl_expstd_mvb 00013)."""
 
     def __init__(self, cam):
-        self.cam, self.presses = cam, 0
+        object.__setattr__(self, "cam", cam)
+        object.__setattr__(self, "presses", 0)
+
+    def __setattr__(self, name, value):
+        if name in ("cam", "presses"):
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self.cam, name, value)
 
     def press(self, key, **kw):
         self.presses += 1
