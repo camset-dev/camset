@@ -68,6 +68,11 @@ def item_page(group: str, tab: str) -> bool:
 _CAMERA = contextvars.ContextVar("placement_camera", default=None)
 
 
+def camera() -> str | None:
+    """The camera being placed (placing), None outside: row_names' default, the one the kit works on."""
+    return _CAMERA.get()
+
+
 @contextlib.contextmanager
 def placing(camera: str | None):
     """Place the definition of `camera` (its key) inside this block: split, steps and the tree read its ROW_NAMES

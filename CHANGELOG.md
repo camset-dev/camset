@@ -240,6 +240,7 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 - **Placement reads the placed definition's own ROW_NAMES, whatever camera the kit works on:** a clone that names no
   camera, or a test's made-up one, now writes the same places as the mapper's computer (Fixed Speed REC's S&Q row).
+  The proof viewer places by its definition's camera, and pass 2's silent-mode rows by their run's.
 - **A proof line's mode reads under any number of trailing parentheticals, and in the ledger a retraction naming a
   mode withdraws in that mode alone:** "S&Q mode (S&Q Motion) (dial set with the menu)" is S&Q, so those lines no
   longer count as Stills. The first open still withdraws a retracted row's opening in every mode.

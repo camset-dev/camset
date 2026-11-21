@@ -268,9 +268,10 @@ def a1_written(tmp_path_factory):
         mp.setattr(definitions, "DATA", tmp / "data")
         _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
         mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
-        # the made-up hand evidence holds no grey entry's looks (the private evidence's, which a clone lacks): the look
-        # check is test_definitions.test_the_a1_pass_stops_on_a_grey_entry_its_looks_do_not_prove's
-        mp.setattr(S.hand_facts, "grey_look_gaps", lambda *a, **k: [])
+        # the made-up hand evidence holds no grey entry's looks (the private evidence's): only a clone, which lacks
+        # them, leaves the look check out; where the evidence is, the real looks are put back and checked
+        if not hand_evidence.path(paths.A1II).exists():
+            mp.setattr(S.hand_facts, "grey_look_gaps", lambda *a, **k: [])
         # the clone's own hand evidence may already show every direction (the a1 II's does since 2026-11-19): the
         # unshown pair's is taken off, so the test does not depend on what the private overlay holds
         mp.setattr(S, "LIMIT_PAIRS", {k: {f: v for f, v in e.items() if f != "evidence"} if k == UNSHOWN else

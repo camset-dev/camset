@@ -565,3 +565,32 @@ def test_placement_reads_the_placed_definitions_own_row_names_whatever_camera_th
         node = placement.Tree({"tabs": ["Shooting"], "menu": []}, tree).tabs[0]["groups"][0]["rows"][0]
         assert node["kids"][0]["l"] == "Fixed Speed REC"
     assert placement.split(path) == ["Remote Zoom Speed", "1 Fixed Speed REC"], "outside: as before"
+
+
+def test_the_viewer_and_the_reports_silent_modes_rename_by_their_own_cameras_row_names(unnamed, monkeypatch, tmp_path):
+    """The proof viewer places a definition's records by the paths the writer places them by, so by the DEFINITION's
+    camera's ROW_NAMES (proof_viewer.as_its_camera around records and menu); pass2_report.silent_modes names each row
+    by its RUN's camera's (the run's folder), whatever camera the kit works on (here the tests' made-up one): every
+    camera row_names is asked for there is that camera, none the one the kit works on."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import pass2_report as R
+    import proof_viewer as pv
+    seen, real_name, real = [], row_names.renamed_name, row_names.renamed
+    monkeypatch.setattr(row_names, "renamed_name", lambda path, camera=None: seen.append(camera) or real_name(path, camera))
+    monkeypatch.setattr(row_names, "renamed", lambda path, camera=None: seen.append(camera) or real(path, camera))
+    monkeypatch.setattr(pv, "RUN_ROOT", None)
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", tmp_path / "evidence")
+    doc = {"model": "TEST", "tabs": ["Shooting"], "layouts": [{"model": "TEST", "firmware": "1.00"}], "menu": [],
+           "settings": [{"key": "global:0x0001", "area": "global", "name": "B", "tab": "Shooting", "group": "G1",
+                         "order": 1, "values": [], "proved": {"run": "kit2_pass2", "menu": ["B > B1 [Movie mode]"]}}]}
+    pv.menu(doc, pv.records(doc, {}), tmp_path)
+    assert seen and set(seen) == {"TEST_fw1.00"}, set(seen)
+    run = tmp_path / "runs" / "OTHER-CAM_fw1.00" / "kit2_pass2"
+    (run / "dat").mkdir(parents=True)
+    (run / "proofs.jsonl").write_text(json.dumps(
+        {"path": ["Remote Zoom Speed", "1 Fixed Speed REC"], "kind": "list", "index": 1, "label": "On",
+         "base": "00001_before.DAT", "dat": "00002_x.DAT", "applied": True,
+         "changes": [{"key": "global:0x0314", "before": 0, "after": 1}]}) + "\n", encoding="utf-8")
+    seen.clear()
+    assert R.silent_modes(run, save=False)
+    assert seen and set(seen) == {"OTHER-CAM_fw1.00"}, set(seen)
