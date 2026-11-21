@@ -365,3 +365,53 @@ def test_a_set_of_a_box_that_stops_exits_1(maps, monkeypatch, tmp_path, capsys, 
     with pytest.raises(SystemExit) as got:
         run_set(monkeypatch, tmp_path, " > ".join(BOX) + "=24p", raises, [{}])
     assert got.value.code == 1 and "stopped" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- the two-box row is judged grey before its Right
+
+class RowCam:
+    """A made-up camera on the menu: the row reached by the scan lit, Right recorded."""
+
+    def __init__(self):
+        self.presses = []
+        self.frame = SimpleNamespace(path=Path("00001_x.png"), image=np.zeros((480, 640, 3), np.uint8))
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+
+
+def opening_seams(monkeypatch, grey_at):
+    """boxes_run.open_row's way to the row made up; the lit row's drawing (proving.greyrow.row_grey) grey on the rows
+    `grey_at` names (by how deep the walk is: 0 the top row, 1 the submenu's)."""
+    from proving import greyrow
+    depth = {"at": 0}
+    monkeypatch.setattr(boxes_run, "menu_from_shooting", lambda cam: None)
+    monkeypatch.setattr(boxes_run, "scan_position", lambda cam, cycle: 0)
+    monkeypatch.setattr(boxes_run, "go_to", lambda cam, cycle, model, j, label: 0)
+
+    def enter_any(cam, path, i):
+        depth["at"] = len(path) - 1
+    monkeypatch.setattr(boxes_run, "enter_any", enter_any)
+    monkeypatch.setattr(greyrow, "row_grey", lambda cam: (True, 140.0) if depth["at"] in grey_at else (False, 220.0))
+
+
+@pytest.mark.parametrize("grey_at", [{0}, {1}])
+def test_open_row_presses_no_right_on_a_row_drawn_grey(monkeypatch, grey_at):
+    """boxes_run.open_row, the two-box path mode_switch --set takes (and now on the S&Q menu too), judges the lit row
+    as set_row's row_refused does (proving.greyrow.row_grey) before each Right that would open it: the top row before
+    the walk into it, the two-box row before its own Right; drawn grey, nothing is pressed on it."""
+    cam = RowCam()
+    opening_seams(monkeypatch, grey_at)
+    with pytest.raises(boxes_run.Failed, match="drawn grey"):
+        boxes_run.open_row(cam, None, None, SQ)
+    assert "right" not in cam.presses
+
+
+def test_open_row_opens_a_row_drawn_white_as_before(monkeypatch):
+    cam = RowCam()
+    opening_seams(monkeypatch, set())
+    monkeypatch.setattr(boxes_run, "lines", lambda cam: [])
+    monkeypatch.setattr(boxes_run, "focus", lambda cam: None)
+    with pytest.raises(boxes_run.Failed, match="did not open its boxes"):     # the made-up screen opens nothing
+        boxes_run.open_row(cam, None, None, SQ)
+    assert cam.presses == ["right"] * boxes_run.RIGHTS, "white: its Right goes as before"
