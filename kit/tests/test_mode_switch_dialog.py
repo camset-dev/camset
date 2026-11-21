@@ -164,6 +164,81 @@ def test_dialog_labels_are_the_maps_labels_for_a_dialog_row_only(monkeypatch):
     assert mode_switch.dialog_labels(["Picture Profile"], "Movie") is None
 
 
+@pytest.mark.parametrize("row, option", [("Shoot Mode", "Program Auto"), ("Drive Mode", "Single Shooting"),
+                                         ("Focus Area", "Wide")])
+def test_a_dialog_row_outside_dialog_rows_is_refused_and_menu_closes_it(ms, row, option):
+    """The dialog path chooses only in the rows DIALOG_ROWS names (Picture Profile; widened by name, each a reviewed
+    change). Shoot Mode is not one: Down crosses the families and the title names only the mode, so OK could switch to
+    another family's mode behind the kept switch's record. Any other dialog: Right, then MENU alone, nothing chosen."""
+    from prove_run import Failed
+    assert sorted(ms.DIALOG_ROWS) == ["Picture Profile"]
+    cam = DialogCam(PP, start=0)
+    with pytest.raises(Failed, match=f"{row!r} opened a dialog.*only in the dialog rows DIALOG_ROWS names") as e:
+        ms.set_row(cam, None, None, [row], option, lambda m: None, mode="Movie")
+    assert cam.presses == ["right", "menu"] and cam.chosen is None
+    assert "nothing was chosen, MENU closed the dialog" in str(e.value)
+
+
+# rows decision 2 and decision 8 leave to the owner's hand, a family each: --set never chooses in them, whatever screen
+# their Right opens (a list, a dialog or any other), refused before the link opens and before any press
+BY_HAND = [
+    ("flash", ["Flash Mode"]), ("flash", ["Wireless Flash"]), ("flash", ["Red Eye Reduction"]),
+    ("flash", ["Flash Comp."]), ("flash", ["Flash Sync Spd. Prty."]), ("flash", ["Reg. Flash Shooting Set"]),
+    ("flash", ["Live View Display Set.", "Flash Effect dur Sht."]),
+    ("sound", ["Audio Signal(Shooting)"]), ("sound", ["Audio Signal Volume"]), ("sound", ["Playback/Monitor. Vol."]),
+    ("sound", ["Beep"]),
+    ("light", ["AF Illuminator"]), ("light", ["Video Light Mode"]), ("light", ["Tally Lamp"]), ("light", ["REC Lamp"]),
+    ("motion", ["Pre-AF"]), ("motion", ["Eye-Start AF"]), ("motion", ["SteadyShot"]),
+    ("motion", ["Silent Mode Settings", "Target Function Settings", "Shutter When Pwr OFF"]),
+    ("screen reader", ["Screen Reader", "Volume"]), ("auto power off temp", ["Auto Power OFF Temp."]),
+    ("usb", ["USB Connection Mode"]), ("usb", ["USB LUN Setting"]), ("usb", ["USB Power Supply"]),
+    ("language", ["Language"]), ("ntsc/pal", ["NTSC/PAL Selector"]),
+    ("area and date", ["Area/Date/Time Setting", "Date/Time Setup"]), ("area and date", ["Area Setting"]),
+    ("area and date", ["Daylight Savings"]), ("area and date", ["Time Zone"]),
+    ("network", ["Wired LAN Connect"]), ("network", ["Wi-Fi Connect"]), ("network", ["Bluetooth Function"]),
+    ("network", ["Airplane Mode"]), ("network", ["Access Authen. Settings"]), ("network", ["IP Address Setting"]),
+    ("network", ["FTP Function"]), ("network", ["FTP Power Save"]), ("network", ["Security(IPsec)"]),
+    ("network", ["PC Remote Function"]), ("network", ["Location Info. Link Set"]),
+    ("network", ["Remote Shoot Function", "PC Remote Function"]),
+]
+
+
+@pytest.mark.parametrize("family, path", BY_HAND, ids=[" > ".join(p) for _, p in BY_HAND])
+def test_set_refuses_every_by_hand_row_before_any_press(ms, family, path):
+    """set_row refuses a by-hand row before it reaches it (no press at all), whatever kind of screen it would open:
+    safety.never_open's rows and the ones no safety list names (SET_BY_HAND: the flash, the area and date rows, the
+    network and USB rows by their words)."""
+    from prove_run import Failed
+    cam = DialogCam(PP, start=0)
+    with pytest.raises(Failed, match="by hand|never opens") as e:
+        ms.set_row(cam, None, None, path, "On", lambda m: None, mode="Stills")
+    assert cam.presses == [] and cam.chosen is None
+    assert " > ".join(path) in str(e.value)
+
+
+@pytest.mark.parametrize("family, path", BY_HAND, ids=[" > ".join(p) for _, p in BY_HAND])
+def test_set_plan_refuses_every_by_hand_row_before_the_link_opens(family, path):
+    import mode_switch
+    with pytest.raises(SystemExit, match="nothing was sent to the camera") as e:
+        mode_switch.set_plan([f"{' > '.join(path)}=On"], "Stills", {}, set())
+    assert "by hand" in str(e.value) or "never opens" in str(e.value)
+
+
+# every row a chain has set with --set (the chains of 2026-11-17 to 2026-11-21, and the runs' set_row events): none is
+# a by-hand row, and each stays open to --set
+CHAIN_ROWS = ["HDMI Info. Display", "File Format", "S&Q Settings > Frame Rate Settings > Rec Frame Rate",
+              "Log Shooting Setting > Log Shooting", "Picture Profile", "HDMI Output Settings > Time Code Output",
+              "Exposure Ctrl Type", "Movie Settings > Rec Frame Rate", "Touch Operation",
+              "S&Q Settings > Frame Rate Settings > Frame Rate", "JPEG/HEIF Switch", "Exposure step",
+              "Switch V/H AF Area", "AF Area Registration", "Aspect Ratio"]
+
+
+@pytest.mark.parametrize("row", CHAIN_ROWS)
+def test_the_rows_the_chains_set_are_no_by_hand_rows(row):
+    import mode_switch
+    assert mode_switch.hand_refused(row.split(" > ")) == ""
+
+
 @pytest.mark.parametrize("run, name, grey", [
     ("kit2_calib_mv", "00060_right.png", False),          # Picture Profile's dialog in Movie, opened on Off
     ("kit2_calib_flash", "00019_down.png", True),         # Flash Mode in Stills M: Flash Off, greyed by the mode
