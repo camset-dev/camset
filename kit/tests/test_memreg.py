@@ -666,7 +666,16 @@ def test_the_slots_are_the_camera_files_memory_sets(M):
 # the slot screen's frames the kit has of each slot's tab lit (SEEN_LIT): the run measures them as their slot's tab
 SEEN_FRAMES = [("1", "kit2_memreg_tabs_stills/shots/00014_enter.png"), ("2", "kit2_frame_reg/shots/00265_right.png"),
                ("3", "kit2_frame_reg/shots/00266_right.png"), ("Movie 1", "kit2_memreg_tabs_movie/shots/00005_enter.png"),
-               ("S&Q 1", "kit2_memreg_tabs_sq_look/shots/00005_enter.png")]
+               ("S&Q 1", "kit2_memreg_tabs_sq_look/shots/00005_enter.png"),
+               ("Movie 1", "kit2_memreg_tabs3_mv_look/shots/00005_enter.png"),
+               ("Movie 2", "kit2_memreg_tabs3_mv_look/shots/00006_right.png"),
+               ("Movie 3", "kit2_memreg_tabs3_mv_look/shots/00007_right.png"),
+               ("S&Q 1", "kit2_memreg_tabs3_sq_look/shots/00005_enter.png"),
+               ("S&Q 2", "kit2_memreg_tabs3_sq_look/shots/00006_right.png"),
+               ("S&Q 3", "kit2_memreg_tabs3_sq_look/shots/00007_right.png"),
+               ("Time-lapse 1", "kit2_memreg_tabs3_tl_look/shots/00005_enter.png"),
+               ("Time-lapse 2", "kit2_memreg_tabs3_tl_look/shots/00006_right.png"),
+               ("Time-lapse 3", "kit2_memreg_tabs3_tl_look/shots/00007_right.png")]
 
 
 @pytest.mark.parametrize("slot, rel", SEEN_FRAMES)
@@ -680,12 +689,13 @@ def test_each_slot_seen_lit_is_measured_as_its_own_tab_on_the_cameras_frame(M, s
 
 
 def test_a_slot_whose_tab_has_not_been_seen_lit_is_refused_before_anything_connects(M, monkeypatch):
-    """Movie 2 and 3, S&Q 2 and 3 and the Time-lapse slots: no frame shows their tab lit on their family's screen, so
-    no registration goes there (never a tab assumed) until memreg_run --look-tabs records it; said before the link."""
-    assert set(M.SEEN_LIT) == {"1", "2", "3", "Movie 1", "S&Q 1"}
-    for slot in ("Movie 2", "Movie 3", "S&Q 2", "S&Q 3", "Time-lapse 1", "Time-lapse 2", "Time-lapse 3"):
-        assert "--look-tabs" in M.slot_unseen(slot) and "has not been seen lit" in M.slot_unseen(slot)
-    assert M.slot_unseen("Movie 1") == "" and M.slot_unseen("3") == ""
+    """Since memreg_tab_looks3 (2026-11-21) every one of the twelve slots has its tab seen lit; a slot SEEN_LIT did not
+    name would get no registration (never a tab assumed) until memreg_run --look-tabs recorded it, said before the
+    link."""
+    assert set(M.SEEN_LIT) == set(M.SLOTS)
+    assert all(M.slot_unseen(s) == "" for s in M.SLOTS)
+    monkeypatch.setattr(M, "SEEN_LIT", {k: v for k, v in M.SEEN_LIT.items() if k != "Time-lapse 1"})
+    assert "--look-tabs" in M.slot_unseen("Time-lapse 1") and "has not been seen lit" in M.slot_unseen("Time-lapse 1")
     monkeypatch.setattr(M.definitions, "active", lambda *a, **k: "none.json")
     monkeypatch.setattr(M, "read_json", lambda path: {"model": "ILCE-1M2"})
     monkeypatch.setattr(M.definitions, "with_evidence", lambda doc, *a, **k: doc)

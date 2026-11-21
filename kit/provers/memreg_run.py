@@ -29,8 +29,8 @@ One session, bracketed as every run is (decision 15; runner.prover_session):
      the lit tab measured after each (lit_tab: where the orange square sits in the tab row; tab 1 at x 224-273, each
      next 60 px on; step_to_tab, never Right from 3), so Enter never falls on M1-M4, which register to the card; a lit
      tab that cannot be measured, after one fresh look, or a Right that lit no next tab, fails the registration before
-     Enter (never assumed). Only a slot whose tab has been seen lit on its family's screen registers (SEEN_LIT: 1, 2, 3,
-     Movie 1, S&Q 1 so far); --look-tabs records the others (Right twice and MENU, no Enter). Then Enter as drive.py's
+     Enter (never assumed). Only a slot whose tab has been seen lit on its family's screen registers (SEEN_LIT: all
+     twelve since 2026-11-21); --look-tabs records a new body's (Right twice and MENU, no Enter). Then Enter as drive.py's
      vouched "enter!:Memory" sends
      it (press_decision: the kit's reader cannot size the square, so the lit text is unread; the screen's whole text
      must name nothing never-open but the row allowed). The slot screen reads as no known kind, on which no Enter goes
@@ -109,8 +109,16 @@ SEEN_LIT = {
          "kit2_memreg_tabs_stills 00014_enter.png",
     "2": "kit2_frame_reg 00080 to 00265_right.png (twelve laps)",
     "3": "kit2_frame_reg 00081 to 00266_right.png (twelve laps)",
-    "Movie 1": "kit2_memreg_tabs_movie 00005_enter.png",
-    "S&Q 1": "kit2_memreg_tabs_sq_look 00005_enter.png",
+    "Movie 1": "kit2_memreg_tabs_movie 00005_enter.png; kit2_memreg_tabs3_mv_look 00005_enter.png",
+    "S&Q 1": "kit2_memreg_tabs_sq_look 00005_enter.png; kit2_memreg_tabs3_sq_look 00005_enter.png",
+    # memreg_tab_looks3 (2026-11-21, memreg_run --look-tabs): each family's screen opened on tab 1, Right lit 2, then 3
+    "Movie 2": "kit2_memreg_tabs3_mv_look 00006_right.png",
+    "Movie 3": "kit2_memreg_tabs3_mv_look 00007_right.png",
+    "S&Q 2": "kit2_memreg_tabs3_sq_look 00006_right.png",
+    "S&Q 3": "kit2_memreg_tabs3_sq_look 00007_right.png",
+    "Time-lapse 1": "kit2_memreg_tabs3_tl_look 00005_enter.png (OSD eyes)",
+    "Time-lapse 2": "kit2_memreg_tabs3_tl_look 00006_right.png (OSD eyes)",
+    "Time-lapse 3": "kit2_memreg_tabs3_tl_look 00007_right.png (OSD eyes)",
 }
 # the record of a settings file that says which shooting family the camera is in, by model, and its codes (the
 # definition's "Shooting family (stills / movie / S&Q / time-lapse)", proved): a slot's family is checked by the run's
