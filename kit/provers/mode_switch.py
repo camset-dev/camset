@@ -61,14 +61,14 @@ from camkit.vlm import check_readers  # noqa: E402
 from camkit.match import clean  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
-from crawl_run import find_position, go_to, on_main  # noqa: E402
+from crawl_run import find_position, go_to  # noqa: E402
 from prove_run import Failed, bar_text, enter_any, info_notice_ok, option_key, to_shooting  # noqa: E402
 from proving.tables import (DIAL_ROW, cell_value, dial_cell, dial_option, dial_table, on_dial_cell,  # noqa: E402
                             to_dial_cell)
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, SHOWN_EXPOSURES, SHOWN_MODES, SWITCH_KEPT, add_in_argument,  # noqa: E402
                     add_info_ok_argument, close_screen, end_session, forget_refused, in_mode, load_scan,
                     menu_from_shooting, notes_named_or_exit, read_json, restore_checked, restoring, scan_arg, scan_mode,
-                    scan_position, session_start, shown_mode, switch_advice, switch_left, switch_waiting, write_json)
+                    on_main, scan_position, session_start, shown_mode, switch_advice, switch_left, switch_waiting, write_json)
 from shootmode_run import FAMILIES, mode_name  # noqa: E402
 
 BY_MENU, BY_DIAL = "Set with Menu", "Set with Dial"

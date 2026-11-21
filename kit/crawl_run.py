@@ -107,7 +107,7 @@ from camkit.screen import same_position  # noqa: E402
 from camkit.crawl import LAP_TABS, crawl, lap_rows  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, StopRequested  # noqa: E402
-from camkit.live import lit_text, LiveCamera, PageLabels, reader_label, text_of  # noqa: E402
+from camkit.live import lit_box, lit_text, LiveCamera, PageLabels, reader_label, text_of  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
@@ -118,7 +118,7 @@ from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_RESTORE_BY_HAND, EXIT_UN
                     known_labels, label_readings, load_scan, network_decided_or_exit, network_readings, network_values,
                     restart_watched, restore_checked, row_readings, row_values, session_start, values_withheld,
                     wait_shooting)
-from runner import (add_info_ok_argument, definition, info_ok_for, info_ok_or_exit, row_labels,  # noqa: E402
+from runner import (add_info_ok_argument, definition, info_ok_for, info_ok_or_exit, on_main, row_labels,  # noqa: E402
                     row_questions_or_exit)
 
 
@@ -441,41 +441,46 @@ def tab_shown(text: str) -> str | None:
     return min(hits)[1] if hits else None
 
 
-# The Main tab's page (the a1 II's "Main 2/63", "Main 2/59" in Movie and S&Q): a status panel of tiles beside its group
-# headings, no rows, and no page scan holds it. The camera reopens its menu where it was last closed, so a run that
-# closed it there (tco_1fps_look's tab-column jump at S&Q 1fps, kit2_greyrow 04498, 2026-11-21) leaves it to the next
-# (kit2_pp_cd_sq 00004): its breadcrumb, then its page count, lead the screen's text
-MAIN_PAGE = re.compile(r"\s*main\s+\d+\s*/\s*\d+", re.I)
-
-
-def on_main(text: str) -> bool:
-    """Whether a menu screen's text (the breadcrumb leads it) is the Main tab's page."""
-    return bool(MAIN_PAGE.match(text or ""))
+# The Main page's own headings ("1 Main" on the a1 II's Stills menu, "1 Main1" and "2 Main2" in Movie and S&Q), as
+# OCR reads the lit bar on one, and the x where its tiles begin: the heading's bar ends at x = 314 (kit2_pp_cd_sq 00005),
+# the tiles start at about 320. A lit item that is not such a heading left of the tiles is no place from_main moves from
+MAIN_HEADING = re.compile(r"\s*main\s*[12]?\s*", re.I)
+MAIN_TILES_X = 320
 
 
 def from_main(cam, cycle, model):
-    """Off the Main tab's page (on_main) by the columns, never an Enter and never a press on a tile (its tiles open
-    settings): Left only where a bar is lit (a heading of the page, kit2_pp_cd_sq 00005; Left from the group column to
-    the tab column, as kit2_greyrow 04492 to 04493), the screen then still the Main page with no bar lit; Down in the tab
-    column to the Shooting tab below Main, the breadcrumb then reading Shooting with no bar lit; Right into its group
-    column, a group's bar then lit; then from_groups, as for any menu opened in the group column. Each press only on a
-    screen read as the menu; anything else stops it there, nothing more pressed (the caller's MENU closes the menu).
-    Returns from_groups' position, or None."""
+    """Off the Main tab's page (on_main) by the columns, never an Enter and never a press with a tile lit (its tiles
+    open settings, and no frame shows one lit): Left only where the lit bar reads as one of the page's own headings
+    (MAIN_HEADING) and ends left of its tiles (MAIN_TILES_X; kit2_pp_cd_sq 00005), Left then taking the cursor from the
+    group column to the tab column (as kit2_greyrow 04492 to 04493), the screen then still the Main page with nothing
+    lit; Down only with nothing lit at all (camkit.live.lit_box None: the tab column's white box draws no orange, 00004),
+    to the Shooting tab below Main, the breadcrumb then reading Shooting with nothing lit; Right into its group column,
+    a group's bar then lit; then from_groups, as for any menu opened in the group column. Each press only on a screen
+    read as the menu; anything else (a tile lit, a bar OCR reads as nothing, a heading's text right of the tiles' edge)
+    stops it there, nothing pressed (the caller's MENU closes the menu). Returns from_groups' position, or None."""
+    def box():
+        return lit_box(cam.frame.image)
+
     def lit():
         return lit_text(cam.frame.image, cam.frame.path).strip()
-    if lit():
+    b = box()
+    if b is not None:
+        if not MAIN_HEADING.fullmatch(lit()) or b[2] >= MAIN_TILES_X:
+            print("off the Main page: the item lit is not one of its headings left of its tiles; nothing is pressed",
+                  flush=True)
+            return None
         cam.press("left")
-        if cam.read().kind != "menu" or not on_main(menu_text(cam)) or lit():
+        if cam.read().kind != "menu" or not on_main(menu_text(cam)) or box() is not None:
             print("off the Main page: Left did not leave the Main tab lit in the tab column; nothing more is pressed",
                   flush=True)
             return None
     cam.press("down")
-    if cam.read().kind != "menu" or tab_shown(menu_text(cam)) != "Shooting" or lit():
+    if cam.read().kind != "menu" or tab_shown(menu_text(cam)) != "Shooting" or box() is not None:
         print(f"off the Main page: Down in the tab column did not reach the Shooting tab ({said(cam, menu_text(cam)[:30])});"
               " nothing more is pressed", flush=True)
         return None
     cam.press("right")
-    if cam.read().kind != "menu" or cam.read().focus != "groups" or not lit():
+    if cam.read().kind != "menu" or cam.read().focus != "groups" or box() is None or not lit():
         print("off the Main page: Right did not light a group of the Shooting tab; nothing more is pressed", flush=True)
         return None
     print("the menu opened on the Main page: off it by the columns, to the Shooting tab", flush=True)

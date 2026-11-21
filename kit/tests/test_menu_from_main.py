@@ -20,12 +20,16 @@ from camkit import paths  # noqa: E402
 
 import crawl_run  # noqa: E402
 
-# the frames as the kit reads them: (breadcrumb text, lit bar text, kind, focus)
-MAIN_TAB = ("Main 2/63 Main ISO 1/250 F5.6", "", "menu", "groups")             # kit2_pp_cd_sq 00004: the tab lit
-MAIN_HEADING = ("Main 2/63 Main ISO 1/250 F5.6", "Main", "menu", "groups")      # 00005: the "1 Main" heading lit
-SHOOTING_TAB = ("Shooting 4/59 Image Quality/Rec", "", "menu", "groups")       # kit2_greyrow 04493: the tab lit
-SHOOTING_GROUP = ("Shooting 4/59 Image Quality/Rec", "Image Quality/Rec", "menu", "groups")   # 04492: a group lit
-MY_MENU_TAB = ("My Menu 1/59 My Menu Setting", "", "menu", "groups")          # 04497
+# the frames as the kit reads them: (breadcrumb text, lit bar text, kind, focus, the lit box: camkit.live.lit_box)
+MAIN_TAB = ("Main 2/63 Main ISO 1/250 F5.6", "", "menu", "groups", None)       # kit2_pp_cd_sq 00004: the tab lit
+MAIN_HEADING = ("Main 2/63 Main ISO 1/250 F5.6", "Main", "menu", "groups", (98, 46, 314, 98))     # 00005: "1 Main"
+SHOOTING_TAB = ("Shooting 4/59 Image Quality/Rec", "", "menu", "groups", None)   # kit2_greyrow 04493: the tab lit
+SHOOTING_GROUP = ("Shooting 4/59 Image Quality/Rec", "Image Quality/Rec", "menu", "groups", (98, 46, 366, 99))  # 04492
+MY_MENU_TAB = ("My Menu 1/59 My Menu Setting", "", "menu", "groups", None)    # 04497
+# no frame shows these: a tile lit, a heading's word right of the tiles' edge, a bar OCR reads as nothing
+MAIN_TILE = ("Main 2/63 Main ISO 1/250 F5.6", "1/250", "menu", "groups", (322, 46, 430, 120))
+MAIN_FAR = ("Main 2/63 Main ISO 1/250 F5.6", "Main", "menu", "groups", (330, 46, 420, 98))
+MAIN_ICON = ("Main 2/63 Main ISO 1/250 F5.6", "", "menu", "groups", (98, 46, 314, 98))
 
 
 @pytest.mark.parametrize("rel, main, lit", [
@@ -44,10 +48,16 @@ def test_the_cameras_frames_read_as_main_or_not(rel, main, lit):
     f = paths.a1ii_root() / rel
     if not f.exists():
         pytest.skip(f"{rel} is not here")
+    from camkit.live import lit_box
     frame = load(f)
     text = ocr.text_in(ocr.read([frame.path])[frame.path], (0, 0, 640, 480))
     assert crawl_run.on_main(text) is main, text[:40]
     assert bool(lit_text(frame.image, frame.path).strip()) is lit
+    box = lit_box(frame.image)
+    assert (box is not None) is lit                                 # the tab column's white box: nothing lit at all
+    if main and lit:
+        assert crawl_run.MAIN_HEADING.fullmatch(lit_text(frame.image, frame.path).strip())
+        assert box[2] < crawl_run.MAIN_TILES_X                      # the heading's bar ends left of the tiles
 
 
 def test_the_tab_column_frames_name_their_tab():
@@ -83,6 +93,7 @@ def walk(monkeypatch):
         cam = Walk(start, script)
         monkeypatch.setattr(crawl_run, "menu_text", lambda c: c.state[0])
         monkeypatch.setattr(crawl_run, "lit_text", lambda image, path: cam.state[1])
+        monkeypatch.setattr(crawl_run, "lit_box", lambda image, kind=None: cam.state[4])
 
         def from_groups(c, cycle, model):
             seen.append(c.state)
@@ -113,13 +124,22 @@ def test_from_the_main_tab_no_left(walk):
     ({MAIN_TAB: {"down": MY_MENU_TAB}}, ["down"]),                                   # Down read another tab
     ({MAIN_TAB: {"down": SHOOTING_GROUP}}, ["down"]),                                # a bar lit after the Down
     ({MAIN_TAB: {"down": SHOOTING_TAB}, SHOOTING_TAB: {"right": SHOOTING_TAB}}, ["down", "right"]),  # no group lit
-    ({MAIN_TAB: {"down": ("Shooting 4/59", "", "dialog", None)}}, ["down"]),          # not a menu
+    ({MAIN_TAB: {"down": ("Shooting 4/59", "", "dialog", None, None)}}, ["down"]),    # not a menu
 ])
 def test_anything_else_on_the_way_stops_with_nothing_more_pressed(walk, script, pressed):
     cam = walk(MAIN_TAB, script)
     assert crawl_run.from_main(cam, [], {}) is None
     assert cam.pressed == pressed and "enter" not in cam.pressed
     assert walk.seen == []
+
+
+@pytest.mark.parametrize("start", [MAIN_TILE, MAIN_FAR, MAIN_ICON])
+def test_a_tile_or_a_bar_not_read_as_a_heading_left_of_the_tiles_gets_no_press(walk, start):
+    """The reviewer of menu-from-main: no frame shows a tile lit, so with anything lit but one of the page's headings
+    left of its tiles nothing is pressed, neither Left nor Down."""
+    cam = walk(start, {})
+    assert crawl_run.from_main(cam, [], {}) is None
+    assert cam.pressed == []
 
 
 def test_a_left_that_leaves_a_bar_lit_stops_there(walk):
@@ -147,6 +167,19 @@ def test_mode_switch_find_falls_back_to_find_position(monkeypatch):
     with pytest.raises(mode_switch.Failed, match="could not reach"):
         mode_switch.find(SimpleNamespace(read=lambda: SimpleNamespace(kind="menu"),
                                          frame=SimpleNamespace(path=Path("00005_right.png"))), [], {}, "X")
+
+
+def test_every_opener_that_steps_into_the_rows_presses_no_right_on_the_main_page():
+    """The openers that press a first Right when the menu opens in the group column (grep of 'focus == "groups"'):
+    mode_switch.open_menu, prove_run's session and page_scan's into_rows judge the Main page first; prove_run then takes
+    it off by from_main; crawl_run.find_position goes to from_main before its own group-column way."""
+    src = {rel: (ROOT / rel).read_text(encoding="utf-8") for rel in
+           ("kit/provers/mode_switch.py", "kit/prove_run.py", "kit/page_scan.py", "kit/crawl_run.py")}
+    assert 'focus == "groups" and not on_main(text(cam))' in src["kit/provers/mode_switch.py"]
+    assert 'focus == "groups" and not shows_main(cam)' in src["kit/prove_run.py"]
+    assert "j = from_main(cam, cycle, model)" in src["kit/prove_run.py"]
+    assert "which no scan starts from" in src["kit/page_scan.py"]
+    assert 'focus == "groups" and on_main(menu_text(cam))' in src["kit/crawl_run.py"]
 
 
 def test_open_menu_presses_no_right_on_the_main_page(monkeypatch):

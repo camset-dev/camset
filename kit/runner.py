@@ -1283,6 +1283,28 @@ def close_menu_and_wait(link, eyes, why: str, read=None, wait=None) -> None:
     (wait or session.wait_for)(eyes, ("shooting",), why, link=link)
 
 
+# The Main tab's page (the a1 II's "Main 2/63", "Main 2/59" in Movie and S&Q): a status panel of tiles beside its group
+# headings, no rows, and no page scan holds it. The camera reopens its menu where it was last closed, so a run that
+# closed it there (tco_1fps_look's tab-column jump at S&Q 1fps, kit2_greyrow 04498, 2026-11-21) leaves it to the next
+# (kit2_pp_cd_sq 00004): its breadcrumb, then its page count, lead the screen's text
+MAIN_PAGE = re.compile(r"\s*main\s+\d+\s*/\s*\d+", re.I)
+
+
+def on_main(text: str) -> bool:
+    """Whether a menu screen's text (the breadcrumb leads it) is the Main tab's page (crawl_run.from_main leaves it;
+    mode_switch's, prove_run's and page_scan's openers press no Right on it)."""
+    return bool(MAIN_PAGE.match(text or ""))
+
+
+def shows_main(cam) -> bool:
+    """Whether the screen on show (cam.frame) is the Main tab's page (on_main on its whole text, camkit.live.text_of);
+    False where its text cannot be read, as before this check (a test's frame with no file)."""
+    try:
+        return on_main(text_of(cam))
+    except Exception:
+        return False
+
+
 def session_start(link, eyes, why: str = "the start download", tag: str = "before", reach=None, say: bool = True,
                   settle: float = SETTLE_S, prepare=None, lock=None, clock=None) -> Path:
     """A session's start, the one place a runner downloads its start file (decision 15), its link open and its eyes
