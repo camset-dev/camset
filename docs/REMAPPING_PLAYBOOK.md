@@ -58,7 +58,11 @@ your owner, and the default is no.
    [decision 3](decisions/0003-the-screen-reader-only-with-headphones-in.md)). Your owner may allow one harmless change
    at a time, named per row: the scale prover and `prove_run.py` take `--allow "ROW"` for that row, only with your
    owner's word. The a1 II's owner allowed remotely the volume and brightness rows, and the Screen Reader On as decision
-   3 says; ask yours.
+   3 says; ask yours. On 2026-11-20, asked whether each F-number may be set through the SDK (which moves the lens's
+   diaphragm) and registered into the Camera Set. Memory slots, they said "Yes", then "go ahead with the run, obviously
+   the lens could limit the aperture" and "if you can get the camera to do f-numbers out the range go for it"
+   (`kit/provers/memreg_run.py --aperture`, its empty slots filled for good by `--fill-empty-slot`; ask yours, the
+   default is no).
 2. **Never run an action:**
    - format, delete, protect, rating, crop, copy;
    - reset or initialize, cleaning, pixel mapping, firmware update;

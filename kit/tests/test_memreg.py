@@ -623,7 +623,10 @@ def test_aperture_needs_the_owners_word_and_lists_without_a_camera(M, monkeypatc
     assert M.main(["--aperture", "--list"]) == 0
     assert "set:0x0180@288 and global:0x018c@288 must hold it" in capsys.readouterr().out
     assert M.main(["--aperture", "--fill-empty-slot", "--list"]) == 0
-    assert "stays registered" in capsys.readouterr().out
+    said = capsys.readouterr().out
+    assert M.NOT_PUT_BACK in said
+    for words in ("filled mark", "registration family", "exposure mode", "read M"):
+        assert words in M.NOT_PUT_BACK, f"the upload does not put back {words!r}: the console says so"
     with pytest.raises(SystemExit, match="owner's word"):
         M.main(["--aperture"])
     with pytest.raises(SystemExit, match="--aperture"):

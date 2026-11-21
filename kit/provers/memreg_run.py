@@ -269,12 +269,15 @@ def slot_apertures(cs, section: int) -> dict:
 
 FILL_EMPTY_WORD = ("the owner's word of 2026-11-20 for the aperture run: \"go ahead with the run, obviously the lens "
                    "could limit the aperture\", told that a registration fills an empty slot for good")
+# What the start file's upload does not put back in a slot the run filled (NOT_BY_FILE's three records), in words.
+NOT_PUT_BACK = ("the start file's upload puts its values back, but not its filled mark (it stays registered), its "
+                "registration family, nor its exposure mode, which will read M, the mode the run registers in")
 
 
 def slot_refused(cs, model: str, section: int, slot: str, fill_empty: bool) -> str:
     """Why the slot of `section` may not be registered from the start file `cs`, or "": an empty slot is refused (a
     registration fills it for good: the filled mark is one of the records no settings file sets), unless `fill_empty`
-    (--fill-empty-slot, FILL_EMPTY_WORD): the slot then stays registered after the run, its values the start file's."""
+    (--fill-empty-slot, FILL_EMPTY_WORD): the slot then stays registered after the run (NOT_PUT_BACK)."""
     if slot_filled(cs, model, section) or fill_empty:
         return ""
     return (f"slot {slot} is empty in the start file: registering it would fill it for good (no settings file empties "
@@ -393,8 +396,8 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
         if why:
             raise Failed(why)
         if not slot_filled(start_cs, model_name, section):
-            say(f"slot {a.slot} is empty in the start file and is filled by this run for good ({FILL_EMPTY_WORD}): it "
-                "stays registered afterwards, its values the start file's")
+            say(f"slot {a.slot} is empty in the start file and is filled by this run for good ({FILL_EMPTY_WORD}): "
+                f"{NOT_PUT_BACK}")
         got = link.get("FNumber") or {}
         if not got.get("writable"):
             raise Failed("the camera does not take FNumber now (the shooting mode sets it: Stills A or M takes it)")
@@ -703,8 +706,7 @@ def main(argv=None) -> int:
                                                    "one the lens does not offer is said, never set")
     ap.add_argument("--fill-empty-slot", action="store_true",
                     help="with --aperture: register the slot even where it is empty in the start file, which fills it "
-                         f"for good: the slot stays registered after the run, its values the start file's ("
-                         f"{FILL_EMPTY_WORD})")
+                         f"for good: {NOT_PUT_BACK} ({FILL_EMPTY_WORD})")
     ap.add_argument("--beyond-lens", action="store_true",
                     help="with --aperture: instead of the lens's F-numbers, try each F-number of the definition's table "
                          "the lens does not offer once through the same SDK set; one refused or read back otherwise is "
@@ -723,8 +725,7 @@ def main(argv=None) -> int:
               f"back, then the slot registered and a download: {' and '.join(aperture_keys(section))} must hold it; "
               "the held one last; the live aperture put back and read back; the start file uploaded and checked")
         if a.fill_empty_slot:
-            print(f"--fill-empty-slot: an empty slot is registered and stays registered afterwards, its values the "
-                  f"start file's ({FILL_EMPTY_WORD})")
+            print(f"--fill-empty-slot: an empty slot is registered for good: {NOT_PUT_BACK} ({FILL_EMPTY_WORD})")
         if a.list:
             return 0
         if not memory_allowed(a.allow) or [x for x in a.allow if not memory_allowed([x])]:
