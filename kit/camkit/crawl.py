@@ -430,6 +430,7 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     s = cam.read()
     r.kind = s.kind
     not_passed = ""
+    behind = False          # the row's own screen behind its own question (--allow ROW), a submenu to crawl
     if s.kind == "notice" and info_ok is not None and not looked_at:
         # a notice the run names for this row (--info-ok): its OK, once, by the caller's judgement; else left as ever
         got = info_ok(cam, " > ".join((*path, label)), before) or {}
@@ -437,9 +438,13 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
             r.info_ok = {"row": got.get("row") or label, "frame": got["frame"]}
             s = cam.read()
             r.kind = s.kind
+            # a row's own question answered (pass_row_question says by what): what opens behind it is the row's own
+            # screen, crawled as any submenu is (expstd_movie_sqc, 2026-11-21: Exposure Std. Adjust's five rows were
+            # left unwalked behind it, kit2_crawl_expstd_mvc 00016); an --info-ok notice's screen stays unwalked
+            behind = bool(got.get("by")) and s.kind == "submenu" and labels is not None and len(path) < MAX_DEPTH
         else:
             not_passed = str(got.get("refused") or "")
-    if r.info_ok is not None and s.kind not in WALKERS:
+    if r.info_ok is not None and s.kind not in WALKERS and not behind:
         r.outcome = f"notice passed: a {s.kind} screen after its OK, left unwalked"
     elif same_state(s, row_screen):
         r.outcome = "no response to Right"
@@ -616,6 +621,10 @@ def back_to(cam, place: "Place", tries: int = 4) -> bool:
             # wraps, so Down until this row comes round (bounded: past its place, from wherever it reopens, and at
             # least as far as crawl_submenu's own guard; each step checks the screen, so the bound costs nothing)
             cam.press("right")
+            if cam.read().kind == "notice":
+                # the submenu's row asks before it opens (a row's own question, Exposure Std. Adjust's): the way back
+                # answers nothing and presses no Down on a question; lost, and the caller's MENU cancels it
+                return False
             for _ in range(max(place.index + 16, SUBMENU_ROWS)):
                 if same_state(cam.read(), place.screen):
                     return True
