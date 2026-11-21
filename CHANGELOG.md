@@ -238,6 +238,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A crawl given `--allow "Exposure Std. Adjust"` now answers the row's question:** the way past reached only the
+  crawl's press counter, so the camera refused that Enter and the lap stopped.
 - **Placement reads the placed definition's own ROW_NAMES, whatever camera the kit works on:** a clone that names no
   camera, or a test's made-up one, now writes the same places as the mapper's computer (Fixed Speed REC's S&Q row).
 - **Shoot Mode's Intelligent Auto can be chosen on the owner's word, `--allow "Intelligent Auto"`:** `mode_switch.py`
