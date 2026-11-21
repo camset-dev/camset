@@ -379,6 +379,9 @@ class RowCam:
     def press(self, key, **kw):
         self.presses.append(key)
 
+    def read(self):
+        return SimpleNamespace(kind="menu")
+
 
 def opening_seams(monkeypatch, grey_at):
     """boxes_run.open_row's way to the row made up; the lit row's drawing (proving.greyrow.row_grey) grey on the rows

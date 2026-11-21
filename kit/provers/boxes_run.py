@@ -198,6 +198,8 @@ def row_refused(cam, path: list) -> None:
     """Failed where the lit row (the last of `path`) is drawn grey (proving.greyrow.row_grey, as mode_switch's set_row
     judges a list row): no Right on it, nothing pressed. Where its drawing cannot be told the row opens as before."""
     from proving.greyrow import row_grey
+    if not callable(getattr(cam, "read", None)):
+        return                  # a camera that reads no screen tells no drawing: the row opens as before
     grey, measure = row_grey(cam)
     if grey:
         raise Failed(f"{' > '.join(path)}: the row is drawn grey (its label reads {measure:.0f}, "
