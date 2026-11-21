@@ -58,7 +58,10 @@ passes the shape no word is judged. The ways past are explicit, named by the cal
 judgement of that very press with every check lifted (confirm_once: drive.py --owner --confirm through press's
 confirm, beside drive.py's word for an owner row's step or armed press, permit); pp_reset_run's profile reset
 question, ("profile_reset", "PPn"), which goes only where the screen read afresh is that question
-(profile_reset_passed); a consent named for one
+(profile_reset_passed); a row's own question under its run's --allow ROW, ("row_question", ROW), an Enter only where
+the screen read afresh is a notice whose whole text is that row's own question (safety.row_question, measured:
+Exposure Std. Adjust's on the a1 II, the maintainer's allowance of 2026-11-21) with OK lit (row_question_passed); a
+consent named for one
 press on one named screen (answer_once: a prover's --allow for its own row's screen, drive.py's and card_actions.py's
 --confirm "SCREEN TEXT"), which lifts the shape and never the word list, or, for a row's own dialog drawn in its portrait
 arrangement held vertically (UprightDialog), judges that one Enter as a level dialog's on the frame read upright, and for
@@ -1057,7 +1060,8 @@ class LiveCamera:
         self.may_open_exact = None
         # the caller's word that it judged its next press with the confirmation check lifted (drive.py --owner --confirm):
         # used up by that press (confirm_refused). True, or the words naming it; or ("profile_reset", "PPn") for
-        # pp_reset_run's question, which this camera judges again itself (profile_reset_passed)
+        # pp_reset_run's question, which this camera judges again itself (profile_reset_passed); or ("row_question",
+        # ROW) for a row's own question under its run's --allow, judged again likewise (row_question_passed)
         self.confirm_once = False
         # a prover's consent, named by its run's --allow for its own row, to answer that row's screen with its next press
         # (memreg_run's and framepos_run's slot screen, mymenu_run's picker, customshoot's Register): the screen's shape
@@ -1500,7 +1504,10 @@ class LiveCamera:
           (drive.py --owner --confirm, for a step or the armed press it allowed, beside `permit`); `permit`: drive.py
           allowed it as an owner row's step or armed press (owner_inside_refused). ("profile_reset", "PPn"),
           pp_reset_run's one question under its --allow, lifts nothing by itself: the screen read afresh here must be
-          that profile's own reset question (safety.profile_reset_dialog), else no Enter;
+          that profile's own reset question (safety.profile_reset_dialog), else no Enter. ("row_question", ROW), a
+          row's own question under its run's --allow ROW (proving.screens.pass_row_question), likewise: an Enter alone,
+          on a notice read afresh whose whole text is that row's question (safety.row_question), OK lit, else no Enter
+          (row_question_passed);
         - `answer` (answer_once): a consent named for one press on one named screen (a prover's --allow for its own
           row's screen; drive.py's and card_actions.py's --confirm with the screen's whole text): the shape refuses
           nothing, the word list still refuses a confirmation; an UprightDialog, for an Enter on a screen of no known
@@ -1527,6 +1534,8 @@ class LiveCamera:
         kind = self.screen.kind
         judged_at = self._moves()
         if isinstance(confirmed, tuple):
+            if tuple(confirmed)[:1] == ("row_question",):
+                return self.row_question_passed(key, confirmed, judged_at)
             return self.profile_reset_passed(key, confirmed, judged_at)
         by = (confirmed if isinstance(confirmed, str) else "--confirm") if confirmed else \
             ("an owner decision's armed press" if armed else "")
@@ -1785,6 +1794,32 @@ class LiveCamera:
             self.refuse(key, f"the screen is not {profile}'s own reset question ({why}): no Enter")
         self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind,
                      by=f"pp_reset_run --allow: {profile}'s own reset question, read again at the press")
+        return judged_at
+
+    def row_question_passed(self, key: str, confirmed: tuple, judged_at: int) -> int:
+        """A row's own question under its run's --allow, ("row_question", ROW) (proving.screens.pass_row_question,
+        2026-11-21: Exposure Std. Adjust on the a1 II): the press goes only where it is an Enter, the screen read afresh
+        here is a notice whose whole text is that row's own question (safety.row_question: its words as measured on the
+        camera's frames, its two buttons OK and Cancel, nothing else) and its lit button reads OK. So the lift covers that
+        one question's OK alone; any other key, screen, row or lit button is refused, and nothing else gains anything."""
+        row = str((tuple(confirmed) + ("", ""))[1])
+        if safety.canonical_input(key) not in safety.ENTER_KEYS:
+            self.refuse(key, f"{row}'s question is answered by an Enter alone: no {key}")
+        if row not in safety.ROW_QUESTIONS:
+            self.refuse(key, f"{row!r} has no question the kit may answer: no Enter")
+        if self.screen.kind != "notice":
+            self.refuse(key, f"the screen reads as {self.screen.kind!r}, not a notice: not {row}'s own question, no Enter")
+        try:
+            why = safety.row_question(text_of(self), row)
+            lit = lit_text(self.frame.image, self.frame.path) if not why else ""
+        except Exception as e:
+            why, lit = f"its text cannot be read ({type(e).__name__})", ""
+        if why:
+            self.refuse(key, f"the screen is not {row}'s own question ({why}): no Enter")
+        if safety.fold(lit).strip().casefold() != "ok":
+            self.refuse(key, f"{row}'s question has {lit.strip()!r} lit, not OK: no Enter")
+        self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind,
+                     by=f"--allow {row!r}: its own question, read again at the press, OK lit")
         return judged_at
 
     def owner_inside_refused(self, key: str, inside: dict, permit):

@@ -29,6 +29,13 @@ the row is recorded "notice (named, not passed: ...)"; where the phrase leaves m
 is printed, to give it whole. rows.jsonl keeps "info_ok": {"row", "frame"} for a row passed. Not with --network, whose
 rows are looked at only.
 
+--allow ROW (repeatable; runner.row_questions_or_exit refuses any label but a row whose own question the kit knows,
+safety.ROW_QUESTIONS: Exposure Std. Adjust's on the a1 II) answers the question ROW asks before it opens with OK, the
+owner's word for the run: only after Right on ROW, only where the screen reads as that question word for word with its
+two buttons alone, after at most one Up onto OK (proving.screens.pass_row_question), and the camera judges that Enter
+again (camkit.live's row_question_passed); the screen behind it is walked, and rows.jsonl keeps "info_ok" for it as for
+a notice passed. Not with --network.
+
 Settings are downloaded before and after and diffed (pass 1 must change nothing); if anything changed, the
 start file is uploaded and the restore checked (docs/decisions/0015). --limit stops
 after opening N rows (for supervised tries). A STOP file (<run>/STOP) cancels any open
@@ -111,7 +118,8 @@ from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_RESTORE_BY_HAND, EXIT_UN
                     known_labels, label_readings, load_scan, network_decided_or_exit, network_readings, network_values,
                     restart_watched, restore_checked, row_readings, row_values, session_start, values_withheld,
                     wait_shooting)
-from runner import add_info_ok_argument, definition, info_ok_for, info_ok_or_exit, row_labels  # noqa: E402
+from runner import (add_info_ok_argument, definition, info_ok_for, info_ok_or_exit, row_labels,  # noqa: E402
+                    row_questions_or_exit)
 
 
 def summary(r) -> dict:
@@ -800,6 +808,11 @@ def main():
                          "that page is opened alone next time")
     add_network_argument(ap)
     add_info_ok_argument(ap)
+    ap.add_argument("--allow", action="append", default=[], metavar="ROW",
+                    help="a row whose own question before it opens this lap answers with OK, the owner's word for the "
+                         "run (safety.ROW_QUESTIONS: Exposure Std. Adjust's on the a1 II), only where the screen reads "
+                         "as that question word for word, with OK lit; any other label is refused before anything "
+                         "connects; never on a --network lap")
     coverage.add_skip_argument(ap, crawl=True)
     ap.add_argument("--no-first-open", action="store_true",
                     help="open no row this body has not been seen to open, whatever the owner's blank-cards statement: "
@@ -814,6 +827,9 @@ def main():
     a = ap.parse_args()
     if a.info_ok and a.network:
         sys.exit("--info-ok passes no notice on a --network run: its rows are looked at only")
+    if a.allow and a.network:
+        sys.exit("--allow answers no question on a --network run: its rows are looked at only")
+    questions = row_questions_or_exit(a.allow, only=True)
     if a.panels and a.network:
         # a panel's Right commits its carousel's option, and a look lap commits nothing (2026-11-15, the maintainer)
         sys.exit("--panels opens no panel on a --network run, a look lap, which commits nothing: nothing was sent to the "
@@ -895,7 +911,8 @@ def main():
             try:
                 complete = crawl_from_menu(cam, link, cycle, model, a.limit, results, a.start_label, a.panels,
                                            tuple(a.tabs.split(",")) if a.tabs else None, network=network,
-                                           info_ok=info_ok_pass(named), ledger=ledger, first=first, look=look)
+                                           info_ok=info_ok_pass(named, questions), ledger=ledger, first=first,
+                                           look=look)
             except StopRequested:                           # a STOP: cancelled as ever, and no failure
                 print("STOP file: cancelling", flush=True)
                 complete = True
@@ -978,16 +995,25 @@ def network_settings_or_exit(run) -> dict:
     return {r: d for r, d in rows.items() if not safety.address_screen(r)}
 
 
-def info_ok_pass(named: dict):
-    """camkit.crawl's info_ok for --info-ok (`named`: runner.info_ok_or_exit's {row: phrase}), or None when it names
-    none: for a row named, the lit bar read on the frame before Right (camkit.live.lit_text) and the notice judged and
-    passed by proving.screens.pass_named_notice ({"row", "frame"}, or {"refused": why} with nothing pressed); None for a
-    row not named, which is left as ever."""
-    if not named:
+def info_ok_pass(named: dict, questions=frozenset()):
+    """camkit.crawl's info_ok for --info-ok (`named`: runner.info_ok_or_exit's {row: phrase}) and --allow (`questions`:
+    runner.row_questions_or_exit's rows), or None when they name none: for a row --allow names, its own question answered
+    by proving.screens.pass_row_question (the lit bar read on the frame before Right as the row, the screen that very
+    question, OK lit); for a row --info-ok names, the lit bar read on the frame before Right (camkit.live.lit_text) and
+    the notice judged and passed by proving.screens.pass_named_notice ({"row", "frame"}, or {"refused": why} with
+    nothing pressed); None for a row neither names, which is left as ever."""
+    if not named and not questions:
         return None
 
     def passed(cam, name, before):
-        from proving.screens import pass_named_notice       # here: runner and camkit stay free of the prover's parts
+        from proving import screens                         # here: runner and camkit stay free of the prover's parts
+        from proving.screens import pass_named_notice
+        if name.split(" > ")[-1] in questions:
+            screens.ROW_QUESTION.update(questions)
+            lit = lit_text(before.image, before.path) if before is not None else ""
+            return screens.pass_row_question(cam, name, lit)
+        if not named:
+            return None
         phrase = info_ok_for(named, name)
         if phrase is None:
             return None

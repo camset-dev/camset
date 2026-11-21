@@ -60,6 +60,8 @@ The guards:
                              own_question, the row's own question after an armed press (kit/drive.py cancels it).
   profile_reset_row(lit, title, profile)   why the lit row is not a Picture Profile's own Reset row, or "".
   profile_reset_dialog(text, profile)      why a screen is not that row's own "Reset PPn to the default setting?".
+  row_question(text, row)    why a screen is not that row's own question (ROW_QUESTIONS, measured: Exposure Std.
+                             Adjust's on the a1 II), its words in order and its two buttons, OK and Cancel, alone.
 
 The button lists and the never-set properties are also compiled into both C++ programs (camlink and the editor's
 camera helper), which refuse them on their own: kit/tools/build_docs.py writes them into kit/common/never_touch.h
@@ -2164,6 +2166,45 @@ def profile_reset_dialog(text: str, profile: str) -> str:
     # a permission: the question is read in the readings spaced as read alone ("theDefault" set apart is no default)
     if not any(re.search(rf"\breset\b.*\bpp\s*{n}\b.*\bdefault\b", r, re.S) for r in plain_view(readings, text)):
         return f"the screen does not read as 'Reset {profile} to the default setting?'"
+    return ""
+
+
+# A row's own question the kit may answer with OK, only on a run that names the row (--allow ROW, the owner's word for
+# that run: runner.row_questions_or_exit) and only where the screen read is that question: its whole text as the camera
+# draws it, measured on its own frames. Exposure Std. Adjust on the a1 II asks it before it opens (kit2_drive 01213 to
+# 01355, Stills; kit2_crawl_sq_1120 00601 and the look laps kit2_a1fin_look_sq and _sq2, S&Q; kit2_a1fin_look_movie and
+# _movie2, Movie: 49 frames, every one read word for word alike), with OK above Cancel and Cancel lit. The maintainer's
+# allowance (2026-11-21), the owner's words: "Exposure adjust is ok, just put it back to where it was at the end."
+ROW_QUESTIONS = {"Exposure Std. Adjust": "This function adjusts the standard of optimum exposure. Generally, "
+                                         "adjustment is not necessary. Adjust?"}
+ROW_QUESTION_BUTTONS = ("cancel", "ok")
+
+
+def _question_words(text) -> list:
+    """A screen's words as row_question compares them: folded, case folded, letters and digits alone."""
+    return re.sub(r"[^a-z0-9]+", " ", fold(text or "").casefold()).split()
+
+
+def row_question(text: str, row: str) -> str:
+    """Why a screen's whole text is not `row`'s own question (ROW_QUESTIONS), or "" when it is: the row has one, some
+    text was read, it names nothing no allowance opens (never_lifted, network_words) and reads as no confirmation, and
+    its words are the question's, in order, word for word, followed by its two buttons, OK and Cancel, in either order,
+    and nothing else. No slack: a word more or less, another question, another notice is no permission."""
+    want = ROW_QUESTIONS.get(row)
+    if want is None:
+        return f"{row!r} has no question the kit may answer"
+    if not (text or "").strip():
+        return "no text could be read on the screen"
+    if never_lifted(text) or network_words(text):
+        return f"the screen reads {never_lifted(text) or network_words(text)}"
+    if confirmation(text):
+        return f"the screen reads as a confirmation ({confirmation(text)})"
+    got, words = _question_words(text), _question_words(want)
+    if got[:len(words)] != words:
+        return f"the screen's words are not the question's, in order ({row}'s)"
+    rest = got[len(words):]
+    if sorted(rest) != sorted(ROW_QUESTION_BUTTONS):
+        return f"the screen shows more than its two buttons, OK and Cancel ({len(rest)} words after the question)"
     return ""
 
 
