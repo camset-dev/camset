@@ -366,6 +366,29 @@ _PREVIOUS: dict = {}
 # short (camkit.session.verify_restore's check after an upload, which reads and changes nothing): None otherwise
 WAITING_ON: str | None = None
 
+_SLOW_DOC: dict = {}            # slow_doc's: the definition as read, by its file, size and time
+
+
+def slow_doc() -> dict:
+    """The definition camkit.slow_states names its states by: the camera's (camkit.definitions.active), read again
+    only when its file changed; {} where there is none or it cannot be read (then nothing is known: silent)."""
+    from . import definitions
+    try:
+        target = definitions.active(required=False)
+        st = target.stat() if target is not None else None
+    except Exception:
+        return {}
+    if st is None:
+        return {}
+    key = (str(target), st.st_mtime_ns, st.st_size)
+    if _SLOW_DOC.get("key") != key:
+        try:
+            doc = json.loads(target.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        _SLOW_DOC.update(key=key, doc=doc if isinstance(doc, dict) else {})
+    return _SLOW_DOC["doc"]
+
 
 def _on_signal(signum, frame):
     if any(r.stop_requested() and getattr(r, "_stop_why", None) for r in _RUNS):
@@ -426,6 +449,9 @@ class Link:
         # windows measured over one kind of link apply over that kind alone (camkit.frames.link_connection)
         self.connection = ""
         self.events = []          # SDK events (disconnects, warnings) as they arrive
+        # why nothing but MENU is pressed: this link's last download held a state in which the camera acts on one press
+        # twice (camkit.slow_states.after_download, set by download, cleared by one without it), else ""
+        self.slow = ""
         self.moves = 0            # commands sent that can change the screen (MOVES), LiveCamera's own among them
         # when the last of them was answered (time.monotonic(); None before any): an OSD frame is no older than the kit's
         # own last move only once camkit.live.OSD_LAG has passed since (camkit.live.look_again)
@@ -781,6 +807,7 @@ class Link:
     def _guard(self, verb: str, args: list, allow, cleanup: bool, screen=None, on_shooting=frozenset(), judged=None,
                leaving: bool = False):
         """Raises when the command may not go out (the module docstring's guards); returns when it may."""
+        self.slow_guard(verb, args)
         picture = getattr(self, "picture", False)
         if picture and (verb in ("dial", "set", "setstr") or (verb == "press" and args[:1] != ["menu"])):
             raise safety.Refused("a picture link (kit/tools/take_picture.py) sends no press but MENU, no dial and no "
@@ -1073,7 +1100,21 @@ class Link:
         name = self.run.dat_name(tag)
         path = Path(self._must(f"download {quoted(self.run.dat)} {quoted(name)}", timeout=90)["path"])
         provenance.record(path, self.run.root, run=self.run.dir.name, camera=self.model)
+        # a run's own choice can put the camera where it acts on one press twice (S&Q Frame Rate 1fps on the a1 II):
+        # every download is judged, and one in such a state leaves this link pressing nothing but MENU (slow_guard)
+        from . import slow_states
+        self.slow = slow_states.after_download(slow_doc(), path)
+        if self.slow:
+            self.run.log("slow_state", file=path.name, why=self.slow)
         return path
+
+    def slow_guard(self, verb: str, args: list):
+        """Refused: any press but MENU, and any dial, while this link's last download held a state in which the camera
+        acts on one press twice (self.slow). MENU, the way back to the shooting screen, and the restore's upload, which
+        presses nothing, still go; the run's restore takes the camera out of the state."""
+        why = getattr(self, "slow", "")
+        if why and (verb == "dial" or (verb == "press" and args[:1] != ["menu"])):
+            raise safety.Refused(why)
 
     def upload(self, path: Path) -> dict:
         """Replace every camera setting with this file. The camera restarts and the link drops.
