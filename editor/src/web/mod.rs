@@ -4501,7 +4501,7 @@ pub(crate) mod tests {
         let (g, layout) = on_page(&mut app, "Setup").expect("on Setup's page as on the camera");
         assert_eq!(g, group);
         let at = layout.as_array().unwrap().iter().position(|l| l["key"] == key.key.as_str()).unwrap();
-        assert_eq!((&layout[at]["depth"], &layout[at - 1]["head"]), (&json!(1), &json!(key.row[0])), "under its row");
+        assert_eq!((&layout[at]["depth"], &layout[at - 1]["head"]), (&json!(1), &json!("Custom Key/Dial Set. (Movie)")), "under its row");
         assert!(on_page(&mut app, &key.tab).is_none(), "not on its own tab's page too");
         assert_eq!(link(&mut app), ("Setup".to_string(), group));
         ask(&mut app, "prefs", json!({ "name": "flat_list", "value": true }));

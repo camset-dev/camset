@@ -2335,7 +2335,7 @@ pub(crate) mod facts_tests {
         let (mut app, dir, user) = sample_app("menus_titles_clash", Some(crate::test_support::stub_menus));
         let (media, movie, adjust) = (setting(&app, "global:0x0298"), setting(&app, "global:0x029a"), setting(&app, "global:0x02fb"));
         let title = |app: &App, s: &Setting, menu: &str| app.listed_record(s, 0, menu).name;
-        assert_eq!((title(&app, &media, "Movie"), title(&app, &movie, "Movie")), (media.name.clone(), movie.name.clone()), "in Movie's menu, each its full name");
+        assert_eq!((title(&app, &media, "Movie"), title(&app, &movie, "Movie")), ("Recording Media (Still)".to_string(), movie.name.clone()), "in Movie's menu, each its full name");
         assert_eq!(title(&app, &adjust, "Still"), "SteadyShot Adjust.", "a row alone, as the camera draws it");
         // in no menu two rows under one heading titled alike where one is retitled
         for m in ["Still", "Movie", "S&Q"] {
@@ -2355,8 +2355,8 @@ pub(crate) mod facts_tests {
             }
         }
         app.schema_gen += 1;
-        assert_eq!((title(&app, &media, "Movie"), title(&app, &movie, "Movie")), (media.name.clone(), movie.name.clone()), "drawn alike: each its full name");
-        assert_eq!(title(&app, &media, "Still"), "Recording Media", "alone under its heading in Still's menu");
+        assert_eq!((title(&app, &media, "Movie"), title(&app, &movie, "Movie")), ("Recording Media (Still)".to_string(), movie.name.clone()), "drawn alike: each its full name");
+        assert_eq!(title(&app, &media, "Still"), "Recording Media (Still)", "alone under its heading in Still's menu");
         assert_eq!(title(&app, &adjust, "Still"), "SteadyShot Adjust.", "drawn without its #1");
         let groups = app.tab_groups_in(0, Some("Still"), &media.tab, "", false);
         let (_, _, rows) = groups.iter().find(|(g, _, _)| *g == media.group).unwrap();
@@ -2364,7 +2364,7 @@ pub(crate) mod facts_tests {
         assert!(lines.iter().any(|l| matches!(l, Line::Heading { label, path, .. } if label == "Rec. Media Settings" && path == &["Rec. Media Settings#1".to_string()])), "{lines:?}");
         assert_eq!(menu_rows::place_words(&media).map(|_| ()), Some(()));
         let placed = app.schema.settings.iter().find(|s| s.key == movie.key).cloned().unwrap();
-        assert_eq!(menu_rows::place_words(&placed).as_deref(), Some("On the camera: Rec. Media Settings > Recording Media"));
+        assert_eq!(menu_rows::place_words(&placed).as_deref(), Some("On the camera: Rec. Media Settings > Recording Media (Movie)"));
         done(&dir, &user);
     }
 
@@ -2658,7 +2658,7 @@ pub(crate) mod facts_tests {
         app.select(Some(View::Tab(tab.into())), Some(group.into()), None);
         let _ = w.run(&mut app, vec![]);
         let said = w.run(&mut app, vec![]);
-        let first = said.iter().find(|(_, r, l)| *r == Role::Label && l == "⏷ Custom Key/Dial Set.").map(|(id, ..)| *id).expect("the heading");
+        let first = said.iter().find(|(_, r, l)| *r == Role::Label && l == "⏷ Custom Key/Dial Set. (Still)").map(|(id, ..)| *id).expect("the heading");
         let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: A11y::Click, target: first, data: None })]);
         let _ = w.run(&mut app, vec![]);
         // one of the two folded (the tree lists the two nodes in its own order), the other left open

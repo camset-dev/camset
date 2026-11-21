@@ -599,6 +599,10 @@
      "type": "string",
      "description": "Its unit."
     },
+    "modes": {
+     "type": "string",
+     "description": "The shooting modes the setting applies in, as the definition's own modes field writes them (\"still image, movie\"): the editor's \"Applies in\"."
+    },
     "inactive_when": {
      "type": "object",
      "additionalProperties": false,

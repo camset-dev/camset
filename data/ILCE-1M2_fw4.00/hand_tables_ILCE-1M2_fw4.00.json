@@ -666,7 +666,31 @@
       "name": "Save HEIF Size",
       "inactive_when": {"record": 472, "name": "JPEG/HEIF Switch", "values": [0], "unlock": 1, "unlock_label": "HEIF(4:2:0)"},
       "note": "Remote Shoot Setting > Save HEIF Size, the row the menu draws in place of Save JPEG Size (0x03dc) while JPEG/HEIF Switch is on HEIF(4:2:0): Large Size 0, Small Size 1, the codes Save JPEG Size uses. With the switch on JPEG the row is not drawn."
-    }
+    },
+    "global:0x0338": {
+      "name": "Av Auto/Manual Switch",
+      "inactive_when": {"record": 688, "name": "Exposure Ctrl Type", "values": [0], "unlock": 1, "unlock_label": "Flexible Exp. Mode"}
+    },
+    "global:0x033a": {
+      "name": "Tv Auto/Manual Switch",
+      "inactive_when": {"record": 688, "name": "Exposure Ctrl Type", "values": [0], "unlock": 1, "unlock_label": "Flexible Exp. Mode"}
+    },
+    "global:0x033c": {
+      "name": "ISO Auto/Manual Set",
+      "inactive_when": {"record": 688, "name": "Exposure Ctrl Type", "values": [0], "unlock": 1, "unlock_label": "Flexible Exp. Mode"}
+    },
+    "global:0x1021": {
+      "name": "Color Gamut",
+      "inactive_when": {"record": 4127, "name": "Log Shooting", "values": [0], "unlock": 1, "unlock_label": "On (Flexible ISO)"}
+    },
+    "global:0x1023": {
+      "name": "Embed LUT File",
+      "inactive_when": {"record": 4127, "name": "Log Shooting", "values": [0], "unlock": 1, "unlock_label": "On (Flexible ISO)"}
+    },
+    "global:0x02e9": {"name": "Audio Recording", "modes": "movie"},
+    "global:0x0018": {"name": "Audio Input Master Level", "modes": "movie"},
+    "global:0x116e": {"name": "Auto Framing", "modes": "movie"},
+    "global:0x0498": {"name": "Movie HDMI Output Time Code", "modes": "still image, movie"}
   },
   "FILTER_FLAGS": {
     "global:0x1290": {
@@ -2687,6 +2711,54 @@
     "global:0x0c4c": {
       "note": "Whether the parts Lock Operation Parts (0x046f) names are locked now: Unlocked 0, Locked 1. Holding Fn locks them and holding it again unlocks them. Not known yet: whether holding MENU and Fn together, which locks every button, writes it.",
       "values": [[0, "Unlocked"], [1, "Locked"]]
+    },
+    "global:0x0e6e": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
+      "values": [[0, "S"], [1, "M"], [2, "L"], [3, "XL"], [4, "XS"]]
+    },
+    "global:0x0e70": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
+      "values": [[0, "S"], [1, "M"], [2, "L"], [3, "XL"], [4, "XS"]]
+    },
+    "global:0x0e72": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
+      "values": [[0, "S"], [1, "M"], [2, "L"], [3, "XL"], [4, "XS"]]
+    },
+    "global:0x0f86": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
+      "values": [[0, "XL"], [1, "L"], [2, "M"], [3, "S"], [4, "XS"]]
+    },
+    "global:0x0f88": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
+      "values": [[0, "XL"], [1, "L"], [2, "M"], [3, "S"], [4, "XS"]]
+    },
+    "global:0x0f8a": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
+      "values": [[0, "XL"], [1, "L"], [2, "M"], [3, "S"], [4, "XS"]]
+    },
+    "global:0x132d": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
+      "values": [[0, "Custom 1"], [1, "Custom 2"], [2, "Custom 3"]]
+    },
+    "global:0x132f": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
+      "values": [[0, "Custom 1"], [1, "Custom 2"], [2, "Custom 3"]]
+    },
+    "global:0x1331": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
+      "values": [[0, "Custom 1"], [1, "Custom 2"], [2, "Custom 3"]]
+    },
+    "global:0x1399": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
+      "values": [[0, "Custom 1"], [1, "Custom 2"], [2, "Custom 3"]]
+    },
+    "global:0x139b": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
+      "values": [[0, "Custom 1"], [1, "Custom 2"], [2, "Custom 3"]]
+    },
+    "global:0x139d": {
+      "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
+      "values": [[0, "Custom 1"], [1, "Custom 2"], [2, "Custom 3"]]
     }
   },
   "CAROUSEL": [
@@ -2988,7 +3060,8 @@
     ["global:0x12e7[8]", 2577, "FTP (crown icon) Trans. (This Img.)"],
     ["global:0x12e7[9]", 2577, "FTP (crown icon) Trans. (This Img.)"],
     ["global:0x12e7[10]", 2577, "FTP (crown icon) Trans. (This Img.)"],
-    ["global:0x12e7[11]", 2577, "FTP (crown icon) Trans. (This Img.)"]
+    ["global:0x12e7[11]", 2577, "FTP (crown icon) Trans. (This Img.)"],
+    ["global:0x02ed", 1, "On"]
   ],
   "PP7_VALUES": [
     ["global:0x052b[6]", 15, "S-Log2 (the first a1's PP7; not offered on this body)"],

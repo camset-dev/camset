@@ -84,6 +84,13 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the docs and the ledger's public form, the mapping found no menu row that changes such a record, so it does not know
   what the record holds, and a change to it is unproved and at your own risk. Which unmapped records never changed
   stays in the mapper's private ledger, never listed or counted in a public file (decision 27).
+- **The a1 II's definition takes the night's proofs in Movie, S&Q and Time-lapse:** Picture Profile's rows, File
+  Settings and the S&Q and Time-lapse frame-rate rows now stand in the S&Q menu, the look-alike rows Custom Key/Dial
+  Set., Fn Menu Settings and Recording Media carry their icon's words, and Movie Interval Rec's fifteen Interval Times
+  are named and proved. It also says why five rows are greyed (Av/Tv Auto/Manual Switch and ISO Auto/Manual Set by
+  Exposure Ctrl Type, Color Gamut and Embed LUT File by Log Shooting), gives four rows the modes they apply in (Audio
+  Recording, Audio Rec Level, Auto Framing, Time Code Output) and proves the twelve AF Area Registration copies of Spot
+  size and Custom area.
 - **The a1 II's definition lists the camera's three menus, Still, Movie and S&Q,** and the menus each of its 1380 placed
   settings stands in, read from each mode's own menus; 165 settings take the row they lacked, among them Camera Set.
   Memory's records, the focus positions under Focus Area and Preset Focus/Zoom's. It also names 340 values as the camera
