@@ -56,15 +56,58 @@ def screen_text(cam) -> str:
     return ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
 
 
+def lit_icon_label(frame) -> str:
+    """The lit bar's label read with the icon at its start painted over, as camkit.crawl.icon_entry reads a row
+    (camkit.screen.label_icons finds the icon by its pixels, page_model.covered_readings reads the label right of it):
+    "" where no bar is lit, the bar starts with no icon, or the reading fails."""
+    from camkit.live import lit_found
+    from page_model import MENU_LABEL, SUBMENU_LABEL, covered_readings
+    try:
+        box, _ = lit_found(frame.image)
+        if not box:
+            return ""
+        column = MENU_LABEL if box[0] > 100 else SUBMENU_LABEL        # a menu page's bar starts at 138, a submenu's at 56
+        band = (box[1], box[3])
+        boxes, text_x = screen.label_icons(frame.image, band, column[0])
+        if not boxes:
+            return ""
+        got = covered_readings({0: (frame.image, {0: (band, boxes, text_x)})}, column, {"ocr": None})
+        return str((got.get(0, {}).get(0) or {}).get("ocr") or "")
+    except Exception:
+        return ""
+
+
+def bar_is_row(lit: str, row: str, frame=None) -> bool:
+    """Whether the lit bar read `lit` (on `frame`, the frame before Right) is the row `row`: safety.bar_on_row on the lit
+    text, as everywhere; or, where an icon stands at the bar's start (lit_icon_label, measured 2026-11-21 on Exposure
+    Std. Adjust in the Movie and S&Q menus, read "SExposure Std. Adjust": kit2_crawl_expstd_mv 00013_down), the bar's
+    label read with the icon covered passes bar_on_row, and the lit text is that reading with one token of at most
+    camkit.row_names.ICON_LEAD characters in front (the icon's letters, glued on or set apart). The bar must still be the
+    row: nothing is taken because it contains the row's name."""
+    from camkit.row_names import ICON_LEAD
+    if safety.bar_on_row(lit, row):
+        return True
+    if frame is None:
+        return False
+    covered = lit_icon_label(frame)
+    if not covered or not safety.bar_on_row(covered, row):
+        return False
+    seen, label = safety.plain(lit or ""), safety.plain(covered)
+    k = seen.find(label, 1)
+    lead = seen[:k].strip() if k > 0 else ""
+    return bool(lead) and " " not in lead and len(lead) <= ICON_LEAD and safety.bar_on_row(seen[k:], row)
+
+
 def _reads_ok(lit) -> bool:
     return safety.fold(lit or "").strip().casefold() == "ok"
 
 
-def pass_row_question(cam, name: str, lit_before: str) -> dict | None:
+def pass_row_question(cam, name: str, lit_before: str, before=None) -> dict | None:
     """The question a row asks before it opens, answered with OK on the run's word for that row alone (--allow ROW, the
     owner's word: ROW_QUESTION; Exposure Std. Adjust on the a1 II, 2026-11-21). None where the row (`name`'s last label)
     is not one the run named: its notice is the caller's, as ever. Otherwise Enter goes out once, and only when all hold:
-    the screen is a notice; the lit bar read before Right (`lit_before`) is the row (safety.bar_on_row); the screen's
+    the screen is a notice; the lit bar read before Right (`lit_before`, on the frame `before`) is the row (bar_is_row:
+    safety.bar_on_row, or its label right of an icon drawn before it); the screen's
     whole text is that row's own question (safety.row_question: its words as measured on the camera's frames, its two
     buttons OK and Cancel, nothing else); and OK is lit, after at most one Up, which moves the cursor from Cancel onto OK
     above it (nothing is chosen by it). The press carries ("row_question", ROW), so the camera's own Enter check judges it
@@ -76,7 +119,7 @@ def pass_row_question(cam, name: str, lit_before: str) -> dict | None:
     frame = cam.frame.path.name
     if cam.read().kind != "notice":
         return {"refused": f"not a notice ({cam.read().kind}, {frame})"}
-    if not safety.bar_on_row(lit_before, row):
+    if not bar_is_row(lit_before, row, before):
         return {"refused": "the lit bar read before Right is not the row named"}
     why = safety.row_question(screen_text(cam), row)
     if why:

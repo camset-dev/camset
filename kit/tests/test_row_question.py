@@ -256,7 +256,8 @@ def test_crawls_pass_answers_the_named_rows_question_and_leaves_every_other_row(
     import crawl_run
     from proving import screens
     calls = []
-    monkeypatch.setattr(screens, "pass_row_question", lambda cam, name, lit: calls.append((name, lit)) or {"row": name})
+    monkeypatch.setattr(screens, "pass_row_question",
+                        lambda cam, name, lit, before=None: calls.append((name, lit)) or {"row": name})
     monkeypatch.setattr(screens, "ROW_QUESTION", set())
     monkeypatch.setattr(crawl_run, "lit_text", lambda image, path: ROW)
     assert crawl_run.info_ok_pass({}, frozenset()) is None
@@ -288,7 +289,7 @@ def test_the_way_in_answers_the_question_only_for_the_row_the_run_named(monkeypa
     from proving import base, nav, screens
     calls = []
 
-    def passed(cam, name, lit):
+    def passed(cam, name, lit, before=None):
         calls.append((name, lit))
         cam.kind = "submenu"
         return {"row": name, "frame": "00011_x.png", "by": "--allow"}
