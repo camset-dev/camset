@@ -214,6 +214,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`carousel_fields_run.py` takes a short title OCR reads exactly where the reader names no option:** the movie
+  Self-timer's "On" no longer goes unread; a reader naming an option is still taken.
 - **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a
   grey option where it may, closes the list with MENU and stops, as it does where whether an option is grey cannot be told.
 - **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that
