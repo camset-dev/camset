@@ -23,11 +23,15 @@ One session, bracketed as every run is (decision 15; runner.prover_session):
      The row is never-open (an action): a camera run opens it only when given --allow "Camera Set. Memory", the owner's
      word (they allowed it remotely on 2026-11-09: drive.py --allow, kit2_small_1109), and each proof line says so
      ("allowance", runner.allowed_or_exit). The slot screen ("MR Memory", tabs 1 2 3 M1 M2 M3 M4, the lit tab
-     a small orange square: kit2_small_1109 00013, 00021, 00154 and 00282_enter.png) must read Memory and no Movie, S&Q
-     or Time-lapse; the lit tab must be the slot's (lit_tab: where the orange square sits in the tab row; tab 1 at
-     x 224-273 on all four frames, the other tabs placed 60 px apart by the frame's own labels, never seen lit), so
-     Enter never falls on M1-M4, which register to the card; a lit tab that cannot be measured, after one fresh look,
-     fails the registration before Enter (never assumed); then Enter as drive.py's vouched "enter!:Memory" sends
+     a small orange square: kit2_small_1109 00013, 00021, 00154 and 00282_enter.png) must read Memory, and for a Stills
+     slot no Movie, S&Q or Time-lapse (a Movie or S&Q screen draws its family as an icon alone: the run's start file
+     says the family, family_refused, before any press); it opens on tab 1, and the slot's tab is reached by Right,
+     the lit tab measured after each (lit_tab: where the orange square sits in the tab row; tab 1 at x 224-273, each
+     next 60 px on; step_to_tab, never Right from 3), so Enter never falls on M1-M4, which register to the card; a lit
+     tab that cannot be measured, after one fresh look, or a Right that lit no next tab, fails the registration before
+     Enter (never assumed). Only a slot whose tab has been seen lit on its family's screen registers (SEEN_LIT: 1, 2, 3,
+     Movie 1, S&Q 1 so far); --look-tabs records the others (Right twice and MENU, no Enter). Then Enter as drive.py's
+     vouched "enter!:Memory" sends
      it (press_decision: the kit's reader cannot size the square, so the lit text is unread; the screen's whole text
      must name nothing never-open but the row allowed). The slot screen reads as no known kind, on which no Enter goes
      by its shape (safety.enter_refused, 2026-11-14): the run's --allow is the consent to answer it (press_decision's
@@ -63,7 +67,8 @@ One session, bracketed as every run is (decision 15; runner.prover_session):
 
 Options: --allow (the owner's word for Camera Set. Memory; a camera run refuses to start without it), --rows
 (repeatable, a candidate's path with " > "; default: set_twins' picks), --limit, --list (no camera),
---scan (the Stills page scan; default: the camera's latest Stills page scan, runner.latest_scan), --slot (1 only: the frames show tab 1 lit), --survey (the
+--scan (the page scan of the menu the camera shows; default: the camera's latest Stills page scan, runner.latest_scan),
+--slot (SLOTS' names; the rows' spot check registers a Stills slot, --aperture any SEEN_LIT slot), --look-tabs, --survey (the
 set_twins.json to read), --run (default kit2_memtwins, beside the survey).
 """
 import argparse
@@ -85,10 +90,34 @@ import set_twins  # noqa: E402
 MEMORY_ROW = "Camera Set. Memory"
 KIND = "registration mirror"
 RUN = set_twins.RUN
-SLOTS = ("1",)                       # only tab 1 has been seen lit (lit_tab)
+# The body's twelve memory slots by the name --slot takes: (the shooting family whose memory screen shows the slot, its
+# tab, its file section: the camera file's memory_sets, Stills 1-3, Movie 4-6, S&Q 7-9, Time-lapse 10-12)
+SLOTS = {"1": ("Stills", "1", 1), "2": ("Stills", "2", 2), "3": ("Stills", "3", 3),
+         "Movie 1": ("Movie", "1", 4), "Movie 2": ("Movie", "2", 5), "Movie 3": ("Movie", "3", 6),
+         "S&Q 1": ("S&Q", "1", 7), "S&Q 2": ("S&Q", "2", 8), "S&Q 3": ("S&Q", "3", 9),
+         "Time-lapse 1": ("Time-lapse", "1", 10), "Time-lapse 2": ("Time-lapse", "2", 11),
+         "Time-lapse 3": ("Time-lapse", "3", 12)}
+# The slots whose tab the kit has seen lit on their family's memory screen, lit_tab measuring it on the frames named
+# (kit/tests/test_memreg.py reads them): only these are registered; any other waits for --look-tabs to record its tab
+# lit on its own screen, never a tab assumed. kit2_frame_reg (2026-11-02, Stills) went Right, Right, Right from the row
+# twelve times: the screen opened on tab 1, each Right lit the next tab. memreg_tab_looks (2026-11-21) opened the
+# Stills, Movie and S&Q screens on tab 1 lit; drive.py's Right check (nothing lit to read on that screen) kept it there
+SEEN_LIT = {
+    "1": "kit2_small_1109 00013, 00021, 00154, 00282_enter.png; kit2_frame_reg 00079 to 00264_right.png; "
+         "kit2_memreg_tabs_stills 00014_enter.png",
+    "2": "kit2_frame_reg 00080 to 00265_right.png (twelve laps)",
+    "3": "kit2_frame_reg 00081 to 00266_right.png (twelve laps)",
+    "Movie 1": "kit2_memreg_tabs_movie 00005_enter.png",
+    "S&Q 1": "kit2_memreg_tabs_sq_look 00005_enter.png",
+}
+# the record of a settings file that says which shooting family the camera is in, by model, and its codes (the
+# definition's "Shooting family (stills / movie / S&Q / time-lapse)", proved): a slot's family is checked by the run's
+# start file, since a Movie or S&Q memory screen names its family by an icon alone
+FAMILY = {"ILCE-1M2": (0x13bf, {0: "Stills", 1: "Movie", 2: "S&Q", 3: "Time-lapse"})}
 # the slot screen's tab row: the orange square of the lit tab (kit2_small_1109 00013, 00021, 00154, 00282_enter.png:
-# x 224-273, y within the top 56 rows), the labels 60 px apart (1 2 3 M1 M2 M3 M4)
+# x 224-273, y within the top 56 rows), the labels 60 px apart (1 2 3 M1 M2 M3 M4); 1 to 3 the body's, M1-M4 the card's
 TABS = ("1", "2", "3", "M1", "M2", "M3", "M4")
+BODY_TABS = TABS[:3]
 TAB_X, TAB_STEP, TAB_STRIP, TAB_WIDTH, TAB_HEIGHT, TAB_SLACK = 248, 60, 80, (40, 60), (28, 60), 15
 SLOT_SCREEN = re.compile(r"\bmemory\b", re.I)
 NOT_STILLS = re.compile(r"movie|s\s*&\s*q|time-?\s?lapse", re.I)
@@ -117,8 +146,39 @@ def survey_rows(survey: dict, asked=None) -> list:
 
 
 def section_of(slot: str) -> int:
-    """The file section of a Stills slot (the camera section's memory_sets: section 1 is Memory 1)."""
-    return int(slot)
+    """The file section of a slot (SLOTS: the camera file's memory_sets, section 1 Memory 1, 4 Movie Memory 1 ...)."""
+    return SLOTS[slot][2]
+
+
+def slot_unseen(slot: str) -> str:
+    """Why the slot is not registered, its tab never seen lit on its family's memory screen (SEEN_LIT), or ""."""
+    if slot in SEEN_LIT:
+        return ""
+    family, tab, _ = SLOTS[slot]
+    return (f"slot {slot!r}'s tab ({tab}) has not been seen lit on the {family} memory screen (SEEN_LIT names the frames "
+            f"of each slot that has): memreg_run.py --look-tabs, run in {family}, records it; no Enter goes on a tab the "
+            "kit has not measured")
+
+
+def family_of(cs, model: str) -> str | None:
+    """The shooting family the settings file `cs` holds the camera in (FAMILY's record), or None where it cannot be
+    read."""
+    rid, names = FAMILY.get(model, (None, {}))
+    rec = cs.get(0, rid) if rid is not None else None
+    return names.get(rec.value()) if rec is not None else None
+
+
+def family_refused(cs, model: str, slot: str) -> str:
+    """Why the slot may not be registered with the camera as the start file `cs` has it, or "": the camera must be in
+    the slot's family (a Movie slot on the Movie memory screen), as the file says, before any press."""
+    want, got = SLOTS[slot][0], family_of(cs, model)
+    if got is None:
+        return (f"which shooting family the camera is in cannot be read from the start file ({model}: FAMILY names no "
+                f"record for it, or the file lacks it), so slot {slot!r} ({want}) is not registered")
+    if got != want:
+        return (f"the camera is in {got} (the start file), and slot {slot!r} is on the {want} memory screen: switch to "
+                f"{want} first (kit/provers/mode_switch.py --to ... --keep); nothing was pressed")
+    return ""
 
 
 def expected_keys(model: str, section: int) -> frozenset:
@@ -392,7 +452,8 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
                            end_why="the settings download after the registrations") as s:
         cam, link = s.cam, s.link
         start_cs = camset.read(s.start)
-        why = slot_refused(start_cs, model_name, section, a.slot, a.fill_empty_slot)
+        why = family_refused(start_cs, model_name, a.slot) or \
+            slot_refused(start_cs, model_name, section, a.slot, a.fill_empty_slot)
         if why:
             raise Failed(why)
         if not slot_filled(start_cs, model_name, section):
@@ -448,6 +509,35 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
     return status
 
 
+def look_tabs(a, doc: dict) -> int:
+    """--look-tabs: one session (decision 15), nothing registered: the start download says the family the camera is
+    in (family_of); the slot screen opened, tabs 1 to 3 lit in turn by Right and measured (look_slot_tabs), MENU out;
+    tab_looks.json in the run folder names each frame and what it measured; the start file put back and checked.
+    Status 0 when tabs 1, 2 and 3 were measured in that order, 1 otherwise."""
+    from camkit.frames import eyes_from_config
+    from camkit.runs import Run
+    from prove_run import Failed
+    from runner import load_scan, prover_session
+    model_name = doc.get("model") or definitions.key(doc).split("_fw")[0]
+    cycle, model = load_scan(a.scan)
+    run = Run(a.run)
+    hdmi = eyes_from_config(run)
+    say = lambda m: print(m, flush=True)     # noqa: E731
+    looked, family = [], None
+    with prover_session(run, hdmi, may_open=set(a.allow), show=0,
+                        end_why="the settings download after the look") as s:
+        family = family_of(camset.read(s.start), model_name)
+        if family is None:
+            raise Failed(f"which shooting family the camera is in cannot be read from the start file ({model_name}): no "
+                         "look is made")
+        looked = look_slot_tabs(s.cam, cycle, model, family, a.allow)
+        write_json(run.dir / "tab_looks.json", {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "family": family,
+                                                "start": s.start.name, "looks": looked}, indent=1)
+        say(f"{family} memory screen: " + ", ".join(f"{x['frame']} tab {x['tab'] or '(none placed)'}" for x in looked)
+            + "; MENU, nothing registered")
+    return 0 if [x["tab"] for x in looked] == list(BODY_TABS) else 1
+
+
 def scrub(msg: str) -> str:
     """A failure as printed: without the list's lit option (set_row's "(on '...')"), which can be the held one."""
     return re.sub(r"\s*\(on '.*?'\)", "", msg)
@@ -494,11 +584,25 @@ def memory_allowed(allow) -> bool:
     return any(safety.clean_label(safety.fold(x)) == want for x in allow or ())
 
 
-def register_slot(cam, cycle, model, slot: str, say, allow=(MEMORY_ROW,)) -> dict:
-    """Step a. (and c.): the slot registered, back on the menu. Fails before Enter when the row, the screen or the lit
-    tab is not the one expected."""
+def measured_tab(cam, tag: str = "slot-tab") -> tuple:
+    """(the slot screen's lit tab, or None; the frames it was measured on): lit_tab on the frame on show, and where it
+    places none, once more on a fresh frame."""
+    tab, frames = lit_tab(cam.frame.image), [cam.frame.path.name]
+    if tab is None:
+        cam.refresh(tag)
+        tab = lit_tab(cam.frame.image)
+        frames.append(cam.frame.path.name)
+    return tab, frames
+
+
+def open_slot_screen(cam, cycle, model, family: str) -> tuple:
+    """MENU, Camera Set. Memory by the scan, its lit text read, Enter (LiveCamera's row check: never-open, and the
+    run's may_open names it): (the row's frame, the slot screen's lit tab, the frames it was measured on). Fails
+    before any press on the slot screen when it does not read Memory, when a Stills slot's screen names another family
+    (a Movie or S&Q screen draws its family as an icon alone, which the start file's family_refused stands in for), or
+    when its lit tab cannot be measured (never assumed: Enter on M1-M4 registers to the card, which no file puts
+    back)."""
     from camkit.live import lit_text, text_of
-    from drive import highlighted, press_decision
     from mode_switch import find, open_menu
     from prove_run import Failed
     open_menu(cam)
@@ -507,21 +611,68 @@ def register_slot(cam, cycle, model, slot: str, say, allow=(MEMORY_ROW,)) -> dic
     if match.key(MEMORY_ROW) not in match.key(lit):
         raise Failed(f"the lit row reads {lit!r}, not {MEMORY_ROW} ({cam.frame.path.name})")
     row_frame = cam.frame.path.name
-    cam.press("enter")                  # LiveCamera's row check: never-open, and this run's may_open names it
+    cam.press("enter")
     t, kind = text_of(cam), cam.read().kind
-    if not SLOT_SCREEN.search(t) or NOT_STILLS.search(t):
-        raise Failed(f"Enter on {MEMORY_ROW} opened {kind}, not the Stills memory slots ({cam.frame.path.name})")
-    tab = lit_tab(cam.frame.image)
-    if tab is None:                     # re-read the screen once, on a fresh frame
-        first = cam.frame.path.name
-        cam.refresh("slot-tab")
-        t = text_of(cam)
-        tab = lit_tab(cam.frame.image)
-        if tab is None:                 # never assumed: Enter on M1-M4 registers to the card, which no file puts back
-            raise Failed(f"the slot screen's lit tab could not be measured ({first}, then {cam.frame.path.name}): no "
-                         "Enter on a tab the kit cannot place")
-    if tab != slot:
-        raise Failed(f"the slot screen lights {f'tab {tab}' if tab else 'no tab the kit can place'}, not {slot} "
+    if not SLOT_SCREEN.search(t) or (family == "Stills" and NOT_STILLS.search(t)):
+        raise Failed(f"Enter on {MEMORY_ROW} opened {kind}, not the {family} memory slots ({cam.frame.path.name})")
+    tab, frames = measured_tab(cam)
+    if tab is None:
+        raise Failed(f"the slot screen's lit tab could not be measured ({', then '.join(frames)}): no Enter on a tab "
+                     "the kit cannot place")
+    return row_frame, tab, frames
+
+
+def step_to_tab(cam, tab: str, want: str) -> str:
+    """From the lit tab `tab` to the body tab `want` by Right, the lit tab measured after each Right (measured_tab):
+    Right only from a body tab before `want`, so never from 3, whose next is M1, the card's; no Left (the screen has
+    opened on tab 1 on every frame the kit has). Fails, with no further press, when the screen opened past `want` or on
+    no body tab, or a Right did not light exactly the next tab. Returns `want`."""
+    from prove_run import Failed
+    if tab not in BODY_TABS or BODY_TABS.index(tab) > BODY_TABS.index(want):
+        raise Failed(f"the slot screen opened on tab {tab}, past tab {want} or on none of the body's (1 to 3): no Left "
+                     f"is pressed, and no Enter ({cam.frame.path.name})")
+    while tab != want:
+        nxt = BODY_TABS[BODY_TABS.index(tab) + 1]
+        cam.press("right")
+        got, frames = measured_tab(cam)
+        if got != nxt:
+            raise Failed(f"Right from tab {tab} lit {f'tab {got}' if got else 'no tab the kit can place'}, not {nxt} "
+                         f"({', then '.join(frames)}): no Enter")
+        tab = got
+    return tab
+
+
+def look_slot_tabs(cam, cycle, model, family: str, allow=(MEMORY_ROW,)) -> list:
+    """--look-tabs: the slot screen opened (open_slot_screen), its lit tab measured, then Right while the lit tab is a
+    body tab before 3, the lit tab measured after each; then MENU out. No Enter on the slot screen: nothing is
+    registered. [{"frame", "tab", "box"}] per look; a Right that lights no next tab ends the walk there, MENU still the
+    last press."""
+    _row, tab, frames = open_slot_screen(cam, cycle, model, family)
+    looked = [{"frame": frames[-1], "tab": tab, "box": list(tab_box(cam.frame.image) or ()) or None}]
+    while tab in BODY_TABS[:2]:
+        cam.press("right")
+        got, frames = measured_tab(cam)
+        looked.append({"frame": frames[-1], "tab": got, "box": list(tab_box(cam.frame.image) or ()) or None})
+        if got != BODY_TABS[BODY_TABS.index(tab) + 1]:
+            break
+        tab = got
+    cam.press("menu")
+    return looked
+
+
+def register_slot(cam, cycle, model, slot: str, say, allow=(MEMORY_ROW,)) -> dict:
+    """Step a. (and c.): the slot registered, back on the menu. Fails before Enter when the row, the screen or the lit
+    tab is not the one expected: the slot screen opened (open_slot_screen), the slot's tab reached by Right with each
+    tab measured (step_to_tab), and Enter only on the slot's own tab measured lit."""
+    from camkit.live import text_of
+    from drive import highlighted, press_decision
+    from prove_run import Failed
+    family, want, _ = SLOTS[slot]
+    row_frame, tab, _frames = open_slot_screen(cam, cycle, model, family)
+    tab = step_to_tab(cam, tab, want)
+    t, kind = text_of(cam), cam.read().kind
+    if tab != want:
+        raise Failed(f"the slot screen lights {f'tab {tab}' if tab else 'no tab the kit can place'}, not {want} "
                      f"({cam.frame.path.name})")
     # the slot screen reads as no known kind: its Enter goes by the run's --allow, consent to answer the row's own
     # screen (the shape check lifted, never the confirmation words), as the camera judges it too (answer_once)
@@ -623,6 +774,9 @@ def prove(a, doc: dict, todo: list, survey: dict, allowance: str) -> int:
                            end_why="the settings download after the registrations") as s:
         cam, link = s.cam, s.link
         start_cs = camset.read(s.start)
+        why = family_refused(start_cs, model_name, a.slot)
+        if why:
+            raise Failed(why)
         if not slot_filled(start_cs, model_name, section):
             raise Failed(f"slot {a.slot} is empty in the start file: registering it would fill it for good (no settings "
                          "file empties it); this run registers a filled slot only")
@@ -696,7 +850,12 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=int, default=0, help="the first N rows only")
     ap.add_argument("--list", action="store_true", help="print the plan only; no camera")
     add_scan_argument(ap, default=LATEST_SCAN, mode="Stills")
-    ap.add_argument("--slot", choices=SLOTS, default="1", help="the Stills memory slot to register (1)")
+    ap.add_argument("--slot", choices=list(SLOTS), default="1",
+                    help="the memory slot to register: 1, 2 or 3 (Stills), 'Movie 1', 'S&Q 1' ...; only one whose tab "
+                         "has been seen lit on its family's memory screen (SEEN_LIT), with the camera in its family")
+    ap.add_argument("--look-tabs", action="store_true",
+                    help="look only: open the memory screen of the family the camera is in, light tabs 1 to 3 by Right "
+                         "and measure each, MENU out; nothing registered (tab_looks.json)")
     ap.add_argument("--survey", default=None, help="set_twins.json (default: runs/<camera>/kit2_memtwins/)")
     ap.add_argument("--run", default=RUN)
     ap.add_argument("--aperture", action="store_true",
@@ -718,20 +877,37 @@ def main(argv=None) -> int:
         sys.exit("memreg_run: --beyond-lens is the aperture run's: give it with --aperture")
     root = paths.run_root()
     doc = definitions.with_evidence(read_json(definitions.active()), definitions.active())
+    if a.look_tabs:
+        print("--look-tabs: the memory screen of the family the camera is in (its start file says which), opened from "
+              f"{MEMORY_ROW}; tabs 1 to 3 lit by Right, each measured; MENU out, no Enter on it, nothing registered; the "
+              "start file put back and checked")
+        if a.list:
+            return 0
+        if not memory_allowed(a.allow) or [x for x in a.allow if not memory_allowed([x])]:
+            sys.exit(f"memreg_run: {MEMORY_ROW} is never-open (an action); --look-tabs opens it only with the owner's "
+                     f"word, --allow {MEMORY_ROW!r}, and no other")
+        allowed_or_exit(a.allow)
+        return look_tabs(a, doc)
     if a.aperture:
         section = section_of(a.slot)
-        print(f"--aperture: slot {a.slot} (set{section}): every F-number the attached lens offers (the SDK's list, read "
+        print(f"--aperture: slot {a.slot} (set{section}, the {SLOTS[a.slot][0]} memory screen's tab {SLOTS[a.slot][1]}): "
+              "every F-number the attached lens offers (the SDK's list, read "
               f"at the run's start){f', among {a.values}' if a.values else ''}, each set through the SDK and read "
               f"back, then the slot registered and a download: {' and '.join(aperture_keys(section))} must hold it; "
               "the held one last; the live aperture put back and read back; the start file uploaded and checked")
         if a.fill_empty_slot:
             print(f"--fill-empty-slot: an empty slot is registered for good: {NOT_PUT_BACK} ({FILL_EMPTY_WORD})")
+        if slot_unseen(a.slot):
+            sys.exit(f"memreg_run: {slot_unseen(a.slot)}")
         if a.list:
             return 0
         if not memory_allowed(a.allow) or [x for x in a.allow if not memory_allowed([x])]:
             sys.exit(f"memreg_run: {MEMORY_ROW} is never-open (an action); --aperture opens it only with the owner's "
                      f"word, --allow {MEMORY_ROW!r}, and no other")
         return prove_apertures(a, doc, allowed_or_exit(a.allow))
+    if SLOTS[a.slot][0] != "Stills" or slot_unseen(a.slot):
+        sys.exit(f"memreg_run: the rows' spot check registers Stills slots only (set_twins' rows are the Stills menu's), "
+                 f"each seen lit: {slot_unseen(a.slot) or f'slot {a.slot!r} is a {SLOTS[a.slot][0]} slot'}")
     camera = definitions.key(doc)
     model_name = doc.get("model") or camera.split("_fw")[0]
     if model_name not in NOT_BY_FILE:

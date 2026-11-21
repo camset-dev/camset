@@ -631,3 +631,207 @@ def test_aperture_needs_the_owners_word_and_lists_without_a_camera(M, monkeypatc
         M.main(["--aperture"])
     with pytest.raises(SystemExit, match="--aperture"):
         M.main(["--fill-empty-slot", "--list"])
+
+
+# ---------------------------------------------------------------- the twelve slots (2026-11-21)
+
+def test_the_slots_are_the_camera_files_memory_sets(M):
+    """SLOTS: each of the twelve slots --slot names, by its family, tab and file section, as the camera file's
+    memory_sets has them (Stills 1-3, Movie 4-6, S&Q 7-9, Time-lapse 10-12)."""
+    import json
+    sets = json.loads((ROOT / "data" / "ILCE-1M2_fw4.00" / "camera_ILCE-1M2_fw4.00.json").read_text(
+        encoding="utf-8"))["memory_sets"]
+    got = {}
+    for name, (family, tab, section) in M.SLOTS.items():
+        got.setdefault(family, []).append(section)
+        assert sets["names"][str(section)].endswith(f"Memory {tab}"), name
+        assert M.section_of(name) == section
+    assert got == sets["modes"]
+    assert list(M.SLOTS)[:4] == ["1", "2", "3", "Movie 1"]
+
+
+# the slot screen's frames the kit has of each slot's tab lit (SEEN_LIT): the run measures them as their slot's tab
+SEEN_FRAMES = [("1", "kit2_memreg_tabs_stills/shots/00014_enter.png"), ("2", "kit2_frame_reg/shots/00265_right.png"),
+               ("3", "kit2_frame_reg/shots/00266_right.png"), ("Movie 1", "kit2_memreg_tabs_movie/shots/00005_enter.png"),
+               ("S&Q 1", "kit2_memreg_tabs_sq_look/shots/00005_enter.png")]
+
+
+@pytest.mark.parametrize("slot, rel", SEEN_FRAMES)
+def test_each_slot_seen_lit_is_measured_as_its_own_tab_on_the_cameras_frame(M, slot, rel):
+    from camkit.frames import load
+    assert slot in M.SEEN_LIT and rel.split("/")[0] in M.SEEN_LIT[slot]
+    f = paths.a1ii_root() / rel
+    if not f.exists():
+        pytest.skip(f"{rel} is not here")
+    assert M.lit_tab(load(f).image) == M.SLOTS[slot][1]
+
+
+def test_a_slot_whose_tab_has_not_been_seen_lit_is_refused_before_anything_connects(M, monkeypatch):
+    """Movie 2 and 3, S&Q 2 and 3 and the Time-lapse slots: no frame shows their tab lit on their family's screen, so
+    no registration goes there (never a tab assumed) until memreg_run --look-tabs records it; said before the link."""
+    assert set(M.SEEN_LIT) == {"1", "2", "3", "Movie 1", "S&Q 1"}
+    for slot in ("Movie 2", "Movie 3", "S&Q 2", "S&Q 3", "Time-lapse 1", "Time-lapse 2", "Time-lapse 3"):
+        assert "--look-tabs" in M.slot_unseen(slot) and "has not been seen lit" in M.slot_unseen(slot)
+    assert M.slot_unseen("Movie 1") == "" and M.slot_unseen("3") == ""
+    monkeypatch.setattr(M.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(M, "read_json", lambda path: {"model": "ILCE-1M2"})
+    monkeypatch.setattr(M.definitions, "with_evidence", lambda doc, *a, **k: doc)
+    monkeypatch.setattr(M, "prove_apertures", lambda *a, **k: pytest.fail("no session for an unseen slot"))
+    with pytest.raises(SystemExit, match="has not been seen lit"):
+        M.main(["--aperture", "--slot", "Time-lapse 1", "--allow", "Camera Set. Memory"])
+    with pytest.raises(SystemExit, match="Stills slots only"):
+        M.main(["--slot", "Movie 1", "--allow", "Camera Set. Memory"])
+
+
+def test_the_family_the_camera_is_in_comes_from_the_start_file(M):
+    """family_of: the start file's shooting family record (0x13bf on the a1 II: 0 Stills, 1 Movie, 2 S&Q, 3
+    Time-lapse); family_refused: a slot of another family than the camera's is refused before any press, and so is
+    one where the family cannot be read."""
+    movie = made_file({0x13bf: 1}, [])
+    assert M.family_of(movie, "ILCE-1M2") == "Movie"
+    assert M.family_refused(movie, "ILCE-1M2", "Movie 1") == ""
+    assert "in Movie" in M.family_refused(movie, "ILCE-1M2", "1") and "Stills" in M.family_refused(movie, "ILCE-1M2", "1")
+    assert M.family_of(made_file({0x13bf: 3}, []), "ILCE-1M2") == "Time-lapse"
+    assert "cannot be read" in M.family_refused(made_file({}, []), "ILCE-1M2", "1")
+    assert "cannot be read" in M.family_refused(movie, "OTHER-1", "1")
+
+
+class TabCam:
+    """A made-up camera on Camera Set. Memory's row: the first Enter opens the slot screen on tab `start`, each Right
+    lights the next tab (or none with stuck=True), the second Enter registers and the menu is back, MENU leaves the slot
+    screen. Its frames are tab_frame squares for the lit tab; every press is kept."""
+    PLACES = {"1": (224, 273), "2": (284, 333), "3": (344, 393), "M1": (404, 453)}
+
+    def __init__(self, start="1", stuck=False):
+        from types import SimpleNamespace
+        self.tab, self.stuck, self.pressed, self.kind, self.n = start, stuck, [], "menu", 0
+        self.run = SimpleNamespace(log=lambda *a, **k: None)
+
+    @property
+    def frame(self):
+        from types import SimpleNamespace
+        image = tab_frame(*self.PLACES[self.tab]) if self.kind == "unknown" else np.zeros((480, 640, 3), np.uint8)
+        return SimpleNamespace(image=image, path=Path(f"{self.n:05d}_x.png"))
+
+    def read(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(kind=self.kind)
+
+    def press(self, key, **kw):
+        self.pressed.append(key)
+        self.n += 1
+        self.answer_once = None
+        if key == "enter":
+            self.kind = "menu" if self.kind == "unknown" else "unknown"
+        elif key == "right" and not self.stuck:
+            self.tab = list(self.PLACES)[list(self.PLACES).index(self.tab) + 1]
+        elif key == "menu":
+            self.kind = "menu"
+
+    def refresh(self, tag):
+        self.n += 1
+
+
+@pytest.fixture
+def slot_world(M, monkeypatch):
+    import camkit.live
+    import drive
+    import mode_switch
+    texts = {"screen": "MR Memory 1 2 3 M1 M2 M3 M4 ISO AUTO MENU OK"}
+    monkeypatch.setattr(mode_switch, "open_menu", lambda cam: None)
+    monkeypatch.setattr(mode_switch, "find", lambda cam, cycle, model, label: None)
+    monkeypatch.setattr(camkit.live, "lit_text", lambda image, path: "MR Camera Set. Memory")
+    monkeypatch.setattr(camkit.live, "text_of", lambda cam: texts["screen"] if cam.kind == "unknown" else
+                        ("Registered." if cam.pressed.count("enter") > 1 else "MR Camera Set. Memory"))
+    monkeypatch.setattr(drive, "highlighted", lambda image, path: "")
+    monkeypatch.setattr(drive, "press_decision", lambda *a, **k: ("", True))
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    return texts
+
+
+@pytest.mark.parametrize("slot, presses", [("1", ["enter", "enter"]), ("2", ["enter", "right", "enter"]),
+                                           ("3", ["enter", "right", "right", "enter"]),
+                                           ("Movie 1", ["enter", "enter"])])
+def test_the_slot_is_reached_by_right_from_tab_1_each_tab_measured_before_enter(M, slot_world, slot, presses):
+    """register_slot: the slot screen opens on tab 1 (every frame the kit has); a Right lights the next tab, measured
+    after each (lit_tab), and Enter goes only once the slot's own tab is measured lit. A Movie slot's screen draws no
+    word of its family (its icon only): the start file's family says it (family_refused, before the session's
+    presses), and the Stills screen check (no Movie, S&Q or Time-lapse word) is a Stills slot's alone."""
+    if slot == "Movie 1":
+        slot_world["screen"] = "MR Memory 1 2 3 M1 M2 M3 M4 Movie XAVC S HD MENU OK"
+    cam = TabCam()
+    M.register_slot(cam, None, None, slot, lambda m: None, ("Camera Set. Memory",))
+    assert cam.pressed == presses
+
+
+def test_a_right_that_does_not_light_the_next_tab_stops_before_enter(M, slot_world):
+    from prove_run import Failed
+    cam = TabCam(stuck=True)
+    with pytest.raises(Failed, match="Right from tab 1 lit tab 1, not 2"):
+        M.register_slot(cam, None, None, "3", lambda m: None, ("Camera Set. Memory",))
+    assert cam.pressed == ["enter", "right"], "no second Right and no Enter on the slot screen"
+
+
+def test_a_slot_screen_opened_past_the_slots_tab_gets_no_press(M, slot_world):
+    """Opened on tab 2 (never seen; a Left is never pressed), slot 1 is refused with no press on the slot screen."""
+    from prove_run import Failed
+    cam = TabCam(start="2")
+    with pytest.raises(Failed, match="opened on tab 2, past tab 1"):
+        M.register_slot(cam, None, None, "1", lambda m: None, ("Camera Set. Memory",))
+    assert cam.pressed == ["enter"]
+
+
+def test_the_stills_screen_check_still_refuses_another_familys_screen_for_a_stills_slot(M, slot_world):
+    from prove_run import Failed
+    slot_world["screen"] = "MR Memory 1 2 3 M1 M2 M3 M4 Movie XAVC S HD MENU OK"
+    with pytest.raises(Failed, match="not the Stills memory slots"):
+        M.register_slot(TabCam(), None, None, "2", lambda m: None, ("Camera Set. Memory",))
+
+
+def test_look_tabs_lights_tab_2_and_3_with_right_and_leaves_with_menu_no_enter(M, slot_world):
+    """--look-tabs (the frames the unseen slots wait for): the slot screen opened, its lit tab measured, Right twice
+    with a measure after each, then MENU; no Enter on the slot screen, nothing registered. A Right that lights no next
+    tab ends the look there, MENU still the last press."""
+    cam = TabCam()
+    looked = M.look_slot_tabs(cam, None, None, "Movie", ("Camera Set. Memory",))
+    assert cam.pressed == ["enter", "right", "right", "menu"]
+    assert [x["tab"] for x in looked] == ["1", "2", "3"] and all(x["frame"] for x in looked)
+    assert [x["box"] for x in looked] == [[224, 273], [284, 333], [344, 393]]
+    stuck = TabCam(stuck=True)
+    looked = M.look_slot_tabs(stuck, None, None, "Movie", ("Camera Set. Memory",))
+    assert stuck.pressed == ["enter", "right", "menu"] and [x["tab"] for x in looked] == ["1", "1"]
+
+
+def test_every_memory_section_s_registration_records_are_left_out_of_an_upload_s_count():
+    """camkit.not_by_file.memory_left: NOT_BY_FILE's three records in each of the body's twelve memory sections, which
+    upload_check's known_left and mode_switch --restore leave out of a restore's count (a Movie, S&Q or Time-lapse
+    slot filled once stays filled, and every later upload of an older file would otherwise stop a chain)."""
+    from camkit import not_by_file
+    from tools import upload_check as U
+    left = not_by_file.memory_left("ILCE-1M2")
+    assert len(left) == 36 and {"set1:0x023c", "set4:0x023c", "set7:0x11ab", "set12:0x11ad"} <= left
+    assert not_by_file.memory_left("OTHER-1") == frozenset()
+    assert left <= U.known_left(SAMPLE)
+
+
+def test_mode_switch_restore_leaves_the_memory_records_out_of_its_count(monkeypatch, tmp_path):
+    """mode_switch --restore: its end compare and its restore check take memory_left's keys as expected (said by key,
+    not counted), so a slot the kept switch's session registered does not fail the switch's restore."""
+    import json
+    import contextlib
+    from types import SimpleNamespace
+    sys.path.insert(1, str(ROOT / "kit" / "provers"))
+    import mode_switch as MS
+    (tmp_path / MS.KEPT).write_text(json.dumps({"to": "Movie", "start": str(SAMPLE)}), encoding="utf-8")
+    seen = {}
+    monkeypatch.setattr(MS, "Run", lambda name: SimpleNamespace(dir=tmp_path))
+    monkeypatch.setattr(MS, "eyes_from_config", lambda run: SimpleNamespace(attach=lambda lk: None, close=lambda: None))
+    monkeypatch.setattr(MS, "Link", lambda run: contextlib.nullcontext(SimpleNamespace()))
+    monkeypatch.setattr(MS, "end_session", lambda link, hdmi, start, why, tag, **kw: seen.setdefault("end", kw) and
+                        SimpleNamespace(uploaded=True, after=start))
+    monkeypatch.setattr(MS, "restore_checked", lambda run, ending, start, **kw: seen.setdefault("check", kw) or True)
+    monkeypatch.setattr(sys, "argv", ["mode_switch.py", "--restore", "--run", "made_up"])
+    MS.main()
+    from camkit import not_by_file
+    want = not_by_file.memory_left("ILCE-1M2")
+    assert seen["end"]["expected"] == want and seen["check"]["expected"] == want
