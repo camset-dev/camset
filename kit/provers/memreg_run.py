@@ -85,7 +85,7 @@ sys.path.insert(1, str(Path(__file__).resolve().parent))
 sys.path.insert(2, str(Path(__file__).resolve().parents[1] / "tools"))
 from camkit import camset, definitions, match, paths, safety  # noqa: E402
 from camkit.not_by_file import FILLED_MARK, NOT_BY_FILE  # noqa: E402
-from runner import (LATEST_SCAN, add_allow_argument, add_in_argument, add_scan_argument,  # noqa: E402
+from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_allow_argument, add_in_argument, add_scan_argument,  # noqa: E402
                     allowed_or_exit, in_mode, read_json, scan_dir, write_json)
 import set_twins  # noqa: E402
 
@@ -384,23 +384,53 @@ def beyond_lens(table: list, lens: list) -> list:
     return sorted(v for v in dict.fromkeys(table) if v and v not in set(lens))
 
 
+# camlink's answer to a set while the camera does not take FNumber (2026-11-21: for about 2 to 4 s after every settings
+# download FNumber reads display only with none listed): waited out and tried again, never a refusal of the value
+NOT_WRITABLE = re.compile(r"not writable", re.I)
+SET_TRIES = 3
+
+
+def set_fnumber(link, v: int, ready=None, tries: int = SET_TRIES):
+    """FNumber set to `v` through the SDK and read back, the read-back returned: before each try the run's way back to
+    the shooting screen (`ready()`, MENU out the kit's usual way, the screen read) and fnumber_settable (read until the
+    camera takes FNumber, else its Failed with what the camera reported). A "not writable now" is waited out and tried
+    again, up to `tries` times; any other refusal (the camera kept another value) is raised as the camera's."""
+    for n in range(max(1, tries)):
+        if ready is not None:
+            ready()
+        fnumber_settable(link)
+        try:
+            link.set("FNumber", v)
+            return (link.get("FNumber") or {}).get("current")
+        except Exception as e:
+            if not NOT_WRITABLE.search(str(e)) or n + 1 >= tries:
+                raise
+
+
 def register_apertures(link, values: list, slot: str, section: int, register, download, stopped, say,
-                       word: str = "not offered") -> tuple:
-    """Each F-number of `values` set through the SDK (link.set("FNumber"): an exposure property camkit.safety.
-    SET_PROPERTIES allows), read back, then the slot registered (`register()`) and a download made (`download(tag)`):
-    the slot's two records (aperture_keys) must hold it. Between registrations only, `stopped()` (the run's STOP file)
-    ends the loop: no registration is ever left half-way by it. A set the camera refuses, or reads back otherwise,
-    registers nothing and is said. Returns (the proof lines, one per record a registration wrote, applied where the
-    record holds the value; the values not set; whether a stop ended it)."""
+                       word: str = "not offered", ready=None) -> tuple:
+    """Each F-number of `values` set through the SDK (set_fnumber: on the shooting screen, once the camera takes
+    FNumber; link.set("FNumber"), an exposure property camkit.safety.SET_PROPERTIES allows), read back, then the slot
+    registered (`register()`) and a download made (`download(tag)`): the slot's two records (aperture_keys) must hold
+    it. Between registrations only, `stopped()` (the run's STOP file) ends the loop: no registration is ever left
+    half-way by it. A set the camera refuses (it kept another value), or reads back otherwise, registers nothing and is
+    said; FNumber that the camera never takes again (fnumber_settable's Failed, or "not writable now" through every try)
+    stops the registrations, never a value counted refused for it. Returns (the proof lines, one per record a
+    registration wrote, applied where the record holds the value; the values not set; whether a stop ended it)."""
+    from prove_run import Failed
     lines, not_set, before = [], [], None
     for v in values:
         if stopped():
             say(f"stopped before F-number {f_label(v)}: the registrations so far are kept, the restore puts the slot back")
             return lines, not_set, True
         try:
-            link.set("FNumber", v)
-            back = (link.get("FNumber") or {}).get("current")
+            back = set_fnumber(link, v, ready)
+        except Failed:
+            raise
         except Exception as e:              # the camera refused the set: never forced by another route
+            if NOT_WRITABLE.search(str(e)):
+                raise Failed(f"F-number {f_label(v)}: the camera kept FNumber not writable through {SET_TRIES} waits "
+                             f"({e}); the registrations so far are kept, the restore puts the slot back") from None
             not_set.append({"value": v, "why": f"{word}: {type(e).__name__}: {e}"})
             say(f"   {f_label(v)}: {word} (the camera refused it: {e}); nothing registered, nothing forced")
             continue
@@ -425,21 +455,32 @@ def register_apertures(link, values: list, slot: str, section: int, register, do
     return lines, not_set, False
 
 
-def put_back_aperture(link, held, say) -> bool:
-    """The live aperture the run began with set back and read back (live state no settings file holds: decision 15)."""
+def put_back_aperture(link, held, say, ready=None) -> bool:
+    """The live aperture the run began with set back and read back (live state no settings file holds: decision 15), as
+    each set goes (set_fnumber: on the shooting screen, once the camera takes FNumber, a "not writable now" waited out).
+    False where it still is not back: prove_apertures then ends with EXIT_UNRESTORED (status_of), so the chain and the
+    queue stop there, the one command that puts it back said."""
+    how = (f"the queue stops here (exit {EXIT_UNRESTORED}): put it back with kit/tools/sdk_set.py FNumber={held} "
+           "before anything else runs")
     try:
-        link.set("FNumber", held)
-        back = (link.get("FNumber") or {}).get("current")
+        back = set_fnumber(link, held, ready)
     except Exception as e:
-        say(f"the live aperture was not put back to {f_label(held)} ({e}): set it by hand (kit/tools/sdk_set.py "
-            f"FNumber={held})")
+        say(f"the live aperture was not put back to {f_label(held)} ({e}): {how}")
         return False
     if back != held:
-        say(f"the live aperture reads {back} after it was put back to {held}: set it by hand (kit/tools/sdk_set.py "
-            f"FNumber={held})")
+        say(f"the live aperture reads {back} after it was put back to {held}: {how}")
         return False
     say(f"the live aperture is back on {f_label(held)} (read back)")
     return True
+
+
+def status_of(back: bool, applied: int, lines: int, stopped: bool, beyond: bool, not_set: int) -> int:
+    """The aperture run's exit status: EXIT_UNRESTORED where the live aperture is not back (put_back_aperture), which
+    stops a chain and the queue; else 0 where every registration applied and no STOP ended it (and, in the lens's range,
+    every F-number was registered: beyond the lens a refusal is a result), 1 otherwise."""
+    if not back:
+        return EXIT_UNRESTORED
+    return 0 if applied == lines and not stopped and (beyond or (lines and not not_set)) else 1
 
 
 # the SDK's property enable flag in words (CrPropertyEnableFlag); FNUMBER_TRIES reads FNUMBER_PAUSE s apart before a run
@@ -490,7 +531,7 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
     hdmi = eyes_from_config(run)
     say = lambda m: print(m, flush=True)     # noqa: E731
     only = {int(x) for x in a.values.split(",")} if a.values else None
-    status = 1
+    status, put_back = 1, {"back": True}
     with proofs_file(run, None, {"allowance": allowance} if allowance else None) as out, \
             prover_session(run, hdmi, may_open=set(a.allow), show=0, expected=expected_keys(model_name, section),
                            end_why="the settings download after the registrations") as s:
@@ -528,15 +569,24 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
         def dl(tag):
             p = download(cam, link, hdmi, tag)
             return p.name, camset.read(p)
+
+        def ready():
+            # on the shooting screen before an SDK set: the kit's usual way out of a menu, the screen read
+            from prove_run import to_shooting
+            from runner import close_screen
+            close_screen(cam, link)
+            to_shooting(link, hdmi, "the SDK's FNumber set")
+        lines, not_set, stopped = [], [], False
         try:
             lines, not_set, stopped = register_apertures(link, todo, a.slot, section, register, dl,
                                                          lambda: (run.dir / "STOP").exists(), say,
-                                                         word="refused" if a.beyond_lens else "not offered")
+                                                         word="refused" if a.beyond_lens else "not offered",
+                                                         ready=ready)
             if a.beyond_lens and not_set:
                 write_json(run.dir / "beyond_lens.json", {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "slot": a.slot,
                                                           "lens": lens, "refused": not_set}, indent=1)
         finally:
-            back = put_back_aperture(link, held, say)
+            back = put_back["back"] = put_back_aperture(link, held, say, ready)
         for line in lines:
             out.write(json.dumps(line) + "\n")
         out.flush()
@@ -546,9 +596,9 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
         say(f"{len(lines)} proof lines, {applied} applied; {len(not_set)} F-numbers not set"
             + ("; stopped by the STOP file between registrations" if stopped else ""))
         # beyond the lens a refusal is a result, not a failure: the run is whole where every value that took applied
-        status = 0 if back and applied == len(lines) and not stopped and (a.beyond_lens or (lines and not not_set)) \
-            else 1
-    return status
+        status = status_of(back, applied, len(lines), stopped, a.beyond_lens, len(not_set))
+    # a run the registrations stopped part way still ends EXIT_UNRESTORED where its put-back failed (status_of)
+    return status if put_back["back"] else EXIT_UNRESTORED
 
 
 def look_tabs(a, doc: dict) -> int:

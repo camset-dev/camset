@@ -505,21 +505,34 @@ def test_the_lens_list_is_registered_once_each_the_held_one_last(M):
 
 
 class ApertureLink:
-    """The SDK's FNumber as the link answers it: set, then read back; `refuse` values the camera will not take, and
-    `drift` ones it reads back otherwise."""
+    """The SDK's FNumber as camlink answers it: set, then read back; `refuse` values the camera will not take ("camera
+    kept another value", the beyond-lens run's own refusal), `drift` ones it reads back otherwise. `window`: after each
+    download (after_download()), FNumber reads display only with none listed and a set answers "not writable now" for
+    that many reads and sets (2026-11-21: about 2 to 4 s after every settings download)."""
 
-    def __init__(self, held=560, refuse=(), drift=()):
+    def __init__(self, held=560, refuse=(), drift=(), window=0):
         self.current, self.refuse, self.drift, self.sets = held, set(refuse), set(drift), []
+        self.window, self.left, self.gets = window, 0, 0
+
+    def after_download(self):
+        self.left = self.window
 
     def set(self, name, value):
         assert name == "FNumber"
+        if self.left > 0:
+            self.left -= 1
+            raise RuntimeError(f"set FNumber {value}: not writable now")
         self.sets.append(value)
         if value in self.refuse:
-            raise RuntimeError("not writable")
+            raise RuntimeError("camera kept another value")
         self.current = value + 10 if value in self.drift else value
 
     def get(self, name):
-        return {"current": self.current, "writable": True, "values": [400, 450, 560]}
+        self.gets += 1
+        if self.left > 0:
+            self.left -= 1
+            return {"current": self.current, "enable": 2, "writable": False, "values": []}
+        return {"current": self.current, "enable": 1, "writable": True, "values": [400, 450, 560]}
 
 
 def aperture_world(link, stop_after=None, records=None):
@@ -972,3 +985,63 @@ def test_the_run_works_in_the_mode_it_is_given_so_a_kept_switch_does_not_refuse_
     with pytest.raises(SystemExit, match="on the Stills menu: give --in Stills"):
         M.main(["--aperture", "--slot", "2", "--in", "S&Q"] + allow)
     assert M.menu_of("Time-lapse") == "S&Q" and M.menu_of("Stills") == "Stills"
+
+
+def test_each_set_waits_for_fnumber_after_a_download_and_none_is_lost_to_the_window(M, monkeypatch):
+    """2026-11-21 08:52-09:28: after every settings download FNumber reads display only, and a set answers "not
+    writable now", for about 2 to 4 s; the runs set the next F-number 2.0 s after a registration's download and
+    counted fifteen values "not offered". Each set now goes after the run's way back to the shooting screen (`ready`)
+    and fnumber_settable; a "not writable now" is waited out and tried again, never counted as refused."""
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    link = ApertureLink(held=560, window=3)
+    done, said, register, download, stopped = aperture_world(link)
+
+    def downloaded(tag):
+        got = download(tag)
+        link.after_download()
+        return got
+    readies = []
+    lines, not_set, stop = M.register_apertures(link, [400, 450, 560], "1", 1, register, downloaded, stopped,
+                                                said.append, ready=lambda: readies.append(1))
+    assert done == [400, 450, 560] and not not_set and not stop
+    assert len(lines) == 6 and all(x["applied"] for x in lines)
+    assert len(readies) >= 3, "the way back to the shooting screen before each set"
+    assert not any("not offered" in s for s in said)
+
+
+def test_a_set_the_camera_refuses_is_still_a_refusal_but_a_window_that_never_ends_stops_the_run(M, monkeypatch):
+    """A refusal other than "not writable" (the camera kept another value) is recorded as before. FNumber that stays not
+    writable through every wait stops the registrations with the camera's report (fnumber_settable's Failed), never
+    fifteen values counted not offered."""
+    from prove_run import Failed
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    link = ApertureLink(held=560, refuse={450})
+    done, said, register, download, stopped = aperture_world(link)
+    lines, not_set, _ = M.register_apertures(link, [400, 450], "1", 1, register, download, stopped, said.append)
+    assert done == [400] and [x["value"] for x in not_set] == [450] and "kept another value" in not_set[0]["why"]
+    stuck = ApertureLink(held=560, window=10 ** 6)
+    stuck.after_download()
+    done, said, register, download, stopped = aperture_world(stuck)
+    with pytest.raises(Failed, match="does not take FNumber now"):
+        M.register_apertures(stuck, [400, 450], "1", 1, register, download, stopped, said.append)
+    assert done == [] and stuck.sets == []
+
+
+def test_the_put_back_waits_too_and_a_put_back_that_fails_stops_the_queue(M, monkeypatch, capsys):
+    """put_back_aperture waits for FNumber as each set does; where it still fails, prove_apertures ends with
+    EXIT_UNRESTORED (the live aperture is live state no settings file puts back: decision 15), so the chain and the queue
+    stop, saying the one command that puts it back, rather than exit 1 that the queue rolls past."""
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    link = ApertureLink(held=400, window=3)
+    link.after_download()
+    said = []
+    assert M.put_back_aperture(link, 560, said.append) is True and link.current == 560
+    stuck = ApertureLink(held=400, window=10 ** 6)
+    stuck.after_download()
+    assert M.put_back_aperture(stuck, 560, said.append) is False
+    assert any("kit/tools/sdk_set.py FNumber=560" in s and "the queue stops" in s for s in said)
+    from runner import EXIT_UNRESTORED
+    assert M.status_of(back=False, applied=2, lines=2, stopped=False, beyond=False, not_set=0) == EXIT_UNRESTORED
+    assert M.status_of(back=True, applied=2, lines=2, stopped=False, beyond=False, not_set=0) == 0
+    assert M.status_of(back=True, applied=2, lines=2, stopped=False, beyond=False, not_set=3) == 1
+    assert M.status_of(back=True, applied=0, lines=0, stopped=False, beyond=True, not_set=3) == 0
