@@ -1060,7 +1060,7 @@ def info_ok_pass(named: dict, questions=frozenset()):
         if name.split(" > ")[-1] in questions:
             screens.ROW_QUESTION.update(questions)
             lit = lit_text(before.image, before.path) if before is not None else ""
-            return screens.pass_row_question(cam, name, lit)
+            return screens.pass_row_question(cam, name, lit, before)
         if not named:
             return None
         phrase = info_ok_for(named, name)

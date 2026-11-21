@@ -81,10 +81,11 @@ def enter_path(cam, path, start: int, at=None):
     the row; any other notice, or that question refused, fails as before (its MENU is the caller's)."""
     for k, label in enumerate(path[start + 1:], start + 1):
         asks = path[k - 1] in screens.ROW_QUESTION
+        before = cam.frame if asks else None
         lit = live.lit_text(cam.frame.image, cam.frame.path) if asks else ""
         cam.press("right")
         if asks and cam.read().kind == "notice":
-            got = screens.pass_row_question(cam, " > ".join(path[:k]), lit) or {}
+            got = screens.pass_row_question(cam, " > ".join(path[:k]), lit, before) or {}
             if "refused" in got:
                 raise Failed(f"Right on {path[k - 1]!r} opened its question, not answered: {got['refused']}")
         if cam.read().kind != "submenu":
