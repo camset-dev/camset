@@ -31,7 +31,8 @@ reconnects and counts the records that differ. Some never take from a file (0x18
 they are listed by name so a person can tell them from a failed restore.
 
 An upload exits 0 once its restore checks out (no record differs but those no settings file sets back, KNOWN_LEFT and
-NOT_BY_FILE; with a restore by hand pending, once RESTORE_BY_HAND.json is removed), and 4 (EXIT_UNRESTORED,
+the registration records of each memory slot the camera's download shows filled; with a restore by hand pending, once
+RESTORE_BY_HAND.json is removed), and 4 (EXIT_UNRESTORED,
 kit/exit_status.py) when it does not: other records still differ, or the camera did not answer after its restart. A
 chain's upload step stops there (kit/tools/chain.py).
 """
@@ -46,7 +47,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import camset, definitions, paths, provenance  # noqa: E402
 from camkit.link import Link, LinkError  # noqa: E402
-from camkit.not_by_file import NOT_BY_FILE  # noqa: E402
+from camkit.not_by_file import filled_left_of  # noqa: E402
 from camkit.runs import RESTORE_BY_HAND, Run, clear_restore_by_hand, restore_pending_any  # noqa: E402
 from camkit.session import compared, verify_restore  # noqa: E402
 from exit_status import EXIT_UNRESTORED  # noqa: E402
@@ -128,23 +129,22 @@ def read_noted(*files) -> list:
 
 # The records a settings file never sets back, by model (the module docstring's list): Recall Custom's registration
 # working copy (0x18cb, its fourth slot: kit/proving/tables.py) and 0x1126, which only Camera Settings Reset and
-# Initialize change (data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json); and the memory slots' registration records,
-# camkit.not_by_file's NOT_BY_FILE in each of Memory 1-3. A restore by hand after an Initialize leaves them as it wrote
-# them
+# Initialize change (data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json); and the memory slots' registration records
+# (camkit.not_by_file: NOT_BY_FILE, and 0x0170 in the S&Q and Time-lapse sets), only for the slots the camera's own
+# download shows filled (filled_left_of: a slot that reads empty tolerates nothing; any of the twelve sections since
+# 2026-11-21, Memory 1-3 by key alone before). A restore by hand after an Initialize leaves them as it wrote them
 KNOWN_LEFT = {"ILCE-1M2": ("global:0x18cb", "global:0x1126")}
-MEMORY_SECTIONS = (1, 2, 3)
 
 
-def known_left(f: Path) -> frozenset:
-    """The keys of the records a settings file never sets back, for the model of the file `f` (KNOWN_LEFT and
-    NOT_BY_FILE); empty for a model none names, or a file that cannot be read."""
+def known_left(f: Path, camera: Path | None = None) -> frozenset:
+    """The keys of the records a settings file never sets back, for the model of the file `f`: KNOWN_LEFT, and the
+    registration records of each memory slot the camera's download `camera` shows filled (filled_left_of; none with no
+    download); empty for a model none names, or a file that cannot be read."""
     try:
         model = camset.read(f).model
     except Exception:
         return frozenset()
-    keys = set(KNOWN_LEFT.get(model, ()))
-    keys |= {f"set{n}:0x{rid:04x}" for n in MEMORY_SECTIONS for rid in NOT_BY_FILE.get(model, ())}
-    return frozenset(keys)
+    return frozenset(KNOWN_LEFT.get(model, ())) | (filled_left_of(camera) if camera is not None else frozenset())
 
 
 def pending_file(pending: dict, f: Path, root: Path) -> bool:
@@ -262,8 +262,9 @@ def main() -> int | None:
     # the records a file never sets back (KNOWN_LEFT), said by key and left out of the count, while a restore by hand
     # is pending: an Initialize or a registration leaves them as it wrote them, whatever the start file holds. Without
     # one they are counted and listed as before, and never make the restore one that did not check out
+    # (the memory slots' records only where the camera's own download after the restore shows the slot filled)
     known = known_left(f)
-    left = known if pending is not None else frozenset()
+    left_of = (lambda after: known_left(f, after)) if pending is not None else None
     with Link(run, **restoring) as link:
         # the camera compared with the file first (held_already), but with a restore by hand pending, which puts its
         # start file back and checks it as it always did, or --always
@@ -278,12 +279,16 @@ def main() -> int | None:
             print("--accept is for a restore by hand pending, and none is: it changed nothing", flush=True)
         return 0
     n = verify_restore(run, f, **({"link_class": functools.partial(Link, **restoring)} if restoring else {}),
-                       **({"expected": left} if left else {}))
+                       **({"expected": left_of} if left_of else {}))
     print("differences:", n, flush=True)
+    restored = glob.glob(str(run.dat / "*restored.DAT"))
+    got = max(restored, key=os.path.getmtime) if restored else None
+    if got is not None:
+        known = known_left(f, Path(got))        # with the slots the camera's own download shows filled
+    left = known if pending is not None else frozenset()
     differ = []
     if n:
         names = setting_names()
-        got = max(glob.glob(str(run.dat / "*restored.DAT")), key=os.path.getmtime)
         for c in camset.diff(*read_noted(f, got)):
             name = names.get(c.key) or names.get("set:" + c.key.split(":")[1]) or "?"
             print(f"   {c.key} {name}", flush=True)

@@ -1857,7 +1857,7 @@ def upload_harness(tmp_path, monkeypatch, verdict, root=None, differ=("global:0x
     monkeypatch.setattr(U, "setting_names", lambda: {})
     monkeypatch.setattr(U.camset, "diff", lambda *a: [SimpleNamespace(key=k) for k in differ])
     monkeypatch.setattr(U, "read_noted", lambda *f: [None, None])
-    monkeypatch.setattr(U, "known_left", lambda f: frozenset({"global:0x1126", "set1:0x023c"}))
+    monkeypatch.setattr(U, "known_left", lambda f, camera=None: frozenset({"global:0x1126", "set1:0x023c"}))
     monkeypatch.setattr(U.glob, "glob", lambda pattern: [str(start)])
     return U, start, other, links
 
@@ -1873,7 +1873,8 @@ def test_upload_check_puts_back_that_file_alone_and_clears_the_mark_once_it_chec
     U.main()
     assert links[0] is True and restore_pending(tmp_path)                    # 3 records differ: the mark stays
     assert links[1][1].keywords == {"pending_restore": True}                 # the reconnection may open too
-    assert links[1][2] == {"global:0x1126", "set1:0x023c"}                   # C: what no file sets back, left out
+    # C: what no file sets back, left out, decided on the camera's own download (a function of it: known_left's slots)
+    assert links[1][2](start) == {"global:0x1126", "set1:0x023c"}
     assert "global:0x1126" in capsys.readouterr().out
     verdict["n"] = 0
     U.main()
@@ -1925,10 +1926,15 @@ def test_upload_check_clears_the_mark_in_both_runs_folders(tmp_path, monkeypatch
 
 
 def test_the_records_no_file_sets_back_are_known_by_model(tmp_path, monkeypatch):
+    """KNOWN_LEFT by model; a memory slot's registration records only where the camera's download shows that slot
+    filled (camkit.not_by_file.filled_left_of: here slot 3 alone reads filled)."""
     from tools import upload_check as U
-    monkeypatch.setattr(U.camset, "read", lambda f: SimpleNamespace(model="ILCE-1M2"))
-    got = U.known_left(tmp_path / "x.DAT")
-    assert {"global:0x18cb", "global:0x1126", "set1:0x023c", "set3:0x11ad"} <= got
+    camera = SimpleNamespace(model="ILCE-1M2", get=lambda n, rid: SimpleNamespace(value=lambda: 4 if n == 3 else 2))
+    monkeypatch.setattr(U.camset, "read", lambda f: camera)
+    assert U.known_left(tmp_path / "x.DAT") == {"global:0x18cb", "global:0x1126"}
+    got = U.known_left(tmp_path / "x.DAT", tmp_path / "restored.DAT")
+    assert {"global:0x18cb", "global:0x1126", "set3:0x023c", "set3:0x11ad"} <= got
+    assert not any(k.startswith(("set1:", "set2:", "set4:")) for k in got), "a slot that reads empty tolerates nothing"
     monkeypatch.setattr(U.camset, "read", lambda f: SimpleNamespace(model="OTHER-1"))
     assert U.known_left(tmp_path / "x.DAT") == frozenset()
 

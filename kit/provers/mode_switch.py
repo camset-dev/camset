@@ -632,6 +632,14 @@ def switched_mode(to: str) -> str:
     return "Stills" if to in MODES else scan_mode(to)
 
 
+def restore_left(after) -> frozenset:
+    """--restore's `expected`, a function of each download `after` (camkit.session calls it): the registration records
+    of every memory slot that download shows filled (camkit.not_by_file.filled_left_of), none of a slot it shows empty;
+    none where the file cannot be read."""
+    from camkit.not_by_file import filled_left_of
+    return filled_left_of(after)
+
+
 def forget(kept: Path, shows: str, say) -> Path:
     """--forget --shows MODE: the kept record renamed mode_switch.forgotten-<date-time>.json beside it, nothing sent to
     the camera; runner.switch_waiting reads only the record's own name, so no run stops on it any more. `shows` is what
@@ -729,16 +737,21 @@ def main():
         info = read_json(kept)
         start = Path(info["start"])
         hdmi = eyes_from_config(run)
+        # a memory slot the switch's session registered (memreg_run in a Movie, S&Q or Time-lapse slot) stays filled:
+        # its registration records no settings file sets back are said by key and left out of the count, only where
+        # the camera's own download shows that slot filled (camkit.not_by_file.filled_left_of, the session's expected
+        # as a function of each download: restore_left), as upload_check leaves them out; every other record counts
+        left = restore_left
         try:
             # the start file goes back when anything differs from it, even if the shooting screen does not come; a
             # restore that raises exits EXIT_UNRESTORED (runner.restoring) and the kept record stays
             with restoring("mode_switch --restore"), Link(run) as link:
                 hdmi.attach(link)
-                ending = end_session(link, hdmi, start, "the restore", tag="restore")
+                ending = end_session(link, hdmi, start, "the restore", tag="restore", expected=left)
         finally:
             hdmi.close()
         # checked after an upload (a reconnect, 40 s); with nothing to upload, the end download already said 0 differ
-        if not restore_checked(run, ending, start):
+        if not restore_checked(run, ending, start, expected=left):
             sys.exit(EXIT_UNRESTORED)        # the kept record stays for another --restore (runner.EXIT_UNRESTORED)
         kept.unlink()
         return

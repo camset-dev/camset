@@ -982,7 +982,8 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
     and lists none (camkit.session.ended), for a prover that never prints a value the start file holds (afreg_run);
     keys=True with it lists their keys, never a value (a --network or --owner run: values_withheld).
     expected: records no settings file sets which the run is known to write (camkit.session.ended), said by key and
-    left out (memreg_run: a memory slot's registration marks). With keys (a --network or --owner run) an error's quoted
+    left out (memreg_run: a memory slot's registration marks), or a function of the download giving them
+    (camkit.not_by_file.filled_left_of: mode_switch --restore), passed on as it is (expected_arg). With keys (a --network or --owner run) an error's quoted
     texts are withheld in what it prints too (restoring), as that run's first error line has them."""
     if reach is None:
         from proving.nav import to_shooting as reach
@@ -1005,7 +1006,7 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
         # no wait first: camlink waits up to 5 s for the camera to allow a settings download (sdk_session.h,
         # downloadSettings: SaveOperationEnableStatus), and the session's end tries it four times (session.ended)
         return session.finish(link, start, tag=tag, **({} if show is None else {"show": show}),
-                              **({"expected": frozenset(expected)} if expected else {}), **({"keys": True} if keys else {}))
+                              **({"expected": expected_arg(expected)} if expected else {}), **({"keys": True} if keys else {}))
 
 
 OWNER_CLEARS_POLL = 5.0          # s between looks while the owner clears a screen no restore may go over
@@ -1157,6 +1158,12 @@ def changes_kept(changes, values: bool = True) -> list:
     """A run's changes as its results file keeps them: changes_of, or, where values are withheld (`values` False: a
     --network or --owner run whose decision does not log values), [{"key"}] alone, never a before or an after."""
     return changes_of(changes) if values else [{"key": c.key} for c in changes or ()]
+
+
+def expected_arg(expected):
+    """A session's `expected` as camkit.session takes it: a function of the download (camkit.not_by_file.filled_left_of)
+    as it is, keys as a frozenset."""
+    return expected if callable(expected) else frozenset(expected)
 
 
 def restore_checked(run, ending, start: Path, note: str = "THE START FILE DID NOT TAKE: check the camera",
@@ -1380,7 +1387,7 @@ def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: fl
         restored = ps.restored = restore_checked(run, ending, start, note, **({"eyes": eyes} if watch_restart else {}),
                                                  **({"show": 0} if show == 0 else {}),
                                                  **({"keys": True} if keys else {}),
-                                                 **({"expected": frozenset(expected)} if expected else {}))
+                                                 **({"expected": expected_arg(expected)} if expected else {}))
     finally:
         if close_eyes:
             eyes.close()

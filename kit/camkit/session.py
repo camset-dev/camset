@@ -327,7 +327,7 @@ def ended(link, start: Path, tag: str = "after", tries: int = 4, pause: float = 
         say("the camera kept refusing the settings download: the start file is not restored; put it back with "
             f"kit/tools/upload_check.py {start}")
         return Ending(None)
-    changes, known = _apart(compared(start, after, say), expected)
+    changes, known = _apart(compared(start, after, say), expected, after)
     say(f"{len(changes)} records differ from the start file {start.name}{_besides(known)}")
     for c in changes[:show]:
         say(f"   {c.key}: {c.before!r} -> {c.after!r}")
@@ -347,8 +347,12 @@ def said_keys(changes: list, say=_say) -> None:
         say(f"   records: {', '.join(c.key for c in changes[:KEYS_SAID])}{more}")
 
 
-def _apart(changes: list, expected) -> tuple:
-    """(the changes, the ones `expected` names): records no settings file sets, which the run is known to write."""
+def _apart(changes: list, expected, after=None) -> tuple:
+    """(the changes, the ones `expected` names): records no settings file sets, which the run is known to write.
+    `expected` may be a function of the download `after` giving those keys (camkit.not_by_file.filled_left_of: a memory
+    slot's records only where that download shows the slot filled); with no download it names none."""
+    if callable(expected):
+        expected = expected(after) if after is not None else frozenset()
     expected = frozenset(expected or ())
     return [c for c in changes if c.key not in expected], [c for c in changes if c.key in expected]
 
@@ -493,7 +497,8 @@ def _check_restore_tries(run, start, settle, pause, link_class, ready, say, show
             with link_class(run) as link:
                 log("restore_reconnected", tries=attempt, seconds=round(clock.monotonic() - t0, 3))
                 clock.sleep(ready)
-                ch, known = _apart(compared(start, link.download("restored"), say), expected)
+                restored = link.download("restored")
+                ch, known = _apart(compared(start, restored, say), expected, restored)
                 say(f"after the restore: {len(ch)} records differ from the start file{_besides(known)}")
                 for c in ch[:show]:
                     say(f"   {c.key}: {c.before!r} -> {c.after!r}")

@@ -171,8 +171,9 @@ def test_the_records_no_file_sets_back_come_from_a_library_and_no_import_error_i
     from tools import upload_check as U
     before = list(sys.path)
     monkeypatch.setitem(sys.modules, "memreg_run", None)          # the prover cannot be imported
-    got = U.known_left(SAMPLE)
-    assert {"global:0x18cb", "global:0x1126", "set1:0x023c", "set2:0x11ab", "set3:0x11ad"} <= got
+    got = U.known_left(SAMPLE, SAMPLE)
+    # the sample's slots read empty: no memory slot's record is left out (camkit.not_by_file.filled_left_of)
+    assert got == {"global:0x18cb", "global:0x1126"}
     assert sys.path == before
     import camkit.not_by_file
     monkeypatch.delitem(sys.modules, "memreg_run")
