@@ -238,6 +238,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **Shoot Mode's Intelligent Auto can be chosen on the owner's word, `--allow "Intelligent Auto"`:** `mode_switch.py`
+  and `shootmode_run.py` choose it only where its green icon is drawn in the look the camera's own frames show; any
+  other look, and every run without the word, is refused as before.
 - **A proof line's mode reads under any number of trailing parentheticals, and in the ledger a retraction naming a
   mode withdraws in that mode alone:** "S&Q mode (S&Q Motion) (dial set with the menu)" is S&Q, so those lines no
   longer count as Stills. The first open still withdraws a retracted row's opening in every mode.
