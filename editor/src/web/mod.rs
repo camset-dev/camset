@@ -298,7 +298,8 @@ impl App {
             }
             "activate" => {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
-                let Some(rule) = linked[0].inactive_when.clone() else { return WebReply::error(400, "This setting is not greyed out.") };
+                // `inactive_when`'s switch, else `inactive_if`'s (greyed in some modes, or with an HDMI device)
+                let Some(rule) = linked[0].inactive_when.clone().or_else(|| linked[0].inactive_if.as_ref().map(|r| r.rule.clone())) else { return WebReply::error(400, "This setting is not greyed out.") };
                 if !self.editable() {
                     return WebReply::error(409, &self.view_only_why(true));
                 }
@@ -1501,7 +1502,17 @@ impl App {
                     r.name, Self::describe_record(&self.schema, r.record, doc.value(target, (r.record, None))), r.name),
                 "unlock": if editable { Some(format!("Activate (set {} to {})", r.name, r.unlock_label)) } else { None },
             });
+        } else if let Some(line) = self.grey_lines(s, target).into_iter().find(|l| l.activate.is_some()) {
+            // greyed in some modes only, or with a device on the HDMI socket (`inactive_if`): the window's words
+            let (_, _, name, label) = line.activate.clone().unwrap_or_default();
+            row["inactive"] = json!({ "text": line.text, "unlock": editable.then(|| format!("Activate (set {name} to {label})")), "cable": line.cable });
         }
+        // as the menu shown stands for it (`grey`): dimmed, or as usual with the words beside it; and where the camera
+        // greys it whatever the file holds (`grey_in`), for the details
+        let grey = self.grey(s, target, now);
+        row["dim"] = json!(grey.dim);
+        row["grey_note"] = json!(grey.note);
+        row["grey_in"] = json!(self.grey_in_words(s));
         // the rest of the window's detail panel: help, where it applies and is kept, how it was mapped, what the camera
         // writes with it and refuses, the records it lives in, its raw value, My Menu, and file B's text
         row["help"] = json!(s.help);

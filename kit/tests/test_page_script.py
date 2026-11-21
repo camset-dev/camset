@@ -512,6 +512,31 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_a_rows_greys_are_drawn_as_the_window_draws_them(tmp_path):
+    """The greys the editor works out for the menu a row is shown in (`grey`): dimmed where they cover every mode the
+    menu stands for (`dim`), as usual with the words beside the row where they cover some (`grey_note`); the detail's
+    words for a rule of some modes or an HDMI device with its Activate and that the cable is the owner's
+    (`inactive.cable`), and where the camera greys it whatever the file holds beside "Applies in" (`grey_in`). An older
+    answer with no `dim` dims a greyed row as before."""
+    got = run(tmp_path, LAYOUT + """
+const some = drawRow(row("k:tc", "Time Code Run", { dim: false, grey_note: "grey in S&Q", grey_in: "The camera greys this out in S&Q.", modes: "movie" }));
+const all = drawRow(row("k:au", "Audio Recording", { dim: true, grey_note: null }));
+const hdmi = drawRow(row("k:th", "Touch Func. in Shooting", { dim: false, grey_note: "greyed with an HDMI device connected",
+  inactive: { text: "Greyed out on the camera while HDMI Info. Display = On and a device is connected to the HDMI socket.", unlock: "Activate (set HDMI Info. Display to Off)", cable: "Unplugging the HDMI device is yours to do: Activate changes the setting only." } }));
+const older = drawRow(row("k:old", "Old", { inactive: { text: "Greyed out on the camera while X = Y.", unlock: null } }));
+console.log(JSON.stringify({
+  some: [some.classList.contains("inactive"), some.querySelector("[data-grey]").textContent, some.querySelector("[data-grey-in]") && some.querySelector("[data-grey-in]").textContent],
+  all: all.classList.contains("inactive"),
+  hdmi: [hdmi.classList.contains("inactive"), hdmi.querySelector("[data-grey]").textContent, hdmi.querySelector(".under").textContent.includes("yours to do"), !!hdmi.querySelector(".under button")],
+  older: older.classList.contains("inactive"),
+}));
+""")
+    assert got["some"] == [False, "grey in S&Q", "The camera greys this out in S&Q."]
+    assert got["all"] is True and got["older"] is True
+    assert got["hdmi"] == [False, "greyed with an HDMI device connected", True, True]
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an

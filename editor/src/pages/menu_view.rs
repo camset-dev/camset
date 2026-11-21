@@ -524,9 +524,10 @@ impl App {
                             let s = &row[0];
                             let selected = Some(index) == current;
                             let edited = row.iter().any(|l| self.changed(l));
-                            let inactive = self.doc.as_ref().is_some_and(|d| {
-                                s.inactive_when.as_ref().is_some_and(|r| r.inactive(d.value(self.target, (r.record, None))))
-                            });
+                            // greyed on the camera as the menu shown stands for it (`grey`): dimmed, or as usual with
+                            // the words beside it
+                            let grey = self.grey(s, self.target, self.menu_shown().as_deref());
+                            let inactive = grey.dim;
                             let mut name = RichText::new(self.setting_title(s));
                             let mut value = RichText::new(if edited { format!("{EDIT_MARK} {}", self.row_value(s)) } else { self.row_value(s) });
                             if foreign { value = value.weak(); }
@@ -538,12 +539,16 @@ impl App {
                                 name = name.weak();
                                 value = value.weak();
                             }
-                            let r1 = if depth == 0 {
+                            let r1 = if depth == 0 && grey.note.is_none() {
                                 ui.selectable_label(selected, name)
                             } else {
                                 ui.horizontal(|ui| {
                                     ui.add_space(ROW_INDENT * depth as f32);
-                                    ui.selectable_label(selected, name)
+                                    let r = ui.selectable_label(selected, name);
+                                    if let Some(note) = &grey.note {
+                                        ui.label(RichText::new(note).small().color(tone::weak(ui.visuals())));
+                                    }
+                                    r
                                 }).inner
                             };
                             // where it sits on the camera ("On the camera: Pre-Capture Settings > Pre-Captr. Start Trigger")
@@ -696,10 +701,19 @@ impl App {
             ui.strong("Where"); ui.strong("Setting"); ui.strong("Value"); ui.end_row();
             for s in &hits {
                 ui.label(RichText::new(self.where_shown(s)).color(tab_ink(ui.visuals(), &self.schema.camera, &s.tab)));
+                // greyed on the camera as the menu it opens in stands for it (`grey`), as the page's search says
+                let grey = self.grey(s, self.target, self.jump_place(s, self.target, self.menu_shown().as_deref()).0.as_deref());
                 let r = ui.link(&s.name).on_hover_text(if has_mymenu { format!("Click to open it in its menu; right-click to add it to {}", self.schema.camera.text.my_menu_name()) } else { "Click to open it in its menu".to_string() });
                 if r.clicked() { go = Some(s.clone()); }
                 self.mymenu_context(&r, s, &mut my_actions);
-                let v = ui.label(self.row_value(s));
+                let v = ui.horizontal(|ui| {
+                    let value = RichText::new(self.row_value(s));
+                    let v = ui.label(if grey.dim { value.weak() } else { value });
+                    if let Some(note) = &grey.note {
+                        ui.label(RichText::new(note).small().color(tone::weak(ui.visuals())));
+                    }
+                    v
+                }).inner;
                 if let Some(why) = self.doc.as_ref().and_then(|d| self.unnamed_why(s, d.value(self.target, s.slot()))) { v.on_hover_text(why); }
                 ui.end_row();
             }
