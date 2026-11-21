@@ -720,14 +720,16 @@ def refused_by_notice(cam, say, step: str):
     return watch
 
 
-def set_setup_row(cam, cycle, model, path: list, option: str):
-    """A setup row put on its option (mode_switch.set_row) with refused_by_notice watching; a failure said without the
-    list's lit option (scrub)."""
+def set_setup_row(cam, cycle, model, path: list, option: str, mode: str = "Stills"):
+    """A setup row put on its option (mode_switch.set_row, on the menu of `mode`) with refused_by_notice watching; a
+    failure said without the list's lit option (scrub)."""
     from mode_switch import set_row
     from prove_run import Failed
     step = f"{' > '.join(path)} = {option}"
     try:
-        set_row(cam, cycle, model, path, option, refused_by_notice(cam, lambda m: print(m, flush=True), step))
+        say = refused_by_notice(cam, lambda m: print(m, flush=True), step)
+        # set_row's own default is Stills: the mode is passed only where it is another menu's
+        set_row(cam, cycle, model, path, option, say, **({} if mode == "Stills" else {"mode": mode}))
     except Failed as e:
         raise Failed(scrub(str(e))) from None
 

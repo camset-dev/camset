@@ -556,7 +556,7 @@ def drive(monkeypatch, tmp_path):
         as_panel = cam.panel if as_panel is None else as_panel
         if as_panel and auto_set and not any(str(x).startswith(f"{PATH[0]} > ") for x in args):
             args = ["--set", f"{PATH[0]} > Setup Row={PANEL_WORD}", *args]
-            monkeypatch.setattr(S, "setup", lambda c, link, hdmi, cycle, model, start, sets, panels=frozenset(): start)
+            monkeypatch.setattr(S, "setup", lambda c, link, hdmi, cycle, model, start, sets, panels=frozenset(), **kw: start)
         real_open = footer is not None or cam.panel or as_panel
         footer = footer or (lambda p, place: CANCEL_OK)
         sees = sees or (lambda p, place: None)
@@ -1525,3 +1525,44 @@ def test_the_setup_rows_label_is_the_definitions_own():
     assert S.panel_set_refused([("Made-up Panel", False)], [], index) == "", "a plain scale needs no set"
     why = S.panel_set_refused([("Made-up Panel", True)], [(["Other Panel", "Setup"], "Manual")], index)
     assert why.endswith('add --set "Made-up Panel > Made-up Setup=Manual"')
+
+
+def test_scale_run_works_in_the_mode_it_is_given(monkeypatch):
+    """--in (runner.add_in_argument), as memreg_run took it on 2026-11-21: the page scan goes with that mode (run_scan:
+    runner.in_mode, so a kept switch to it does not refuse the run and a named scan must be of it), Stills by default."""
+    seen = []
+
+    def load_scan(scan):
+        seen.append(scan.mode)
+        raise RuntimeError("stop here: the scan is all this test needs")
+    monkeypatch.setattr(S, "load_scan", load_scan)
+    for argv, mode in ((["--in", "S&Q", "--scan", "kit2_page_scan_sq_osd5"], "S&Q"),
+                       (["--in", "Movie", "--scan", "kit2_page_scan_movie_osd5"], "Movie"),
+                       (["--scan", "kit2_page_scan_osd3"], "Stills")):
+        monkeypatch.setattr(sys, "argv", ["scale_run.py", "--row", "Finder Color Temp.", *argv])
+        with pytest.raises(RuntimeError, match="stop here"):
+            S.main()
+        assert seen[-1] == mode
+
+
+def test_the_setup_rows_are_set_on_the_menu_of_the_mode_given(monkeypatch):
+    """setup puts each --set row on its option through afreg_run.set_setup_row with the run's mode, so mode_switch's
+    set_row takes the row's labels from that mode's map (Select Finder/Monitor in S&Q, 2026-11-21)."""
+    import afreg_run
+    import mode_switch
+    got = []
+    monkeypatch.setattr(afreg_run, "set_setup_row", lambda cam, cycle, model, path, option, mode="Stills":
+                        got.append((tuple(path), option, mode)))
+    monkeypatch.setattr(mode_switch, "open_menu", lambda cam: None)
+    for name, value in (("close_screen", lambda cam, link: None), ("to_shooting", lambda link, hdmi, why: None),
+                        ("definition_index", lambda: {}), ("wait_lock", lambda *a, **k: None),
+                        ("camset", SimpleNamespace(read=lambda p: {}, diff=lambda a, b: [])),
+                        ("time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0))):
+        monkeypatch.setattr(S, name, value)
+    link = SimpleNamespace(download=lambda tag: Path("after-set.DAT"))
+    sets = [(["Select Finder/Monitor"], "VF(Manual)")]
+    S.setup(SimpleNamespace(), link, None, None, None, Path("start.DAT"), sets, frozenset(), mode="S&Q")
+    assert got == [(("Select Finder/Monitor",), "VF(Manual)", "S&Q")]
+    got.clear()
+    S.setup(SimpleNamespace(), link, None, None, None, Path("start.DAT"), sets)
+    assert got[-1][2] == "Stills"
