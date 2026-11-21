@@ -175,8 +175,9 @@ camera holds it from the factory and no list chooses it back, or a reason keeps 
   modes. A menu's view dims a row only where the rule holds in every mode the view stands for: the file's own mode when
   it is one of the menu's, else all of the menu's modes. Otherwise the view says the condition beside the row, and it
   never dims on a cable it cannot see.
-- **Where they come from:** all three come from `RECORD_FIXES` alone. `"inactive_when": null` takes a rule found wrong
-  out, and a `grey_in` or `inactive_if` the tables stop giving leaves the definition.
+- **Where they come from:** `grey_in` and `inactive_if` come from `RECORD_FIXES` alone; an older `inactive_when` may
+  have no entry. `"inactive_when": null` takes a rule found wrong out, and a `grey_in` or `inactive_if` the tables stop
+  giving leaves the definition.
 - **What the writer refuses:**
   - any rule on the live-mode record;
   - a mode the row's menus do not serve;
