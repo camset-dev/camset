@@ -65,11 +65,12 @@ from crawl_run import find_position, go_to  # noqa: E402
 from prove_run import Failed, bar_text, enter_any, info_notice_ok, option_key, to_shooting  # noqa: E402
 from proving.tables import (DIAL_ROW, cell_value, dial_cell, dial_option, dial_table, on_dial_cell,  # noqa: E402
                             to_dial_cell)
-from runner import (EXIT_UNRESTORED, LATEST_SCAN, SHOWN_EXPOSURES, SHOWN_MODES, SWITCH_KEPT, add_in_argument,  # noqa: E402
+from runner import (EXIT_REFUSED, EXIT_UNRESTORED, LATEST_SCAN, SHOWN_EXPOSURES, SHOWN_MODES, SWITCH_KEPT, add_in_argument,  # noqa: E402
                     add_info_ok_argument, close_screen, end_session, forget_refused, in_mode, load_scan,
                     menu_from_shooting, notes_named_or_exit, read_json, restore_checked, restoring, scan_arg, scan_mode,
                     on_main, scan_position, session_start, shown_mode, switch_advice, switch_left, switch_waiting, write_json)
 from shootmode_run import FAMILIES, mode_name  # noqa: E402
+from camkit import slow_states  # noqa: E402
 
 BY_MENU, BY_DIAL = "Set with Menu", "Set with Dial"
 SHOOTING_DIAL = "Shooting Mode Dial"           # the dial whose cell the table path puts on Set with Menu
@@ -631,6 +632,33 @@ def set_row(cam, cycle, model, path: list, option: str, say, mode: str = "Stills
             say(f"   information after the choice, {how} ({info['frame']}; its words are in the run's events.jsonl)")
 
 
+def target_mode(doc: dict, to: str) -> str | None:
+    """The live mode's name (the camera file's live_mode, in the definition) a switch to `to` lands in: a stills
+    exposure mode (MODES) Stills', a family its own, by its place in the Shoot Mode carousel's Down order
+    (shootmode_run.FAMILIES), which is its live-mode code on the a1 II (0 Stills, 1 Movie, 2 S&Q, 3 Time-lapse); None
+    where the definition names none."""
+    family = 0 if to in MODES else FAMILIES.index(to) if to in FAMILIES else None
+    modes = ((doc.get("camera") or {}).get("live_mode") or {}).get("modes") or {}
+    return modes.get(str(family)) if family is not None else None
+
+
+def switch_refused(doc: dict, start, to: str) -> str:
+    """Why the switch to `to` is not made from the start file `start`: it would land the camera in a state where it acts
+    on one press twice (camkit.slow_states: the S&Q family with S&Q Frame Rate at 1fps on the a1 II), "" otherwise."""
+    mode = target_mode(doc, to)
+    return slow_states.refusal(doc, start, mode=mode, doing=f"mode_switch --to {to!r}") if mode else ""
+
+
+def set_refused(doc: dict, sets) -> str:
+    """Why a --set item is never made: it would set such a state (camkit.slow_states.sets_state), "" otherwise."""
+    for item in sets or ():
+        path, sep, option = str(item).rpartition("=")
+        why = slow_states.sets_state(doc, [x.strip() for x in path.split(" > ")], option) if sep else ""
+        if why:
+            return why
+    return ""
+
+
 def switched_mode(to: str) -> str:
     """The shooting mode whose menu the camera shows after a switch to `to` (runner.SCAN_MODES): a stills exposure
     mode (MODES: P, A, S, M, Auto) is Stills, a family its own (S&Q Motion and Time-lapse: S&Q)."""
@@ -775,6 +803,9 @@ def main():
                 scanned.append(load_scan(in_mode(a.scan, now)))
             return {r.get("label") for p in scanned[0][1].values() for r in p.get("rows") or [] if r.get("label")}
         # a box no two-box row here has: stopped before the link opens
+        why = set_refused(definition(run), a.set)
+        if why:
+            sys.exit(why)
         plan = set_plan(a.set, now, definition(run), box_proofs(run), shown)
         cycle, model = scanned[0] if scanned else load_scan(in_mode(a.scan, now))
         check_readers()     # no reader listed: stop before the link opens, nothing pressed
@@ -864,6 +895,10 @@ def main():
             # the session's start (runner.session_start): the shooting screen, the start download, the menu's lock
             # waited out; the session ends in the switch kept, or with the start file uploaded, its own
             start = session_start(link, hdmi, reach=to_shooting, say=False)
+            why = switch_refused(definition(run), start, a.to)
+            if why:
+                print(why, flush=True)
+                raise SystemExit(EXIT_REFUSED)          # nothing pressed after the start download; not an Exception
             cam = LiveCamera(link, hdmi, run, may_open=MAY_OPEN)
             try:
                 open_menu(cam)

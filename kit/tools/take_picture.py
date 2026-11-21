@@ -34,7 +34,7 @@ from camkit import camset, coverage, definitions, first_open, paths, safety, scr
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, LinkError  # noqa: E402
 from camkit.runs import Run, mark_restore_by_hand  # noqa: E402
-from runner import (EXIT_REFUSED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, cards_statement_refused,  # noqa: E402
+from runner import (EXIT_REFUSED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, cards_statement_refused, slow_or_exit,  # noqa: E402
                     read_json, restore_checked, statements_scope_or_exit)
 
 STILLS = ("stills", "still")            # a live_mode mode's name the release goes in (compared as safety.plain)
@@ -177,6 +177,7 @@ def main(argv=None) -> None:
                 time.sleep(1.0)
             session.wait_for(eyes, ("shooting",), "the start file's download", link=link)
             before = link.download("before")
+            slow_or_exit(before, "take_picture.py")     # a state where the camera acts on one press twice: no press
             try:
                 stopped = picture(link, eyes, camera, live, defn, scope, scope_file, before)
             except ShutterHeld as e:

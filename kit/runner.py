@@ -1305,11 +1305,25 @@ def shows_main(cam) -> bool:
         return False
 
 
+def slow_or_exit(start, doing: str = "", mode: str | None = None) -> None:
+    """Exit EXIT_REFUSED, nothing pressed, where the settings file `start` (a session's start download) holds a state in
+    which this camera has been seen to act on one button press twice (camkit.slow_states, named by the definition: the
+    a1 II's S&Q family with S&Q Frame Rate at 1fps, 2026-11-21), saying in plain words what the kit saw, why it will not
+    press and what to do; nothing where it holds none, the definition names none, or the file cannot be read. `mode`:
+    the shooting mode a switch would land in (kit/provers/mode_switch.py --to)."""
+    from camkit import slow_states
+    why = slow_states.refusal(definition(), start, mode=mode, doing=doing or Path(sys.argv[0]).name or "This run")
+    if why:
+        print(why, flush=True)
+        raise SystemExit(EXIT_REFUSED)
+
+
 def session_start(link, eyes, why: str = "the start download", tag: str = "before", reach=None, say: bool = True,
                   settle: float = SETTLE_S, prepare=None, lock=None, clock=None) -> Path:
     """A session's start, the one place a runner downloads its start file (decision 15), its link open and its eyes
     attached: the shooting screen (`reach(link, eyes, why)`: proving.nav.to_shooting by default, MENU until it shows),
-    the start download (`tag`), its name said (`say`), `prepare(start)` (what a runner does with the start file before
+    the start download (`tag`), judged (slow_or_exit: a state where the camera acts on one press twice ends the run
+    there, EXIT_REFUSED, nothing pressed), its name said (`say`), `prepare(start)` (what a runner does with the start file before
     anything is pressed, while the lock runs from the download's reply: a check, whatever it raises ending the start
     there with no wait; kit/crawl_run.py's own line, its ledger's gate and its first opens), then the menu's lock after
     the download waited out from the download's reply: camkit.session.wait_lock (watched with HDMI eyes in a mode
@@ -1322,6 +1336,7 @@ def session_start(link, eyes, why: str = "the start download", tag: str = "befor
     reach(link, eyes, why)
     start = link.download(tag)
     since = clock.monotonic()
+    slow_or_exit(start)         # a state where the camera acts on one press twice: nothing pressed from here
     if say:
         print(f"start file: {start.name}", flush=True)
     if prepare is not None:

@@ -42,7 +42,7 @@ from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import MAIN_RUN, Run, mark_proof_run  # noqa: E402
 from mode_switch import find, open_menu  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_in_argument, close_for_restore, end_session, in_mode,  # noqa: E402
-                    load_scan, proofs_file, restore_checked, scan_arg)
+                    load_scan, proofs_file, restore_checked, scan_arg, slow_or_exit)
 from prove_run import (Failed, after_download, bar_text, check_box_label, check_state,  # noqa: E402
                        finish_attempt, focused_button, is_box, move_to, option_key, to_shooting, vlm_option)
 from proving.base import wait_lock  # noqa: E402
@@ -430,6 +430,7 @@ def main():
                     hdmi.attach(link)
                     to_shooting(link, hdmi, "the start download")
                     start = download(link, "before", say)
+                    slow_or_exit(start, "filter_run.py")   # a state where the camera acts on one press twice: no press
                     wait_lock(time.monotonic(), hdmi, clock=time)   # the menu's lock after it (camkit.session.wait_lock)
                     cam = LiveCamera(link, hdmi, run)
                     try:
