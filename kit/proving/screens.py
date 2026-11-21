@@ -632,7 +632,10 @@ def lit_letter(cam, prev) -> str:
     label OCR read at the bar's place on the frame before (`prev`: the cursor moved one row), on the same page (every
     row both frames read outside the two bars reads alike, at least LIT_ROWS_ALIKE of them; a row one frame did not read
     is no difference), AND the second reader's label for the lit bar (camkit.live.reader_label: the "second" role alone,
-    never the third readers). Where OCR reads the bar, or either sign is missing, or they differ: ""."""
+    never the third readers). Where OCR reads the bar, or either sign is missing, or they differ: "". Each outcome once
+    it has a frame before and a lit bar OCR reads nothing on is one line in the run's log ("lit_letter": the frames, the
+    label or why none, what OCR read at the place before and what the reader said; every text withheld on a run that
+    asks local readers only, camkit.vlm.LOCAL_ONLY, where a bar can carry a value)."""
     from camkit import live as camlive
     s = cam.read()
     bar = getattr(s, "bar", None)
@@ -643,20 +646,41 @@ def lit_letter(cam, prev) -> str:
         before = screen.read(prev)
         now_lines = ocr.read([cam.frame.path])[cam.frame.path]
         before_lines = ocr.read([prev.path])[prev.path]
-    except Exception:
-        return ""
+    except Exception as e:
+        return _lit_said(cam, prev, why=f"a frame could not be read ({type(e).__name__})")
     if getattr(before, "kind", None) != s.kind:
-        return ""
+        return _lit_said(cam, prev, why=f"the frame before is a {getattr(before, 'kind', None)!r} screen, not "
+                                        f"{s.kind!r}")
     bands = [bar] + ([before.bar] if getattr(before, "bar", None) else [])
     now_rows, before_rows = _rows_outside(now_lines, x0, x1, bands), _rows_outside(before_lines, x0, x1, bands)
     both = set(now_rows) & set(before_rows)
-    if len(both) < LIT_ROWS_ALIKE or any(now_rows[y] != before_rows[y] for y in both):
-        return ""
+    alike = sum(now_rows[y] == before_rows[y] for y in both)
+    if len(both) < LIT_ROWS_ALIKE or alike != len(both):
+        return _lit_said(cam, prev, why=f"not the same page: {alike} of the {len(both)} rows both frames read alike "
+                                        f"(at least {LIT_ROWS_ALIKE}, all of them)")
     was = ocr.text_in(before_lines, (x0, bar[0], x1, bar[1])).strip(" •")
-    said, _why = camlive.reader_label(cam.frame.path)
-    if not was or not said or safety.plain(was) != safety.plain(said):
-        return ""
-    return was
+    if not was:
+        return _lit_said(cam, prev, why="OCR read nothing at the bar's place on the frame before", alike=alike)
+    said, why = camlive.reader_label(cam.frame.path)
+    if not said:
+        return _lit_said(cam, prev, why=f"the second reader gave no label ({why})", ocr=was, alike=alike)
+    if safety.plain(was) != safety.plain(said):
+        return _lit_said(cam, prev, why="the two signs differ", ocr=was, reader=said, alike=alike)
+    return _lit_said(cam, prev, label=was, ocr=was, reader=said, alike=alike)
+
+
+def _lit_said(cam, prev, label: str = "", **fields) -> str:
+    """lit_letter's outcome, logged once in the run's log where the camera has one ("lit_letter"); returns the label
+    ("" for none). On a run that asks local readers only (camkit.vlm.LOCAL_ONLY) every text read is withheld."""
+    from camkit import vlm
+    log = getattr(getattr(cam, "run", None), "log", None)
+    if callable(log):
+        texts = {k: v for k, v in (("label", label), ("ocr", fields.pop("ocr", None)),
+                                   ("reader", fields.pop("reader", None))) if v}
+        if vlm.LOCAL_ONLY:
+            texts = {k: "(withheld)" for k in texts}
+        log("lit_letter", frame=cam.frame.path.name, before=prev.path.name, **texts, **fields)
+    return label
 
 
 def at_label(cam, kind, label, prev=None) -> bool:

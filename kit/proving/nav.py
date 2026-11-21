@@ -42,14 +42,19 @@ def find_row(cam, label, at=None) -> bool:
     picture and the cursor's row, no OCR), the label read there once; a place that does not read as the label
     (a submenu that scrolls keeps its page and cursor row), or never comes, is walked by label from where the
     cursor is. A reading a row cost 0.22 s (the speed review of 2026-11-18). Every Down is read and judged as
-    ever, and the Right after it checks the live bar against the never-open list."""
+    ever, and the Right after it checks the live bar against the never-open list. Every reading of a row is given the
+    frame before the Down that reached it (at_label's prev: a lit letter OCR drops is labelled only so, lit_letter),
+    at the known place too, and the row the walk began on is read again with its frame before when the lap comes back
+    to it (pp_colordepth_sqc, 2026-11-21: the proof's visit came by M's place, read it with no frame before, and the
+    walk that followed began on M and stopped on coming back, never reading it so: kit2_pass2 304672, 304678)."""
     if at is not None and cam.read().kind == "submenu":
-        first = cam.read()
+        first, before = cam.read(), None
         for _ in range(20):
             if same_place(place(cam), at):
-                if at_label(cam, "submenu", label):
+                if at_label(cam, "submenu", label, prev=before):
                     return True
                 break
+            before = getattr(cam, "frame", None)
             cam.press("down")
             if same_state(cam.read(), first):
                 break
@@ -62,6 +67,9 @@ def find_row(cam, label, at=None) -> bool:
         prev = getattr(cam, "frame", None)
         cam.press("down")
         if same_state(cam.read(), first):
+            # back on the row the walk began on, read the first time with no frame before: read again with one
+            if prev is not None and at_label(cam, "submenu", label, prev=prev):
+                return True
             break
     best = closest_row(texts, glued(label))
     if best is None:
