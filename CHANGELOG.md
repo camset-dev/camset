@@ -229,6 +229,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   "SRegist. Face Priority On" and "In Face Priority in Multi Mr On" no longer stop a run that went to that row. Another
   row whose label ends alike or begins inside the icon letters ("S AF Face Priority On"), or words that are no value of
   the row, are refused.
+- **`afreg_run.py --in-order` registers the areas in the order given:** "Custom 2,Custom 1" moves the Custom area copies
+  both ways, so Custom 1 is seen written. Without it the plan keeps the area record's order, as before.
 - **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a
   grey option where it may, closes the list with MENU and stops, as it does where whether an option is grey cannot be told.
 - **`crawl_run.py --leave PATH` leaves a named row unopened, and every row under it:** its outcome says so, so the
