@@ -518,14 +518,12 @@ def switched_mode(to: str) -> str:
     return "Stills" if to in MODES else scan_mode(to)
 
 
-def restore_left(start: Path) -> frozenset:
-    """The records --restore leaves out of its count for the start file `start`: the memory slots' registration records
-    of its model (camkit.not_by_file.memory_left); none where the file cannot be read."""
-    from camkit.not_by_file import memory_left
-    try:
-        return memory_left(camset.read(start).model)
-    except Exception:
-        return frozenset()
+def restore_left(after) -> frozenset:
+    """--restore's `expected`, a function of each download `after` (camkit.session calls it): the registration records
+    of every memory slot that download shows filled (camkit.not_by_file.filled_left_of), none of a slot it shows empty;
+    none where the file cannot be read."""
+    from camkit.not_by_file import filled_left_of
+    return filled_left_of(after)
 
 
 def forget(kept: Path, shows: str, say) -> Path:
@@ -624,9 +622,10 @@ def main():
         start = Path(info["start"])
         hdmi = eyes_from_config(run)
         # a memory slot the switch's session registered (memreg_run in a Movie, S&Q or Time-lapse slot) stays filled:
-        # its registration records no settings file sets back are said by key and left out of the count
-        # (camkit.not_by_file.memory_left), as upload_check leaves them out; every other record counts
-        left = restore_left(start)
+        # its registration records no settings file sets back are said by key and left out of the count, only where
+        # the camera's own download shows that slot filled (camkit.not_by_file.filled_left_of, the session's expected
+        # as a function of each download: restore_left), as upload_check leaves them out; every other record counts
+        left = restore_left
         try:
             # the start file goes back when anything differs from it, even if the shooting screen does not come; a
             # restore that raises exits EXIT_UNRESTORED (runner.restoring) and the kept record stays

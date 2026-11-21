@@ -802,21 +802,90 @@ def test_look_tabs_lights_tab_2_and_3_with_right_and_leaves_with_menu_no_enter(M
     assert stuck.pressed == ["enter", "right", "menu"] and [x["tab"] for x in looked] == ["1", "1"]
 
 
-def test_every_memory_section_s_registration_records_are_left_out_of_an_upload_s_count():
-    """camkit.not_by_file.memory_left: NOT_BY_FILE's three records in each of the body's twelve memory sections, which
-    upload_check's known_left and mode_switch --restore leave out of a restore's count (a Movie, S&Q or Time-lapse
-    slot filled once stays filled, and every later upload of an older file would otherwise stop a chain)."""
+def filled_file(tmp_path, name: str, sections: list, also: list = ()) -> Path:
+    """The sample (every slot empty: set n:0x023c = 2) with the slots of `sections` marked filled (4), and the records
+    `also` names ((section, id)) moved by one, as changed_file moves them (made-up values)."""
+    cs = camset.read(SAMPLE)
+    out = {(n, 0x023c): bytes([4]) + cs.get(n, 0x023c).raw[1:] for n in sections}
+    for section, rid in also:
+        r = cs.get(section, rid)
+        out[(section, rid)] = bytes([(r.raw[0] + 1) % 256]) + r.raw[1:]
+    p = tmp_path / name
+    p.write_bytes(camset.with_values(cs, out))
+    return p
+
+
+def test_every_memory_section_s_registration_records_and_s_q_and_time_lapse_s_fourth(tmp_path):
+    """camkit.not_by_file.memory_left: NOT_BY_FILE's three records in each of the body's twelve memory sections, and in
+    the S&Q and Time-lapse sets (7 to 12) 0x0170 too (the 2026-10-30 log: "0x023c, 0x11ab, 0x11ad and, in S&Q and
+    Time-lapse sets, 0x0170"; kit2_memmirror 00316-00325 wrote set7:0x0170, 00427-00436 set10:0x0170). filled_left:
+    those of a slot only where the download shows it filled (set n:0x023c = 4); a slot that reads empty tolerates
+    nothing. memreg_run's own restore stays strict: its section's three alone."""
     from camkit import not_by_file
-    from tools import upload_check as U
     left = not_by_file.memory_left("ILCE-1M2")
-    assert len(left) == 36 and {"set1:0x023c", "set4:0x023c", "set7:0x11ab", "set12:0x11ad"} <= left
+    assert len(left) == 12 * 3 + 6 and {"set1:0x023c", "set4:0x023c", "set7:0x11ab", "set12:0x11ad"} <= left
+    assert {f"set{n}:0x0170" for n in range(7, 13)} <= left and not {f"set{n}:0x0170" for n in range(1, 7)} & left
     assert not_by_file.memory_left("OTHER-1") == frozenset()
-    assert left <= U.known_left(SAMPLE)
+    assert not_by_file.memory_left("ILCE-1M2", (7,)) == {"set7:0x023c", "set7:0x11ab", "set7:0x11ad", "set7:0x0170"}
+    assert not_by_file.filled_left_of(SAMPLE) == frozenset(), "the sample's twelve slots read empty"
+    both = filled_file(tmp_path, "both.DAT", [1, 7])
+    assert not_by_file.filled_left_of(both) == not_by_file.memory_left("ILCE-1M2", (1, 7))
+    assert not_by_file.filled_left_of(tmp_path / "missing.DAT") == frozenset()
+    assert module("memreg_run", "provers").expected_keys("ILCE-1M2", 7) == {"set7:0x023c", "set7:0x11ab", "set7:0x11ad"}
+
+
+def test_upload_check_tolerates_a_slot_s_records_only_where_the_camera_shows_it_filled(tmp_path):
+    from tools import upload_check as U
+    assert U.known_left(SAMPLE) == {"global:0x18cb", "global:0x1126"}, "no camera download: no slot's records"
+    filled = filled_file(tmp_path, "filled.DAT", [4])
+    got = U.known_left(SAMPLE, filled)
+    assert {"global:0x18cb", "global:0x1126", "set4:0x023c", "set4:0x11ab", "set4:0x11ad"} <= got
+    assert not any(k.startswith(("set1:", "set7:")) for k in got)
+
+
+def test_the_restore_check_tolerates_a_filled_slot_s_records_and_nothing_of_an_empty_one(tmp_path, capsys):
+    """camkit.session with expected a function of the download (filled_left_of): the restored download shows set 1
+    filled and its registration records differ: left out of the count; the same records differing with the slot read
+    empty (its mark moved to 3, not 4): every one counted. finish likewise, uploading only for what counts."""
+    from camkit import not_by_file
+    filled = filled_file(tmp_path, "filled.DAT", [1], also=[(1, 0x11ab)])
+    empty = changed_file(tmp_path, "empty.DAT", [(1, 0x023c), (1, 0x11ab)])
+
+    def linked(after):
+        class Linked:
+            def __init__(self, run):
+                pass
+
+            def __enter__(self):
+                return FakeLink(after)
+
+            def __exit__(self, *exc):
+                return False
+        return Linked
+    kw = {"settle": 0, "ready": 0, "show": 0}
+    assert session.verify_restore(None, SAMPLE, expected=not_by_file.filled_left_of, link_class=linked(filled), **kw) == 0
+    assert "besides 2 no settings file sets" in capsys.readouterr().out
+    assert session.verify_restore(None, SAMPLE, expected=not_by_file.filled_left_of, link_class=linked(empty), **kw) == 2
+    lk = FakeLink(filled)
+    assert session.finish(lk, SAMPLE, expected=not_by_file.filled_left_of, show=0).changes == [] and lk.uploaded == []
+    lk = FakeLink(empty)
+    ending = session.finish(lk, SAMPLE, expected=not_by_file.filled_left_of, show=0)
+    assert [c.key for c in ending.changes] == ["set1:0x023c", "set1:0x11ab"] and lk.uploaded == [SAMPLE]
+
+
+def test_a_prover_session_s_expected_function_reaches_the_session_whole():
+    """runner.end_session and prover_session's restore check pass a function of the download through as it is (a set
+    as a frozenset, as before: expected_arg)."""
+    import runner
+    from camkit import not_by_file
+    assert runner.expected_arg(not_by_file.filled_left_of) is not_by_file.filled_left_of
+    assert runner.expected_arg({"set1:0x023c"}) == frozenset({"set1:0x023c"})
 
 
 def test_mode_switch_restore_leaves_the_memory_records_out_of_its_count(monkeypatch, tmp_path):
-    """mode_switch --restore: its end compare and its restore check take memory_left's keys as expected (said by key,
-    not counted), so a slot the kept switch's session registered does not fail the switch's restore."""
+    """mode_switch --restore: its end compare and its restore check take not_by_file.filled_left_of as expected (a
+    filled slot's registration records said by key, not counted; an empty slot's counted), so a slot the kept switch's
+    session registered does not fail the switch's restore."""
     import json
     import contextlib
     from types import SimpleNamespace
@@ -833,5 +902,7 @@ def test_mode_switch_restore_leaves_the_memory_records_out_of_its_count(monkeypa
     monkeypatch.setattr(sys, "argv", ["mode_switch.py", "--restore", "--run", "made_up"])
     MS.main()
     from camkit import not_by_file
-    want = not_by_file.memory_left("ILCE-1M2")
-    assert seen["end"]["expected"] == want and seen["check"]["expected"] == want
+    assert seen["end"]["expected"] is MS.restore_left and seen["check"]["expected"] is MS.restore_left
+    filled = filled_file(tmp_path, "filled.DAT", [7])
+    assert MS.restore_left(filled) == not_by_file.memory_left("ILCE-1M2", (7,)) and "set7:0x0170" in MS.restore_left(filled)
+    assert MS.restore_left(SAMPLE) == frozenset(), "a slot that reads empty tolerates nothing"
