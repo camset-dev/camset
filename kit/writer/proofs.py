@@ -219,13 +219,14 @@ def kept_proof(old: dict | None, new: dict, gone: frozenset = frozenset(), writt
     return out, said
 
 
-def _counted(proofs: list, skip: set, reported=None):
+def _counted(proofs: list, skip: set, reported=None, modes=()):
     """(line, its changes, which of them it carried over) of each proof line a row's own count takes: not cut short
     (skip, as pass2_report.report_proofs gives it), not left out as made where the camera stood (stood_on, `reported`
     the rows of the report the writer reads), not of a row sampled from the option the camera held (sampled_from_start:
     its values are a count, never listed, decision 16), applied and planned; its changes each change to a record or an
-    array's slot (element_changes), and the keys of those carried over from the option before (carried_over)."""
-    left = set(skip) | stood_on(proofs, skip, reported)
+    array's slot (element_changes), and the keys of those carried over from the option before (carried_over). `modes`:
+    the camera's shooting modes, as the report reads them (pass2_report.stood_rows)."""
+    left = set(skip) | stood_on(proofs, skip, reported, modes)
     carried = {(c["dat"], c["key"]) for c in carried_over(proofs, left)}
     from_start = {name for name, opts in rows_of(None, proofs, left).items() if sampled_from_start(opts)}
     for i, r in enumerate(proofs):
@@ -236,18 +237,18 @@ def _counted(proofs: list, skip: set, reported=None):
         yield r, changes, {c.get("key") for c in changes if (r.get("dat"), c.get("key")) in carried}
 
 
-def written_by_row(proofs: list, skip: set, reported=None) -> dict:
+def written_by_row(proofs: list, skip: set, reported=None, modes=()) -> dict:
     """{the report's row (pass2_report.row_name): {key: the values that row's own counted lines wrote to it}}: each
     line _counted takes, each of its changes to a value but one carried over from the option before."""
     out = collections.defaultdict(lambda: collections.defaultdict(set))
-    for r, changes, carried in _counted(proofs, skip, reported):
+    for r, changes, carried in _counted(proofs, skip, reported, modes):
         for c in changes:
             if c.get("key") not in carried and isinstance(c.get("after"), (int, str)):
                 out[row_name(r)][c["key"]].add(c["after"])
     return {row: dict(keys) for row, keys in out.items()}
 
 
-def still_values(proofs: list, skip: set, report: list, value_of=None) -> dict:
+def still_values(proofs: list, skip: set, report: list, value_of=None, modes=()) -> dict:
     """{(the report's row, a record's key): the values a walk chose there with nothing to show}: each value a counted
     line of the row (_counted) chose, the camera keeping it (applied true), changing nothing at all, no record and no
     slot, where the row credits the line's own label with that value and the line's base download holds that value
@@ -259,7 +260,7 @@ def still_values(proofs: list, skip: set, report: list, value_of=None) -> dict:
         from pass2_report import base_value as value_of
     rows = {e["row"]: e for e in report}
     out = collections.defaultdict(set)
-    for r, changes, _ in _counted(proofs, skip, set(rows)):
+    for r, changes, _ in _counted(proofs, skip, set(rows), modes):
         e = rows.get(row_name(r))
         if e is None or r.get("applied") is not True or not isinstance(r.get("changes"), list) or changes:
             continue

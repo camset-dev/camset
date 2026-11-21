@@ -52,7 +52,7 @@ and asking git nothing for it (judge=False). Only crawl_run.py and prove_run.py 
 row out; drive.py never does. A row with values still to try (values_left) is never settled; a row greyed before is
 settled only while the start file still greys it (its inactive_when, or the blocker's records as they were when the
 look started), a row the kit could not read (a deterministic failure) only while the kit's commit is the look's. Of the
-looks, the latest of a row, what was done and the option wins, but a look that did not reach the row never takes the
+looks, the latest of a row in each mode, what was done and the option wins, but a look that did not reach the row never takes the
 place of one that did, and the records an earlier look saw change stay seen (hidden_changes). Nothing is settled when the ledger cannot be built (no definition, or no looks file yet: the
 first run on a camera) or is stale, and the run says so in one line. A ledger error never breaks a run: each gate says
 it in one line and changes nothing.
@@ -115,7 +115,10 @@ STATUSES = (
                         "a look's blocker (private only: which equipment the owner had)."),
     ("no proof possible", "Every setting placed on it is proved or carries an unproved_reason, one at least of another "
                           "kind than equipment (state, camera_only, not_on_camera, network, unknown): the reason says "
-                          "why no menu choice proves it."),
+                          "why no menu choice proves it. An option also where the hand tables' UNPROVED gives a setting "
+                          "a proof reached such a reason: its values the proof does not list, which no menu choice "
+                          "writes (a fact of the model: the a1 II's Base Look copies, which only Camera Settings Reset "
+                          "writes)."),
     ("inferred from a shared list", "Options only, private only, never proved: no proof chose the value on this "
                                     "setting, and the definition's writer named it from another setting's proof (a "
                                     "shared list: a picker's slots, one array's elements, a hold and its live setting, "
@@ -419,31 +422,41 @@ def read_looks(camera: str = None, path: Path = None) -> list:
 
 
 def latest_looks(looks: list) -> list:
-    """[(line, look)] the ledger reads of the looks file: per (row, did, option) the LATEST look alone (the file is in
-    the order the looks were made), so a look made since corrects one before it, and a retraction (result "retract")
-    leaves nothing; a crawl's lap lines pass through. Rows by their labels compared plain, in any mode."""
+    """[(line, look)] the ledger reads of the looks file: per (row, mode, did, option) the LATEST look alone (the file
+    is in the order the looks were made), so a look made since corrects one before it, and a retraction (result
+    "retract") leaves nothing; a crawl's lap lines pass through. Rows by their labels compared plain; a look in one
+    shooting mode never hides one in another (Shoe Audio Set.: greyed in Movie for want of a shoe audio accessory, in
+    S&Q by the Shoot Mode), and a look or a retraction that names no mode stands for every mode (_last_looks)."""
     last, laps = _last_looks(looks)
     out = [x for x in last.values() if x[1].get("result") != "retract"] + laps
     return sorted(out, key=lambda x: x[0])
 
 
 def _look_key(lk: dict) -> tuple:
-    """A look's (row, did, option), the row by its labels compared plain: the key latest_looks keeps one look of."""
-    return tuple(plain(p) for p in lk.get("path") or []), lk.get("did"), plain(lk.get("option") or "")
+    """A look's (row, mode, did, option), the row by its labels compared plain, the mode as the look names it (None for
+    none): the key latest_looks keeps one look of."""
+    return (tuple(plain(p) for p in lk.get("path") or []), lk.get("mode") or None, lk.get("did"),
+            plain(lk.get("option") or ""))
 
 
 def _last_looks(looks: list) -> tuple:
-    """({(row, did, option): (line, look)} the latest look of each, a retraction included, [(line, lap)]). A look that
-    did not reach the row (not_reached: an unfinished run, a lost row) never takes the place of an earlier look of the
-    same key that did: it says nothing of the row."""
+    """({(row, mode, did, option): (line, look)} the latest look of each, a retraction included, [(line, lap)]). Looks
+    of one row in two shooting modes stand side by side; one that names no mode (a retraction, a look recorded without
+    one) takes the place of the row's looks in every mode, and a later look in any mode takes the place of it. A look
+    that did not reach the row (not_reached: an unfinished run, a lost row) never takes the place of an earlier look
+    that did: it says nothing of the row."""
     last, laps = {}, []
     for line, lk in looks:
         if lk.get("did") == "lap":
             laps.append((line, lk))
             continue
         k = _look_key(lk)
-        if lk.get("result") == "not_reached" and k in last and last[k][1].get("result") != "not_reached":
+        rest = (k[0], k[2], k[3])
+        over = [x for x in last if (x[0], x[2], x[3]) == rest and (k[1] is None or x[1] in (None, k[1]))]
+        if lk.get("result") == "not_reached" and any(last[x][1].get("result") != "not_reached" for x in over):
             continue
+        for x in over:
+            del last[x]
         last[k] = (line, lk)
     return last, laps
 
@@ -455,15 +468,19 @@ def hidden_changes(looks: list) -> list:
     that changed 0x13f3 and 0x13f5, 2026-11-19). A retraction withdraws its key's looks before it; a lap is no row's."""
     last, _laps = _last_looks(looks)
     kept = {line for line, _lk in last.values()}
-    since = {_look_key(lk): line for line, lk in looks if lk.get("did") != "lap" and lk.get("result") == "retract"}
+
+    def key(lk):                    # (row, did, option): a retraction withdraws the row's looks in every mode
+        k = _look_key(lk)
+        return k[0], k[2], k[3]
+    since = {key(lk): line for line, lk in looks if lk.get("did") != "lap" and lk.get("result") == "retract"}
     return [(line, lk) for line, lk in looks if lk.get("did") != "lap" and line not in kept
-            and lk.get("result") != "retract" and lk.get("records_changed") and line > since.get(_look_key(lk), 0)]
+            and lk.get("result") != "retract" and lk.get("records_changed") and line > since.get(key(lk), 0)]
 
 
 def retracted(looks: list) -> list:
     """[(row labels compared plain, did)] of the looks file's retractions that stand (each the latest of its key)."""
     last, _laps = _last_looks(looks)
-    return [(k[0], k[1]) for k, (_line, lk) in last.items() if lk.get("result") == "retract"]
+    return [(k[0], k[2]) for k, (_line, lk) in last.items() if lk.get("result") == "retract"]
 
 
 # ---------------------------------------------------------------- the sources
@@ -1059,13 +1076,15 @@ def _universe(led: Ledger, defn: dict, settings: list, src: Sources) -> None:
 
 
 def _seen_paths(src: Sources, led: Ledger) -> list:
-    """(path, mode, tab) of the rows deeper than a top row the private sources name (looks and crawl submenus), or in
-    the public build the allow-listed facts alone."""
+    """(path, mode, tab) of the rows deeper than a top row the private sources name (the latest looks and the crawl
+    submenus), or in the public build the allow-listed facts alone. A path a standing retraction of its opening names
+    (--record --result retract --did open: a crawl's misreading, "Fixed Speed SIBY" for "Fixed Speed STBY") makes no
+    row, and each path is read as the camera draws it (camkit.row_names.renamed: ROW_NAMES)."""
     if not src.private:
         return [(x["path"], x.get("mode"), x.get("tab")) for x in src.allowed
                 if len(x.get("path") or []) > 1 and all(isinstance(p, str) and p for p in x["path"])]
     out = []
-    for _, lk in src.looks:
+    for _, lk in latest_looks(src.looks):
         if len(lk.get("path") or []) > 1:
             out.append((lk["path"], lk.get("mode"), lk.get("tab")))
     crumbs = _crumbs(src)
@@ -1074,7 +1093,10 @@ def _seen_paths(src: Sources, led: Ledger) -> list:
         for sub in r.get("submenu") or []:
             if isinstance(sub, dict) and sub.get("label"):
                 out.append(([r.get("decided") or r.get("label") or "", sub["label"]], None, tab))
-    return [(p, m, t) for p, m, t in out if all(isinstance(x, str) and x for x in p) and not named_placeholder(src, p)]
+    gone = {labels for labels, did in retracted(src.looks) if did == "open"}
+    return [(list(row_names.renamed(p, src.camera)), m, t) for p, m, t in out
+            if all(isinstance(x, str) and x for x in p) and tuple(plain(x) for x in p) not in gone
+            and not named_placeholder(src, p)]
 
 
 def placeholder_label(label) -> bool:
@@ -1858,6 +1880,7 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
 def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) -> None:
     sony, _header = save_load(src.camera_file)
     frame = src.hand.get("FRAME_PROOFS") or {}
+    reasons = src.hand.get("UNPROVED") or {}
     follows = readout_follows(settings) if src.private else {}      # INFERRED is the private form's alone
     for s in settings:
         p = s.get("proved") if isinstance(s.get("proved"), dict) else None
@@ -1867,6 +1890,10 @@ def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) ->
         hand = {v for v, _ in (frame.get(s["key"]) or {}).get("values") or []} if isinstance(frame.get(s["key"]), dict) \
             else set()
         state = setting_state(s)
+        # a reason the hand tables give a setting a proof reached: no menu choice proves the values that proof does not
+        # cover (the a1 II's Base Look copies, which only Camera Settings Reset writes): a fact of the model, by data
+        why = reasons.get(s["key"])
+        rest = state in ("proved", "sampled") and isinstance(why, list) and bool(why) and why[0] != "equipment"
         row = s.get("row") or []
         closed = next((rule_class(x) for x in row if rule_class(x)), None)
         in_sony = bool(excluded_under(tuple(row), sony, set()))
@@ -1890,7 +1917,7 @@ def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) ->
                 cites[v] = fx["choose_nochange"]
             elif state == "needs equipment":
                 st = "needs equipment"
-            elif state == "no proof possible":
+            elif state == "no proof possible" or rest:
                 st = "no proof possible"
             elif fx.get("greyed"):
                 st = "greyed in state"
