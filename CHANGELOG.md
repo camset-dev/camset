@@ -238,6 +238,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A lit one-letter row OCR cannot read (Color Depth's M, Y) is found when the frame before and the second reader
+  agree on its label:** a proof made there carries `"row_by"` in `proofs.jsonl`, and the report takes its move of a
+  record another row's proofs own as an open question, never as the row's setting.
 - **Placement reads the placed definition's own ROW_NAMES, whatever camera the kit works on:** a clone that names no
   camera, or a test's made-up one, now writes the same places as the mapper's computer (Fixed Speed REC's S&Q row).
 - **Shoot Mode's Intelligent Auto can be chosen on the owner's word, `--allow "Intelligent Auto"`:** `mode_switch.py`
