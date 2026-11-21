@@ -121,6 +121,10 @@ def visit(cam, link, hdmi, cycle, model, path, labels, cells: list) -> dict:
     flipped = []
     for k in sorted(cells):
         to_cell(cam, labels, k)
+        from proving.greyed import choice_refused
+        why = choice_refused(cam, " > ".join(path), labels[k])     # a grid cell: no reading tells one, so refused
+        if why:
+            raise Failed(why)
         before = tick(cam)
         cam.press("enter")
         after = tick(cam)

@@ -204,7 +204,7 @@ def test_rows_told_apart_by_an_icon_draw_its_words():
     the row agrees on them, the headings' paths keeping the labels; a menu's own place takes its own words, none where it
     gives its row and no words. And a row alone on its place titled with its words, so two rows titled alike without
     them are told apart (editor/src/pages/menu.rs, rows_told_apart_by_an_icon_draw_its_words_everywhere)."""
-    case = json.loads((Path(__file__).resolve().parents[2] / "editor" / "tests" / "data" / "menu_row_icons.json").read_text())
+    case = json.loads((Path(__file__).resolve().parents[2] / "editor" / "tests" / "data" / "menu_row_icons.json").read_text(encoding="utf-8"))
 
     def made(v):
         return s(v["key"], v["name"], v["row"], v["row_at"], **{k: x for k, x in v.items() if k not in ("key", "name", "row", "row_at")})

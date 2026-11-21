@@ -242,6 +242,212 @@ def proof_lines(verdict: dict, section: int, slot: str, downloads: dict, frames:
     return lines
 
 
+# ---------------------------------------------------------------- --aperture: each F-number registered into the slot
+
+APERTURE_SET = 0x0180               # a memory set's exposure record: the F-number (F x 100) at byte APERTURE_AT
+APERTURE_COPIES = 0x018c            # the live record that keeps every set's exposure too, a set's block SET_BLOCK long
+APERTURE_AT, SET_BLOCK = 288, 320
+
+
+def aperture_keys(section: int) -> tuple:
+    """The definition's keys of the F-number a registration of the slot of `section` writes: its set record's field,
+    and that set's block in the live copies' record (section 1 at byte 288, each next set 320 bytes on)."""
+    return (f"set:{set_twins.hexid(APERTURE_SET)}@{APERTURE_AT}",
+            f"global:{set_twins.hexid(APERTURE_COPIES)}@{APERTURE_AT + SET_BLOCK * (section - 1)}")
+
+
+def slot_apertures(cs, section: int) -> dict:
+    """{key: the F-number (F x 100) it holds, or None where it cannot be read} for aperture_keys(section) in `cs`."""
+    out = {}
+    for key, (sec, rid) in zip(aperture_keys(section), ((section, APERTURE_SET), (0, APERTURE_COPIES)), strict=True):
+        at = int(key.rsplit("@", 1)[1])
+        rec = cs.get(sec, rid)
+        raw = rec.raw[at:at + 2] if rec is not None else b""
+        out[key] = int.from_bytes(raw, "little") if len(raw) == 2 else None
+    return out
+
+
+FILL_EMPTY_WORD = ("the owner's word of 2026-11-20 for the aperture run: \"go ahead with the run, obviously the lens "
+                   "could limit the aperture\", told that a registration fills an empty slot for good")
+# What the start file's upload does not put back in a slot the run filled (NOT_BY_FILE's three records), in words.
+NOT_PUT_BACK = ("the start file's upload puts its values back, but not its filled mark (it stays registered), its "
+                "registration family, nor its exposure mode, which will read M, the mode the run registers in")
+
+
+def slot_refused(cs, model: str, section: int, slot: str, fill_empty: bool) -> str:
+    """Why the slot of `section` may not be registered from the start file `cs`, or "": an empty slot is refused (a
+    registration fills it for good: the filled mark is one of the records no settings file sets), unless `fill_empty`
+    (--fill-empty-slot, FILL_EMPTY_WORD): the slot then stays registered after the run (NOT_PUT_BACK)."""
+    if slot_filled(cs, model, section) or fill_empty:
+        return ""
+    return (f"slot {slot} is empty in the start file: registering it would fill it for good (no settings file empties "
+            "it); this run registers a filled slot only, unless --fill-empty-slot gives the owner's word")
+
+
+def not_offered(lens: list, asked) -> list:
+    """The F-numbers --values names that the lens does not offer (the camera's list): said, never set."""
+    return sorted(v for v in (asked or ()) if v not in set(lens))
+
+
+def aperture_order(values: list, held, only=None) -> list:
+    """The F-numbers to register, each once: the lens's list as the camera gives it (`values`, F x 100), or those of
+    `only` among it, the one the camera holds (`held`) last, so the live aperture ends where it began."""
+    vals = [v for v in dict.fromkeys(values) if only is None or v in only]
+    return [v for v in vals if v != held] + ([held] if held in vals else [])
+
+
+def f_label(v: int) -> str:
+    return f"F{v / 100:g}"
+
+
+BEYOND_WORD = ("the owner's word of 2026-11-20: \"if you can get the camera to do f-numbers out the range go for it, you "
+               "may need to infer as I may not have lens that cover the whole range\"")
+
+
+def beyond_lens(table: list, lens: list) -> list:
+    """The definition table's F-numbers (F x 100) the lens does not offer, its "—" (0) aside: --beyond-lens tries each
+    once (BEYOND_WORD)."""
+    return sorted(v for v in dict.fromkeys(table) if v and v not in set(lens))
+
+
+def register_apertures(link, values: list, slot: str, section: int, register, download, stopped, say,
+                       word: str = "not offered") -> tuple:
+    """Each F-number of `values` set through the SDK (link.set("FNumber"): an exposure property camkit.safety.
+    SET_PROPERTIES allows), read back, then the slot registered (`register()`) and a download made (`download(tag)`):
+    the slot's two records (aperture_keys) must hold it. Between registrations only, `stopped()` (the run's STOP file)
+    ends the loop: no registration is ever left half-way by it. A set the camera refuses, or reads back otherwise,
+    registers nothing and is said. Returns (the proof lines, one per record a registration wrote, applied where the
+    record holds the value; the values not set; whether a stop ended it)."""
+    lines, not_set, before = [], [], None
+    for v in values:
+        if stopped():
+            say(f"stopped before F-number {f_label(v)}: the registrations so far are kept, the restore puts the slot back")
+            return lines, not_set, True
+        try:
+            link.set("FNumber", v)
+            back = (link.get("FNumber") or {}).get("current")
+        except Exception as e:              # the camera refused the set: never forced by another route
+            not_set.append({"value": v, "why": f"{word}: {type(e).__name__}: {e}"})
+            say(f"   {f_label(v)}: {word} (the camera refused it: {e}); nothing registered, nothing forced")
+            continue
+        if back != v:                       # a clamp, or another value kept: what it answered is kept
+            not_set.append({"value": v, "why": f"{word}: read back {back}"})
+            say(f"   {f_label(v)}: {word} (the camera reads back {back}); nothing registered, nothing forced")
+            continue
+        frames = register()
+        dat, cs = download(f"aperture-{v}")
+        got = slot_apertures(cs, section)
+        for key, held in got.items():
+            ok = held == v
+            lines.append({"path": [MEMORY_ROW, "Aperture"], "menu": MEMORY_ROW, "kind": KIND, "record": key,
+                          "index": v, "label": f_label(v), "slot": slot,
+                          "via": f"FNumber {v} set through the SDK and read back, then slot {slot} registered "
+                                 f"({MEMORY_ROW}, Enter on the slot)",
+                          "base": before, "dat": dat, "after": dat, "applied": ok,
+                          **({} if ok else {"not_applied": f"the record holds {held}, not {v}"}), "frames": frames})
+        say(f"   {f_label(v)}: registered; " + ", ".join(f"{k} {'holds it' if got[k] == v else f'holds {got[k]}'}"
+                                                         for k in got))
+        before = dat
+    return lines, not_set, False
+
+
+def put_back_aperture(link, held, say) -> bool:
+    """The live aperture the run began with set back and read back (live state no settings file holds: decision 15)."""
+    try:
+        link.set("FNumber", held)
+        back = (link.get("FNumber") or {}).get("current")
+    except Exception as e:
+        say(f"the live aperture was not put back to {f_label(held)} ({e}): set it by hand (kit/tools/sdk_set.py "
+            f"FNumber={held})")
+        return False
+    if back != held:
+        say(f"the live aperture reads {back} after it was put back to {held}: set it by hand (kit/tools/sdk_set.py "
+            f"FNumber={held})")
+        return False
+    say(f"the live aperture is back on {f_label(held)} (read back)")
+    return True
+
+
+def prove_apertures(a, doc: dict, allowance: str) -> int:
+    """--aperture: one session (decision 15). The start download; the slot must be filled already (slot_filled: a
+    registration fills an empty slot for good); the camera must take FNumber (Stills A or M); then every F-number the
+    attached lens offers (the SDK's list), or --values among it, set, read back and registered (register_apertures),
+    the held one last; the live aperture put back and read back; the start file uploaded and checked, which puts the
+    slot's records back (the filled mark and the two records NOT_BY_FILE names aside). Proof lines in the run's
+    proofs.jsonl ("registration mirror", no live record: pass2_report.mirrored_values hands them to the writer)."""
+    from camkit.frames import eyes_from_config
+    from camkit.runs import Run, mark_proof_run
+    from prove_run import Failed
+    from runner import load_scan, proofs_file, prover_session
+    model_name = doc.get("model") or definitions.key(doc).split("_fw")[0]
+    section = section_of(a.slot)
+    cycle, model = load_scan(a.scan)
+    run = Run(a.run)
+    hdmi = eyes_from_config(run)
+    say = lambda m: print(m, flush=True)     # noqa: E731
+    only = {int(x) for x in a.values.split(",")} if a.values else None
+    status = 1
+    with proofs_file(run, None, {"allowance": allowance} if allowance else None) as out, \
+            prover_session(run, hdmi, may_open=set(a.allow), show=0, expected=expected_keys(model_name, section),
+                           end_why="the settings download after the registrations") as s:
+        cam, link = s.cam, s.link
+        start_cs = camset.read(s.start)
+        why = slot_refused(start_cs, model_name, section, a.slot, a.fill_empty_slot)
+        if why:
+            raise Failed(why)
+        if not slot_filled(start_cs, model_name, section):
+            say(f"slot {a.slot} is empty in the start file and is filled by this run for good ({FILL_EMPTY_WORD}): "
+                f"{NOT_PUT_BACK}")
+        got = link.get("FNumber") or {}
+        if not got.get("writable"):
+            raise Failed("the camera does not take FNumber now (the shooting mode sets it: Stills A or M takes it)")
+        held, lens = got.get("current"), list(got.get("values") or [])
+        if a.beyond_lens:
+            table = [v for v, _ in next((s.get("values") or [] for s in doc.get("settings") or []
+                                         if s.get("key") == aperture_keys(section)[0]), [])]
+            todo = beyond_lens(table, lens)
+            say(f"--beyond-lens ({BEYOND_WORD}): {len(todo)} F-numbers of the table the lens does not offer, each tried "
+                "once through the same SDK set; one refused or read back otherwise is recorded, never forced")
+        else:
+            todo = aperture_order(lens, held, only)
+            missing = not_offered(lens, only)
+            if missing:
+                say(f"not offered by the attached lens, never set: {', '.join(f_label(v) for v in missing)}")
+        if a.limit:
+            todo = todo[:a.limit] + ([held] if held in todo[a.limit:] else [])
+        say(f"the lens offers {len(lens)} F-numbers ({f_label(min(lens)) if lens else '-'} to "
+            f"{f_label(max(lens)) if lens else '-'}); {len(todo)} to register"
+            + ("" if a.beyond_lens else f", {f_label(held)} (held) last"))
+
+        def register():
+            return register_slot(cam, cycle, model, a.slot, say, a.allow)
+
+        def dl(tag):
+            p = download(cam, link, hdmi, tag)
+            return p.name, camset.read(p)
+        try:
+            lines, not_set, stopped = register_apertures(link, todo, a.slot, section, register, dl,
+                                                         lambda: (run.dir / "STOP").exists(), say,
+                                                         word="refused" if a.beyond_lens else "not offered")
+            if a.beyond_lens and not_set:
+                write_json(run.dir / "beyond_lens.json", {"t": time.strftime("%Y-%m-%d %H:%M:%S"), "slot": a.slot,
+                                                          "lens": lens, "refused": not_set}, indent=1)
+        finally:
+            back = put_back_aperture(link, held, say)
+        for line in lines:
+            out.write(json.dumps(line) + "\n")
+        out.flush()
+        if lines:
+            mark_proof_run(run.dir, "kit/provers/memreg_run.py")
+        applied = sum(1 for x in lines if x["applied"])
+        say(f"{len(lines)} proof lines, {applied} applied; {len(not_set)} F-numbers not set"
+            + ("; stopped by the STOP file between registrations" if stopped else ""))
+        # beyond the lens a refusal is a result, not a failure: the run is whole where every value that took applied
+        status = 0 if back and applied == len(lines) and not stopped and (a.beyond_lens or (lines and not not_set)) \
+            else 1
+    return status
+
+
 def scrub(msg: str) -> str:
     """A failure as printed: without the list's lit option (set_row's "(on '...')"), which can be the held one."""
     return re.sub(r"\s*\(on '.*?'\)", "", msg)
@@ -493,9 +699,39 @@ def main(argv=None) -> int:
     ap.add_argument("--slot", choices=SLOTS, default="1", help="the Stills memory slot to register (1)")
     ap.add_argument("--survey", default=None, help="set_twins.json (default: runs/<camera>/kit2_memtwins/)")
     ap.add_argument("--run", default=RUN)
+    ap.add_argument("--aperture", action="store_true",
+                    help="register every F-number the lens offers into the slot, each set through the SDK first "
+                         "(prove_apertures), instead of the rows")
+    ap.add_argument("--values", default=None, help="with --aperture: these F-numbers only (F x 100, comma-separated); "
+                                                   "one the lens does not offer is said, never set")
+    ap.add_argument("--fill-empty-slot", action="store_true",
+                    help="with --aperture: register the slot even where it is empty in the start file, which fills it "
+                         f"for good: {NOT_PUT_BACK} ({FILL_EMPTY_WORD})")
+    ap.add_argument("--beyond-lens", action="store_true",
+                    help="with --aperture: instead of the lens's F-numbers, try each F-number of the definition's table "
+                         "the lens does not offer once through the same SDK set; one refused or read back otherwise is "
+                         f"recorded in beyond_lens.json, never forced, nothing registered on it ({BEYOND_WORD})")
     a = ap.parse_args(argv)
+    if a.fill_empty_slot and not a.aperture:
+        sys.exit("memreg_run: --fill-empty-slot is the aperture run's (the owner's word for it): give it with --aperture")
+    if a.beyond_lens and not a.aperture:
+        sys.exit("memreg_run: --beyond-lens is the aperture run's: give it with --aperture")
     root = paths.run_root()
     doc = definitions.with_evidence(read_json(definitions.active()), definitions.active())
+    if a.aperture:
+        section = section_of(a.slot)
+        print(f"--aperture: slot {a.slot} (set{section}): every F-number the attached lens offers (the SDK's list, read "
+              f"at the run's start){f', among {a.values}' if a.values else ''}, each set through the SDK and read "
+              f"back, then the slot registered and a download: {' and '.join(aperture_keys(section))} must hold it; "
+              "the held one last; the live aperture put back and read back; the start file uploaded and checked")
+        if a.fill_empty_slot:
+            print(f"--fill-empty-slot: an empty slot is registered for good: {NOT_PUT_BACK} ({FILL_EMPTY_WORD})")
+        if a.list:
+            return 0
+        if not memory_allowed(a.allow) or [x for x in a.allow if not memory_allowed([x])]:
+            sys.exit(f"memreg_run: {MEMORY_ROW} is never-open (an action); --aperture opens it only with the owner's "
+                     f"word, --allow {MEMORY_ROW!r}, and no other")
+        return prove_apertures(a, doc, allowed_or_exit(a.allow))
     camera = definitions.key(doc)
     model_name = doc.get("model") or camera.split("_fw")[0]
     if model_name not in NOT_BY_FILE:

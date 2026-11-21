@@ -1359,6 +1359,8 @@ def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: fl
     try:
         if readers:
             check_readers()     # no reader listed: stop before the link opens, nothing pressed
+        from proving import greyed
+        greyed.say_marks()      # the grey readings this run will not enter on alone (proving.greyed's memory)
         with Link(run) as link:
             eyes.attach(link)
             start = session_start(link, eyes, start_why, start_tag, reach=reach, say=say_start, settle=settle,
@@ -1951,6 +1953,19 @@ def row_values(model=None) -> dict:
     for row in _model_rows(model):
         for label in dict.fromkeys(row_readings(row)):
             out.setdefault(label, set()).update(_shown_values(row))
+    return out
+
+
+def cut_names(doc) -> dict:
+    """{a row label the screen cuts with an ellipsis, compared plain: {the name the camera's definition gives each setting
+    whose row path ends in it, compared plain: its value and option names (value_names)}}: "Face Priority in Mul..." ->
+    {"face priority in multi metering": {"On", "Off"}}. drive.glued_icon ties a lit row that shows more of such a label
+    than the page scan read to it by these names."""
+    out = {}
+    for s in _settings(doc):
+        path = _path(s)
+        if path and isinstance(s.get("name"), str) and re.search(r"(?:\.\.\.|…)\s*$", path[-1]):
+            out.setdefault(safety.plain(path[-1]), {}).setdefault(safety.plain(s["name"]), set()).update(value_names(s))
     return out
 
 

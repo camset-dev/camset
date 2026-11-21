@@ -473,3 +473,161 @@ def test_the_watcher_notes_an_information_screen_by_its_frame(M):
     assert notes == ["an information screen after the choice (00042_enter.png), taken with its OK: its words are in "
                      "events.jsonl under set_row_information"]
     assert said == ["   an information screen after the choice, taken with its OK"]
+
+
+# ---------------------------------------------------------------- --aperture: each F-number registered into the slot
+
+def aperture_file(section: int, value: int) -> Camset:
+    """A made-up file whose set `section` and live copies' block for it hold the F-number `value` (F x 100)."""
+    sets = [dict() for _ in range(12)]
+    block = bytearray(320)
+    block[288:290] = value.to_bytes(2, "little")
+    sets[section - 1] = {0x0180: Record(0x0180, 320, 1, bytes(block), 0)}
+    copies = bytearray(320 * 12)
+    at = 288 + 320 * (section - 1)
+    copies[at:at + 2] = value.to_bytes(2, "little")
+    return Camset(model="TEST-CAM", saved="", sections=[{0x018c: Record(0x018c, 320, 12, bytes(copies), 0)}, *sets])
+
+
+def test_the_aperture_keys_and_their_reading_for_a_slot(M):
+    """A slot's F-number lives in its set's exposure record (byte 288) and in that set's block of the live copies'
+    record (the definition's keys: Memory 1 at 288, Memory 3 at 928, each set 320 bytes on)."""
+    assert M.aperture_keys(1) == ("set:0x0180@288", "global:0x018c@288")
+    assert M.aperture_keys(3) == ("set:0x0180@288", "global:0x018c@928")
+    assert M.slot_apertures(aperture_file(1, 560), 1) == {"set:0x0180@288": 560, "global:0x018c@288": 560}
+    assert M.slot_apertures(aperture_file(3, 1100), 3)["global:0x018c@928"] == 1100
+
+
+def test_the_lens_list_is_registered_once_each_the_held_one_last(M):
+    assert M.aperture_order([400, 450, 560, 450, 800], 560) == [400, 450, 800, 560]
+    assert M.aperture_order([400, 450, 560], 560, only={450, 560}) == [450, 560]
+    assert M.aperture_order([400, 450], 999) == [400, 450], "a held value the lens does not list is not registered"
+
+
+class ApertureLink:
+    """The SDK's FNumber as the link answers it: set, then read back; `refuse` values the camera will not take, and
+    `drift` ones it reads back otherwise."""
+
+    def __init__(self, held=560, refuse=(), drift=()):
+        self.current, self.refuse, self.drift, self.sets = held, set(refuse), set(drift), []
+
+    def set(self, name, value):
+        assert name == "FNumber"
+        self.sets.append(value)
+        if value in self.refuse:
+            raise RuntimeError("not writable")
+        self.current = value + 10 if value in self.drift else value
+
+    def get(self, name):
+        return {"current": self.current, "writable": True, "values": [400, 450, 560]}
+
+
+def aperture_world(link, stop_after=None, records=None):
+    """register_apertures' seams: each registration recorded, each download the slot holding the live value (or what
+    `records` says for it), a STOP file after `stop_after` registrations."""
+    done, said = [], []
+
+    def register():
+        done.append(link.current)
+        return {"slot_frame": f"{len(done):05d}_enter.png"}
+
+    def download(tag):
+        v = (records or {}).get(link.current, link.current)
+        return f"{len(done):05d}_{tag}.DAT", aperture_file(1, v)
+    return done, said, register, download, (lambda: stop_after is not None and len(done) >= stop_after)
+
+
+def test_each_f_number_is_set_read_back_registered_and_checked_in_both_records(M):
+    link = ApertureLink()
+    done, said, register, download, stopped = aperture_world(link)
+    lines, not_set, stop = M.register_apertures(link, [400, 450, 560], "1", 1, register, download, stopped, said.append)
+    assert done == [400, 450, 560] and not not_set and not stop
+    assert [(x["record"], x["index"], x["label"], x["applied"]) for x in lines] == [
+        ("set:0x0180@288", 400, "F4", True), ("global:0x018c@288", 400, "F4", True),
+        ("set:0x0180@288", 450, "F4.5", True), ("global:0x018c@288", 450, "F4.5", True),
+        ("set:0x0180@288", 560, "F5.6", True), ("global:0x018c@288", 560, "F5.6", True)]
+    assert all(x["kind"] == M.KIND and "live" not in x for x in lines), "mirror lines with no live record"
+    assert lines[2]["base"] == lines[0]["dat"], "each proof against the download before it"
+
+
+def test_a_value_the_camera_refuses_or_reads_back_otherwise_registers_nothing(M):
+    link = ApertureLink(refuse={400}, drift={450})
+    done, said, register, download, stopped = aperture_world(link)
+    lines, not_set, _ = M.register_apertures(link, [400, 450, 560], "1", 1, register, download, stopped, said.append)
+    assert done == [560] and [x["value"] for x in not_set] == [400, 450]
+
+
+def test_a_record_that_does_not_take_the_value_is_not_applied(M):
+    link = ApertureLink()
+    done, said, register, download, stopped = aperture_world(link, records={450: 400})
+    lines, _, _ = M.register_apertures(link, [400, 450], "1", 1, register, download, stopped, said.append)
+    assert [x["applied"] for x in lines] == [True, True, False, False]
+    assert "holds 400, not 450" in lines[2]["not_applied"]
+
+
+def test_a_stop_falls_between_registrations_only(M):
+    """The STOP file is read before each registration and never inside one: the loop ends with every registration
+    begun also done, and says so."""
+    link = ApertureLink()
+    done, said, register, download, stopped = aperture_world(link, stop_after=2)
+    lines, _, stop = M.register_apertures(link, [400, 450, 560], "1", 1, register, download, stopped, said.append)
+    assert stop and done == [400, 450] and len(lines) == 4
+    assert any("stopped before F-number F5.6" in s for s in said)
+
+
+def test_the_live_aperture_is_put_back_and_read_back(M):
+    said = []
+    link = ApertureLink(held=400)
+    assert M.put_back_aperture(link, 560, said.append) and link.current == 560
+    link = ApertureLink(drift={560})
+    assert not M.put_back_aperture(link, 560, said.append) and "sdk_set.py FNumber=560" in said[-1]
+
+
+def test_an_empty_slot_is_registered_only_with_its_own_flag(M):
+    """slot_refused: an empty slot is refused (a registration fills it for good: no settings file empties it) unless
+    --fill-empty-slot, the owner's word of 2026-11-20 for the aperture run, which says the slot stays registered."""
+    empty = made_file({}, [{0x023c: 2}])
+    filled = made_file({}, [{0x023c: 4}])
+    assert "empty in the start file" in M.slot_refused(empty, "ILCE-1M2", 1, "1", fill_empty=False)
+    assert M.slot_refused(empty, "ILCE-1M2", 1, "1", fill_empty=True) == ""
+    assert M.slot_refused(filled, "ILCE-1M2", 1, "1", fill_empty=False) == ""
+
+
+def test_the_f_numbers_asked_but_not_offered_are_said_and_never_set(M):
+    """--values names F-numbers; only those the lens offers (the camera's list at the run's start) are set, the rest
+    recorded as not offered."""
+    assert M.not_offered([400, 450, 560], {450, 1100, 3200}) == [1100, 3200]
+    assert M.not_offered([400, 450, 560], None) == []
+
+
+def test_beyond_the_lens_the_tables_other_f_numbers_are_tried_once_each(M):
+    """--beyond-lens (the owner's word of 2026-11-20: "if you can get the camera to do f-numbers out the range go for
+    it"): the definition table's F-numbers the lens does not offer, its "—" (0) aside, each tried once through the same
+    SDK set; one the camera refuses or reads back otherwise (a clamp) is recorded as refused with what it answered,
+    never forced, and no registration is made on it."""
+    table = [0, 95, 100, 400, 450, 560, 2500, 3200]
+    assert M.beyond_lens(table, [400, 450, 560]) == [95, 100, 2500, 3200]
+    link = ApertureLink(held=560, refuse={95}, drift={100})
+    done, said, register, download, stopped = aperture_world(link)
+    lines, refused, _ = M.register_apertures(link, [95, 100, 2500], "1", 1, register, download, stopped, said.append,
+                                             word="refused")
+    assert done == [2500] and len(lines) == 2
+    assert [(x["value"], x["why"].split(":")[0]) for x in refused] == [(95, "refused"), (100, "refused")]
+    assert "read back 110" in refused[1]["why"], "what the camera answered is kept"
+
+
+def test_aperture_needs_the_owners_word_and_lists_without_a_camera(M, monkeypatch, capsys):
+    monkeypatch.setattr(M.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(M, "read_json", lambda path: {"model": "ILCE-1M2"})
+    monkeypatch.setattr(M.definitions, "with_evidence", lambda doc, *a, **k: doc)
+    assert M.main(["--aperture", "--list"]) == 0
+    assert "set:0x0180@288 and global:0x018c@288 must hold it" in capsys.readouterr().out
+    assert M.main(["--aperture", "--fill-empty-slot", "--list"]) == 0
+    said = capsys.readouterr().out
+    assert M.NOT_PUT_BACK in said
+    for words in ("filled mark", "registration family", "exposure mode", "read M"):
+        assert words in M.NOT_PUT_BACK, f"the upload does not put back {words!r}: the console says so"
+    with pytest.raises(SystemExit, match="owner's word"):
+        M.main(["--aperture"])
+    with pytest.raises(SystemExit, match="--aperture"):
+        M.main(["--fill-empty-slot", "--list"])

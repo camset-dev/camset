@@ -7,6 +7,11 @@ position the screen must match what the scan recorded there. Presses: MENU, the 
 Enter, but the OK of an information notice that --info-ok names for its row. Rows on the never-open list are skipped
 by their confirmed label.
 
+--leave "ROW > SUBROW" (repeatable) leaves that row unopened, every row under it with it, nothing pressed on it; its
+outcome is "skipped: left unopened by the run (--leave)" (camkit.crawl.LEFT), in rows.jsonl and the run's events, so the
+menu tree takes it as left on purpose (File Settings walked without Title Name Settings, whose entries open keyboards).
+A path the scan's top rows, this body's records or the definition do not know is refused before anything connects.
+
 --info-ok "ROW=PHRASE" (repeatable, one row each: runner.info_ok_or_exit, which refuses a row that is no label the
 definition or the page model knows or is never-open, and a phrase of fewer than 3 words or 12 letters, with a question
 mark or a pattern's sign such as * [ ] |) takes, after Right on ROW, the OK of the information notice whose whole text is
@@ -754,6 +759,29 @@ def show(row: dict, depth: int = 0):
         show(sub, depth + 1)
 
 
+def leave_paths(given: list, model: dict, seen, doc: dict) -> tuple:
+    """--leave's paths as tuples of labels. Stops before anything connects on a path whose top label is no row of the
+    scan's page model, or whose whole path neither this body's records (seen.seen) nor a setting's row in the
+    definition `doc` starts with: a misspelled path would leave nothing, and the row would open. Labels compared as
+    the scan's rows are found (page_model.same_text)."""
+    from page_model import same_text
+    tops = {r.get("label") for p in model.values() for r in p.get("rows") or [] if r.get("label")}
+    rows = [tuple(s.get("row") or ()) for s in doc.get("settings") or []]
+    out = []
+    for g in given:
+        path = tuple(x.strip() for x in str(g).split(" > ") if x.strip())
+        if not path or not any(same_text(path[0], t) for t in tops):
+            sys.exit(f"--leave {g!r}: {(path or (g,))[0]!r} is no top row of the scan's page model, so nothing would be "
+                     "left and the row would open: nothing was sent to the camera")
+        known = seen.seen(list(path)) or any(
+            len(r) >= len(path) and all(same_text(a, b) for a, b in zip(path, r[:len(path)], strict=True)) for r in rows)
+        if not known:
+            sys.exit(f"--leave {g!r}: neither this body's records nor the definition know the row "
+                     f"{' > '.join(path)!r}, so nothing would be left: nothing was sent to the camera")
+        out.append(path)
+    return tuple(out)
+
+
 def main():
     budget.main_started()       # the start's phases, timed into events.jsonl as the link opens (camkit.budget)
     ap = argparse.ArgumentParser()
@@ -773,6 +801,16 @@ def main():
     add_network_argument(ap)
     add_info_ok_argument(ap)
     coverage.add_skip_argument(ap, crawl=True)
+    ap.add_argument("--no-first-open", action="store_true",
+                    help="open no row this body has not been seen to open, whatever the owner's blank-cards statement: "
+                         "each is skipped and recorded, as without the statement. Beside --leave it is the second "
+                         "guard: a row --leave misses (its label read otherwise by every reader) opens only where it "
+                         "is seen opened already, and nothing under it that never was")
+    ap.add_argument("--leave", action="append", default=[], metavar="PATH",
+                    help="a row this lap leaves unopened, every row under it with it, nothing pressed on it (\" > \" "
+                         "between labels, from the top-level row; repeatable): its outcome says so (camkit.crawl.LEFT), "
+                         "so the menu tree knows it was left, not missed. A path the scan's top rows, this body's "
+                         "records or the definition do not know is refused before anything connects")
     a = ap.parse_args()
     if a.info_ok and a.network:
         sys.exit("--info-ok passes no notice on a --network run: its rows are looked at only")
@@ -797,12 +835,20 @@ def main():
     # (camkit.first_open), only with the owner's blank-cards statement (camkit.statements) and never with --panels;
     # else each is skipped and recorded, and the lap goes on
     seen = first_open.seen_record(run.root.name)
+    if a.leave:
+        import camkit.crawl as crawl_mod
+        crawl_mod.LEAVE = leave_paths(a.leave, model, seen, definition())
+        for p in crawl_mod.LEAVE:
+            print(f"--leave: {' > '.join(p)} is left unopened, every row under it with it", flush=True)
+            run.log("leave", path=list(p))
     try:
         skip_why = cards_statement_refused("crawl_run.py")
     except SystemExit as e:
         skip_why = str(e.code)      # a scope that cannot be read makes no first open, and stops no lap
     if a.panels and not skip_why:
         skip_why = "--panels commits options, while a first open is a look: crawl without --panels first"
+    if a.no_first_open and not skip_why:
+        skip_why = "--no-first-open: this lap opens no row it has not been seen to open, whatever the cards statement"
     said = unseen_line(cycle, model, seen, skip_why, a, network)
     if said:
         print(said, flush=True)

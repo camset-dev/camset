@@ -558,3 +558,173 @@ def leave(cam, name: str) -> None:
     cam.press("menu")
     if cam.read().kind not in ("menu", "submenu"):
         raise Failed(f"{name}: MENU on the list left {cam.read().kind}, not the row's page ({cam.frame.path.name})")
+
+
+# ------------------------------------------------------------------ an entry chosen by a caller's word (2026-11-20)
+# The provers that press Enter on an entry a caller names (mode_switch's Shoot Mode choice, prove_run --first on an
+# axis, carousel_fields_run's option, bracket_run --option, optboxes_run --option, grid_run's cells, filter_run's
+# chooser and boxes, customshoot_run's ticks, orient_run's choice) and the checklist boxes prove_run flips under
+# --never-enter-grey judge the entry first, here, on the frame on show, by the kit's pixel readings alone (no reader):
+# a list's or a side list's lit band and a carousel's lit icon (proving.screens.drawn_grey), and a checklist item's
+# label on its row's band (CHECK_X, GREY_LINE's rule as drawn_grey reads a list's). Drawn grey is never entered (the
+# owner's rule); a drawing no reading can tell is not entered either (no guess), and either refusal says what it is,
+# what the reading saw, and that nothing was pressed on it.
+CHECK_X = (72, 560)             # a checklist item's label, right of its box (20-66), left of its value column (595)
+
+
+def choice_drawing(cam) -> tuple:
+    """(drawn grey: True, False or None where it cannot be told; the measure or None; how it was judged, in words) for
+    the entry under the cursor on the frame on show: a list's or side list's lit band and a carousel's lit icon by
+    proving.screens.drawn_grey (the icon's red: bright where the camera takes the entry, dim where it greys it; a green
+    icon, Intelligent Auto's, or a function's, is no red one and cannot be told), a checklist item by its label's text
+    on the row's band (CHECK_X); any other screen (a grid of boxes, a table, a screen of no known kind) cannot be."""
+    from camkit import screen as camscreen
+    import numpy as np
+    from .screens import GREY_INK, GREY_LINE, GREY_MIN, GREY_TELL
+    s = cam.read()
+    kind = getattr(s, "kind", None)
+    image = getattr(getattr(cam, "frame", None), "image", None)
+    if kind in ("list", "sidelist", "dialog"):
+        grey, level = drawn_grey(cam)
+        icon = "its lit icon" if level is not None else \
+            "its lit icon is not the red one the reading measures (an Intelligent Auto's or a function's)"
+        return grey, level, icon if kind == "dialog" else "its lit band's text"
+    if kind == "checklist" and getattr(s, "bar", None) and image is not None:
+        t, b = s.bar
+        x0, x1 = CHECK_X
+        g = camscreen._grey(image)[t + 6:b - 6, x0:x1]
+        o = camscreen._orange(image)[t + 6:b - 6, x0:x1]
+        ink = g[(g > GREY_INK) & ~o]
+        if len(ink) < GREY_MIN:
+            return None, None, "its label shows too little text on the row's band to read"
+        p = float(np.percentile(ink, 95))
+        grey = True if p <= GREY_LINE - GREY_TELL else False if p >= GREY_LINE + GREY_TELL else None
+        return grey, p, "its label's text on the row's band"
+    return None, None, f"the kit has no pixel reading for an entry of a {kind!r} screen"
+
+
+# The readings no real grey entry has calibrated yet (the reviewer of grey-before-enter, 2026-11-20): a carousel's or
+# dialog's lit column icon, which the camera redraws with the axis value (Spot's icon carries its "L", Drive Mode's its
+# "Hi+"), and a checklist item's label on its row's band, read by the lists' threshold. A proof line chosen on either
+# says so (UNMEASURED, its "grey_judged"), and the first camera refusal after an Enter on an entry either read white
+# marks that row "misjudged" in the camera's memory: MISJUDGED, a JSON-lines file in its run root
+# (runs/<model>_fw<fw>/grey_misjudged.jsonl, local and never versioned, as every run is). From then on, in that run and
+# every later one, that row's entries are not entered on that reading alone (choice_refused), until a "measured" line
+# (mark_measured: that reading calibrated on a grey entry) says otherwise. The latest line for a row and a reading
+# counts; nothing is ever taken out of the file. A list's lit band, measured on the camera's own grey and white
+# options, is no reading this memory holds.
+UNMEASURED = {
+    "icon": "judged by the lit column icon, which the camera draws with the axis value; a greyed axis value has not "
+            "been measured",
+    "checklist": "judged by the item's label on its row's band, by the lists' threshold; a greyed checklist item has "
+                 "not been measured",
+}
+MISJUDGED = "grey_misjudged.jsonl"
+
+
+def reading_of(cam) -> str | None:
+    """The uncalibrated reading choice_drawing judges the entry on show by ("icon" on a carousel or dialog, "checklist"
+    on a checklist), or None (a list's band, which the memory does not hold, or a screen no reading tells)."""
+    read = getattr(cam, "read", None)
+    return {"dialog": "icon", "checklist": "checklist"}.get(getattr(read(), "kind", None) if callable(read) else None)
+
+
+def memory_file(camera: str | None = None):
+    """The camera's memory of misjudged rows (MISJUDGED in its run root), or None where no camera is named."""
+    from camkit import paths
+    try:
+        camera = camera or (paths.camera() or (None,))[0]
+    except Exception:           # nothing names the camera (paths.NoCamera): no memory to read or keep
+        return None
+    return paths.runs_top() / camera / MISJUDGED if camera else None
+
+
+def misjudged(name: str, reading: str, camera: str | None = None) -> dict | None:
+    """The memory's latest line for the row `name` and the reading `reading` where it marks it misjudged, else None."""
+    from camkit import jsonl
+    p = memory_file(camera)
+    if p is None or not p.is_file():
+        return None
+    last = None
+    for e in jsonl.read(p, bad="skip"):
+        if e.get("row") == name and e.get("reading") == reading:
+            last = e
+    return last if last and last.get("kind") == "misjudged" else None
+
+
+def _remember(entry: dict, camera: str | None) -> None:
+    import time
+    from camkit import jsonl
+    p = memory_file(camera)
+    if p is None:
+        return
+    p.parent.mkdir(parents=True, exist_ok=True)
+    jsonl.append(p, {**entry, "t": round(time.time(), 3)})
+
+
+def mark_misjudged(name: str, reading: str, run, frame, notice, camera: str | None = None) -> None:
+    """The camera refused an entry of the row `name` that `reading` read white, chosen on frame `frame` in the run
+    `run` (its notice, if it gave one): that row's entries are not entered on that reading alone from now on."""
+    _remember({"kind": "misjudged", "row": name, "reading": reading, "run": run, "frame": frame, "notice": notice},
+              camera)
+    print(f"   {name}: the camera refused an entry the kit's {reading} reading read white: marked misjudged in "
+          f"{MISJUDGED}, its entries not entered on that reading again until a measurement says otherwise", flush=True)
+
+
+def mark_measured(name: str, reading: str, why: str, camera: str | None = None) -> None:
+    """A measurement of `reading` on a grey entry of the row `name` (`why`: what measured it) lifts its mark."""
+    _remember({"kind": "measured", "row": name, "reading": reading, "why": why}, camera)
+
+
+TOOL = "kit/tools/grey_memory.py"     # --list shows the marks, --measured ROW READING --why ... lifts one
+
+
+def marks_in_force(camera: str | None = None) -> dict:
+    """{(row, reading): its latest line} for every row the memory marks misjudged now."""
+    from camkit import jsonl
+    p = memory_file(camera)
+    latest = {}
+    for e in jsonl.read(p, bad="skip") if p is not None and p.is_file() else ():
+        if e.get("row") and e.get("reading"):
+            latest[(e["row"], e["reading"])] = e
+    return {k: e for k, e in latest.items() if e.get("kind") == "misjudged"}
+
+
+def say_marks(camera: str | None = None) -> None:
+    """At a run's start: the marks it will apply (rows not entered on a reading the camera has refused), and the tool
+    that lifts one; nothing where there is none."""
+    held = marks_in_force(camera)
+    if held:
+        print(f"grey memory: {len(held)} row(s) marked misjudged, not entered on that reading alone this run: "
+              + ", ".join(f"{row!r} ({reading})" for row, reading in sorted(held))
+              + f" ({TOOL} --list; --measured ROW READING --why ... lifts one)", flush=True)
+
+
+def run_name(run) -> str | None:
+    """A run's folder name for the memory's lines (a camkit.runs.Run, or None in a test)."""
+    return getattr(getattr(run, "dir", None), "name", None)
+
+
+def choice_refused(cam, name: str, label: str) -> str:
+    """Why the entry `label` under the cursor of `name`, about to be chosen with Enter by a caller's word, is not, or
+    "" where it is drawn white (choice_drawing, on the frame on show). Plain words for the run's failure: what it is,
+    that it is drawn grey or cannot be told, what the reading saw, and that nothing was pressed on it. A row the
+    camera's memory marks misjudged for the reading on show is refused before any reading (UNMEASURED's note)."""
+    reading = reading_of(cam)
+    marked = misjudged(name, reading) if reading else None
+    if marked:
+        return (f"{name}: the kit's {reading} reading of this row was found wrong (the camera refused an entry it read "
+                f"white, run {marked.get('run')}, frame {marked.get('frame')}): marked misjudged in {MISJUDGED}, its "
+                f"entries are not entered on that reading alone until a measurement says otherwise ({TOOL} --list "
+                f"shows the marks; {TOOL} --measured {name!r} {reading} --why \"what measured it\" lifts this one); "
+                f"{label!r}: nothing was pressed on it")
+    grey, level, how = choice_drawing(cam)
+    if grey is False:
+        return ""
+    frame = getattr(getattr(getattr(cam, "frame", None), "path", None), "name", "")
+    read = f", it reads {level:.0f}" if level is not None else ""
+    if grey:
+        return (f"{name}: {label!r} is drawn grey ({how}{read}, {frame}), and a greyed entry is never entered to "
+                "choose it: nothing was pressed on it")
+    return (f"{name}: whether {label!r} is drawn grey cannot be told ({how}{read}, {frame}), so it is not entered on "
+            "a guess: nothing was pressed on it")
