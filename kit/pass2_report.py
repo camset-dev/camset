@@ -302,6 +302,17 @@ def menu_names(tree) -> set:
     return names
 
 
+# OCR's reading of the camera's ± ("‡0" for "±0", as camkit.live.VALUE_FOLD and SCALE_SIGNS take it)
+OCR_PLUS_MINUS = str.maketrans({"‡": "±"})
+
+
+def plus_minus_read(r: dict) -> dict:
+    """A proof line as report_proofs reads it: OCR's ‡ in its label and shown read as the camera's ± (OCR_PLUS_MINUS),
+    no other sign touched; the line itself, unchanged, where neither holds one."""
+    fix = {f: r[f].translate(OCR_PLUS_MINUS) for f in ("label", "shown") if isinstance(r.get(f), str) and "‡" in r[f]}
+    return {**r, **fix} if fix else r
+
+
 def name_of(o: dict) -> tuple:
     """(name, source, dispute) for one proof: the name its value is credited to, which readers back it, and, for a
     name the readers do not agree on, {label, shown, vlm} to look at (else None). Readers: the pass-1 map's label L
@@ -871,7 +882,7 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
                 continue                       # struck by hand: as if the line were not there (struck_lines)
             if r.get("kind") == MIRROR_KIND:
                 continue                       # a registration's copy, no row's proof (mirror_lines reads it)
-            r = own_changes(qualified(r, part.name, run.name))
+            r = own_changes(qualified(plus_minus_read(r), part.name, run.name))
             key = same_proof(r)
             if key is not None and key in seen:
                 continue                       # the same proof read in another folder

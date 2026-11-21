@@ -1243,6 +1243,22 @@ def test_name_rule_weighs_the_map_the_ocr_and_the_vision_reading(monkeypatch):
     assert R.name_of(o("Manual Focus", None, "Register")) == ("Manual Focus", "one reader (map)", None)
 
 
+def test_ocr_s_dagger_before_a_zero_is_the_camera_s_plus_minus(monkeypatch):
+    # OCR reads the ± before a step's zero as ‡ ("‡0") where the vision model reads "±0", as camkit.live's VALUE_FOLD
+    # and scale_number already take it: report_proofs reads the line as "±0", which the schema's "±0 EV" names
+    import pass2_report as R
+    monkeypatch.setattr(R, "ROW_NAMES", set())
+    o = {"kind": "list", "label": "‡0", "shown": "‡0", "vlm": "±0"}
+    assert R.judge({R.name_of(o)[0]: 6}, {6: "±0 EV"})[0] == "conflict"
+    assert R.plus_minus_read(o) == {**o, "label": "±0", "shown": "±0"} and o["label"] == "‡0"
+    assert R.name_of(R.plus_minus_read(o)) == ("±0", "two readers", None)
+    assert R.judge({R.name_of(R.plus_minus_read(o))[0]: 6}, {6: "±0 EV"})[0] != "conflict"
+    other = {**o, "label": "−1", "shown": None, "vlm": "-1"}
+    assert R.plus_minus_read(other) is other                                    # no other sign, no line, touched
+    import inspect
+    assert "plus_minus_read(r)" in inspect.getsource(R.report_proofs)
+
+
 def test_a_value_carried_over_from_the_option_before_is_not_credited():
     # one attempt of a list row: C moves 0x0001 only, A also writes 0x0002 = 5, B leaves 0x0002 where A put it while
     # 0x0001 moves on; the saved option comes back last and changes nothing. 0x0002 = 5 is A's, not B's
