@@ -906,3 +906,69 @@ def test_mode_switch_restore_leaves_the_memory_records_out_of_its_count(monkeypa
     filled = filled_file(tmp_path, "filled.DAT", [7])
     assert MS.restore_left(filled) == not_by_file.memory_left("ILCE-1M2", (7,)) and "set7:0x0170" in MS.restore_left(filled)
     assert MS.restore_left(SAMPLE) == frozenset(), "a slot that reads empty tolerates nothing"
+
+
+class FNumberLink:
+    """The SDK's FNumber and ExposureProgramMode as camlink answers a get: `replies` FNumber states in turn (the last
+    repeated), each a dict of enable, writable and values; every read kept."""
+
+    def __init__(self, replies, mode=1):
+        self.replies, self.mode, self.reads = list(replies), mode, []
+
+    def get(self, name):
+        self.reads.append(name)
+        if name == "ExposureProgramMode":
+            return {"current": self.mode, "enable": 2, "writable": False, "values": []}
+        r = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+        return {"current": 560, **r}
+
+
+SETTABLE = {"enable": 1, "writable": True, "values": [400, 450, 560]}
+SHOWN_ONLY = {"enable": 2, "writable": False, "values": []}
+
+
+def test_fnumber_is_read_again_before_the_run_gives_up_and_its_refusal_says_what_the_camera_reported(M, monkeypatch):
+    """2026-11-21: both slot-1 chains stopped on "the camera does not take FNumber now (the shooting mode sets it:
+    Stills A or M takes it)" with the camera in Stills M (the start file, the HDMI frame): camlink reported FNumber
+    display-only (enable 2) with no F-number listed, where every earlier Stills M read had it settable with 16. The run
+    reads it again for a while before it gives up (a camera still settling), and the refusal says what the camera
+    reported: the flag in words, how many F-numbers it listed, the SDK's exposure mode; never the F-number it held."""
+    from prove_run import Failed
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    late = FNumberLink([SHOWN_ONLY, SHOWN_ONLY, SETTABLE])
+    assert M.fnumber_settable(late, tries=5)["values"] == [400, 450, 560]
+    assert late.reads.count("FNumber") == 3
+    never = FNumberLink([SHOWN_ONLY])
+    with pytest.raises(Failed) as e:
+        M.fnumber_settable(never, tries=4)
+    why = str(e.value)
+    assert never.reads.count("FNumber") == 4
+    assert "display only" in why and "0 F-numbers listed" in why and "ExposureProgramMode reads 1" in why
+    assert "aperture ring" in why and "560" not in why and "F5.6" not in why
+    movie_p = FNumberLink([SHOWN_ONLY], mode=32848)
+    with pytest.raises(Failed, match="ExposureProgramMode reads 32848"):
+        M.fnumber_settable(movie_p, tries=1)
+    assert M.fnumber_settable(FNumberLink([SETTABLE]), tries=1)["writable"] is True
+
+
+def test_the_run_works_in_the_mode_it_is_given_so_a_kept_switch_does_not_refuse_it(M, monkeypatch):
+    """2026-11-21: memreg_tab_looks2's three looks were refused before connecting ("left the camera in Movie mode, and
+    this run works in Stills mode"): memreg_run took no --in. It takes the runner's --in now, and its page scan goes
+    with that mode (run_scan: runner.in_mode); an aperture slot's family must be on that mode's menu (Movie on Movie,
+    S&Q and Time-lapse on S&Q), refused before anything connects otherwise."""
+    monkeypatch.setattr(M.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(M, "read_json", lambda path: {"model": "ILCE-1M2"})
+    monkeypatch.setattr(M.definitions, "with_evidence", lambda doc, *a, **k: doc)
+    seen = []
+    monkeypatch.setattr(M, "prove_apertures", lambda a, doc, allowance: seen.append(("aperture", a.in_mode)) or 0)
+    monkeypatch.setattr(M, "look_tabs", lambda a, doc: seen.append(("look", a.in_mode, M.run_scan(a).mode)) or 0)
+    allow = ["--allow", "Camera Set. Memory"]
+    assert M.main(["--aperture", "--slot", "Movie 1", "--in", "Movie"] + allow) == 0
+    assert M.main(["--aperture", "--slot", "S&Q 1", "--in", "S&Q"] + allow) == 0
+    assert M.main(["--look-tabs", "--in", "Movie", "--scan", "kit2_page_scan_movie_1118"] + allow) == 0
+    assert seen == [("aperture", "Movie"), ("aperture", "S&Q"), ("look", "Movie", "Movie")]
+    with pytest.raises(SystemExit, match="on the Movie menu: give --in Movie"):
+        M.main(["--aperture", "--slot", "Movie 1"] + allow)
+    with pytest.raises(SystemExit, match="on the Stills menu: give --in Stills"):
+        M.main(["--aperture", "--slot", "2", "--in", "S&Q"] + allow)
+    assert M.menu_of("Time-lapse") == "S&Q" and M.menu_of("Stills") == "Stills"
