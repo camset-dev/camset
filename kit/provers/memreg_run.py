@@ -427,6 +427,36 @@ def put_back_aperture(link, held, say) -> bool:
     return True
 
 
+# the SDK's property enable flag in words (CrPropertyEnableFlag); FNUMBER_TRIES reads FNUMBER_PAUSE s apart before a run
+# gives up on FNumber (a camera still settling after a restart)
+ENABLE_WORDS = {-1: "not supported", 0: "disabled", 1: "settable", 2: "display only", 3: "set only"}
+FNUMBER_TRIES, FNUMBER_PAUSE = 10, 2.0
+
+
+def fnumber_settable(link, tries: int = FNUMBER_TRIES, pause: float = FNUMBER_PAUSE) -> dict:
+    """The SDK's FNumber once the camera takes it (writable, its F-numbers listed), read up to `tries` times `pause` s
+    apart; else Failed, saying what the camera reported: the flag in words, how many F-numbers it listed, and the SDK's
+    ExposureProgramMode (1 is Stills M, where every read of the kit's took FNumber before 2026-11-21), never the F-number
+    it held. 2026-11-21: in Stills M by the start file and the HDMI frame, both slot-1 chains read it display only with
+    none listed; a lens whose aperture ring is off A, or no lens the camera can set, reads so, which only the owner can
+    tell."""
+    from prove_run import Failed
+    got = {}
+    for n in range(max(1, tries)):
+        got = link.get("FNumber") or {}
+        if got.get("writable") and got.get("values"):
+            return got
+        if n + 1 < tries:
+            time.sleep(pause)
+    mode = (link.get("ExposureProgramMode") or {}).get("current")
+    flag = got.get("enable")
+    raise Failed(f"the camera does not take FNumber now: read {max(1, tries)} times, it reports it "
+                 f"{ENABLE_WORDS.get(flag, f'with enable flag {flag}')} with {len(got.get('values') or [])} F-numbers "
+                 f"listed, and ExposureProgramMode reads {mode} (Stills M reads 1, where the camera took FNumber on "
+                 "every earlier read). In A or M, a lens whose aperture ring is off A, or no lens the camera can set, "
+                 "reads so: ask the owner to look at the lens; in P, S or Auto the camera sets FNumber itself")
+
+
 def prove_apertures(a, doc: dict, allowance: str) -> int:
     """--aperture: one session (decision 15). The start download; the slot must be filled already (slot_filled: a
     registration fills an empty slot for good); the camera must take FNumber (Stills A or M); then every F-number the
@@ -458,9 +488,7 @@ def prove_apertures(a, doc: dict, allowance: str) -> int:
         if not slot_filled(start_cs, model_name, section):
             say(f"slot {a.slot} is empty in the start file and is filled by this run for good ({FILL_EMPTY_WORD}): "
                 f"{NOT_PUT_BACK}")
-        got = link.get("FNumber") or {}
-        if not got.get("writable"):
-            raise Failed("the camera does not take FNumber now (the shooting mode sets it: Stills A or M takes it)")
+        got = fnumber_settable(link)
         held, lens = got.get("current"), list(got.get("values") or [])
         if a.beyond_lens:
             table = [v for v, _ in next((s.get("values") or [] for s in doc.get("settings") or []
