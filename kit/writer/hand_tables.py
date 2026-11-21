@@ -42,7 +42,7 @@ import re
 import types
 from pathlib import Path
 
-from camkit import datafiles, paths, row_names
+from camkit import datafiles, grey_rules, paths, row_names
 
 from . import hand_evidence
 
@@ -343,6 +343,18 @@ def _pairs(x, where: str) -> list:
     return x
 
 
+def _grey_fix(k, e: dict) -> None:
+    """A RECORD_FIXES entry's grey fields in their shapes (camkit.grey_rules; the camera's mode names and the row's menus
+    are the writer's to check): an inactive_when an object, or null to take the definition's out; an inactive_if
+    inactive_when's keys with a family or hdmi_device; a grey_in some mode names, none twice."""
+    if "inactive_when" in e and e["inactive_when"] is not None:
+        _need(e["inactive_when"], dict, f"{k!r}'s 'inactive_when'")
+    bad = (grey_rules.rule_problems(e["inactive_if"], repr(k)) if "inactive_if" in e else []) + \
+        (grey_rules.grey_in_problems(e["grey_in"], repr(k)) if "grey_in" in e else [])
+    if bad:
+        raise _Shape(bad[0])
+
+
 def _pattern(text, where: str) -> re.Pattern:
     """`text` compiled as the writer runs it (Python's re); _Shape, saying where, when it does not compile."""
     try:
@@ -375,6 +387,8 @@ def _shaped(name: str, kind: str, raw):
                     (e["live_only"] is not True or not str(k).startswith("global:")):
                 raise _Shape(f"{k!r}'s 'live_only' is only ever true, on a live record (\"global:0x....\"): it keeps "
                              "the record out of the memory sets")
+            if name == "RECORD_FIXES":
+                _grey_fix(k, e)
         return raw
     if kind == "words":
         for k, v in _need(raw, dict, "the table").items():

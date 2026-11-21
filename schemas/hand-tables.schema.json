@@ -604,7 +604,10 @@
      "description": "The shooting modes the setting applies in, as the definition's own modes field writes them (\"still image, movie\"): the editor's \"Applies in\"."
     },
     "inactive_when": {
-     "type": "object",
+     "type": [
+      "object",
+      "null"
+     ],
      "additionalProperties": false,
      "required": [
       "record",
@@ -645,7 +648,86 @@
        "description": "That value's name."
       }
      },
-     "description": "When the camera leaves the setting out, greyed or not drawn, keeping its value: the definition's inactive_when, which the editor shows."
+     "description": "When the camera leaves the setting out, greyed or not drawn, keeping its value: the definition's inactive_when, which the editor shows; null takes the definition's rule out (one found wrong). A rule on the live-mode record is refused: name its modes in grey_in."
+    },
+    "inactive_if": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "record",
+      "name",
+      "values",
+      "unlock",
+      "unlock_label"
+     ],
+     "properties": {
+      "record": {
+       "type": "integer",
+       "description": "The live record whose value decides it, by its id in decimal."
+      },
+      "name": {
+       "type": "string",
+       "description": "That record's setting's name."
+      },
+      "values": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "description": "The values that leave the setting out."
+      },
+      "except": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "description": "Or the values that alone keep it in."
+      },
+      "unlock": {
+       "type": "integer",
+       "description": "A value that brings it back."
+      },
+      "unlock_label": {
+       "type": "string",
+       "description": "That value's name."
+      },
+      "family": {
+       "type": "array",
+       "minItems": 1,
+       "uniqueItems": true,
+       "items": {
+        "type": "string"
+       },
+       "description": "The rule holds only while the camera is in one of these shooting modes, the camera's own names for its shooting modes (camera.live_mode's: the a1 II's Stills, Movie, S&Q and Time-lapse), never menu names; never all of them (that is inactive_when)."
+      },
+      "hdmi_device": {
+       "type": "boolean",
+       "const": true,
+       "description": "The rule holds only while a device is connected to the camera's HDMI socket, which no record of the file tells: the editor never dims the row on it, it says the condition beside the reason."
+      }
+     },
+     "anyOf": [
+      {
+       "required": [
+        "family"
+       ]
+      },
+      {
+       "required": [
+        "hdmi_device"
+       ]
+      }
+     ],
+     "description": "inactive_when's rule, true only under a condition the record alone does not say (family, hdmi_device; one or both): the definition's inactive_if. A key of its own, which an editor that predates it ignores whole, never shows as a grey. Its looks of each side are the hand evidence's (RECORD_FIXES' \"looks\")."
+    },
+    "grey_in": {
+     "type": "array",
+     "minItems": 1,
+     "uniqueItems": true,
+     "items": {
+      "type": "string"
+     },
+     "description": "The shooting modes in which the camera draws the setting's row grey whatever the file holds, the camera's own names for its shooting modes (camera.live_mode's: the a1 II's Stills, Movie, S&Q and Time-lapse), never menu names: each a mode of a menu that lists the row (row_menus), never every one; a fact that differs between two modes of one menu (the S&Q menu's S&Q and Time-lapse) names only the mode it holds in. The editor dims the row in a menu's view only where every mode the view stands for is named, and says the modes beside it where some are (camkit/grey_rules.py, docs/DATA_CONTRACTS.md). Its looks of each side are the hand evidence's (RECORD_FIXES' \"looks\")."
     }
    }
   },

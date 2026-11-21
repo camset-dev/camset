@@ -99,8 +99,92 @@
      "description": "As NEW_RECORDS, for the entries the two share: put on once."
     },
     "RECORD_FIXES": {
-     "$ref": "#/$defs/notes",
-     "description": "A record's corrected note: its evidence."
+     "type": "object",
+     "propertyNames": {
+      "$ref": "#/$defs/key"
+     },
+     "description": "A record's corrected note: its evidence; and for a grey_in or inactive_if, the kit's looks of each side (camkit/grey_rules.py look_problems: the writer refuses an entry whose looks miss one).",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "note+": {
+        "$ref": "#/$defs/after"
+       },
+       "looks": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+         "type": "object",
+         "additionalProperties": false,
+         "required": [
+          "run",
+          "line",
+          "mode",
+          "drawn",
+          "kit_set"
+         ],
+         "properties": {
+          "run": {
+           "type": "string",
+           "minLength": 1,
+           "description": "The run whose looks file holds the line."
+          },
+          "line": {
+           "type": "integer",
+           "minimum": 1,
+           "description": "The line of that run's looks file."
+          },
+          "mode": {
+           "type": "string",
+           "description": "The shooting mode the camera stood in, as camera.live_mode names it (read from the look's start download)."
+          },
+          "drawn": {
+           "enum": [
+            "grey",
+            "white"
+           ],
+           "description": "How the look saw the row."
+          },
+          "blocker": {
+           "type": "integer",
+           "description": "The rule's record's value in that look (read from its start download)."
+          },
+          "kit_set": {
+           "type": "array",
+           "uniqueItems": true,
+           "items": {
+            "enum": [
+             "mode",
+             "blocker"
+            ]
+           },
+           "contains": {
+            "const": "mode"
+           },
+           "description": "What the kit itself set in that run: the shooting mode always (its own switch), and the blocker's value where it set it."
+          },
+          "hdmi": {
+           "enum": [
+            "in",
+            "out"
+           ],
+           "description": "The HDMI cable, as the chain's context line gives it (the owner's word): needed where the entry has hdmi_device."
+          },
+          "help": {
+           "enum": [
+            "shoot mode",
+            "another setting",
+            "none"
+           ],
+           "description": "What the camera's Help or its notice on the grey row named: needed for grey_in."
+          }
+         }
+        },
+        "description": "Each look that proves a side of the entry's grey_in or inactive_if."
+       }
+      }
+     }
     },
     "PICKER_LISTS": {
      "type": "object",

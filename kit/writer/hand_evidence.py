@@ -5,7 +5,8 @@ and families, the notes that say what a record holds, the rules the writer appli
 which state each of its facts was proved (a hand proof's values, run, day and menu row, a sample's count, the owner's
 allowance, a note's evidence, what shows a not-offered mark, how a picker's list was walked whole, what showed a switch keeping copies apart,
 what measured a focus frame's travel, what showed the camera move a limit kept in order, why a row given by hand is its
-record's) is the mapping's
+record's, the looks behind a grey_in or inactive_if, which camkit.grey_rules checks and the definition never holds) is
+the mapping's
 evidence, and is kept in the private overlay beside the definition's own evidence:
 
     private/evidence/<model>_fw<fw>.hand.json   by table name, the fields each entry's evidence adds or replaces

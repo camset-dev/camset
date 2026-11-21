@@ -103,7 +103,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, camset, datafiles, definitions, help_files, paths, placement  # noqa: E402
+from camkit import ROOT, camset, datafiles, definitions, grey_rules, help_files, paths, placement  # noqa: E402
 from make_sample import (PERSONAL, empty_note, missing_words, personal, personal_problems, personal_rules,  # noqa: E402
                          rid_text, shown_why)
 
@@ -855,7 +855,9 @@ def menu_problems(doc: dict) -> list:
     camkit.placement.item_page), a row on My Menu's tab outside its setting page (an owner's item), row_menus or
     row_places on a copy (which follows its setting), row_icons that is not one item per label of its row, each null
     or one of the camera's icon words (icon_words: no place and no value, a fixed vocabulary), at least one not null,
-    and a row whose settings disagree on its row_icons (icons_disagree)."""
+    a row whose settings disagree on its row_icons (icons_disagree), and a grey_in, inactive_if or inactive_when out of
+    camkit.grey_rules' shapes (the camera's own mode names, within the menus that list the row; hdmi_device only true;
+    no rule on the live-mode record; nothing of how it was measured, a look never: grey_rules.problems)."""
     cam = doc.get("camera") or {}
     menus = cam.get("menus")
     mine = ((cam.get("text") or {}).get("my_menu_name")) or "My Menu"
@@ -922,7 +924,7 @@ def menu_problems(doc: dict) -> list:
                           option=place.get("under_option"))
             out += on_my_menu(where, place.get("row_tab") or s.get("row_tab") or s.get("tab"),
                               place.get("row_group") or s.get("row_group") or s.get("group"))
-    return out + icons_disagree(doc)
+    return out + icons_disagree(doc) + grey_rules.problems(doc)
 
 
 def icons_disagree(doc: dict) -> list:

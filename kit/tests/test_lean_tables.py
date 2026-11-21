@@ -24,7 +24,7 @@ EVIDENCE_KEYS = {"run", "date", "proved", "sampled", "linear", "allowance", "evi
 # what the hand evidence may hold, by table: evidence only, so no public fact hides in the private file either
 # (a note's evidence is its suffix, "note+": hand_evidence never replaces a public note)
 EVIDENCE_FIELDS = {"FRAME_PROOFS": {"note+", "proved", "sampled", "linear", "run", "date", "menu", "allowance"},
-                   "NEW_RECORDS": {"note+"}, "FILTER_FLAGS": {"note+"}, "RECORD_FIXES": {"note+"},
+                   "NEW_RECORDS": {"note+"}, "FILTER_FLAGS": {"note+"}, "RECORD_FIXES": {"note+", "looks"},
                    "NOT_OFFERED": {"$key", "$values", "evidence", "files"}, "VIDEO_SYSTEM_VALUES": {"evidence"},
                    "PICKER_LISTS": {"evidence"}, "KEEPS_APART": {"$setting", "evidence", "untick"},
                    "FRAME_TRAVEL": {"evidence"}, "LIMIT_PAIRS": {"evidence"},

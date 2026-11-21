@@ -987,6 +987,12 @@ def main():
     gaps = hand_facts.hand_proof_gaps({"FRAME_PROOFS": FRAME_PROOFS})
     if gaps:
         sys.exit(hand_facts.hand_proof_stop(paths.A1II, gaps))
+    # a grey_in or inactive_if rests on the kit's looks of each side, which the hand evidence puts back into its entry
+    # (camkit.grey_rules): checked where that evidence is, by the plain pass's rule
+    gaps = hand_facts.grey_look_gaps(RECORD_FIXES, {"RECORD_FIXES": RECORD_FIXES}, hand_facts.camera_modes(paths.A1II)) \
+        if HAND_EVIDENCE is not None else []
+    if gaps:
+        sys.exit(hand_facts.grey_look_stop(paths.A1II, gaps))
     doc = definitions.load(target)
     # whether this write rebuilds the places, judged on the definition as read, before this pass's proofs: read without
     # its proof paths, it keeps every place it has, and says why (fromdata.places_as_read)
@@ -1536,6 +1542,7 @@ def main():
                 changed.append((k, by_key[k]["name"], v, pair[1], lab))
                 pair[1] = lab
     for k, fix in RECORD_FIXES.items():
+        fix = hand_facts.public_fix(fix)            # never its looks (the hand evidence's)
         if k in by_key and fix_differs(by_key[k], fix):
             # said by what changes: the name where it does, else the first field that does (a range alone is no name
             # changing to itself), a note by its first words
@@ -1543,6 +1550,7 @@ def main():
             f = next(f for f in ("name", *fix) if fix_differs(s, {f: fix[f]}))
             changed.append((k, s["name"], f, None, fix[f][:60]) if f == "note" else (k, s["name"], f, s.get(f), fix[f]))
             apply_fix(s, fix)
+    hand_facts.grey_out(by_key, RECORD_FIXES, changed)      # grey_in, inactive_if: the tables' alone
     with_drawn(report, by_key, sampled, changed)    # a box's numbers drawn "±5" or "100+", named so over its range
     # PP7-PP9 (elements 6-8 of each profile array) are not on this body's menu (2026-10-30): the list
     # offers PP1-PP6, PP10, PP11 in Stills and Movie mode alike, and Log Shooting on greys it out.
