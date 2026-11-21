@@ -3143,15 +3143,50 @@ def test_a_row_that_names_less_state_gives_way_to_rows_of_the_same_row_that_name
 
 
 @needs_evidence
-def test_the_definition_lists_neither_the_bare_registration_row_nor_focus_areas_movie_mode_row():
-    """The ILCE-1M2's proofs' menu rows (evidence): neither the bare AF Area Registration row nor Focus Area's Movie
-    mode row, which gave way to the rows that name the state (stood_out, above); the registrations list the row that
-    says Switch V/H AF Area Off."""
+def test_the_definition_lists_not_the_bare_registration_row():
+    """The ILCE-1M2's proofs' menu rows (evidence): not the bare AF Area Registration row, which gave way to the rows
+    of the same mode that name the state (stood_out, above); the registrations list the row that says Switch V/H AF
+    Area Off. Focus Area's Movie mode row is Movie's menu's own since 2026-11-21: Stills lines never stand for it
+    (stood_rows, by the camera's modes), so a write since lists it."""
     menu = ("AF Area Registration On, Fn held on the shooting screen",)
     menus = {s["key"]: (s.get("proved") or {}).get("menu") or [] for s in DOC["settings"]}
-    assert not [k for k, m in menus.items() if menu[0] in m or "Focus Area [Movie mode]" in m]
+    assert not [k for k, m in menus.items() if menu[0] in m]
     assert all(f"{menu[0]} [Switch V/H AF Area Off]" in menus[k] for k in ("global:0x0e7a", "global:0x0f80",
                                                                            "global:0x0e74", "global:0x0f8c"))
+
+
+def test_lines_made_in_another_shooting_mode_never_stand_for_the_top_menus(tmp_path):
+    """pass2_report.stood_rows given the camera's shooting modes: a line whose context names another mode ("S&Q mode",
+    "Movie mode (dial set with the menu)") is that mode's menu's row, so lines of the top menu that name more state never
+    stand for it (the a1 II's Zebra Level boxes in Movie and S&Q, beside Stills lines naming Shoot Mode M, were left
+    out of the report and so of those menus, 2026-11-21); lines of one mode still stand for that mode's own. With no
+    modes given (a run whose camera file names none) every line is the top menu's, as before; camera_modes reads the
+    modes from the run's camera file. Made-up proofs."""
+    import pass2_report as R
+    k, row = "global:0x0de2", ("Zebra Level", "Custom 1", "Standard")
+    modes = ["Stills", "Movie", "S&Q", "Time-lapse"]
+
+    def lines(context, frame):
+        return [dict(proof(lab, i, [(k, 70, v)], frame=frame + 2 * n, path=row), context=context)
+                for n, (lab, i, v) in enumerate((("69", 0, 69), ("71", 1, 71)))]
+    # the rows the contexts name a state of, walked (named_states: "Zebra Level Custom 1", "Shoot Mode M")
+    walked = [proof("Custom 1", 8, [("global:0x0379", 0, 8)], frame=2, path=("Zebra Level",)),
+              proof("M", 3, [("global:0x0001", 0, 3)], frame=4, path=("Shoot Mode",))]
+    still = lines("Shoot Mode M (dial set with the menu), Zebra Level Custom 1", 10)
+    sq = lines("S&Q mode, Zebra Level Custom 1", 20)
+    movie = lines("Movie mode, Zebra Level Custom 1", 30)
+    bare_movie = lines("Movie mode", 40)
+    run = write_run(tmp_path, walked + still + sq + movie + bare_movie)
+    proofs, skip, _, _, _ = R.report_proofs(run)
+    name = "Zebra Level > Custom 1 > Standard"
+    assert {f"{name} [S&Q mode, Zebra Level Custom 1]", f"{name} [Movie mode, Zebra Level Custom 1]"} <= \
+        set(R.stood_rows(proofs, skip)), "with no modes given, the Stills lines stand for them"
+    found = R.stood_rows(proofs, skip, modes)
+    assert set(found) == {f"{name} [Movie mode]"}, found
+    assert found[f"{name} [Movie mode]"][1] == {f"{name} [Movie mode, Zebra Level Custom 1]"}
+    assert R.stood_on(proofs, skip, None, modes) == {8, 9}
+    assert R.camera_modes(paths.runs_top() / A1 / "kit2_made_up") == modes
+    assert R.camera_modes(run) == []
 
 
 def test_a_stated_line_backs_a_change_only_under_the_same_option(tmp_path):

@@ -1065,8 +1065,9 @@ def main():
     # the values the lines the report counts wrote: of the proof the definition held before, only such a value is kept
     # beside the report's (kept_proof); an old menu row never is; and each row's own, which says a sampled record walked
     # whole by some run (walked_whole)
-    by_row = written_by_row(all_proofs, cut_short, {e["row"] for e in report})
-    still = still_values(all_proofs, cut_short, report)    # values a walk chose with nothing to show (walked_whole)
+    modes = hand_facts.camera_modes(paths.A1II)           # lines of one mode never stand for another's (stood_rows)
+    by_row = written_by_row(all_proofs, cut_short, {e["row"] for e in report}, modes)
+    still = still_values(all_proofs, cut_short, report, modes=modes)    # values a walk chose with nothing to show
     written = written_values(all_proofs, cut_short, by_row=by_row)
     for e in report:
         row = re.sub(r" \[field \d+\]$", "", e["row"])

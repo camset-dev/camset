@@ -1999,7 +1999,7 @@ def test_a_look_that_did_not_reach_the_row_never_erases_one_that_did(camera):
     assert row(ledger(), "Echo")["status"] == "information screen"
     add_looks(camera, look(["Kilo"], did="choose", option="On", result="not_reached"))
     last, _laps = coverage._last_looks(coverage.read_looks(CAM))
-    assert last[(("kilo",), "choose", "on")][1]["result"] == "not_reached"
+    assert last[(("kilo",), None, "choose", "on")][1]["result"] == "not_reached"
 
 
 def test_a_retraction_names_what_it_withdraws(camera, monkeypatch):
@@ -2164,3 +2164,82 @@ def test_the_ledger_reads_a_rows_n_th_label_as_placement_does():
     assert led.find(["Custom Key/Dial Set.#1"]) == [led.rows[1]]
     assert led.find(["Custom Key/Dial Set."]) == led.rows[:2]
     assert led.find(["Custom Key/Dial Set.#2"]) == []
+
+
+# ---------------------------------------------------------------- rows by mode, misreadings, values no menu writes
+
+def test_a_look_in_one_mode_never_hides_one_in_another_and_one_naming_no_mode_stands_for_every_mode(camera):
+    """The latest look of a row is kept per shooting mode: a later S&Q look (greyed by the Shoot Mode) no longer hides
+    the Movie one that named the equipment it lacks, so a Movie row the Help Guide lists ends "needs equipment" (the a1
+    II's Shoe Audio Set., 2026-11-21). A look naming no mode stands for every mode as before: a retraction withdraws the
+    row's looks in all of them (and a later look in any mode then stands), and one that did not reach the row never
+    takes the place of one that did."""
+    shoe = ["Shoe Audio Set."]
+    movie = look(shoe, mode="Movie", tab="Shooting", screen="notice", result="greyed",
+                 blocker={"equipment": "a shoe audio accessory"})
+    sq = look(shoe, mode="S&Q", tab="Shooting", screen="notice", result="greyed", blocker={"row": "Shoot Mode"})
+    lost = look(shoe, result="not_reached")
+    last, _ = coverage._last_looks([(1, movie), (2, sq), (3, lost)])
+    assert sorted(k[1] for k in last) == ["Movie", "S&Q"]
+    gone = look(shoe, result="retract")
+    last, _ = coverage._last_looks([(1, movie), (2, sq), (4, gone)])
+    assert list(last) == [(("shoe audio set",), None, "open", "")]
+    assert coverage.retracted([(1, movie), (2, sq), (4, gone)]) == [(("shoe audio set",), "open")]
+    last, _ = coverage._last_looks([(1, movie), (4, gone), (5, sq)])
+    assert list(last) == [(("shoe audio set",), "S&Q", "open", "")]
+    with open(camera.data / f"help_guide_menu_{CAM}.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"tab": "Shooting", "group": "Audio Recording", "item": "Shoe Audio Set.", "modes": "movie"})
+                + "\n")
+    add_looks(camera, movie, sq)
+    assert row(ledger(), *shoe)["status"] == "needs equipment"
+
+
+def test_a_retracted_misreading_makes_no_row_and_row_names_give_the_cameras_label(camera):
+    """A crawl's submenu row and its look under a misread label ("Fixed Speed SIBY" for "Fixed Speed STBY", the a1 II's
+    zoom rows, 2026-11-21) make no row once a retraction of its opening stands (coverage.py --record --result retract
+    --did open), and a label ROW_NAMES gives the camera's name for ("1 Fixed Speed REC", an icon read as a letter) is
+    keyed as the camera draws it."""
+    from camkit import row_names
+    crawl = camera.runs / "kit2_crawl" / "rows.jsonl"
+    with open(crawl, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"page": "3/9", "slot": 2, "label": "Kilo", "outcome": "submenu crawled", "kind": "submenu",
+                            "submenu": [{"label": "Fixed Speed SIBY", "outcome": "walked"},
+                                        {"label": "1 Fixed Speed REC", "outcome": "walked"}]}) + "\n")
+    add_looks(camera, look(["Kilo", "Fixed Speed SIBY"], mode="S&Q", screen="list", result="looked", by="crawl"))
+
+    def paths_of():
+        return [e["path"] for e in ledger().rows if e["path"][:1] == ["Kilo"] and len(e["path"]) > 1]
+    assert ["Kilo", "Fixed Speed SIBY"] in paths_of() and ["Kilo", "1 Fixed Speed REC"] in paths_of()
+    hand = camera.data / f"hand_tables_{CAM}.json"
+    tables = json.loads(hand.read_text(encoding="utf-8"))
+    hand.write_text(json.dumps(dict(tables, ROW_NAMES={"Kilo > 1 Fixed Speed REC": "Kilo > Fixed Speed REC"})),
+                    encoding="utf-8")
+    add_looks(camera, look(["Kilo", "Fixed Speed SIBY"], result="retract"))
+    row_names.forget()
+    try:
+        got = paths_of()
+    finally:
+        row_names.forget()
+    assert ["Kilo", "Fixed Speed SIBY"] not in got and ["Kilo", "1 Fixed Speed REC"] not in got
+    assert ["Kilo", "Fixed Speed REC"] in got
+
+
+def test_values_no_menu_writes_are_no_proof_possible_by_the_hand_tables(camera):
+    """A setting a proof reached whose values the proof does not list, and which the hand tables' UNPROVED gives a
+    reason of another kind than equipment (the a1 II's Base Look copies, which only Camera Settings Reset writes): those
+    values are "no proof possible", in the private build and the public one alike, the proved one stays proved; an
+    equipment reason leaves them as they were."""
+    doc = json.loads(camera.defn.read_text(encoding="utf-8"))
+    doc["settings"].append(setting("global:0x0109", "Lima", ["Kilo"], ((0, "A"), (1, "B"), (2, "C")),
+                                   proved={"values": [0]}))
+    camera.defn.write_text(json.dumps(doc), encoding="utf-8")
+    hand = camera.data / f"hand_tables_{CAM}.json"
+    tables = json.loads(hand.read_text(encoding="utf-8"))
+
+    def values(public, kind):
+        hand.write_text(json.dumps(dict(tables, UNPROVED={"global:0x0109": [kind, None, "No menu writes it."]})),
+                        encoding="utf-8")
+        return next(o for o in ledger(public=public).options if o["key"] == "global:0x0109")["values"]
+    for public in (False, True):
+        assert values(public, "not_on_camera") == {0: "proved", 1: "no proof possible", 2: "no proof possible"}
+        assert values(public, "equipment") == {0: "proved", 1: "not yet tried", 2: "not yet tried"}

@@ -422,9 +422,11 @@ same work twice. It is generated each time from the sources that already exist, 
 `kit/tools/coverage.py` prints and writes it (`--print`, `--todo`, `--row`, `--record`, `--proofs`, `--bundles`: its
 `--help`).
 
-**The looks file.** Of a row, what was done and the option, the latest line wins, except one that did not reach the
-row, and the records an earlier line saw change stay seen; `kit/tools/coverage.py --record ... --result retract`
-withdraws one.
+**The looks file.** Of a row, its mode, what was done and the option, the latest line wins, except one that did not
+reach the row, and the records an earlier line saw change stay seen; a line naming no mode stands for every mode.
+`kit/tools/coverage.py --record ... --result retract` withdraws one, and a retracted opening makes no row (a crawl's
+misreading). A hand tables `UNPROVED` reason on a setting a proof reached makes its other values "no proof possible":
+values no menu writes, a fact of the model.
 
 {{ schema_fields("looks") }}
 

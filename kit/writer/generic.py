@@ -133,8 +133,9 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     # beside the report's (kept_proof); an old menu row never is; and each row's own, which says a sampled record walked
     # whole by some run (walked_whole)
     lines = report_proofs(run)[:2] if (run / "proofs.jsonl").exists() else None
-    by_row = written_by_row(*lines, {e["row"] for e in report}) if lines else {}
-    still = still_values(*lines, report) if lines else {}     # values a walk chose with nothing to show
+    modes = hand_facts.camera_modes(definitions.key(doc))     # lines of one mode never stand for another's
+    by_row = written_by_row(*lines, {e["row"] for e in report}, modes) if lines else {}
+    still = still_values(*lines, report, modes=modes) if lines else {}     # values a walk chose with nothing to show
     written = written_values([], set(), by_row=by_row)
     for e in report:
         row = menu_row(re.sub(r" \[field \d+\]$", "", e["row"]), axis_rows)

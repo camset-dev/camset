@@ -739,6 +739,16 @@ def same_proof(r: dict) -> tuple | None:
     return (r.get("run"), r["dat"], r.get("base"), row_name(r), json.dumps(r.get("index")), str(r.get("label")))
 
 
+def camera_modes(run: Path) -> list:
+    """The camera's shooting modes, its camera file's live_mode names in the order of their codes (the first the top
+    menu's: Stills on the a1 II); [] where the camera file names none."""
+    modes = live_mode_reader(run).modes
+    try:
+        return [modes[k] for k in sorted(modes, key=int)]
+    except ValueError:
+        return list(modes.values())
+
+
 def live_mode_reader(run: Path) -> live_modes.Reader:
     """The reader of the shooting mode a proof's download was saved in (camkit.live_modes), by the camera file's
     live_mode (data/<model>_fw<fw>/camera_<model>_fw<fw>.json, the camera being the run's folder's: runs/<model>_fw<fw>/),
@@ -898,7 +908,7 @@ def says_of(r: dict, row: str, rows: dict | None = None) -> bool:
     return False
 
 
-def stood_rows(proofs: list, skip: set = frozenset()) -> dict:
+def stood_rows(proofs: list, skip: set = frozenset(), modes=()) -> dict:
     """{report row: (its lines' indices into proofs, the rows that stand for it)}: each report row (row_name: a row in
     one context) that says nothing of a row X (says_of), beside lines of the same row that name X's state and every
     state the row names (named_states), the lines that stand for it, such that each of its lines chooses an option
@@ -911,9 +921,19 @@ def stood_rows(proofs: list, skip: set = frozenset()) -> dict:
     all), so a row made where the camera stood can tell X's state as the camera was found in (docs/decisions/0016). A row with a line not applied or a box unticked on its own is no such
     row, and neither is any row beside no line that names a state. The lines that stand for a row name more states
     than it, so two rows never stand for each other. skip: indices that already do not count, never taken as either.
+    `modes`: the camera's shooting modes (camera.live_mode's names, the first the top menu's): a line whose context
+    names another of them (camkit.placement.mode_of) is a row of that mode's menu, and only lines of the same mode stand
+    for it, for leaving it out would lose its menu's row (the a1 II's Zebra Level boxes in Movie and S&Q, beside the
+    Stills lines that name Shoot Mode M, 2026-11-21); none given, every line counts as the top menu's.
     The report leaves out those of them whose every value its records credit the rows that stand for them credit as
     well, backed by readers as well (stood_out); the writer reads the lines the report left out (stood_on)."""
     rows_walked = walked_rows(proofs)
+    modes = list(modes or ())
+
+    def menu_mode(r):
+        """The shooting mode a line's context names, None for the top menu's (none named, or the first mode)."""
+        m = placement.mode_of(f"x [{r.get('context') or ''}]", modes) if modes else None
+        return None if m is None or m == modes[0] else m
 
     def option(r):
         if r.get("kind") == "table":
@@ -931,10 +951,10 @@ def stood_rows(proofs: list, skip: set = frozenset()) -> dict:
             return v in wrote
         return json.dumps(base_value(chosen.get("base"), k)) == v
 
-    by_row = collections.defaultdict(list)          # a row in every context (row_name without one) -> its lines
+    by_row = collections.defaultdict(list)          # a row in every context of one mode -> its lines
     for i, r in enumerate(proofs):
         if i not in skip and r.get("path"):
-            by_row[row_name(dict(r, context=None, untick=None))].append(i)
+            by_row[(row_name(dict(r, context=None, untick=None)), menu_mode(r))].append(i)
     out = {}
     for lines in by_row.values():
         named = {i: named_states(proofs[i], rows_walked) for i in lines}
@@ -963,12 +983,12 @@ def stood_rows(proofs: list, skip: set = frozenset()) -> dict:
     return out
 
 
-def stood_on(proofs: list, skip: set = frozenset(), reported=None) -> set:
+def stood_on(proofs: list, skip: set = frozenset(), reported=None, modes=()) -> set:
     """Indices into proofs that do not count: the lines of the rows stood_rows finds, a row the report kept (its name
     among `reported`, report.json's rows: stood_out found a value or a reader there the rows that stand for it lack)
     aside. kit/schema_update.py reads them so: a value only they wrote is not kept from an older definition
-    (writer.proofs.written_values)."""
-    return {i for row, (own, _) in stood_rows(proofs, skip).items() if reported is None or row not in reported
+    (writer.proofs.written_values). `modes`: stood_rows'."""
+    return {i for row, (own, _) in stood_rows(proofs, skip, modes).items() if reported is None or row not in reported
             for i in own}
 
 
@@ -1026,8 +1046,9 @@ def stood_out(run: Path, proofs: list, skip: set, schema: dict, hand: set, reado
     also credits a value no line changed: a final line's, a start's) the rows that stand for them credit on that
     record too, its name backed by readers at least as well (reader_rank), in a row not sampled from the option the
     camera held: leaving such a row out loses no value and no name of the definition, only its menu row. Each row is
-    credited as the report credits it with every row of stood_rows still there."""
-    found = stood_rows(proofs, skip)
+    credited as the report credits it with every row of stood_rows still there. The camera's shooting modes are its
+    camera file's (live_mode_reader): lines of one mode never stand for another's (stood_rows)."""
+    found = stood_rows(proofs, skip, camera_modes(run))
     if not found:
         return set()
     rows = rows_of(run, proofs, skip)
