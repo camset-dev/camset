@@ -232,6 +232,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **No run presses anything at S&Q Frame Rate 1fps:** there the a1 II acted on one press twice, so every run stops at
+  its start download in that state (exit 7) and says how to leave it, and `mode_switch.py` never switches into it nor
+  sets it.
 - **A menu that opens on the Main tab's page is taken off it by the columns:** Left, Down to the Shooting tab, Right,
   never an Enter or a press on its tiles, where `mode_switch.py` and every walk by `find_position` stopped before.
 - **A definition can say a grey the record alone does not tell:** `grey_in` names the shooting modes where the camera
