@@ -232,6 +232,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`crawl_run.py` and `prove_run.py` answer a row's own question with OK on `--allow "ROW"`, the owner's word:** only
+  where the kit knows its words (Exposure Std. Adjust's on the a1 II), the camera judging that one Enter again; every
+  other question, and every run without the flag, still gets MENU.
 - **`mode_switch.py --set` sets Picture Profile's side-strip dialog, and never a row its owner sets by hand:** only the
   dialog rows `DIALOG_ROWS` names are chosen in, by their title and the mode's map. Every flash, sound, light, motion,
   USB, language, NTSC/PAL, area, date and network row is refused before the link opens.
