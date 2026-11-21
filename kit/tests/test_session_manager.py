@@ -586,7 +586,7 @@ def test_mode_switchs_setting_session(world, monkeypatch, own_runs):
     monkeypatch.setattr(mode_switch, "in_mode", lambda scan, mode: scan)
     monkeypatch.setattr(mode_switch, "definition", lambda run=None: {})
     monkeypatch.setattr(mode_switch, "box_proofs", lambda run: {})
-    monkeypatch.setattr(mode_switch, "set_plan", lambda sets, now, d, b: [(["Made-up Row"], "On", None)])
+    monkeypatch.setattr(mode_switch, "set_plan", lambda sets, now, d, b, shown=None: [(["Made-up Row"], "On", None)])
     monkeypatch.setattr(mode_switch, "open_menu", lambda cam: world.say("open menu"))
     monkeypatch.setattr(mode_switch, "set_row", lambda cam, cycle, model, path, option, say, mode=None:
                         world.say("set row"))
