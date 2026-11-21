@@ -642,10 +642,12 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         # its Enter (greyed.choice_refused); the value the carousel opened on goes back as its put-back, as a list's
         first_k = next((i for i, v in enumerate(vals) if option_key(v) == option_key(FIRST[name])), None) \
             if FIRST.get(name) is not None else None
+        judged = None                       # the uncalibrated reading the value was judged by (greyed.UNMEASURED)
         if not final and (greyed.NEVER_ENTER or k == first_k):
             why = greyed.choice_refused(cam, name, axis_title(cam))
             if why:
                 raise Failed(why)
+            judged = greyed.reading_of(cam)
         chosen, shown, seen_vlm = enter_chosen(cam, (cam.frame.path.name, axis_title(cam), later(vlm_option, cam)),
                                                axis_now)
         # the screen after OK, by the list job's step (proving.commit.after_ok): a refusal or a notice closed with MENU,
@@ -655,13 +657,16 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         # back on the row by its place (no menu page judged as the row's page)
         got = after_ok(cam, name, label=vals[k], back=lambda: same_place(place(cam), row_place))
         notice, refused = got.notice, got.refused
+        if judged and refused:
+            # the camera refused a value the icon read white: the row is marked misjudged (greyed.mark_misjudged)
+            greyed.mark_misjudged(name, judged, greyed.run_name(run), chosen, notice)
         dat = link.download(f"{path[-1]}-axis-{k}")
         done = time.monotonic()
         changes = camset.diff(base, camset.read(dat))
         rec = {"path": path, "kind": "axis", "option": job["option"], "index": k, "label": vals[k], "shown": shown,
                "final": final, "chosen_frame": chosen, "vlm": None, **how, "row_frame": cam.frame.path.name, "dat": dat.name,
                "base": base_path.name, "notice": notice, "applied": not refused,
-               "changes": changes_of(changes)}
+               "changes": changes_of(changes), **({"grey_judged": greyed.UNMEASURED[judged]} if judged else {})}
         brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"
         print(f"   {vals[k]!r:40s} {brief}{' ...' if len(changes) > 6 else ''}", flush=True)
         last = dat

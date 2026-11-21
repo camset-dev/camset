@@ -238,12 +238,16 @@ def grid_tick(cam, name: str, b: int):
     s = cam.read()
     if s.kind != "checklist" or s.focus != "rows" or s.row != b:
         raise Failed(f"{name}: the cursor is not on box {b} ({s.kind}, row {s.row}, {cam.frame.path.name})")
-    from proving.greyed import choice_refused
-    why = choice_refused(cam, name, f"box {b}")
+    from proving import greyed
+    why = greyed.choice_refused(cam, name, f"box {b}")
     if why:
         raise Failed(why)
+    judged, chosen = greyed.reading_of(cam), cam.frame.path.name
     before = check_state(cam)
     cam.press("enter")
+    if judged and not before and cam.read().kind == "notice":
+        # a box the band read white, ticked on, and the camera answered with a notice: the row is marked misjudged
+        greyed.mark_misjudged(name, judged, None, chosen, {"frame": cam.frame.path.name})
     after = check_state(cam)
     if before is None or after is None or after == before:
         raise Failed(f"{name}: Enter did not flip box {b} ({before} -> {after}, {cam.frame.path.name})")

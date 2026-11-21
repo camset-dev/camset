@@ -191,6 +191,8 @@ def visit(cam, link, hdmi, cycle, model, h: int, cells: list) -> dict:
         why = choice_refused(cam, "Recall Custom hold", ITEMS[k])
         if why:
             raise Failed(why)
+        from proving import greyed
+        judged, chosen = greyed.reading_of(cam), cam.frame.path.name
         before = tick(cam)
         cam.press("enter")
         after = tick(cam)
@@ -198,6 +200,9 @@ def visit(cam, link, hdmi, cycle, model, h: int, cells: list) -> dict:
             raise Failed(f"cannot read {ITEMS[k]!r}'s tick ({before} -> {after}, {cam.frame.path.name})")
         if after == before:
             refused.append({"box": k, "label": ITEMS[k], "frame": cam.frame.path.name})
+            if judged and not before:
+                # a tick the band read white that the camera would not put on: the row is marked misjudged
+                greyed.mark_misjudged("Recall Custom hold", judged, None, chosen, {"frame": cam.frame.path.name})
             continue
         flipped.append({"box": k, "label": ITEMS[k], "ticked": after})
     to_register(cam)
