@@ -237,6 +237,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   `set_row` already refuses a list row so drawn.
 - **`optboxes_run.py` asks the reader about a box reading no press can have brought:** OCR's "±7" read as "‡1" no
   longer sends a stepping round two values until it gives up.
+- **`carousel_fields_run.py` takes a short title OCR reads exactly where the reader names no option:** the movie
+  Self-timer's "On" no longer goes unread; a reader naming an option is still taken.
 - **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a
   grey option where it may, closes the list with MENU and stops, as it does where whether an option is grey cannot be told.
 - **`crawl_run.py --leave PATH` leaves a named row unopened, and every row under it:** its outcome says so, so the
