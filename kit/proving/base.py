@@ -103,18 +103,33 @@ class RestoreAfter(Exception):
     put back: the session ends there (not a failure)."""
 
 
+# How find_row found the row it is on, where not by OCR's reading of its bar: {row label: "lit letter"} for a lit
+# one-letter row OCR dropped and proving.screens.lit_letter labelled from two agreeing signs (2026-11-21); at_label keeps
+# it, and Tagged writes it into the row's proof lines ("row_by"), so kit/pass2_report.py never takes such a line's move
+# of a record another row's proofs own as the row's setting. Private-run detail: proofs.jsonl alone (decision 16)
+ROW_BY: dict = {}
+
+
 class Tagged:
     """The proofs file, every line tagged with the state it was proved in ("Switch V/H AF Area = AF
-    Point + AF Area"): the same row proved under another setting is another row in the report."""
+    Point + AF Area"): the same row proved under another setting is another row in the report. A line whose path goes
+    through a row found by its lit letter alone (ROW_BY; a bracketed tail aside) carries "row_by"; every other line is
+    written as it comes."""
     def __init__(self, f, context: str | None, extra: dict | None = None):
         self.f, self.context, self.extra = f, context, extra or {}
 
     def write(self, line: str):
-        if (self.context or self.extra) and line.strip():
-            r = {**json.loads(line), **self.extra}
-            if self.context:
-                r["context"] = self.context
-            line = json.dumps(r) + "\n"
+        if (self.context or self.extra or ROW_BY) and line.strip():
+            r = json.loads(line)
+            path = r.get("path") if isinstance(r.get("path"), list) else []
+            by = next((ROW_BY[k] for k in (re.split(r" \[", str(e))[0] for e in path) if k in ROW_BY), None)
+            if self.context or self.extra or by:
+                r = {**r, **self.extra}
+                if by:
+                    r["row_by"] = by
+                if self.context:
+                    r["context"] = self.context
+                line = json.dumps(r) + "\n"
         self.f.write(line)
 
     def flush(self):

@@ -243,7 +243,7 @@ def submenu(monkeypatch):
         cam.bars += 1
         return cam.labels[cam.at]
     monkeypatch.setattr(nav, "bar_text", bar_text)
-    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label: cam.read().kind == kind and bar_text(cam) == label)
+    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label, prev=None: cam.read().kind == kind and bar_text(cam) == label)
     monkeypatch.setattr(nav, "place", lambda cam: ("submenu", cam.at // 6, cam.at % 6))
     monkeypatch.setattr(nav, "same_place", lambda a, b: a == b)
     monkeypatch.setattr(nav, "same_state", lambda a, b: a.row == b.row and a.page == b.page)
@@ -1730,7 +1730,7 @@ def test_the_carousel_readings_left_wait_for_the_title_strip_as_option_index_doe
     cam2 = TitleCam(name=name)
     assert options.icon_index(cam2, {"path": ["Creative Look"], "icon_frames": [], "labels": ["ST", "PT"]}, 1) == 1
     pp = CarouselCam(name=name)
-    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label: True)
+    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label, prev=None: True)
     monkeypatch.setattr(nav, "carousel_text", lambda cam: "PP1" if "down" not in pp.pressed else "PP2")
     nav.enter_pp(pp, ["Picture Profile", "PP2"])
     assert pp.pressed == ["right", "down", "right"]

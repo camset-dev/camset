@@ -2281,12 +2281,20 @@ def main():
         twins += [(name, lab) for lab in label_of.values() if re.search(r" \(\d+\)$", lab)]
         fallback = "carousel" if "axis" in kinds else "box" if "checklist" in kinds else \
             "grid readout" if "wbgrid" in kinds else None
+        # a row found by its lit letter alone (proving.screens.lit_letter: "row_by" on its lines): its move of a record
+        # another row's proofs own is no setting of its own, but a question for a person (2026-11-21)
+        lit = [o for o in opts.values() if o.get("row_by") == "lit letter"]
+        others = frozenset(k for row, keys in owners.items() if base_row(row) != base_row(name) for k in keys) \
+            if lit else frozenset()
         for key, vals in sorted(recs.items()):
             s = schema.get(key)
             mixed = not_one_to_one(proofs, name, key, vals, kinds, not_credited, label_of)
             if key in shared:
                 mixed.append({"value": None, "camera": ", ".join(shared[key]), "schema": None, "kind": "not one to one",
                               "why": "two options of a one-record list wrote one value"})
+            if key in others and any(c["key"] == key for o in lit for c in o.get("changes") or []):
+                mixed.append({"value": None, "camera": name.split(" > ")[-1], "schema": None, "kind": "not one to one",
+                              "why": "a row found by its lit letter alone moved a record another row's proofs own"})
             if mixed:
                 verdict, notes = "conflict", mixed
             elif s is None:

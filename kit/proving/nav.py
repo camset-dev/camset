@@ -54,11 +54,12 @@ def find_row(cam, label, at=None) -> bool:
             if same_state(cam.read(), first):
                 break
     first = cam.read()
-    texts = []
+    texts, prev = [], None
     for _ in range(20):
-        if at_label(cam, "submenu", label):
+        if at_label(cam, "submenu", label, prev=prev):      # a lit letter OCR drops: lit_letter, given the frame before
             return True
         texts.append(bar_text(cam))
+        prev = getattr(cam, "frame", None)
         cam.press("down")
         if same_state(cam.read(), first):
             break
