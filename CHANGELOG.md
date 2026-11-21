@@ -214,6 +214,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`optboxes_run.py` asks the reader about a box reading no press can have brought:** OCR's "±7" read as "‡1" no
+  longer sends a stepping round two values until it gives up.
 - **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a
   grey option where it may, closes the list with MENU and stops, as it does where whether an option is grey cannot be told.
 - **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that
