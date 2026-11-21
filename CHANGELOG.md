@@ -240,6 +240,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **`memreg_run.py --aperture` reads FNumber again before it gives up:** its refusal then says what the camera reported
   (display only, how many F-numbers listed, the exposure mode) and points at the lens. It takes `--in`, so a slot or a
   look in Movie or S&Q runs behind a kept switch.
+- **`scale_run.py` takes `--in` too:** a scale in Movie or S&Q runs behind a kept switch, its `--set` rows set on that
+  mode's menu.
 - **A grey reading no grey entry has measured says so, and is not trusted after the camera refuses it:** proof lines
   judged by a carousel's icon or a checklist's band say how, and a refusal after such an entry marks the row
   "misjudged" (runs/<model>_fw<fw>/grey_misjudged.jsonl), its entries no longer entered on that reading.
