@@ -135,13 +135,19 @@ def rows_seen(request, monkeypatch):
     monkeypatch.setattr(first_open, "seen_record", lambda camera=None: _AllSeen())
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "real_grey: the kit's own grey reading even on a frame with no picture (no "
+                                       "made_up_entries_white): a test that judges the reading itself")
+
+
 @pytest.fixture(autouse=True)
 def made_up_entries_white(request, monkeypatch):
     """A made-up camera's frame holds no picture, so no pixel reading can judge the entry a prover is about to choose
     (proving.greyed.choice_drawing, 2026-11-20): there it reads as drawn white, so each prover's own test tests what it
-    tests. A frame with a picture (a replayed camera frame) is judged as on the camera, and test_choice_grey judges
-    the reading itself, opting out with its own module name."""
-    if request.module.__name__ == "test_choice_grey":
+    tests. A frame with a picture (a replayed camera frame) is judged as on the camera, and a test that judges the
+    reading itself opts out with the real_grey marker (on the test or its module: test_choice_grey's pytestmark), which
+    stays with it whatever the module is called."""
+    if request.node.get_closest_marker("real_grey") is not None:
         return
     from proving import greyed
     real = greyed.choice_drawing

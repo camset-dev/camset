@@ -18,6 +18,9 @@ from camkit import paths, screen  # noqa: E402
 from camkit.frames import load  # noqa: E402
 
 A1 = paths.a1ii_root()
+# the kit's own reading in every test here, a frame with no picture included (conftest's made_up_entries_white skips
+# a test so marked, whatever this module is called)
+pytestmark = pytest.mark.real_grey
 
 
 def cam_of(rel: str):
