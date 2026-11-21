@@ -91,8 +91,9 @@ from prove_run import Failed, enter_any, held_value, option_key, to_shooting  # 
 from proving.base import finish_attempt, wait_lock  # noqa: E402
 from proving.commit import after_ok  # noqa: E402
 from proving.screens import ask_second, option_answer  # noqa: E402
-from runner import (add_allow_argument, add_scan_argument, allowed_or_exit, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
-                    proofs_file, prover_session, read_json, scan_position)
+from runner import (add_allow_argument, add_in_argument, add_scan_argument, allowed_or_exit, changes_of,  # noqa: E402
+                    close_screen, in_mode, load_scan, menu_from_shooting, proofs_file, prover_session, read_json,
+                    scan_position)
 
 TITLE = (0, 0, 640, 52)
 # the number between the ◂ ▸: measured on three scales, and down to 345 for Finder Color Temp.'s, drawn lower
@@ -715,7 +716,13 @@ def definition_index() -> dict:
     return {s["key"]: s for s in definitions.with_evidence(read_json(p), p).get("settings") or []}
 
 
-def setup(cam, link, hdmi, cycle, model, start, sets, panels=frozenset()) -> Path:
+def run_scan(a):
+    """--scan with the mode the run works in (--in, runner.in_mode): a kept switch to that mode does not refuse the run,
+    a named scan must be of that mode (runner.scan_dir), as memreg_run's since 2026-11-21."""
+    return in_mode(a.scan, a.in_mode)
+
+
+def setup(cam, link, hdmi, cycle, model, start, sets, panels=frozenset(), mode: str = "Stills") -> Path:
     """Each --set row put on its option through the menu, in the order given, by kit/provers/afreg_run.py's
     set_setup_row (mode_switch.set_row: the row by the scan, each submenu or panel of "A > B" opened with Right and its
     row found, Right on the row, a list expected, the option found by the list bar's text, OK; a notice after OK kept
@@ -726,13 +733,14 @@ def setup(cam, link, hdmi, cycle, model, start, sets, panels=frozenset()) -> Pat
     row's records are no scale value's; in it each set row's record must hold the option's code, where the definition
     names both (framepos_run.setting_code), else the run stops; where it names neither, the run says the set is not
     verified in the file and goes on. Only the count of records that differ from the start file is printed, never what
-    a screen or a record held; a step that fails stops the run before any row."""
+    a screen or a record held; a step that fails stops the run before any row. `mode`: the menu the camera shows (--in),
+    whose map gives a row's labels (mode_switch.list_labels)."""
     from afreg_run import set_setup_row
     from framepos_run import setting_code
     from mode_switch import open_menu
     for path, option in sets:
         open_menu(cam)
-        set_setup_row(cam, cycle, model, path, option)
+        set_setup_row(cam, cycle, model, path, option, mode=mode)
         if " > ".join(path[:-1]) in panels and option_key(path[0]) in option_key(text(cam, TITLE)) and \
                 match.key(text(cam, PANEL_SETUP)) != match.key(option):
             # back in the panel: its setup row must read the option asked for (open_row's check); what it reads
@@ -773,6 +781,7 @@ def main():
                          "'A > B=OPTION' for a submenu's or a panel's row); the proofs' context names it")
     ap.add_argument("--context", default=None, help="the state these proofs are made in (e.g. Movie mode)")
     add_scan_argument(ap)
+    add_in_argument(ap)
     add_allow_argument(ap)
     a = ap.parse_args()
     if not a.rows:
@@ -782,7 +791,7 @@ def main():
     if why:
         sys.exit(why)
     allowance = allowed_or_exit(a.allow)
-    cycle, model = load_scan(a.scan)
+    cycle, model = load_scan(run_scan(a))
     run = Run("kit2_pass2")
     hdmi = eyes_from_config(run)
     extra = {"allowance": allowance} if allowance else None
@@ -790,7 +799,7 @@ def main():
     with proofs_file(run, context, extra) as out, prover_session(run, hdmi, may_open=a.allow) as s:
         cam, link, start = s.cam, s.link, s.start
         panels = {row for row, panel in a.rows if panel}
-        base = setup(cam, link, hdmi, cycle, model, start, sets, panels) if sets else start
+        base = setup(cam, link, hdmi, cycle, model, start, sets, panels, mode=a.in_mode) if sets else start
         for row, panel in a.rows:
             path = row.split(" > ")
             if safety.path_refused(path, allowed=a.allow):
