@@ -225,7 +225,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the SDK and read back first, the live aperture put back after. `--fill-empty-slot` fills an empty slot for good, and
   `--beyond-lens` tries the table's other F-numbers once each, never forced.
 - **`memreg_run.py` registers the memory slots whose tab it has seen lit (Memory 2 and 3, Movie and S&Q Memory 1):**
-  `--look-tabs` records the others' tabs, and uploads leave every slot's registration records out of their count.
+  `--look-tabs` records the others' tabs. Uploads leave a slot's registration records out of their count only where the
+  camera's own download shows that slot filled.
 - **A grey reading no grey entry has measured says so, and is not trusted after the camera refuses it:** proof lines
   judged by a carousel's icon or a checklist's band say how, and a refusal after such an entry marks the row
   "misjudged" (runs/<model>_fw<fw>/grey_misjudged.jsonl), its entries no longer entered on that reading.
