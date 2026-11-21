@@ -221,6 +221,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`mode_switch.py --set` sets a side-strip dialog row such as Picture Profile:** Down until the title names the
+  option by the mode's map, the entry judged grey or white first, then OK; any refusal closes the dialog with MENU.
 - **`memreg_run.py --aperture` registers every F-number the attached lens offers into a memory slot:** each set through
   the SDK and read back first, the live aperture put back after. `--fill-empty-slot` fills an empty slot for good, and
   `--beyond-lens` tries the table's other F-numbers once each, never forced.
