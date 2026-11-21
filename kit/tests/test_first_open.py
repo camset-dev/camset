@@ -1680,3 +1680,22 @@ def test_take_picture_keeps_its_words_for_a_link_error_once_the_link_opened(pict
     assert code == EXIT_UNRESTORED
     assert "take_picture.py: LinkError: camera link exited; the start file is not known to be back" in said
     assert "never opened" not in said
+
+
+def test_first_opens_seen_judgement_stays_mode_blind_whatever_mode_a_retraction_names():
+    """The first open's safe side, pinned (the reviewer of stood-mode-tails, 2026-11-21): seen_record reads
+    coverage.retracted, which drops the mode, so a standing retraction of a row's opening in ANY mode withdraws its
+    opening looks in every mode: a Movie look then an S&Q retraction, not seen opened; an S&Q retraction then a Movie
+    look, not seen opened either (the retraction stands beside the look, in its own mode); a retraction naming no mode
+    then a later Movie look, seen opened (the later look takes the retraction's place in every mode). The ledger reads a
+    moded retraction in its own mode alone (coverage.retractions); a switch to that here would loosen the first open,
+    and this test says so."""
+    def look(mode, result, line):
+        return line, dict({"path": ["Shoe Audio Set."], "did": "open", "result": result}, **({"mode": mode} if mode else {}))
+
+    def seen(*looks):
+        return first_open._seen_of(list(looks), [], [], first_open.key).seen(["Shoe Audio Set."])
+    assert seen(look("Movie", "looked", 1))
+    assert not seen(look("Movie", "looked", 1), look("S&Q", "retract", 2))
+    assert not seen(look("S&Q", "retract", 1), look("Movie", "looked", 2))
+    assert seen(look(None, "retract", 1), look("Movie", "looked", 2))
