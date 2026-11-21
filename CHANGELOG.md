@@ -59,6 +59,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The camera's greys that depend on the shooting mode or an HDMI device:** where a definition gives them (`grey_in`,
+  `inactive_if`), a row is dimmed in a menu whose modes the grey covers, and otherwise drawn as usual with "grey in S&Q"
+  or "greyed with an HDMI device connected" beside it, in the window, its search list and the page alike. The details
+  say when the camera greys it, with Activate where a setting lifts the grey; the row stays editable.
 - **Rows the camera tells apart by an icon alone carry the icon's words:** where a definition gives them (`row_icons`),
   the two Custom Key/Dial Set. rows read "(Still)" and "(Movie)" after their label, in Edit, Compare, a row's place and
   the page alike, and the definition viewer draws the same. The search finds a setting by the words of its row as drawn

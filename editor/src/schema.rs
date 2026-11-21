@@ -110,6 +110,15 @@ pub struct Setting {
     /// Greyed-out rule: the camera ignores this setting while another record has certain values.
     #[serde(default)]
     pub inactive_when: Option<InactiveRule>,
+    /// The shooting modes (as `camera.live_mode` names them) in which the camera draws this row grey whatever the file
+    /// holds ("S&Q", "Time-lapse"): each a mode of a menu the row is in, never all of them (`App::grey`).
+    #[serde(default)]
+    pub grey_in: Vec<String>,
+    /// A greyed-out rule (`inactive_when`'s fields) that holds only in some shooting modes (`family`) or only with a
+    /// device connected to the HDMI socket (`hdmi_device`): a field of its own, so an editor that does not know it shows
+    /// no grey rather than a false one (`App::grey`).
+    #[serde(default)]
+    pub inactive_if: Option<InactiveIf>,
     /// For array records: which element this setting is (e.g. 0-10 for PP1-PP11).
     #[serde(default)]
     pub index: Option<u16>,
@@ -490,6 +499,18 @@ pub struct InactiveRule {
     pub except: Vec<i64>,
     pub unlock: i64,
     pub unlock_label: String,
+}
+
+/// `Setting::inactive_if`: a greyed-out rule that holds only in the shooting modes `family` names (not all of them), or
+/// only with a device connected to the HDMI socket (`hdmi_device`), or both.
+#[derive(Clone, Debug, Deserialize)]
+pub struct InactiveIf {
+    #[serde(flatten)]
+    pub rule: InactiveRule,
+    #[serde(default)]
+    pub family: Vec<String>,
+    #[serde(default)]
+    pub hdmi_device: bool,
 }
 
 impl InactiveRule {

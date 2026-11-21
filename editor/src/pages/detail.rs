@@ -367,6 +367,10 @@ impl App {
             if !s.modes.is_empty() {
                 ui.label(RichText::new(format!("Applies in: {}", s.modes)).small().color(tone::note(ui.visuals()))).on_hover_text(self.modes_hover());
             }
+            // where the camera greys it whatever the file holds (`grey_in`)
+            if let Some(words) = self.grey_in_words(s) {
+                ui.label(RichText::new(words).small().color(tone::note(ui.visuals())));
+            }
             if s.in_sets {
                 ui.label(RichText::new("Kept in the memories too").small().color(tone::weak(ui.visuals()))).on_hover_text(self.memories_hover());
             } else if self.prefs.expert && s.area == "global" {
@@ -425,6 +429,25 @@ impl App {
                 ));
                 if editable && ui.button(format!("Activate (set {} to {})", r.name, r.unlock_label)).clicked() {
                     actions.push(Action::Set(self.target, (r.record, None), r.unlock));
+                }
+            });
+            ui.add_space(8.0);
+        }
+        // greyed out on the camera in some modes only, or with a device on the HDMI socket (`inactive_if`): when, and Activate
+        for line in self.grey_lines(s, self.target, self.menu_shown().as_deref()).into_iter().filter(|l| l.activate.is_some() || l.muted.is_some()) {
+            egui::Frame::new().fill(tone::boxed(ui.visuals())).inner_margin(8.0).corner_radius(4.0).show(ui, |ui| {
+                ui.label(&line.text);
+                if let Some((record, unlock, name, label)) = &line.activate {
+                    if editable && ui.button(format!("Activate (set {name} to {label})")).clicked() {
+                        actions.push(Action::Set(self.target, (*record, None), *unlock));
+                    }
+                }
+                // its modes none of this menu's: no Activate, and why
+                if let Some(why) = &line.muted {
+                    ui.label(RichText::new(why).small().color(tone::weak(ui.visuals())));
+                }
+                if let Some(cable) = &line.cable {
+                    ui.label(RichText::new(cable).small().color(tone::weak(ui.visuals())));
                 }
             });
             ui.add_space(8.0);
@@ -803,6 +826,158 @@ impl App {
     }
 }
 
+/// What a row of a view of one menu shows of the greys the file does not decide alone (`App::grey`): whether it is
+/// dimmed, and the words beside it ("grey in S&Q"). Never hidden, never view only.
+pub(crate) struct Grey {
+    pub(crate) dim: bool,
+    pub(crate) note: Option<String>,
+}
+
+/// A line of the detail panel about a grey (`App::grey_lines`): its words; the Activate it offers (the record, the value
+/// that lifts the grey, the record's name and that value's label); why it offers none where its modes are none of the
+/// view's (`muted`: Activate would change nothing there); and, for a rule that needs a device on the HDMI socket, the
+/// words that say the cable is the owner's.
+pub(crate) struct GreyLine {
+    pub(crate) text: String,
+    pub(crate) activate: Option<(u16, i64, String, String)>,
+    pub(crate) muted: Option<String>,
+    pub(crate) cable: Option<String>,
+}
+
+/// "S&Q", "S&Q and Time-lapse", "Stills, Movie and S&Q".
+fn modes_words(list: &[String]) -> String {
+    match list {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+impl App {
+    /// The shooting modes the definition names (`camera.live_mode`, `memory_sets.modes`).
+    fn known_modes(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let names = self.schema.camera.live_mode.iter().flat_map(|l| l.modes.values().cloned())
+            .chain(self.schema.camera.memory_sets.iter().flat_map(|m| m.modes.keys().cloned()));
+        for n in names {
+            if !out.contains(&n) {
+                out.push(n);
+            }
+        }
+        out
+    }
+
+    /// The shooting modes a view of menu `menu` for set `target` stands for: the set's own mode (`set_mode`: the live
+    /// settings' by `camera.live_mode`, a memory's by `memory_sets.modes`) where it is one of the menu's, else every mode
+    /// of the menu; with no menu, the set's mode where known, else every mode the definition names.
+    pub(crate) fn view_modes(&self, target: usize, menu: Option<&str>) -> Vec<String> {
+        let mode = self.set_mode(target);
+        match menu.and_then(|m| self.menu_named(m)) {
+            Some(m) => match mode.filter(|f| m.modes.contains(f)) {
+                Some(f) => vec![f],
+                None => m.modes.clone(),
+            },
+            None => mode.map_or_else(|| self.known_modes(), |f| vec![f]),
+        }
+    }
+
+    /// `list` where the definition names every mode in it; None for a mode it does not name, so that grey is drawn
+    /// as usual and said nowhere.
+    fn named_modes(&self, list: &[String]) -> Option<Vec<String>> {
+        let known = self.known_modes();
+        list.iter().all(|m| known.contains(m)).then(|| list.to_vec())
+    }
+
+    /// The modes `s` is grey in whatever the file holds (`grey_in`), where it names any and the definition names them all.
+    fn grey_in_modes(&self, s: &Setting) -> Option<Vec<String>> {
+        self.named_modes(&s.grey_in).filter(|l| !l.is_empty())
+    }
+
+    /// The detail's words for `grey_in` ("The camera greys this out in S&Q and Time-lapse."), for every user.
+    pub(crate) fn grey_in_words(&self, s: &Setting) -> Option<String> {
+        self.grey_in_modes(s).map(|l| format!("The camera greys this out in {}.", modes_words(&l)))
+    }
+
+    /// `s`'s `inactive_if` where its rule holds in set `target` by the file (and the definition names its modes), with
+    /// the record's value there.
+    fn inactive_if_holds<'a>(&self, s: &'a Setting, target: usize) -> Option<(&'a camset_editor::schema::InactiveIf, Option<i64>)> {
+        let r = s.inactive_if.as_ref()?;
+        self.named_modes(&r.family)?;
+        let v = self.doc.as_ref()?.value(target, (r.rule.record, None));
+        r.rule.inactive(v).then_some((r, v))
+    }
+
+    /// What a row of `s` shows in a view of menu `menu` for set `target` (`view_modes`) of the greys the camera keeps:
+    /// `inactive_when` dimmed where its rule holds, as always; `grey_in` dimmed where it covers every mode the view stands
+    /// for, "grey in S&Q" beside it where it covers some; `inactive_if` where its rule holds: with `family` dimmed where it
+    /// covers every mode, the reason and "in S&Q" where it covers some, as usual where none; with `hdmi_device` never
+    /// dimmed, "greyed with an HDMI device connected" (and its modes where they cover some). Never hidden, never view only.
+    pub(crate) fn grey(&self, s: &Setting, target: usize, menu: Option<&str>) -> Grey {
+        let view = self.view_modes(target, menu);
+        let covered = |list: &[String]| -> Vec<String> { view.iter().filter(|m| list.contains(m)).cloned().collect() };
+        let mut dim = self.doc.as_ref().is_some_and(|d| s.inactive_when.as_ref().is_some_and(|r| r.inactive(d.value(target, (r.record, None)))));
+        let mut notes: Vec<String> = Vec::new();
+        if let Some(list) = self.grey_in_modes(s) {
+            let c = covered(&list);
+            if !c.is_empty() && c.len() == view.len() {
+                dim = true;
+            } else if !c.is_empty() {
+                notes.push(format!("grey in {}", modes_words(&c)));
+            }
+        }
+        if let Some((r, v)) = self.inactive_if_holds(s, target) {
+            let c = covered(&r.family);
+            let all = r.family.is_empty() || (!c.is_empty() && c.len() == view.len());
+            let some = !all && !c.is_empty();
+            if r.hdmi_device {
+                if all || some {
+                    let modes = if some { format!(", in {}", modes_words(&c)) } else { String::new() };
+                    notes.push(format!("greyed with an HDMI device connected{modes}"));
+                }
+            } else if all {
+                dim = true;
+            } else if some {
+                notes.push(format!("greyed while {} = {}, in {}", r.rule.name, Self::describe_record(&self.schema, r.rule.record, v), modes_words(&c)));
+            }
+        }
+        Grey { dim, note: (!notes.is_empty()).then(|| notes.join("; ")) }
+    }
+
+    /// The detail panel's lines about `s`'s greys in set `target` as menu `menu` shows it, for every user: `grey_in`'s
+    /// modes (no Activate), and where `inactive_if`'s rule holds, when the camera greys it, with Activate where its modes
+    /// meet the view's (`view_modes`; else why there is none: it would change nothing here), and for a device on the
+    /// HDMI socket that the cable is the owner's.
+    pub(crate) fn grey_lines(&self, s: &Setting, target: usize, menu: Option<&str>) -> Vec<GreyLine> {
+        let mut out: Vec<GreyLine> = self.grey_in_words(s).into_iter().map(|text| GreyLine { text, activate: None, muted: None, cable: None }).collect();
+        if let Some((r, v)) = self.inactive_if_holds(s, target) {
+            let what = format!("{} = {}", r.rule.name, Self::describe_record(&self.schema, r.rule.record, v));
+            let device = if r.hdmi_device { " and a device is connected to the HDMI socket" } else { "" };
+            let only = if r.family.is_empty() { String::new() } else { format!(", in {} only", modes_words(&r.family)) };
+            let view = self.view_modes(target, menu);
+            let here = r.family.is_empty() || r.family.iter().any(|m| view.contains(m));
+            out.push(GreyLine {
+                text: format!("Greyed out on the camera while {what}{device}{only}."),
+                activate: here.then(|| (r.rule.record, r.rule.unlock, r.rule.name.clone(), r.rule.unlock_label.clone())),
+                muted: (!here).then(|| format!("Nothing to activate in this menu: the camera greys it in {} only.", modes_words(&r.family))),
+                cable: r.hdmi_device.then(|| "Unplugging the HDMI device is yours to do: Activate changes the setting only.".to_string()),
+            });
+        }
+        out
+    }
+
+    /// The switch Activate sets for `s` in set `target` as menu `menu` shows it, the window's and the page's alike:
+    /// `inactive_when`'s where its rule holds, else `inactive_if`'s where its rule holds and its modes meet the view's
+    /// (`grey_lines`): the record, its value, the record's name and that value's label. None where nothing here is greyed
+    /// that a setting lifts.
+    pub(crate) fn activate_rule(&self, s: &Setting, target: usize, menu: Option<&str>) -> Option<(u16, i64, String, String)> {
+        let d = self.doc.as_ref()?;
+        if let Some(r) = s.inactive_when.as_ref().filter(|r| r.inactive(d.value(target, (r.record, None)))) {
+            return Some((r.record, r.unlock, r.name.clone(), r.unlock_label.clone()));
+        }
+        self.grey_lines(s, target, menu).into_iter().find_map(|l| l.activate)
+    }
+}
+
 /// A family's table beside an option of a camera row, and an option that opens a page of its own.
 #[cfg(test)]
 mod family_tests {
@@ -905,5 +1080,196 @@ mod family_tests {
         assert!(app.tab_groups(&tab).iter().all(|(n, _, _)| *n != p.group) && app.shown_group_of(&on) != p.group);
         app.set_flat_list(false);
         let _ = (std::fs::remove_dir_all(dir), std::fs::remove_dir_all(user));
+    }
+}
+
+/// The greys the camera measured that the definition could not say before (`grey_in`, `inactive_if`), stubbed as the
+/// next data pass gives them (`test_support::grey_stub`).
+#[cfg(test)]
+mod grey_tests {
+    use super::*;
+    use crate::test_support::{done, grey_stub, sample_app};
+
+    /// The live-mode record (`camera.live_mode`).
+    const LIVE_MODE: u16 = 0x13bf;
+
+    fn by(app: &App, key: &str) -> Setting {
+        app.schema.settings.iter().find(|s| s.key == key).cloned().unwrap()
+    }
+
+    fn put(app: &mut App, section: usize, id: u16, v: i64) {
+        app.doc.as_mut().unwrap().edited.sections[section].get_mut(id).unwrap().put(None, v).unwrap();
+        app.schema_gen += 1;
+    }
+
+    /// A view of one menu stands for the edited set's mode (`set_mode`) where it is one of the menu's, else for every
+    /// mode of the menu: the S&Q menu for S&Q and Time-lapse, for S&Q alone with the live settings saved in S&Q or an S&Q
+    /// memory edited, for Time-lapse alone with a Time-lapse memory.
+    #[test]
+    fn a_view_stands_for_its_sets_mode_or_all_of_its_menus() {
+        let (mut app, dir, user) = sample_app("grey_view", Some(grey_stub));
+        put(&mut app, 0, LIVE_MODE, 0);
+        assert_eq!(app.view_modes(0, Some("Still")), vec!["Stills".to_string()]);
+        assert_eq!(app.view_modes(0, Some("S&Q")), vec!["S&Q".to_string(), "Time-lapse".into()]);
+        assert_eq!(app.view_modes(7, Some("S&Q")), vec!["S&Q".to_string()], "an S&Q memory edited");
+        assert_eq!(app.view_modes(10, Some("S&Q")), vec!["Time-lapse".to_string()], "a Time-lapse memory edited");
+        put(&mut app, 0, LIVE_MODE, 2);
+        assert_eq!(app.view_modes(0, Some("S&Q")), vec!["S&Q".to_string()], "the live settings saved in S&Q");
+        done(&dir, &user);
+    }
+
+    /// `grey_in`: dimmed where it covers every mode the view stands for, as usual with "grey in S&Q" where it covers
+    /// some, as usual where none; the detail says it for every user, with no Activate, and the row stays editable. A mode
+    /// the definition does not name: as usual, said nowhere.
+    #[test]
+    fn grey_in_dims_where_it_covers_the_view_and_says_where_it_covers_some() {
+        let (mut app, dir, user) = sample_app("grey_in", Some(grey_stub));
+        put(&mut app, 0, LIVE_MODE, 0);
+        let (audio, tc) = (by(&app, "global:0x02e9"), by(&app, "global:0x02f4"));
+        let g = app.grey(&audio, 0, Some("Movie"));
+        assert!(!g.dim && g.note.is_none(), "the Movie menu: as usual");
+        assert!(app.grey(&audio, 0, Some("S&Q")).dim, "grey in both of the S&Q menu's modes: dimmed");
+        let g = app.grey(&tc, 0, Some("S&Q"));
+        assert!(!g.dim && g.note.as_deref() == Some("grey in S&Q"), "grey in one of them: a note");
+        put(&mut app, 0, LIVE_MODE, 2);
+        assert!(app.grey(&tc, 0, Some("S&Q")).dim, "the view standing for S&Q alone");
+        assert!(app.grey(&audio, 10, Some("S&Q")).dim, "a Time-lapse memory edited");
+        let lines = app.grey_lines(&audio, 0, Some("S&Q"));
+        assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["The camera greys this out in S&Q and Time-lapse."]);
+        assert!(lines[0].activate.is_none());
+        assert!(app.locked_why(&audio, 0).is_none() && app.cell_editable(Col::a(0), std::slice::from_ref(&audio)), "never view only");
+        let slow = by(&app, "global:0x0332");
+        let g = app.grey(&slow, 0, Some("S&Q"));
+        assert!(!g.dim && g.note.is_none() && app.grey_lines(&slow, 0, Some("S&Q")).is_empty(), "an unknown mode: as usual");
+        done(&dir, &user);
+    }
+
+    /// `inactive_if` with `family`: where the record's rule holds by the file, dimmed where its modes cover every mode
+    /// the view stands for, as usual with the reason and "in S&Q" where they cover some, as usual where none; the detail
+    /// says it with Activate; nothing where the rule does not hold.
+    #[test]
+    fn a_rule_of_some_modes_dims_only_where_they_cover_the_view() {
+        let (mut app, dir, user) = sample_app("grey_family", Some(grey_stub));
+        put(&mut app, 0, LIVE_MODE, 0);
+        let zoom = by(&app, "global:0x02ff");
+        put(&mut app, 0, 584, 4);
+        let g = app.grey(&zoom, 0, Some("S&Q"));
+        assert!(!g.dim && g.note.is_none() && app.grey_lines(&zoom, 0, Some("S&Q")).is_empty(), "60fps: the rule does not hold");
+        put(&mut app, 0, 584, 2);
+        let g = app.grey(&zoom, 0, Some("S&Q"));
+        assert!(!g.dim && g.note.as_deref() == Some("greyed while S&Q Frame Rate = 120fps, in S&Q"), "{:?}", g.note);
+        let g = app.grey(&zoom, 0, Some("Still"));
+        assert!(!g.dim && g.note.is_none(), "the Still menu: as usual");
+        put(&mut app, 7, 584, 2);
+        assert!(app.grey(&zoom, 7, Some("S&Q")).dim, "an S&Q memory edited: dimmed");
+        let lines = app.grey_lines(&zoom, 0, Some("S&Q"));
+        assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["Greyed out on the camera while S&Q Frame Rate = 120fps, in S&Q only."]);
+        assert_eq!(lines[0].activate.as_ref().map(|a| (a.0, a.1)), Some((584, 4)));
+        assert!(app.cell_editable(Col::a(0), std::slice::from_ref(&zoom)), "still editable");
+        done(&dir, &user);
+    }
+
+    /// `inactive_if` with `hdmi_device`: never dimmed, in any view; where the rule holds the row says it is greyed with an
+    /// HDMI device connected, and the detail says when, with Activate and that the cable is the owner's.
+    #[test]
+    fn an_hdmi_device_rule_never_dims_and_says_so() {
+        let (mut app, dir, user) = sample_app("grey_hdmi", Some(grey_stub));
+        let touch = by(&app, "global:0x0476");
+        put(&mut app, 0, 1180, 0);
+        for m in ["Still", "Movie", "S&Q"] {
+            let g = app.grey(&touch, 0, Some(m));
+            assert!(!g.dim && g.note.as_deref() == Some("greyed with an HDMI device connected"), "{m}");
+        }
+        let lines = app.grey_lines(&touch, 0, Some("Still"));
+        assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["Greyed out on the camera while HDMI Info. Display = On and a device is connected to the HDMI socket."]);
+        assert!(lines[0].activate.as_ref().is_some_and(|a| a.0 == 1180 && a.1 == 1) && lines[0].cable.is_some());
+        put(&mut app, 0, 1180, 1);
+        assert!(app.grey(&touch, 0, Some("Still")).note.is_none() && app.grey_lines(&touch, 0, Some("Still")).is_empty(), "HDMI Info. Display Off");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's finding: a setting with both rules where only `inactive_if`'s holds: the window's Activate, the
+    /// page's button and the page's request all set `inactive_if`'s record, never `inactive_when`'s; where
+    /// `inactive_when`'s holds, its own; with neither holding the request is refused in plain words. Where the rule's
+    /// modes are none of the view's (the Still menu, for a rule of S&Q only), the line stays and no Activate is offered:
+    /// the window says why, the page's row too, and the page's request is refused.
+    #[test]
+    fn activate_sets_the_rule_that_holds_and_none_where_it_changes_nothing() {
+        use crate::web::tests::answer;
+        let (mut app, dir, user) = sample_app("grey_activate", Some(grey_stub));
+        for s in app.schema.settings.iter_mut().filter(|s| s.key == "global:0x02ff") {
+            s.inactive_when = serde_json::from_value(serde_json::json!({ "record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off" })).unwrap();
+        }
+        app.schema_gen += 1;
+        put(&mut app, 0, LIVE_MODE, 0);
+        put(&mut app, 0, 1180, 1);
+        put(&mut app, 0, 584, 2);
+        let zoom = by(&app, "global:0x02ff");
+        let value = |app: &App, id: u16| app.doc.as_ref().unwrap().value(0, (id, None));
+        let row = |app: &mut App, menu: &str| -> serde_json::Value {
+            let j: serde_json::Value = serde_json::from_slice(&answer(app, "tab", serde_json::json!({ "target": 0, "tab": "Shooting", "menu": menu })).body).unwrap();
+            j["groups"].as_array().unwrap().iter().flat_map(|g| g["rows"].as_array().unwrap().iter()).find(|r| r["key"] == "global:0x02ff").cloned().unwrap()
+        };
+        let press = |app: &mut App, menu: &str| answer(app, "activate", serde_json::json!({ "target": 0, "key": "global:0x02ff", "menu": menu }));
+        // only inactive_if's rule holds (S&Q Frame Rate 120fps, HDMI Info. Display Off)
+        assert_eq!(app.activate_rule(&zoom, 0, Some("S&Q")).map(|a| (a.0, a.1)), Some((584, 4)), "the window's switch");
+        assert_eq!(row(&mut app, "S&Q")["inactive"]["unlock"], "Activate (set S&Q Frame Rate to 60fps)", "the page's button");
+        assert_eq!(press(&mut app, "S&Q").status, 200);
+        assert_eq!((value(&app, 584), value(&app, 1180)), (Some(4), Some(1)), "S&Q Frame Rate set, HDMI Info. Display left");
+        let refused = press(&mut app, "S&Q");
+        assert!(refused.status == 409 && String::from_utf8_lossy(&refused.body).contains("Nothing to activate here"), "neither holds now: refused");
+        // inactive_when's holds: its own switch
+        put(&mut app, 0, 1180, 0);
+        assert_eq!(app.activate_rule(&zoom, 0, Some("S&Q")).map(|a| (a.0, a.1)), Some((1180, 1)));
+        put(&mut app, 0, 1180, 1);
+        // the Still menu, the rule of S&Q only holding: the line stays, no Activate, and why
+        put(&mut app, 0, 584, 2);
+        let lines = app.grey_lines(&zoom, 0, Some("Still"));
+        assert!(lines.iter().any(|l| l.text.ends_with("in S&Q only.") && l.activate.is_none() && l.muted.as_deref().is_some_and(|m| m.starts_with("Nothing to activate in this menu"))));
+        assert!(app.activate_rule(&zoom, 0, Some("Still")).is_none());
+        let r = row(&mut app, "Still");
+        assert!(r["inactive"]["unlock"].is_null() && r["inactive"]["muted"].as_str().is_some(), "{}", r["inactive"]);
+        assert_eq!(press(&mut app, "Still").status, 409);
+        assert_eq!(value(&app, 584), Some(2), "nothing changed");
+        done(&dir, &user);
+    }
+
+    /// The page says what the window says: a row's dim and note, the detail's words and Activate (which the page's
+    /// activate takes for `inactive_if`); the window's third column and its search list draw the note.
+    #[test]
+    fn the_page_the_menu_and_the_search_list_say_the_same() {
+        use crate::web::tests::answer;
+        let (mut app, dir, user) = sample_app("grey_page", Some(grey_stub));
+        put(&mut app, 0, LIVE_MODE, 0);
+        put(&mut app, 0, 584, 2);
+        put(&mut app, 0, 1180, 0);
+        let j: serde_json::Value = serde_json::from_slice(&answer(&mut app, "tab", serde_json::json!({ "target": 0, "tab": "Shooting", "menu": "S&Q" })).body).unwrap();
+        let row = |k: &str| j["groups"].as_array().unwrap().iter().flat_map(|g| g["rows"].as_array().unwrap().iter()).find(|r| r["key"] == k).cloned().unwrap_or_else(|| panic!("{k}"));
+        let (tc, audio, zoom) = (row("global:0x02f4"), row("global:0x02e9"), row("global:0x02ff"));
+        assert_eq!((tc["dim"].as_bool(), tc["grey_note"].as_str()), (Some(false), Some("grey in S&Q")));
+        assert_eq!(audio["dim"], true);
+        assert_eq!(audio["grey_in"], "The camera greys this out in S&Q and Time-lapse.");
+        assert_eq!(zoom["inactive"]["text"], "Greyed out on the camera while S&Q Frame Rate = 120fps, in S&Q only.");
+        assert!(zoom["inactive"]["unlock"].as_str().is_some() && zoom["editable"] == true);
+        let k: serde_json::Value = serde_json::from_slice(&answer(&mut app, "tab", serde_json::json!({ "target": 0, "tab": "Setup", "menu": "Still" })).body).unwrap();
+        let touch = k["groups"].as_array().unwrap().iter().flat_map(|g| g["rows"].as_array().unwrap().iter()).find(|r| r["key"] == "global:0x0476").cloned().unwrap();
+        assert_eq!((touch["dim"].as_bool(), touch["grey_note"].as_str()), (Some(false), Some("greyed with an HDMI device connected")));
+        assert!(touch["inactive"]["cable"].as_str().is_some_and(|c| c.contains("HDMI")));
+        assert_eq!(answer(&mut app, "activate", serde_json::json!({ "target": 0, "key": "global:0x02ff", "menu": "S&Q" })).status, 200);
+        assert_eq!(app.doc.as_ref().unwrap().value(0, (584, None)), Some(4), "the page's Activate set S&Q Frame Rate to 60fps");
+        // the window: the third column and the search list draw the note
+        app.set_menu("S&Q");
+        app.select(Some(View::Tab("Shooting".into())), Some("TC/UB".into()), None);
+        let texts = |app: &mut App| {
+            let ctx = egui::Context::default();
+            let mut frame = eframe::Frame::_new_kittest();
+            let _ = ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(app, ctx, &mut frame));
+            let out = ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(app, ctx, &mut frame));
+            crate::test_support::texts(&out.shapes)
+        };
+        assert!(texts(&mut app).iter().any(|t| t == "grey in S&Q"), "the third column");
+        (app.view, app.search) = (View::Search, "Time Code Run".into());
+        assert!(texts(&mut app).iter().any(|t| t == "grey in S&Q"), "the search list");
+        done(&dir, &user);
     }
 }

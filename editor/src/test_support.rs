@@ -46,6 +46,23 @@ pub(crate) fn row_icons_stub(v: &mut serde_json::Value) {
     }
 }
 
+/// The a1 II's greys the camera measured and the definition will give (`grey_in`, `inactive_if`), as the contract's
+/// examples: Audio Recording grey in S&Q and Time-lapse, Time Code Run grey in S&Q, Zoom Range greyed while S&Q Frame Rate
+/// is 240fps or 120fps in S&Q only, Touch Func. in Shooting greyed while HDMI Info. Display is On with a device on the
+/// HDMI socket; Auto Slow Shutter with a mode the definition does not name (drawn as usual).
+pub(crate) fn grey_stub(v: &mut serde_json::Value) {
+    for s in v["settings"].as_array_mut().unwrap() {
+        match s["key"].as_str().unwrap_or("") {
+            "global:0x02e9" => s["grey_in"] = serde_json::json!(["S&Q", "Time-lapse"]),
+            "global:0x02f4" => s["grey_in"] = serde_json::json!(["S&Q"]),
+            "global:0x0332" => s["grey_in"] = serde_json::json!(["Night"]),
+            "global:0x02ff" => s["inactive_if"] = serde_json::json!({ "record": 584, "name": "S&Q Frame Rate", "values": [0, 2], "unlock": 4, "unlock_label": "60fps", "family": ["S&Q"] }),
+            "global:0x0476" => s["inactive_if"] = serde_json::json!({ "record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off", "hdmi_device": true }),
+            _ => {}
+        }
+    }
+}
+
 pub(crate) fn stub_menus(v: &mut serde_json::Value) {
     strip_menus(v);
     v["camera"]["menus"] = serde_json::json!([

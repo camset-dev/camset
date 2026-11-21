@@ -1811,11 +1811,20 @@ function drawRow(r) {
   if (r.copy_note) under.push(el("div", { class: "note", "data-copy-note": "", title: r.copy_note_why || undefined }, plain(r.copy_note)));
   if (r.inactive) {
     under.push(el("div", { class: "weak" }, r.inactive.text, " ",
-      r.inactive.unlock ? el("button", { class: "small", onclick: () => act("activate", { target: rowTarget(r), key: r.key }) }, r.inactive.unlock) : null));
+      r.inactive.unlock ? el("button", { class: "small", onclick: () => act("activate", { target: rowTarget(r), key: r.key }) }, r.inactive.unlock) : null,
+      // a rule of modes none of this menu's: no Activate, and why
+      r.inactive.muted ? el("span", { class: "small", "data-muted": "" }, " " + r.inactive.muted) : null,
+      // a rule that needs a device on the HDMI socket: the cable is the owner's
+      r.inactive.cable ? el("span", { class: "small" }, " " + r.inactive.cable) : null));
   }
+  // greyed on the camera in only some of the modes this menu stands for, or with an HDMI device: as usual, the words
+  // beside it (`grey`, the window's)
+  if (r.grey_note) more.push(el("span", { class: "weak", "data-grey": "" }, r.grey_note));
   // the record id beside the name, as Settings asks (the Main page's rows keep their tile's caption)
   const name = el("div", { class: "name", "data-ctl": "name" }, r.name, expert && r.record_id && !r.caption ? `\u00a0\u00a0${r.record_id}` : null);
-  const row = el("div", { class: "row" + (r.changed ? " changed" : "") + (r.inactive ? " inactive" : "") + (r.caption && r.caption === view.focus ? " focus" : ""),
+  // dimmed where the camera greys it in every mode the menu stands for (`dim`; an older answer: where it is greyed)
+  const dim = "dim" in r ? r.dim : !!r.inactive;
+  const row = el("div", { class: "row" + (r.changed ? " changed" : "") + (dim ? " inactive" : "") + (r.caption && r.caption === view.focus ? " focus" : ""),
     "data-caption": r.caption, "data-key": r.key, "data-depth": r.depth, style: r.depth ? { "--depth": String(r.depth) } : undefined },
   name, ctl, el("div", { class: "more" }, ...more),
   under.length ? el("div", { class: "under" }, ...under) : null);
@@ -1897,6 +1906,8 @@ function rowDetail(r) {
   if (r.unnamed) out.push(el("div", { class: "note" }, r.unnamed));
   const meta = [];
   if (r.modes) meta.push(el("span", { class: "modes", title: h.modes }, `Applies in: ${r.modes}`));
+  // where the camera greys it whatever the file holds (`grey_in`)
+  if (r.grey_in) meta.push(el("span", { class: "modes", "data-grey-in": "" }, r.grey_in));
   if (r.stored === "sets") meta.push(el("span", { class: "weak", title: "Registering a memory (Camera Set. Memory) copies this setting into it. The Memories page shows them side by side." }, "Kept in the memories too"));
   if (r.stored === "live" && expert) meta.push(el("span", { class: "weak", title: h.live }, "Live settings only"));
   if (r.record && expert) meta.push(el("span", { class: "weak", title: h.record }, r.record));
