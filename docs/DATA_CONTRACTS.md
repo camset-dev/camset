@@ -354,7 +354,7 @@ A `FRAME_TRAVEL` entry, and each of its `limits`, its `boxes` and its `pictures`
 
 `private/evidence/<model>_fw<fw>/struck_proofs_<model>_fw<fw>.json`, never committed: `{"struck": [{"run", "line",
 "sha256", "why"}]}`. The pass-2 report leaves each such line out as if it were not there, and says so with why every
-time. It refuses an entry whose line's bytes differ or that its run does not hold. The lines themselves stay in `runs/`
+time. It refuses an entry whose line's bytes differ; one naming a line its run does not hold strikes nothing there. The lines themselves stay in `runs/`
 as evidence (`kit/pass2_report.py`, `struck_lines`).
 
 ## The hand evidence file: how each hand fact was proved

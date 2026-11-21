@@ -3029,8 +3029,10 @@ def test_the_main_runs_report_reads_the_cameras_other_proof_runs(tmp_path):
 def test_a_proof_line_struck_by_hand_is_left_out_said_and_held_to_its_bytes(tmp_path, monkeypatch, capsys):
     """pass2_report.struck_lines: a private file in the camera's evidence folder strikes proof lines by run, line
     number and the line's own SHA-256; report_proofs leaves each out as if it were not there and says so, with why,
-    every time. An entry whose line holds other bytes (a file that moved), a line the run does not hold, or an entry out
-    of its shape stops the report. With no such file the report reads every line as before. Made-up proofs."""
+    every time. An entry whose line holds other bytes (a file that moved), or an entry out of its shape, stops the
+    report; one naming a line the run does not hold strikes nothing (another run: a test's made-up one, where the
+    mapper's file names the real run's lines). With no such file the report reads every line as before. Made-up
+    proofs."""
     import hashlib
     import pass2_report as R
     run = write_run(tmp_path, [proof(lab, i, [("global:0x0001", 9, i)], frame=10 + 2 * i)
@@ -3051,8 +3053,9 @@ def test_a_proof_line_struck_by_hand_is_left_out_said_and_held_to_its_bytes(tmp_
     strike(entry(2))
     assert [p["label"] for p in R.report_proofs(run)[0]] == ["A", "C"]
     assert f"left out: 1 proof lines struck by hand ({f.name}, private): made up" in capsys.readouterr().out
+    strike(entry(2, line=9))
+    assert [p["label"] for p in R.report_proofs(run)[0]] == ["A", "B", "C"], "a line the run does not hold"
     for bad, words in (((entry(2, line=3),), "whose bytes are not the ones it names"),
-                       ((entry(2, line=9),), "which it does not hold"),
                        (({"run": run.name, "line": 2},), "cannot be read as struck proof lines")):
         strike(*bad)
         with pytest.raises(SystemExit) as e:

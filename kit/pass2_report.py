@@ -532,7 +532,8 @@ def struck_lines(camera: str) -> dict:
     """{(run folder name, line number): entry} of the proof lines the mapper struck by hand, report_proofs leaving each
     out as if it were not there, and saying so, each time, with why: {"struck": [{"run", "line" (from 1, as the file
     numbers it), "sha256" (of the line's own bytes, its newline aside: a file that moved cannot strike another line),
-    "why"}]}. Lines stay in runs/ as evidence (nobody edits a run's line); a struck line is one whose proof the report
+    "why"}]}. A line its run holds with other bytes stops the report; one its run does not hold strikes nothing there
+    (a proofs file only grows: a shorter one is another run, a test's made-up one). Lines stay in runs/ as evidence (nobody edits a run's line); a struck line is one whose proof the report
     must not read (the a1 II's Intelligent Auto lines of 2026-11-21, whose rows then credited other rows' records to
     every exposure-mode label). {} where there is no file; one out of its shape stops the report."""
     p = struck_file(camera)
@@ -884,10 +885,6 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
         blocked.update(b)
         failed.update(f)
         proofs += own
-        missing = sorted(n for name, n in struck if name == part.name and n not in {x for x, _raw, _r in lines})
-        if missing:
-            sys.exit(f"pass2_report: {struck_file(run.parent.name).name} strikes {part.name} line(s) "
-                     f"{', '.join(map(str, missing))}, which it does not hold: nothing reported; correct the entries")
     if gone:
         print(f"left out: {len(gone)} proof lines struck by hand ({struck_file(run.parent.name).name}, private): "
               + "; ".join(sorted({e["why"] for e in gone})), flush=True)
