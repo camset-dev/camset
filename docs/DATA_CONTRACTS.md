@@ -350,6 +350,13 @@ A `FRAME_TRAVEL` entry, and each of its `limits`, its `boxes` and its `pictures`
 
 {{ schema_fields("hand-tables", "$defs/frame_picture") }}
 
+## Proof lines struck by hand (private)
+
+`private/evidence/<model>_fw<fw>/struck_proofs_<model>_fw<fw>.json`, never committed: `{"struck": [{"run", "line",
+"sha256", "why"}]}`. The pass-2 report leaves each such line out as if it were not there, and says so with why every
+time. It refuses an entry whose line's bytes differ or that its run does not hold. The lines themselves stay in `runs/`
+as evidence (`kit/pass2_report.py`, `struck_lines`).
+
 ## The hand evidence file: how each hand fact was proved
 
 `private/evidence/<model>_fw<fw>.hand.json`, beside the definition's evidence file; `kit/writer/hand_evidence.py`'s

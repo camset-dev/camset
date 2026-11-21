@@ -238,6 +238,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A proof line can be struck by hand, privately:** the pass-2 report leaves a line the mapper's
+  `struck_proofs_<model>_fw<fw>.json` names (run, line, its own hash, why) out, says so each time, and refuses an
+  entry that no longer matches its line.
 - **A lit one-letter row OCR cannot read (Color Depth's M, Y) is found when the frame before and the second reader
   agree on its label:** a proof made there carries `"row_by"` in `proofs.jsonl`, and the report takes its move of a
   record another row's proofs own as an open question, never as the row's setting.
