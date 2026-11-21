@@ -662,10 +662,20 @@ def lit_letter(cam, prev) -> str:
 def at_label(cam, kind, label, prev=None) -> bool:
     """Whether the bar on the `kind` screen reads as `label`; where OCR reads nothing on the lit bar, its label by
     lit_letter's two agreeing signs, given the frame before (`prev`, find_row's)."""
+    from .base import ROW_BY
     if cam.read().kind != kind:
         return False
-    t = bar_text(cam) or (lit_letter(cam, prev) if prev is not None else "")
-    return (same_text(t, glued(label)) and keeps_lead(t, label)) or (label in SEEN and same_text(t, SEEN[label]))
+    t = bar_text(cam)
+    by = ""
+    if not t and prev is not None:
+        t = lit_letter(cam, prev)
+        by = "lit letter" if t else ""
+    found = (same_text(t, glued(label)) and keeps_lead(t, label)) or (label in SEEN and same_text(t, SEEN[label]))
+    if found and by:
+        ROW_BY[label] = by              # the row's proof lines say so (proving.base.Tagged)
+    elif found:
+        ROW_BY.pop(label, None)
+    return found
 
 
 def closest_row(texts: list, label) -> int | None:
