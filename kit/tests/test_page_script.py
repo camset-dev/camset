@@ -524,16 +524,19 @@ const all = drawRow(row("k:au", "Audio Recording", { dim: true, grey_note: null 
 const hdmi = drawRow(row("k:th", "Touch Func. in Shooting", { dim: false, grey_note: "greyed with an HDMI device connected",
   inactive: { text: "Greyed out on the camera while HDMI Info. Display = On and a device is connected to the HDMI socket.", unlock: "Activate (set HDMI Info. Display to Off)", cable: "Unplugging the HDMI device is yours to do: Activate changes the setting only." } }));
 const older = drawRow(row("k:old", "Old", { inactive: { text: "Greyed out on the camera while X = Y.", unlock: null } }));
+const muted = drawRow(row("k:zr", "Zoom Range", { dim: false, inactive: { text: "Greyed out on the camera while S&Q Frame Rate = 120fps, in S&Q only.", unlock: null, muted: "Nothing to activate in this menu: the camera greys it in S&Q only." } }));
 console.log(JSON.stringify({
   some: [some.classList.contains("inactive"), some.querySelector("[data-grey]").textContent, some.querySelector("[data-grey-in]") && some.querySelector("[data-grey-in]").textContent],
   all: all.classList.contains("inactive"),
   hdmi: [hdmi.classList.contains("inactive"), hdmi.querySelector("[data-grey]").textContent, hdmi.querySelector(".under").textContent.includes("yours to do"), !!hdmi.querySelector(".under button")],
   older: older.classList.contains("inactive"),
+  muted: [!!muted.querySelector(".under button"), muted.querySelector("[data-muted]") && muted.querySelector("[data-muted]").textContent.trim()],
 }));
 """)
     assert got["some"] == [False, "grey in S&Q", "The camera greys this out in S&Q."]
     assert got["all"] is True and got["older"] is True
     assert got["hdmi"] == [False, "greyed with an HDMI device connected", True, True]
+    assert got["muted"] == [False, "Nothing to activate in this menu: the camera greys it in S&Q only."], "no Activate, and why"
 
 
 @needs_node

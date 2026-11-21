@@ -1758,9 +1758,9 @@ pub(crate) mod copies_tests {
             o.proved = None;
         }
         app.schema_gen += 1;
-        // the switch off as the file was opened, so the change is a real one
+        // the switch at a value that greys the setting out, as the file was opened, so the change is a real one
         let switch = app.schema.settings.iter().find(|o| o.slot() == (rule.record, None)).cloned().unwrap();
-        let off = switch.values.iter().map(|(v, _)| *v).find(|v| *v != rule.unlock).unwrap_or(rule.unlock + 1);
+        let off = switch.values.iter().map(|(v, _)| *v).find(|v| *v != rule.unlock && rule.inactive(Some(*v))).unwrap();
         as_opened(&mut app, |c| c.sections[0].get_mut(rule.record).unwrap().put(None, off).unwrap());
         let before = app.doc.as_ref().unwrap().value(0, (rule.record, None));
         let r = answer(&mut app, "activate", json!({ "target": 0, "key": grey.key }));

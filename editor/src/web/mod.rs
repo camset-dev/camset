@@ -298,17 +298,21 @@ impl App {
             }
             "activate" => {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
-                // `inactive_when`'s switch, else `inactive_if`'s (greyed in some modes, or with an HDMI device)
-                let Some(rule) = linked[0].inactive_when.clone().or_else(|| linked[0].inactive_if.as_ref().map(|r| r.rule.clone())) else { return WebReply::error(400, "This setting is not greyed out.") };
+                // the switch the row's Activate names (`activate_rule`): `inactive_when`'s where its rule holds, else
+                // `inactive_if`'s where its rule holds and its modes meet the menu's; none, refused in plain words
+                let Some((record, unlock, name, label)) = self.activate_rule(&linked[0], target, menu) else {
+                    self.status = "Nothing to activate here: the camera does not grey this setting out now, or not in this menu's modes.".to_string();
+                    return WebReply::error(409, &self.status);
+                };
                 if !self.editable() {
                     return WebReply::error(409, &self.view_only_why(true));
                 }
                 // a refusal (the record view only outside Expert mode, a file left other than the camera keeps it) is
                 // said, as every handler that changes the file says it, and the status keeps the reason
-                if let Some(why) = self.apply(vec![Action::Set(target, (rule.record, None), rule.unlock)]) {
+                if let Some(why) = self.apply(vec![Action::Set(target, (record, None), unlock)]) {
                     return WebReply::error(409, &why);
                 }
-                self.status = format!("{} set to {} {from}", rule.name, rule.unlock_label);
+                self.status = format!("{name} set to {label} {from}");
                 WebReply::json(json!({ "ok": true }))
             }
             "undo" => {
@@ -1502,10 +1506,11 @@ impl App {
                     r.name, Self::describe_record(&self.schema, r.record, doc.value(target, (r.record, None))), r.name),
                 "unlock": if editable { Some(format!("Activate (set {} to {})", r.name, r.unlock_label)) } else { None },
             });
-        } else if let Some(line) = self.grey_lines(s, target).into_iter().find(|l| l.activate.is_some()) {
-            // greyed in some modes only, or with a device on the HDMI socket (`inactive_if`): the window's words
-            let (_, _, name, label) = line.activate.clone().unwrap_or_default();
-            row["inactive"] = json!({ "text": line.text, "unlock": editable.then(|| format!("Activate (set {name} to {label})")), "cable": line.cable });
+        } else if let Some(line) = self.grey_lines(s, target, now).into_iter().find(|l| l.activate.is_some() || l.muted.is_some()) {
+            // greyed in some modes only, or with a device on the HDMI socket (`inactive_if`): the window's words, its
+            // Activate where its modes meet the menu's, else why there is none
+            let unlock = line.activate.as_ref().filter(|_| editable).map(|(_, _, name, label)| format!("Activate (set {name} to {label})"));
+            row["inactive"] = json!({ "text": line.text, "unlock": unlock, "muted": line.muted, "cable": line.cable });
         }
         // as the menu shown stands for it (`grey`): dimmed, or as usual with the words beside it; and where the camera
         // greys it whatever the file holds (`grey_in`), for the details

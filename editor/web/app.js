@@ -1812,6 +1812,8 @@ function drawRow(r) {
   if (r.inactive) {
     under.push(el("div", { class: "weak" }, r.inactive.text, " ",
       r.inactive.unlock ? el("button", { class: "small", onclick: () => act("activate", { target: rowTarget(r), key: r.key }) }, r.inactive.unlock) : null,
+      // a rule of modes none of this menu's: no Activate, and why
+      r.inactive.muted ? el("span", { class: "small", "data-muted": "" }, " " + r.inactive.muted) : null,
       // a rule that needs a device on the HDMI socket: the cable is the owner's
       r.inactive.cable ? el("span", { class: "small" }, " " + r.inactive.cable) : null));
   }

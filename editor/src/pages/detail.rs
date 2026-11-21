@@ -434,13 +434,17 @@ impl App {
             ui.add_space(8.0);
         }
         // greyed out on the camera in some modes only, or with a device on the HDMI socket (`inactive_if`): when, and Activate
-        for line in self.grey_lines(s, self.target).into_iter().filter(|l| l.activate.is_some()) {
+        for line in self.grey_lines(s, self.target, self.menu_shown().as_deref()).into_iter().filter(|l| l.activate.is_some() || l.muted.is_some()) {
             egui::Frame::new().fill(tone::boxed(ui.visuals())).inner_margin(8.0).corner_radius(4.0).show(ui, |ui| {
                 ui.label(&line.text);
                 if let Some((record, unlock, name, label)) = &line.activate {
                     if editable && ui.button(format!("Activate (set {name} to {label})")).clicked() {
                         actions.push(Action::Set(self.target, (*record, None), *unlock));
                     }
+                }
+                // its modes none of this menu's: no Activate, and why
+                if let Some(why) = &line.muted {
+                    ui.label(RichText::new(why).small().color(tone::weak(ui.visuals())));
                 }
                 if let Some(cable) = &line.cable {
                     ui.label(RichText::new(cable).small().color(tone::weak(ui.visuals())));
@@ -830,11 +834,13 @@ pub(crate) struct Grey {
 }
 
 /// A line of the detail panel about a grey (`App::grey_lines`): its words; the Activate it offers (the record, the value
-/// that lifts the grey, the record's name and that value's label); and, for a rule that needs a device on the HDMI
-/// socket, the words that say the cable is the owner's.
+/// that lifts the grey, the record's name and that value's label); why it offers none where its modes are none of the
+/// view's (`muted`: Activate would change nothing there); and, for a rule that needs a device on the HDMI socket, the
+/// words that say the cable is the owner's.
 pub(crate) struct GreyLine {
     pub(crate) text: String,
     pub(crate) activate: Option<(u16, i64, String, String)>,
+    pub(crate) muted: Option<String>,
     pub(crate) cable: Option<String>,
 }
 
@@ -937,22 +943,38 @@ impl App {
         Grey { dim, note: (!notes.is_empty()).then(|| notes.join("; ")) }
     }
 
-    /// The detail panel's lines about `s`'s greys in set `target`, for every user: `grey_in`'s modes (no Activate), and
-    /// where `inactive_if`'s rule holds, when the camera greys it, with Activate (and, for a device on the HDMI socket,
-    /// that the cable is the owner's).
-    pub(crate) fn grey_lines(&self, s: &Setting, target: usize) -> Vec<GreyLine> {
-        let mut out: Vec<GreyLine> = self.grey_in_words(s).into_iter().map(|text| GreyLine { text, activate: None, cable: None }).collect();
+    /// The detail panel's lines about `s`'s greys in set `target` as menu `menu` shows it, for every user: `grey_in`'s
+    /// modes (no Activate), and where `inactive_if`'s rule holds, when the camera greys it, with Activate where its modes
+    /// meet the view's (`view_modes`; else why there is none: it would change nothing here), and for a device on the
+    /// HDMI socket that the cable is the owner's.
+    pub(crate) fn grey_lines(&self, s: &Setting, target: usize, menu: Option<&str>) -> Vec<GreyLine> {
+        let mut out: Vec<GreyLine> = self.grey_in_words(s).into_iter().map(|text| GreyLine { text, activate: None, muted: None, cable: None }).collect();
         if let Some((r, v)) = self.inactive_if_holds(s, target) {
             let what = format!("{} = {}", r.rule.name, Self::describe_record(&self.schema, r.rule.record, v));
             let device = if r.hdmi_device { " and a device is connected to the HDMI socket" } else { "" };
             let only = if r.family.is_empty() { String::new() } else { format!(", in {} only", modes_words(&r.family)) };
+            let view = self.view_modes(target, menu);
+            let here = r.family.is_empty() || r.family.iter().any(|m| view.contains(m));
             out.push(GreyLine {
                 text: format!("Greyed out on the camera while {what}{device}{only}."),
-                activate: Some((r.rule.record, r.rule.unlock, r.rule.name.clone(), r.rule.unlock_label.clone())),
+                activate: here.then(|| (r.rule.record, r.rule.unlock, r.rule.name.clone(), r.rule.unlock_label.clone())),
+                muted: (!here).then(|| format!("Nothing to activate in this menu: the camera greys it in {} only.", modes_words(&r.family))),
                 cable: r.hdmi_device.then(|| "Unplugging the HDMI device is yours to do: Activate changes the setting only.".to_string()),
             });
         }
         out
+    }
+
+    /// The switch Activate sets for `s` in set `target` as menu `menu` shows it, the window's and the page's alike:
+    /// `inactive_when`'s where its rule holds, else `inactive_if`'s where its rule holds and its modes meet the view's
+    /// (`grey_lines`): the record, its value, the record's name and that value's label. None where nothing here is greyed
+    /// that a setting lifts.
+    pub(crate) fn activate_rule(&self, s: &Setting, target: usize, menu: Option<&str>) -> Option<(u16, i64, String, String)> {
+        let d = self.doc.as_ref()?;
+        if let Some(r) = s.inactive_when.as_ref().filter(|r| r.inactive(d.value(target, (r.record, None)))) {
+            return Some((r.record, r.unlock, r.name.clone(), r.unlock_label.clone()));
+        }
+        self.grey_lines(s, target, menu).into_iter().find_map(|l| l.activate)
     }
 }
 
@@ -1112,13 +1134,13 @@ mod grey_tests {
         put(&mut app, 0, LIVE_MODE, 2);
         assert!(app.grey(&tc, 0, Some("S&Q")).dim, "the view standing for S&Q alone");
         assert!(app.grey(&audio, 10, Some("S&Q")).dim, "a Time-lapse memory edited");
-        let lines = app.grey_lines(&audio, 0);
+        let lines = app.grey_lines(&audio, 0, Some("S&Q"));
         assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["The camera greys this out in S&Q and Time-lapse."]);
         assert!(lines[0].activate.is_none());
         assert!(app.locked_why(&audio, 0).is_none() && app.cell_editable(Col::a(0), std::slice::from_ref(&audio)), "never view only");
         let slow = by(&app, "global:0x0332");
         let g = app.grey(&slow, 0, Some("S&Q"));
-        assert!(!g.dim && g.note.is_none() && app.grey_lines(&slow, 0).is_empty(), "an unknown mode: as usual");
+        assert!(!g.dim && g.note.is_none() && app.grey_lines(&slow, 0, Some("S&Q")).is_empty(), "an unknown mode: as usual");
         done(&dir, &user);
     }
 
@@ -1132,7 +1154,7 @@ mod grey_tests {
         let zoom = by(&app, "global:0x02ff");
         put(&mut app, 0, 584, 4);
         let g = app.grey(&zoom, 0, Some("S&Q"));
-        assert!(!g.dim && g.note.is_none() && app.grey_lines(&zoom, 0).is_empty(), "60fps: the rule does not hold");
+        assert!(!g.dim && g.note.is_none() && app.grey_lines(&zoom, 0, Some("S&Q")).is_empty(), "60fps: the rule does not hold");
         put(&mut app, 0, 584, 2);
         let g = app.grey(&zoom, 0, Some("S&Q"));
         assert!(!g.dim && g.note.as_deref() == Some("greyed while S&Q Frame Rate = 120fps, in S&Q"), "{:?}", g.note);
@@ -1140,7 +1162,7 @@ mod grey_tests {
         assert!(!g.dim && g.note.is_none(), "the Still menu: as usual");
         put(&mut app, 7, 584, 2);
         assert!(app.grey(&zoom, 7, Some("S&Q")).dim, "an S&Q memory edited: dimmed");
-        let lines = app.grey_lines(&zoom, 0);
+        let lines = app.grey_lines(&zoom, 0, Some("S&Q"));
         assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["Greyed out on the camera while S&Q Frame Rate = 120fps, in S&Q only."]);
         assert_eq!(lines[0].activate.as_ref().map(|a| (a.0, a.1)), Some((584, 4)));
         assert!(app.cell_editable(Col::a(0), std::slice::from_ref(&zoom)), "still editable");
@@ -1158,11 +1180,57 @@ mod grey_tests {
             let g = app.grey(&touch, 0, Some(m));
             assert!(!g.dim && g.note.as_deref() == Some("greyed with an HDMI device connected"), "{m}");
         }
-        let lines = app.grey_lines(&touch, 0);
+        let lines = app.grey_lines(&touch, 0, Some("Still"));
         assert_eq!(lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>(), ["Greyed out on the camera while HDMI Info. Display = On and a device is connected to the HDMI socket."]);
         assert!(lines[0].activate.as_ref().is_some_and(|a| a.0 == 1180 && a.1 == 1) && lines[0].cable.is_some());
         put(&mut app, 0, 1180, 1);
-        assert!(app.grey(&touch, 0, Some("Still")).note.is_none() && app.grey_lines(&touch, 0).is_empty(), "HDMI Info. Display Off");
+        assert!(app.grey(&touch, 0, Some("Still")).note.is_none() && app.grey_lines(&touch, 0, Some("Still")).is_empty(), "HDMI Info. Display Off");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's finding: a setting with both rules where only `inactive_if`'s holds: the window's Activate, the
+    /// page's button and the page's request all set `inactive_if`'s record, never `inactive_when`'s; where
+    /// `inactive_when`'s holds, its own; with neither holding the request is refused in plain words. Where the rule's
+    /// modes are none of the view's (the Still menu, for a rule of S&Q only), the line stays and no Activate is offered:
+    /// the window says why, the page's row too, and the page's request is refused.
+    #[test]
+    fn activate_sets_the_rule_that_holds_and_none_where_it_changes_nothing() {
+        use crate::web::tests::answer;
+        let (mut app, dir, user) = sample_app("grey_activate", Some(grey_stub));
+        for s in app.schema.settings.iter_mut().filter(|s| s.key == "global:0x02ff") {
+            s.inactive_when = serde_json::from_value(serde_json::json!({ "record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off" })).unwrap();
+        }
+        app.schema_gen += 1;
+        put(&mut app, 0, LIVE_MODE, 0);
+        put(&mut app, 0, 1180, 1);
+        put(&mut app, 0, 584, 2);
+        let zoom = by(&app, "global:0x02ff");
+        let value = |app: &App, id: u16| app.doc.as_ref().unwrap().value(0, (id, None));
+        let row = |app: &mut App, menu: &str| -> serde_json::Value {
+            let j: serde_json::Value = serde_json::from_slice(&answer(app, "tab", serde_json::json!({ "target": 0, "tab": "Shooting", "menu": menu })).body).unwrap();
+            j["groups"].as_array().unwrap().iter().flat_map(|g| g["rows"].as_array().unwrap().iter()).find(|r| r["key"] == "global:0x02ff").cloned().unwrap()
+        };
+        let press = |app: &mut App, menu: &str| answer(app, "activate", serde_json::json!({ "target": 0, "key": "global:0x02ff", "menu": menu }));
+        // only inactive_if's rule holds (S&Q Frame Rate 120fps, HDMI Info. Display Off)
+        assert_eq!(app.activate_rule(&zoom, 0, Some("S&Q")).map(|a| (a.0, a.1)), Some((584, 4)), "the window's switch");
+        assert_eq!(row(&mut app, "S&Q")["inactive"]["unlock"], "Activate (set S&Q Frame Rate to 60fps)", "the page's button");
+        assert_eq!(press(&mut app, "S&Q").status, 200);
+        assert_eq!((value(&app, 584), value(&app, 1180)), (Some(4), Some(1)), "S&Q Frame Rate set, HDMI Info. Display left");
+        let refused = press(&mut app, "S&Q");
+        assert!(refused.status == 409 && String::from_utf8_lossy(&refused.body).contains("Nothing to activate here"), "neither holds now: refused");
+        // inactive_when's holds: its own switch
+        put(&mut app, 0, 1180, 0);
+        assert_eq!(app.activate_rule(&zoom, 0, Some("S&Q")).map(|a| (a.0, a.1)), Some((1180, 1)));
+        put(&mut app, 0, 1180, 1);
+        // the Still menu, the rule of S&Q only holding: the line stays, no Activate, and why
+        put(&mut app, 0, 584, 2);
+        let lines = app.grey_lines(&zoom, 0, Some("Still"));
+        assert!(lines.iter().any(|l| l.text.ends_with("in S&Q only.") && l.activate.is_none() && l.muted.as_deref().is_some_and(|m| m.starts_with("Nothing to activate in this menu"))));
+        assert!(app.activate_rule(&zoom, 0, Some("Still")).is_none());
+        let r = row(&mut app, "Still");
+        assert!(r["inactive"]["unlock"].is_null() && r["inactive"]["muted"].as_str().is_some(), "{}", r["inactive"]);
+        assert_eq!(press(&mut app, "Still").status, 409);
+        assert_eq!(value(&app, 584), Some(2), "nothing changed");
         done(&dir, &user);
     }
 
