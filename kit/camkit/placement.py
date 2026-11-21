@@ -26,6 +26,8 @@ with_hand places a record by a row given by hand (HAND_PLACES) instead of its pr
 its top row; with_modes gives a proof whose context names no mode the mode the camera's own files say it was made in.
 """
 import collections
+import contextlib
+import contextvars
 import difflib
 import re
 
@@ -61,10 +63,26 @@ def item_page(group: str, tab: str) -> bool:
     return bool(t) and re.fullmatch(rf"{re.escape(t)}(?:page)?\d+", norm(group)) is not None
 
 
+# the camera whose definition is being placed (placing): its own ROW_NAMES rename the records' older row names, whatever
+# camera the kit works on (a test's made-up one, a clone that names none); None outside: the one the kit works on
+_CAMERA = contextvars.ContextVar("placement_camera", default=None)
+
+
+@contextlib.contextmanager
+def placing(camera: str | None):
+    """Place the definition of `camera` (its key) inside this block: split, steps and the tree read its ROW_NAMES
+    (camkit.row_names), so one definition's places are the same on every computer (writer/fromdata.from_data)."""
+    token = _CAMERA.set(camera)
+    try:
+        yield
+    finally:
+        _CAMERA.reset(token)
+
+
 def split(path: str) -> list:
     """A proof's menu path as its labels, the context in brackets left out, the row as the camera draws it where the
-    records name it otherwise (camkit.row_names)."""
-    path = re.sub(r"\s*\[[^\]]*\]", "", row_names.renamed_name(path))
+    records name it otherwise (camkit.row_names, the ROW_NAMES of the camera being placed: placing)."""
+    path = re.sub(r"\s*\[[^\]]*\]", "", row_names.renamed_name(path, _CAMERA.get()))
     return [x.strip() for x in re.split(r" > | / | › ", path) if x.strip()]
 
 
@@ -72,7 +90,7 @@ def steps(path: str) -> list:
     """A proof's menu path as (how it is reached, label) pairs, as split() reads its labels: "" for the first, ">"
     for a step into a submenu (" > ", " › "), "/" for an option of the row before (" / "). The row as the camera draws
     it, as split() reads it."""
-    path = row_names.renamed_name(path)
+    path = row_names.renamed_name(path, _CAMERA.get())
     path = re.sub(r"\s*\[[^\]]*\]", "", path)
     out, how = [], ""
     for x in re.split(r"( > | / | › )", path):
@@ -229,7 +247,7 @@ class Tree:
         (camkit.row_names, each label renamed under the path the tree wrote: `written`)."""
         n[0] += 1
         written = (*written, r["label"])
-        path = path + [row_names.renamed(written)[-1] if r["label"] else r["label"]]
+        path = path + [row_names.renamed(written, _CAMERA.get())[-1] if r["label"] else r["label"]]
         walk = walks.get(tuple(norm(x) for x in path)) or walks.get(tuple(norm(x) for x in written), [])
         out = {"id": f"{self.mode}:n{n[0]}" if self.mode else f"n{n[0]}", "l": path[-1], "st": r.get("state") or "", "why": r.get("why") or "",
                "opts": r.get("options") or [], "walk": walk,
