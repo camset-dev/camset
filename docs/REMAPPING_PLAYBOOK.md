@@ -109,6 +109,11 @@ your owner, and the default is no.
      `crawl_run.py` or `prove_run.py`, where the kit knows its words (`safety.ROW_QUESTIONS`). (The a1 II's owner allowed
      OK on Exposure Std. Adjust's question on 2026-11-21: "Exposure adjust is ok, just put it back to where it was at
      the end." Ask yours: the default is no.)
+   - An entry the grey reading cannot judge is never chosen, unless your owner allows it for the run and the kit has
+     measured its normal look. (The a1 II's owner allowed Shoot Mode's Intelligent Auto, whose icon is green, on
+     2026-11-21: "Yes you can use it and any other modes on that screen"; `mode_switch.py` and `shootmode_run.py` take
+     it as `--allow "Intelligent Auto"`, and choose it only drawn in the look 550 frames show. Ask yours: the default is
+     no.)
    - A dial turns only on a screen a regex names (rule 14).
 9. **Never act on a stale picture.** An HDMI frame older than 2 s raises an error. When HDMI goes black, the kit
    checks the SDK's OSD image instead.

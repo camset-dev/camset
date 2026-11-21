@@ -705,11 +705,46 @@ def run_name(run) -> str | None:
     return getattr(getattr(run, "dir", None), "name", None)
 
 
-def choice_refused(cam, name: str, label: str) -> str:
+# Shoot Mode's Intelligent Auto, whose lit icon in the carousel's family column is green (no red for choice_drawing to
+# read): its normal look as the camera draws it, measured on its own frames (2026-11-21, 550 frames with it lit over 166
+# runs, both eyes): in the column's lit-row band (AUTO_BAND) 373 to 745 green pixels (green over 90, 40 over red and
+# blue), their 95th percentile of green 204 to 255; with any other mode lit (1,782 frames) no green pixel there. No
+# greyed Intelligent Auto was ever drawn. AUTO_MIN and AUTO_GREEN take that look with a margin under each lowest (73
+# pixels, 4 levels); anything under either is not that look. The strip's AUTO box is green whether lit or not, so it
+# tells nothing. Taken only on the owner's word for the run (choice_refused's auto_allowed: mode_switch's and
+# shootmode_run's --allow "Intelligent Auto"): an allowance, apart from the misjudged memory, which still refuses
+AUTO_ENTRY = "Intelligent Auto"
+AUTO_BAND = (0, 180, 108, 226)      # x0, y0, x1, y1: the family column's lit row (its icons stand at y 188 to 218)
+AUTO_MIN, AUTO_GREEN = 300, 200
+
+
+def auto_look(cam) -> tuple:
+    """(True where the lit row's icon in Shoot Mode's family column is green in its normal look, else None; its 95th
+    percentile of green or None; its green pixels counted) on the frame on show."""
+    import numpy as np
+    image = getattr(getattr(cam, "frame", None), "image", None)
+    if image is None:
+        return None, None, 0
+    x0, y0, x1, y1 = AUTO_BAND
+    a = np.asarray(image)[y0:y1, x0:x1].astype(np.int16)
+    if a.ndim != 3 or a.shape[2] < 3:
+        return None, None, 0
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    green = g[(g > 90) & (g > r + 40) & (g > b + 40)]
+    n = len(green)
+    if not n:
+        return None, None, 0
+    p = float(np.percentile(green, 95))
+    return (True if n >= AUTO_MIN and p >= AUTO_GREEN else None), p, n
+
+
+def choice_refused(cam, name: str, label: str, auto_allowed: bool = False) -> str:
     """Why the entry `label` under the cursor of `name`, about to be chosen with Enter by a caller's word, is not, or
     "" where it is drawn white (choice_drawing, on the frame on show). Plain words for the run's failure: what it is,
     that it is drawn grey or cannot be told, what the reading saw, and that nothing was pressed on it. A row the
-    camera's memory marks misjudged for the reading on show is refused before any reading (UNMEASURED's note)."""
+    camera's memory marks misjudged for the reading on show is refused before any reading (UNMEASURED's note).
+    auto_allowed: the owner's word for the run that Shoot Mode's Intelligent Auto may be chosen (2026-11-21): where the
+    red reading cannot tell it, it goes only drawn in its normal look (auto_look), on that row and entry alone."""
     reading = reading_of(cam)
     marked = misjudged(name, reading) if reading else None
     if marked:
@@ -722,6 +757,14 @@ def choice_refused(cam, name: str, label: str) -> str:
     if grey is False:
         return ""
     frame = getattr(getattr(getattr(cam, "frame", None), "path", None), "name", "")
+    if grey is None and auto_allowed and name == "Shoot Mode" and label.split(",")[-1].strip() == AUTO_ENTRY:
+        ok, green, n = auto_look(cam)
+        if ok:
+            return ""
+        seen = f"green at {green:.0f} over {n} pixels" if green is not None else "no green on its lit row"
+        return (f"{name}: {label!r} is allowed on the owner's word, but its lit icon is not the look the camera draws it "
+                f"in ({seen}; its normal look measures {AUTO_GREEN} or more over {AUTO_MIN} pixels or more, {frame}): "
+                "nothing was pressed on it")
     read = f", it reads {level:.0f}" if level is not None else ""
     if grey:
         return (f"{name}: {label!r} is drawn grey ({how}{read}, {frame}), and a greyed entry is never entered to "
