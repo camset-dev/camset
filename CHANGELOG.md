@@ -231,6 +231,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the row, are refused.
 - **`afreg_run.py --in-order` registers the areas in the order given:** "Custom 2,Custom 1" moves the Custom area copies
   both ways, so Custom 1 is seen written. Without it the plan keeps the area record's order, as before.
+- **`mode_switch.py --set` sets the S&Q Frame Rate boxes with the camera in S&Q mode:** the S&Q family's two-box rows
+  are taken on the S&Q menu where that menu's own page scan draws them. Other menus and rows are refused as before.
+- **The two-box path judges each row grey before opening it:** `boxes_run` presses no Right on a row drawn grey, as
+  `set_row` already refuses a list row so drawn.
 - **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a
   grey option where it may, closes the list with MENU and stops, as it does where whether an option is grey cannot be told.
 - **`crawl_run.py --leave PATH` leaves a named row unopened, and every row under it:** its outcome says so, so the

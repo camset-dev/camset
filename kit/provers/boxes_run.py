@@ -194,16 +194,35 @@ def focus(cam) -> int | None:
     return max(range(2), key=lambda i: lit[i]) if max(lit) > 0.3 else None
 
 
+def row_refused(cam, path: list) -> None:
+    """Failed where the lit row (the last of `path`) is drawn grey (proving.greyrow.row_grey, as mode_switch's set_row
+    judges a list row): no Right on it, nothing pressed. Where its drawing cannot be told the row opens as before."""
+    from proving.greyrow import row_grey
+    if not callable(getattr(cam, "read", None)):
+        return                  # a camera that reads no screen tells no drawing: the row opens as before
+    grey, measure = row_grey(cam)
+    if grey:
+        raise Failed(f"{' > '.join(path)}: the row is drawn grey (its label reads {measure:.0f}, "
+                     f"{getattr(cam.frame.path, 'name', '')}), so it was not opened: kit/provers/greyrow_run.py asks the "
+                     "camera why; nothing was pressed on it")
+
+
 def open_row(cam, cycle, model, path):
     """From the shooting screen: MENU, the row by the scan, Right (RIGHTS times); the boxes opened where the breadcrumb
     holds the row's label, a box is lit and the footer draws its OK key (camkit.screen.footer_keys, by pixels, as the
     screen's consent judges it: OCR read "● OK" on one frame and missed it on the next, kit2_pass2 240268 and 240575,
-    2026-11-18, the footer the same pixel for pixel); else Failed, nothing but Right pressed."""
+    2026-11-18, the footer the same pixel for pixel); else Failed, nothing but Right pressed. Each row on the way is
+    judged grey before the Right that would open it (row_refused: the top row before the walk into it, the two-box row
+    before its own), as set_row judges a list row: mode_switch --set takes this path on the S&Q menu too, whose rows
+    in Time-lapse no look has drawn yet."""
     menu_from_shooting(cam)              # MENU, once more if it went unanswered after a download
     j = scan_position(cam, cycle)
     if j is None or go_to(cam, cycle, model, j, path[0]) is None:
         raise Failed(f"could not reach {path[0]!r} by the scan")
+    row_refused(cam, path[:1])
     enter_any(cam, path, 0)
+    if len(path) > 1:
+        row_refused(cam, path)
     for _ in range(RIGHTS):
         cam.press("right")
     crumb = ocr.text_in(lines(cam), CRUMB)

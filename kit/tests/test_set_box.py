@@ -211,6 +211,60 @@ def test_a_path_to_a_box_is_told_from_a_list_rows(maps):
     assert mode_switch.two_box(BOX, "Movie", definition(), set()) is None, "boxes_run never proved it: no two-box row"
 
 
+def test_on_the_sq_menu_the_sq_familys_own_two_box_row_is_taken_where_its_scan_draws_it(maps):
+    """The definition names the S&Q screen's boxes on the Movie menu only (row_mode Movie: where the crawls first met
+    them), but the screen is the S&Q family's own and the S&Q menu draws it too: on the S&Q menu two_box takes S&Q
+    Settings' (and Time-lapse Settings') two-box rows where that menu's own page scan draws the row's top label
+    (`shown`, read only when asked); not without the scan's word, not on another menu, not for another row."""
+    proved = mode_switch.box_proofs(SimpleNamespace(dir=maps / "made_up"))
+    asked = []
+
+    def shown():
+        asked.append(1)
+        return {"S&Q Settings", "File Format"}
+    got = mode_switch.two_box(BOX, "S&Q", definition(), proved, shown)
+    assert (got["row"], got["box"], sorted(got["keys"])) == (SQ, "Rec Frame Rate", ["global:0x023e", "global:0x0244"])
+    assert asked, "the scan is read when the definition alone does not place the row on this menu"
+    assert mode_switch.two_box(BOX, "S&Q", definition(), proved) is None, "no scan's word: as before"
+    assert mode_switch.two_box(BOX, "S&Q", definition(), proved, lambda: {"File Format"}) is None
+    assert mode_switch.two_box(BOX, "Stills", definition(), proved, shown) is None, "the S&Q menu's own rows only"
+    asked.clear()
+    assert mode_switch.two_box(BOX, "Movie", definition(), proved, shown)["box"] == "Rec Frame Rate"
+    assert not asked, "on the menu the definition names, the scan is never read"
+    # set_plan: the item planned on the S&Q menu with the scan's word, refused as before without it
+    plan = mode_switch.set_plan(["S&Q Settings > Frame Rate Settings > Rec Frame Rate=24p"], "S&Q", definition(),
+                                proved, shown)
+    assert plan[0][2]["box"] == "Rec Frame Rate"
+    with pytest.raises(SystemExit) as got:
+        mode_switch.set_plan(["S&Q Settings > Frame Rate Settings > Rec Frame Rate=24p"], "S&Q", definition(), proved,
+                             lambda: set())
+    assert "not a two-box row on the S&Q menu" in str(got.value.code)
+
+
+def test_set_reads_the_sq_menus_scan_for_the_sq_familys_row_before_the_link(maps, monkeypatch, tmp_path, no_camera):
+    """--set with a switch waiting in S&Q: the S&Q menu's page scan (the run's --scan in that mode) is read before the
+    link opens, and a scan that does not draw S&Q Settings leaves the box refused as before, nothing sent."""
+    run = tmp_path / "made_up"
+    run.mkdir()
+    (run / mode_switch.KEPT).write_text(json.dumps({"to": "S&Q Motion", "scan_mode": "S&Q", "start": "x.DAT"}),
+                                        encoding="utf-8")
+    monkeypatch.setattr(mode_switch, "Run", lambda name: SimpleNamespace(dir=run))
+    monkeypatch.setattr(mode_switch, "definition", lambda r: definition())
+    monkeypatch.setattr(mode_switch, "box_proofs", lambda r: {tuple(BOX), tuple(SQ + ["Frame Rate"])})
+    scans = []
+
+    def load_scan(scan):
+        scans.append(scan)
+        return None, {"4/59": {"rows": [{"label": "File Format"}, {"label": "Movie Settings"}]}}
+    monkeypatch.setattr(mode_switch, "load_scan", load_scan)
+    monkeypatch.setattr(sys, "argv", ["mode_switch.py", "--set", "S&Q Settings > Frame Rate Settings > Rec Frame "
+                                      "Rate=24p", "--scan", "kit2_sq_scan", "--run", "made_up"])
+    with pytest.raises(SystemExit) as got:
+        mode_switch.main()
+    assert "not a two-box row on the S&Q menu" in str(got.value.code)
+    assert len(scans) == 1 and str(scans[0]).endswith("kit2_sq_scan"), "the --scan given, as the run resolves it"
+
+
 @pytest.mark.parametrize("item,mode,why", [
     ("S&Q Settings > Frame Rate Settings > Shutter=24p", "Movie", "'Shutter' is not one of its two boxes"),
     ("S&Q Settings > Frame Rate Settings > Rec Frame Rate=24p", "Stills", "not a two-box row on the Stills menu"),
@@ -311,3 +365,56 @@ def test_a_set_of_a_box_that_stops_exits_1(maps, monkeypatch, tmp_path, capsys, 
     with pytest.raises(SystemExit) as got:
         run_set(monkeypatch, tmp_path, " > ".join(BOX) + "=24p", raises, [{}])
     assert got.value.code == 1 and "stopped" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- the two-box row is judged grey before its Right
+
+class RowCam:
+    """A made-up camera on the menu: the row reached by the scan lit, Right recorded."""
+
+    def __init__(self):
+        self.presses = []
+        self.frame = SimpleNamespace(path=Path("00001_x.png"), image=np.zeros((480, 640, 3), np.uint8))
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+
+    def read(self):
+        return SimpleNamespace(kind="menu")
+
+
+def opening_seams(monkeypatch, grey_at):
+    """boxes_run.open_row's way to the row made up; the lit row's drawing (proving.greyrow.row_grey) grey on the rows
+    `grey_at` names (by how deep the walk is: 0 the top row, 1 the submenu's)."""
+    from proving import greyrow
+    depth = {"at": 0}
+    monkeypatch.setattr(boxes_run, "menu_from_shooting", lambda cam: None)
+    monkeypatch.setattr(boxes_run, "scan_position", lambda cam, cycle: 0)
+    monkeypatch.setattr(boxes_run, "go_to", lambda cam, cycle, model, j, label: 0)
+
+    def enter_any(cam, path, i):
+        depth["at"] = len(path) - 1
+    monkeypatch.setattr(boxes_run, "enter_any", enter_any)
+    monkeypatch.setattr(greyrow, "row_grey", lambda cam: (True, 140.0) if depth["at"] in grey_at else (False, 220.0))
+
+
+@pytest.mark.parametrize("grey_at", [{0}, {1}])
+def test_open_row_presses_no_right_on_a_row_drawn_grey(monkeypatch, grey_at):
+    """boxes_run.open_row, the two-box path mode_switch --set takes (and now on the S&Q menu too), judges the lit row
+    as set_row's row_refused does (proving.greyrow.row_grey) before each Right that would open it: the top row before
+    the walk into it, the two-box row before its own Right; drawn grey, nothing is pressed on it."""
+    cam = RowCam()
+    opening_seams(monkeypatch, grey_at)
+    with pytest.raises(boxes_run.Failed, match="drawn grey"):
+        boxes_run.open_row(cam, None, None, SQ)
+    assert "right" not in cam.presses
+
+
+def test_open_row_opens_a_row_drawn_white_as_before(monkeypatch):
+    cam = RowCam()
+    opening_seams(monkeypatch, set())
+    monkeypatch.setattr(boxes_run, "lines", lambda cam: [])
+    monkeypatch.setattr(boxes_run, "focus", lambda cam: None)
+    with pytest.raises(boxes_run.Failed, match="did not open its boxes"):     # the made-up screen opens nothing
+        boxes_run.open_row(cam, None, None, SQ)
+    assert cam.presses == ["right"] * boxes_run.RIGHTS, "white: its Right goes as before"

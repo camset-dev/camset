@@ -296,35 +296,52 @@ def _boxes_under(row: list, depth: int, doc: dict, mode: str | None) -> list:
             and s["row"][:-1] == row and (mode is None or _fits(s, mode))]
 
 
-def two_box(path: list, mode: str, doc: dict, proved: set) -> dict | None:
+# The S&Q menu's own family of rows (2026-11-20): S&Q Settings and Time-lapse Settings, drawn on the S&Q menu whatever
+# menu the definition names their two-box screens on (the a1 II's names the Movie menu for S&Q Settings > Frame Rate
+# Settings, where the crawls first met it: row_mode Movie, row_menus Movie). On that menu two_box takes such a row only
+# where the menu's own page scan draws its top label (family_row): the camera's own word, read from the scan.
+FAMILY_ROWS = {"S&Q": ("S&Q Settings", "Time-lapse Settings")}
+
+
+def family_row(path: list, mode: str, shown=None) -> bool:
+    """Whether `path` is a row of the S&Q family (FAMILY_ROWS) on the menu of `mode`, whose own page scan draws its top
+    label (`shown`: a callable giving the scan's row labels, called only here)."""
+    return bool(path) and path[0] in FAMILY_ROWS.get(mode, ()) and shown is not None and path[0] in shown()
+
+
+def two_box(path: list, mode: str, doc: dict, proved: set, shown=None) -> dict | None:
     """The two-box row `path` names a box of, on the menu of the shooting `mode` (S&Q Settings > Frame Rate Settings >
     Rec Frame Rate): the definition (`doc`) holds exactly two boxes under the row on that menu (settings whose row is the
     row's path and a box's name, their row_mode that mode or none), and boxes_run has proved the row's boxes (`proved`,
     box_proofs). The maps hold no such row (the crawl meets the screen as an unknown one, kit2_crawl_movie), and the
     definition alone does not tell a two-box screen from a submenu of two rows (Time-lapse Settings, BULB Timer Settings,
     40 rows of the a1 II's), so boxes_run's own proofs say which it is. {"row", "box", "names", "keys": the definition's
-    records at that row and box, one for each movie format}, or None: a list row, set by set_row as before."""
+    records at that row and box, one for each movie format}, or None: a list row, set by set_row as before. A row of the
+    S&Q family on the S&Q menu whose boxes the definition names on another menu only is taken where that menu's page
+    scan draws it (family_row, `shown`)."""
     if len(path) < 2:
         return None
     row, box = list(path[:-1]), path[-1]
     under = _boxes_under(row, len(path), doc, mode)
+    if not under and family_row(path, mode, shown):
+        under = _boxes_under(row, len(path), doc, None)
     names = sorted({s["row"][-1] for s in under})
     if len(names) != 2 or not any((*row, n) in proved for n in names):
         return None
     return {"row": row, "box": box, "names": names, "keys": [s["key"] for s in under if s["row"][-1] == box]}
 
 
-def set_plan(items: list, mode: str, doc: dict, proved: set) -> list:
+def set_plan(items: list, mode: str, doc: dict, proved: set, shown=None) -> list:
     """[(path, option, two_box or None)] for --set's items on the menu of `mode`; stops before the link opens on an
     item with no value, on a box its two-box row does not have, and on a two-box row the definition holds on another
-    mode's menu only."""
+    mode's menu only, unless it is the S&Q family's own and the menu's page scan draws it (two_box's `shown`)."""
     plan = []
     for item in items:
         row, _, option = item.partition("=")
         path, option = [x.strip() for x in row.split(" > ")], option.strip()
         if not option:
             sys.exit(f"--set {item!r} names no value (ROW=OPTION): nothing was sent to the camera")
-        box = two_box(path, mode, doc, proved)
+        box = two_box(path, mode, doc, proved, shown)
         if box is not None and box["box"] not in box["names"]:
             sys.exit(f"--set {item!r}: {box['box']!r} is not one of its two boxes ({' and '.join(box['names'])}): "
                      "nothing was sent to the camera")
@@ -616,8 +633,16 @@ def main():
         now = info.get("scan_mode") or switched_mode(info["to"])
         if a.in_mode and a.in_mode != now:
             sys.exit(f"--in {a.in_mode}: the switch waiting in {kept} left the camera in {now} mode; nothing was sent")
-        plan = set_plan(a.set, now, definition(run), box_proofs(run))   # a box no two-box row here has: stopped
-        cycle, model = load_scan(in_mode(a.scan, now))
+        scanned = []
+
+        def shown() -> set:
+            """The row labels this menu's page scan draws (two_box's word for the S&Q family's rows), read once."""
+            if not scanned:
+                scanned.append(load_scan(in_mode(a.scan, now)))
+            return {r.get("label") for p in scanned[0][1].values() for r in p.get("rows") or [] if r.get("label")}
+        # a box no two-box row here has: stopped before the link opens
+        plan = set_plan(a.set, now, definition(run), box_proofs(run), shown)
+        cycle, model = scanned[0] if scanned else load_scan(in_mode(a.scan, now))
         check_readers()     # no reader listed: stop before the link opens, nothing pressed
         import boxes_run
         hdmi = eyes_from_config(run)
