@@ -3917,9 +3917,11 @@ def altered_pass(tmp: Path, mp) -> tuple:
     mp.setattr(S, "UNPROVED", {k: (kind, None, why) for k, (kind, _, why) in S.UNPROVED.items()})
     mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
     # the made-up hand evidence stands for the UNPROVED days alone: the grey entries' looks are the private evidence's,
-    # which a clone or CI lacks (where the evidence is, they are put back and pass all the same); the look check is
-    # test_the_a1_pass_stops_on_a_grey_entry_its_looks_do_not_prove's
-    mp.setattr(S.hand_facts, "grey_look_gaps", lambda *a, **k: [])
+    # which a clone or CI lacks, so only there is the look check left out; where the evidence is, the entries' real looks
+    # are put back and checked as the pass checks them (test_the_a1_pass_stops_on_a_grey_entry_its_looks_do_not_prove
+    # is the check's own test)
+    if not hand_evidence.path(A1).exists():
+        mp.setattr(S.hand_facts, "grey_look_gaps", lambda *a, **k: [])
     mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
     said = io.StringIO()
     with contextlib.redirect_stdout(said):

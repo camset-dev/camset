@@ -394,6 +394,18 @@ def carousel_order(prefix: str) -> dict:
     return rank
 
 
+def as_its_camera(fn):
+    """fn(doc, ...) with the definition's own camera placed (camkit.placement.placing): its ROW_NAMES rename the
+    records' older row names as the writer's from_data does, whatever camera the kit works on, so the viewer places by
+    the same paths as the writer."""
+    @functools.wraps(fn)
+    def run(doc, *a, **k):
+        with placement.placing(definition_key(doc)):
+            return fn(doc, *a, **k)
+    return run
+
+
+@as_its_camera
 def records(doc, ev) -> list:
     out, place = [], Place(doc)
     for s in doc["settings"]:
@@ -541,6 +553,7 @@ def page_place(r: dict, pages: dict) -> int:
     return rows.index(mine) if mine in rows else len(rows)
 
 
+@as_its_camera
 def menu(doc, recs, here: Path) -> list:
     """The camera's tabs, groups and rows (the menu tree), every record hung on the row its proof went through
     (placement.grown, as the definition places it: a row in another tab where its own tab has none, the sub-rows its

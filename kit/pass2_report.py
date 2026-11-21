@@ -502,7 +502,7 @@ def row_name(r: dict) -> str:
     the box ticked ("Playback Filter Condition > Protect [box ticked]"): in the chooser's row it would take the place of
     the chooser's first option (both index 0) and be credited with what the item's other records held. The path is the
     row's as the camera draws it (camkit.row_names), so a line written with an older name is the same row."""
-    name = " > ".join(row_names.renamed(r["path"]))
+    name = " > ".join(row_names.renamed(r["path"], placement.camera()))
     if r["kind"] == "fields":
         name += f" [field {r['index'][0]}]"
     if r["kind"] in ("axis", "wbgrid", "look", "lookbase", "table"):
@@ -517,7 +517,7 @@ def row_name(r: dict) -> str:
 
 def fail_key(r: dict) -> str:
     """The row a failures.jsonl line names, as still_failing keys it (a proof gives the same key)."""
-    k = " > ".join(row_names.renamed(r["path"]))         # as the camera draws it (camkit.row_names)
+    k = " > ".join(row_names.renamed(r["path"], placement.camera()))         # as the camera draws it (camkit.row_names)
     return k + f" / {r['option']}" if r.get("kind") in ("axis", "look", "lookbase", "wbgrid", "table") and r.get("option") else k
 
 
@@ -775,6 +775,15 @@ def silent_modes(run: Path, save: bool = True) -> dict:
     camera's cache (camkit.live_modes; a dry run keeps none). {} for a run with no proofs."""
     if not (run / "proofs.jsonl").exists():
         return {}
+    # each row named by the run's own camera's ROW_NAMES (camkit.placement.placing), whatever camera the kit works on:
+    # its labels go into the proofs' evidence, where placement reads them by the same names
+    camera = run.parent.name if paths.KEY.fullmatch(run.parent.name or "") else None
+    with placement.placing(camera):
+        return _silent_modes(run, save)
+
+
+def _silent_modes(run: Path, save: bool) -> dict:
+    """silent_modes' body, the run's camera placed."""
     proofs, skip = report_proofs(run)[:2]
     reader = live_mode_reader(run)
     modes = list(reader.modes.values())
@@ -857,7 +866,7 @@ def state_items(r: dict) -> list:
 def walked_rows(proofs: list) -> dict:
     """{norm(name): name} of every menu row the proofs walk (each part of their paths, a context aside): the rows a
     context item can name the state of in words (state_row)."""
-    return {norm(n): n for r in proofs for p in row_names.renamed(r.get("path") or [])
+    return {norm(n): n for r in proofs for p in row_names.renamed(r.get("path") or [], placement.camera())
             if (n := re.split(r" \[", p)[0].strip())}
 
 
@@ -2098,7 +2107,7 @@ def own_name(o: dict) -> str:
     ("File Format" of "Image Quality Settings / File Format / SLOT 1"), its context aside."""
     if o.get("kind") == "table" and o.get("screen", "table") == "table" and o.get("option"):
         return str(o["option"]).rpartition(" / ")[0] or str(o["option"])
-    return str(row_names.renamed(o["path"])[-1]).split(" [")[0]          # as the camera draws it (camkit.row_names)
+    return str(row_names.renamed(o["path"], placement.camera())[-1]).split(" [")[0]          # as the camera draws it (camkit.row_names)
 
 
 def start_lines(opts: dict) -> frozenset:
@@ -2223,7 +2232,7 @@ def main():
         print(f"left out: {len(skip)} proofs of {len(cut)} rows, from attempts that did not finish", flush=True)
     # each row by its older name and as the camera draws it (camkit.row_names): a reading of either names a row
     ROW_NAMES.update(norm(re.split(r" \[", p)[0]) for r in proofs
-                     for p in (*(r.get("path") or []), *row_names.renamed(r.get("path") or [])))
+                     for p in (*(r.get("path") or []), *row_names.renamed(r.get("path") or [], placement.camera())))
     MENU_NAMES.update(menu_names(definitions.menu_tree_file(target.stem) if target.exists() else None))
     hand = hand_rules(cam)
     readouts = frozenset(k for k, x in schema.items() if "view only" in (x.get("note") or "").lower())
@@ -2616,7 +2625,7 @@ def still_failing(run: Path) -> tuple:
     last_proof = collections.defaultdict(int)
     for r in jsonl.read(run / "proofs.jsonl"):
         last_proof[key(r)] = max(last_proof[key(r)], frame_no(r.get("chosen_frame")), frame_no(r.get("dat")))
-        here = " > ".join(row_names.renamed(r["path"]))
+        here = " > ".join(row_names.renamed(r["path"], placement.camera()))
         last_proof[here] = max(last_proof[here], last_proof[key(r)])
         if r.get("part_of"):                  # a row proved by its parts, each a row of its own (Playback Filter
             last_proof[r["part_of"]] = max(last_proof[r["part_of"]], last_proof[key(r)])   # Condition, 2026-11-07)
