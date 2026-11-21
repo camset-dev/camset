@@ -220,14 +220,84 @@ def test_a_box_ticked_on_by_a_white_band_and_the_ok_refused_marks_the_row(memory
     assert marked and marked["run"] == "kit2_checklist_test"
 
 
-def test_the_other_checklist_tickers_mark_a_refused_tick_on_too():
-    """customshoot_run (a tick on that does not take) and filter_run's grid tick (a notice after a tick on) mark the
-    row as prove_run's checklists do, right after their judgement's Enter."""
-    for rel, refusal in (("provers/customshoot_run.py", "if judged and not before:"),
-                         ("provers/filter_run.py", 'if judged and not before and cam.read().kind == "notice":')):
+def test_the_other_checklist_tickers_mark_only_a_refusal_notice_after_a_tick_on():
+    """customshoot_run and filter_run's grid tick mark the row as prove_run's checklists do, right after their
+    judgement's Enter, and only where the camera answered a tick put on with a refusal notice (commit.REFUSED_WORDS: an
+    unrelated notice, or a tick that did not flip with no notice, which could be a misread tick, marks nothing);
+    customshoot_run keys its mark by hold and item, so one refusal never blocks every item of every hold."""
+    for rel in ("provers/customshoot_run.py", "provers/filter_run.py"):
         src = (KIT / rel).read_text(encoding="utf-8")
-        at = src.index(refusal)
-        assert "greyed.reading_of(cam)" in src[:at] and "greyed.mark_misjudged(" in src[at:at + 400], rel
+        at = src.index("greyed.mark_misjudged(")
+        before = src[max(0, at - 700):at]
+        assert "greyed.reading_of(cam)" in src[:at] and "REFUSED_WORDS.search(" in before, rel
+        assert '"notice"' in before, rel
+    cs = (KIT / "provers" / "customshoot_run.py").read_text(encoding="utf-8")
+    assert 'f"Recall Custom hold {h} / {ITEMS[k]}"' in cs and 'choice_refused(cam, "Recall Custom hold",' not in cs
+
+
+@pytest.mark.real_grey
+def test_a_notice_that_is_no_refusal_marks_no_checklist_row(memory, monkeypatch):
+    monkeypatch.setattr(greyed, "choice_drawing", lambda cam: (False, 210.0, "its label's text on the row's band"))
+    monkeypatch.setattr(greyed, "NEVER_ENTER", True)
+    cam = Checklist()
+    C, link, run, start = checklist_seams(monkeypatch, cam)
+    monkeypatch.setattr(C, "ocr", SimpleNamespace(read=lambda frames, eng=None: {f: [] for f in frames},
+                                                  text_in=lambda lines, box: "Recording to the card."))
+    out = []
+    sink = SimpleNamespace(write=lambda line: out.append(__import__("json").loads(line)), flush=lambda: None)
+    with __import__("contextlib").suppress(C.Failed):
+        C._prove_check_row(cam, link, run, {"path": ["Playback Filter"], "labels": ["Date", "Rating"]}, start, sink)
+    assert greyed.misjudged("Playback Filter", "checklist") is None
+
+
+# ------------------------------------------------------------------ the memory's tool, and every run saying the marks
+
+def test_the_tool_lists_the_marks_and_lifts_one_only_with_a_why(memory, capsys):
+    sys.path.insert(0, str(KIT / "tools"))
+    import grey_memory as M
+    assert M.main(["--list"]) == 0 and "no row is marked" in capsys.readouterr().out
+    greyed.mark_misjudged("Drive Mode / Cont. Shooting", "icon", "kit2_x", "00012_enter.png", None)
+    capsys.readouterr()
+    M.main(["--list"])
+    said = capsys.readouterr().out
+    assert "1 row(s) marked misjudged" in said and "'Drive Mode / Cont. Shooting' (icon): run kit2_x" in said
+    with pytest.raises(SystemExit, match="needs --why"):
+        M.main(["--measured", "Drive Mode / Cont. Shooting", "icon"])
+    with pytest.raises(SystemExit, match="one of"):
+        M.main(["--measured", "Drive Mode / Cont. Shooting", "band", "--why", "x"])
+    with pytest.raises(SystemExit, match="holds no icon mark"):
+        M.main(["--measured", "Metering Mode / Spot", "icon", "--why", "x"])
+    assert M.main(["--measured", "Drive Mode / Cont. Shooting", "icon", "--why", "a grey Hi+ measured"]) == 0
+    assert greyed.misjudged("Drive Mode / Cont. Shooting", "icon") is None
+    capsys.readouterr()
+    M.main(["--list"])
+    assert "no row is marked" in capsys.readouterr().out
+
+
+def test_the_refusal_names_the_tool(memory, monkeypatch):
+    monkeypatch.setattr(greyed, "choice_drawing", lambda cam: (False, 214.0, "its lit icon"))
+    greyed.mark_misjudged("Drive Mode / Cont. Shooting", "icon", "kit2_x", "00012_enter.png", None)
+    why = greyed.choice_refused(dialog_cam(), "Drive Mode / Cont. Shooting", "Hi+")
+    assert "kit/tools/grey_memory.py --measured" in why and "--list" in why
+
+
+def test_every_run_says_the_marks_it_will_apply(memory, capsys):
+    greyed.say_marks()
+    assert capsys.readouterr().out == "", "no mark: nothing said"
+    greyed.mark_misjudged("Drive Mode / Cont. Shooting", "icon", "kit2_x", "00012_enter.png", None)
+    capsys.readouterr()
+    greyed.say_marks()
+    said = capsys.readouterr().out
+    assert "'Drive Mode / Cont. Shooting' (icon)" in said and "grey_memory.py" in said
+    # said at the start of every run that judges an entry: the provers' session, prove_run, filter_run, mode_switch
+    for rel, before in (("runner.py", "with Link(run) as link:"), ("prove_run.py", None),
+                        ("provers/filter_run.py", None), ("provers/mode_switch.py", None)):
+        src = (KIT / rel).read_text(encoding="utf-8")
+        if rel == "runner.py":
+            src = src.split("def prover_session", 1)[1]
+        assert "greyed.say_marks()" in src, rel
+        if before:
+            assert src.index("greyed.say_marks()") < src.index(before), rel
 
 
 # ------------------------------------------------------------------ the conftest fixture's opt-out is a marker

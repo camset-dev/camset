@@ -676,6 +676,30 @@ def mark_measured(name: str, reading: str, why: str, camera: str | None = None) 
     _remember({"kind": "measured", "row": name, "reading": reading, "why": why}, camera)
 
 
+TOOL = "kit/tools/grey_memory.py"     # --list shows the marks, --measured ROW READING --why ... lifts one
+
+
+def marks_in_force(camera: str | None = None) -> dict:
+    """{(row, reading): its latest line} for every row the memory marks misjudged now."""
+    from camkit import jsonl
+    p = memory_file(camera)
+    latest = {}
+    for e in jsonl.read(p, bad="skip") if p is not None and p.is_file() else ():
+        if e.get("row") and e.get("reading"):
+            latest[(e["row"], e["reading"])] = e
+    return {k: e for k, e in latest.items() if e.get("kind") == "misjudged"}
+
+
+def say_marks(camera: str | None = None) -> None:
+    """At a run's start: the marks it will apply (rows not entered on a reading the camera has refused), and the tool
+    that lifts one; nothing where there is none."""
+    held = marks_in_force(camera)
+    if held:
+        print(f"grey memory: {len(held)} row(s) marked misjudged, not entered on that reading alone this run: "
+              + ", ".join(f"{row!r} ({reading})" for row, reading in sorted(held))
+              + f" ({TOOL} --list; --measured ROW READING --why ... lifts one)", flush=True)
+
+
 def run_name(run) -> str | None:
     """A run's folder name for the memory's lines (a camkit.runs.Run, or None in a test)."""
     return getattr(getattr(run, "dir", None), "name", None)
@@ -691,8 +715,9 @@ def choice_refused(cam, name: str, label: str) -> str:
     if marked:
         return (f"{name}: the kit's {reading} reading of this row was found wrong (the camera refused an entry it read "
                 f"white, run {marked.get('run')}, frame {marked.get('frame')}): marked misjudged in {MISJUDGED}, its "
-                f"entries are not entered on that reading alone until a measurement says otherwise; {label!r}: nothing "
-                "was pressed on it")
+                f"entries are not entered on that reading alone until a measurement says otherwise ({TOOL} --list "
+                f"shows the marks; {TOOL} --measured {name!r} {reading} --why \"what measured it\" lifts this one); "
+                f"{label!r}: nothing was pressed on it")
     grey, level, how = choice_drawing(cam)
     if grey is False:
         return ""

@@ -1195,6 +1195,7 @@ def main():
     # start file (--start) goes back all the same, as a put-back must never need a reader
     if todo:
         check_readers()
+        greyed.say_marks()      # the grey readings this run will not enter on alone (proving.greyed's memory)
     hdmi = eyes_from_config(run)
     out = Tagged(open(run.dir / proofs, "a", encoding="utf-8", newline="\n"), a.context,  # noqa: SIM115 (closed in the finally below)
                  {"allowance": allowance} if allowance else None)

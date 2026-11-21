@@ -235,9 +235,11 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
             notice = {"text": text_n, "frame": cam.frame.path.name}
             print(f"   refused: {text_n[:90]!r}", flush=True)
             cam.cancel_to_menu()
-            if judged and any(b["ticked"] for b in changed_boxes):
-                # a box ticked on that the band read white, and the camera refused the OK (an untick refused, as the
-                # last box of a list that needs one, says nothing of grey): the row is marked misjudged
+            from .commit import REFUSED_WORDS
+            if judged and any(b["ticked"] for b in changed_boxes) and REFUSED_WORDS.search(text_n):
+                # a box ticked on that the band read white, and the camera refused the OK with a refusal notice
+                # (REFUSED_WORDS, as an axis value's; an untick refused, as the last box of a list that needs one, or an
+                # unrelated notice, says nothing of grey): the row is marked misjudged
                 from . import greyed
                 greyed.mark_misjudged(name, judged, greyed.run_name(run), chosen, notice)
         elif s.kind != "shooting" and not same_place(place(cam), row_place):
