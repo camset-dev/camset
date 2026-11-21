@@ -451,6 +451,14 @@ Each line is a symptom, then its cause, then what to do.
   presses nothing and the run stops. A jump by the columns never enters such a group either. A menu that
   still matches no page fails closed ("the menu opened on a screen the scan does not know") and the restore puts the
   start file back: run it again. How the column is read: `kit/crawl_run.py`, `from_groups`.
+- **The menu opens on the Main tab's page ("Main 2/63")** → the camera reopens its menu where a run last closed it, and
+  no page scan holds the Main page. The kit goes off it by the columns, Left, Down to the Shooting tab, Right, never an
+  Enter or a press on its tiles (`kit/crawl_run.py`, `from_main`); or close the menu on another page by hand.
+- **Tabs or rows skipped at S&Q Frame Rate 1fps** → in that state the a1 II moved two tabs for some single presses
+  (2026-11-21: one press sent each, Focus to Network and Network to My Menu), and two 1fps row walks ended one row off.
+  Every run now ends at its start download in that state, nothing pressed (exit 7), a switch that would land there is
+  not made, and `mode_switch.py --set` never sets it (`kit/camkit/slow_states.py`): set another rate by hand, or load a
+  file that holds one.
 - **A row's icon reads otherwise on its lit bar than on its page** → OCR reads a row's icon as letters, and reads it
   differently with the row lit (the a1 II's IP Address Setting: the page scan's readings show the Wired LAN icon glued on
   in one reading and set apart in another; the lit bar shows it with a letter misread). The kit takes the icon the page

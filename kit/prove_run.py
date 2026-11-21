@@ -107,14 +107,14 @@ from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from camkit.session import check_restore, verify_restore  # noqa: E402
-from crawl_run import go_to  # noqa: E402
+from crawl_run import from_main, go_to  # noqa: E402
 from page_model import same_text  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_allow_argument, add_network_argument, add_scan_argument, allowed_or_exit,  # noqa: E402
                     changes_of, end_session, known_groups, known_labels, known_values, label_readings, load_scan,
                     log_network_decided, menu_from_shooting, network_decided_or_exit, network_readings, network_values,
                     read_json, restoring, row_values, values_withheld)
 from runner import (add_info_ok_argument, definition, info_ok_or_exit, row_labels, row_questions_or_exit,  # noqa: E402
-                    session_start)
+                    session_start, shows_main)
 # the run's settings live with their readers, and main() sets them there (proving.base.MAP, proving.jobs.HELP_TEXT,
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
 import proving.base  # noqa: E402
@@ -781,7 +781,8 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
         # fresh look shows the shooting screen still (menu_from_shooting); a MENU sent blind after a wait closed a menu
         # that had opened late, and the next Left reached the shooting screen (kit2_pass2 250525-250527, 2026-11-18)
         menu_from_shooting(cam)
-        if cam.read().kind == "menu" and cam.read().focus == "groups":
+        # on the Main tab's page (runner.shows_main) a Right goes onto its headings or tiles: from_main below leaves it
+        if cam.read().kind == "menu" and cam.read().focus == "groups" and not shows_main(cam):
             # the menu reopens where a hand left it, the focus in the group column: Right moves it onto the
             # page's rows, which is where every scan position is (it chooses nothing). Only with the menu at
             # rest (cam.press waits out the slide): on a row, Right opens it (2026-11-06). A never-open group
@@ -808,6 +809,8 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
                 cam.press("menu")
                 raise Failed(f"Right to step into the rows opened a {cam.read().kind} screen instead; cancelled")
         j = next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
+        if j is None and cam.read().kind == "menu" and shows_main(cam):
+            j = from_main(cam, cycle, model)        # off the Main page by the columns (crawl_run.from_main)
         if j is None:
             raise Failed(f"the menu opened on a screen the scan does not know ({cam.read().kind})")
         last = start

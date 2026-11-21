@@ -35,7 +35,7 @@ from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, option_key, to_shooting, vlm_option  # noqa: E402
 from proving.commit import after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
+from runner import (EXIT_UNRESTORED, add_scan_argument, changes_of, close_for_restore, definition, slow_or_exit,  # noqa: E402
                     close_screen, end_session, load_scan, menu_from_shooting, proofs_file, restore_checked,
                     restoring, scan_mode, scan_position, session_start)
 
@@ -128,6 +128,12 @@ def main():
     ap.add_argument("--families", default="0,1,2,3", help="which families to prove (0 stills ... 3 Time-lapse)")
     a = ap.parse_args()
     start = Path(a.start)
+    # its proofs choose each family's entries, landing the camera in each family's state of the start file: none may be
+    # one where the camera acts on one press twice (runner.slow_or_exit), judged before the link opens
+    live = ((definition().get("camera") or {}).get("live_mode") or {}).get("modes") or {}
+    for f in [int(x) for x in a.families.split(",")]:
+        if live.get(str(f)):
+            slow_or_exit(start, "shootmode_run.py", mode=live[str(f)])
     cycle, model = load_scan(a.scan)
     started = session.MODE              # the start's mode, as load_scan set it: the lock's rule after its restore
     run = Run("kit2_pass2")

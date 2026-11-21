@@ -17,7 +17,8 @@ EXIT_NOT_CONFIRMED = 6
 # (kit/crawl_run.py: after a press on a row, or on the way to one; a row whose opening alone is refused is skipped and the
 # lap goes on), its start file then put back and checked: the camera is as it was, but what the run was asked to do is not
 # done; a chain stops there, as after status 4 (its end file is uploaded). When the restore did not check out, the run
-# exits 4 instead
+# exits 4 instead. Also a run's exit at its start download, nothing pressed, in a state where the camera acts on one
+# press twice (runner.slow_or_exit, camkit.slow_states: the a1 II at S&Q Frame Rate 1fps)
 EXIT_REFUSED = 7
 # a run's exit when anything but a refusal stopped its work short (kit/crawl_run.py: an error, a screen the scan does not
 # know, the start label not reached, the crawl lost or off the scan; kit/drive.py: its --path's first row not reached by

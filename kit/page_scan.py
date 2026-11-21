@@ -37,13 +37,14 @@ import argparse
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import jsonl, live, paths, safety, screen, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.live import STALE_S  # noqa: E402
 from camkit.runs import Run  # noqa: E402
-from runner import (LATEST_SCAN, SCAN_ID, SCAN_MODES, current_eyes, mark_lap_whole, prover_session,  # noqa: E402
+from runner import (LATEST_SCAN, SCAN_ID, SCAN_MODES, current_eyes, mark_lap_whole, prover_session, shows_main,  # noqa: E402
                     record_mode, recorded_mode, refuse_switched, scan_mode, scan_record, switch_for_scan, write_json)
 
 
@@ -105,6 +106,8 @@ class Scan:
             return f, s                         # moved meanwhile: the caller judges it afresh (ok_to_press)
         lit = live.lit_text(f.image, f.path)
         why = live.UNREAD if not lit.strip() and live.lit_box(f.image) is not None else live.open_refused(lit)
+        if not why and shows_main(SimpleNamespace(frame=f)):
+            why = "the menu opened on the Main tab's page, which no scan starts from (its Right goes onto its headings)"
         if why:
             self.run.log("press_refused", key="right", frame=f.path.name, why=why)
             print(f"STOPPED before scanning: right refused on {f.path.name}: {why}; nothing more pressed. Move the "

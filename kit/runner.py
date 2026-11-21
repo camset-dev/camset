@@ -1283,11 +1283,47 @@ def close_menu_and_wait(link, eyes, why: str, read=None, wait=None) -> None:
     (wait or session.wait_for)(eyes, ("shooting",), why, link=link)
 
 
+# The Main tab's page (the a1 II's "Main 2/63", "Main 2/59" in Movie and S&Q): a status panel of tiles beside its group
+# headings, no rows, and no page scan holds it. The camera reopens its menu where it was last closed, so a run that
+# closed it there (tco_1fps_look's tab-column jump at S&Q 1fps, kit2_greyrow 04498, 2026-11-21) leaves it to the next
+# (kit2_pp_cd_sq 00004): its breadcrumb, then its page count, lead the screen's text
+MAIN_PAGE = re.compile(r"\s*main\s+\d+\s*/\s*\d+", re.I)
+
+
+def on_main(text: str) -> bool:
+    """Whether a menu screen's text (the breadcrumb leads it) is the Main tab's page (crawl_run.from_main leaves it;
+    mode_switch's, prove_run's and page_scan's openers press no Right on it)."""
+    return bool(MAIN_PAGE.match(text or ""))
+
+
+def shows_main(cam) -> bool:
+    """Whether the screen on show (cam.frame) is the Main tab's page (on_main on its whole text, camkit.live.text_of);
+    False where its text cannot be read, as before this check (a test's frame with no file)."""
+    try:
+        return on_main(text_of(cam))
+    except Exception:
+        return False
+
+
+def slow_or_exit(start, doing: str = "", mode: str | None = None) -> None:
+    """Exit EXIT_REFUSED, nothing pressed, where the settings file `start` (a session's start download) holds a state in
+    which this camera has been seen to act on one button press twice (camkit.slow_states, named by the definition: the
+    a1 II's S&Q family with S&Q Frame Rate at 1fps, 2026-11-21), saying in plain words what the kit saw, why it will not
+    press and what to do; nothing where it holds none, the definition names none, or the file cannot be read. `mode`:
+    the shooting mode a switch would land in (kit/provers/mode_switch.py --to)."""
+    from camkit import slow_states
+    why = slow_states.refusal(definition(), start, mode=mode, doing=doing or Path(sys.argv[0]).name or "This run")
+    if why:
+        print(why, flush=True)
+        raise SystemExit(EXIT_REFUSED)
+
+
 def session_start(link, eyes, why: str = "the start download", tag: str = "before", reach=None, say: bool = True,
                   settle: float = SETTLE_S, prepare=None, lock=None, clock=None) -> Path:
     """A session's start, the one place a runner downloads its start file (decision 15), its link open and its eyes
     attached: the shooting screen (`reach(link, eyes, why)`: proving.nav.to_shooting by default, MENU until it shows),
-    the start download (`tag`), its name said (`say`), `prepare(start)` (what a runner does with the start file before
+    the start download (`tag`), judged (slow_or_exit: a state where the camera acts on one press twice ends the run
+    there, EXIT_REFUSED, nothing pressed), its name said (`say`), `prepare(start)` (what a runner does with the start file before
     anything is pressed, while the lock runs from the download's reply: a check, whatever it raises ending the start
     there with no wait; kit/crawl_run.py's own line, its ledger's gate and its first opens), then the menu's lock after
     the download waited out from the download's reply: camkit.session.wait_lock (watched with HDMI eyes in a mode
@@ -1300,6 +1336,7 @@ def session_start(link, eyes, why: str = "the start download", tag: str = "befor
     reach(link, eyes, why)
     start = link.download(tag)
     since = clock.monotonic()
+    slow_or_exit(start)         # a state where the camera acts on one press twice: nothing pressed from here
     if say:
         print(f"start file: {start.name}", flush=True)
     if prepare is not None:
@@ -1414,8 +1451,9 @@ def allowed_or_exit(labels) -> str:
         why = safety.allow_refused(label)
         if why:
             sys.exit(f"{label!r}: {why}")
-    if labels:
-        print(f"operator allowed these never-open rows: {', '.join(repr(x) for x in labels)}", flush=True)
+    shut = [x for x in labels if x not in safety.ROW_QUESTIONS]     # a row's own question is said by row_questions_or_exit
+    if shut:
+        print(f"operator allowed these never-open rows: {', '.join(repr(x) for x in shut)}", flush=True)
     return safety.allowance(labels)
 
 
