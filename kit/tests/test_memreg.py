@@ -505,21 +505,34 @@ def test_the_lens_list_is_registered_once_each_the_held_one_last(M):
 
 
 class ApertureLink:
-    """The SDK's FNumber as the link answers it: set, then read back; `refuse` values the camera will not take, and
-    `drift` ones it reads back otherwise."""
+    """The SDK's FNumber as camlink answers it: set, then read back; `refuse` values the camera will not take ("camera
+    kept another value", the beyond-lens run's own refusal), `drift` ones it reads back otherwise. `window`: after each
+    download (after_download()), FNumber reads display only with none listed and a set answers "not writable now" for
+    that many reads and sets (2026-11-21: about 2 to 4 s after every settings download)."""
 
-    def __init__(self, held=560, refuse=(), drift=()):
+    def __init__(self, held=560, refuse=(), drift=(), window=0):
         self.current, self.refuse, self.drift, self.sets = held, set(refuse), set(drift), []
+        self.window, self.left, self.gets = window, 0, 0
+
+    def after_download(self):
+        self.left = self.window
 
     def set(self, name, value):
         assert name == "FNumber"
+        if self.left > 0:
+            self.left -= 1
+            raise RuntimeError(f"set FNumber {value}: not writable now")
         self.sets.append(value)
         if value in self.refuse:
-            raise RuntimeError("not writable")
+            raise RuntimeError("camera kept another value")
         self.current = value + 10 if value in self.drift else value
 
     def get(self, name):
-        return {"current": self.current, "writable": True, "values": [400, 450, 560]}
+        self.gets += 1
+        if self.left > 0:
+            self.left -= 1
+            return {"current": self.current, "enable": 2, "writable": False, "values": []}
+        return {"current": self.current, "enable": 1, "writable": True, "values": [400, 450, 560]}
 
 
 def aperture_world(link, stop_after=None, records=None):
@@ -653,7 +666,16 @@ def test_the_slots_are_the_camera_files_memory_sets(M):
 # the slot screen's frames the kit has of each slot's tab lit (SEEN_LIT): the run measures them as their slot's tab
 SEEN_FRAMES = [("1", "kit2_memreg_tabs_stills/shots/00014_enter.png"), ("2", "kit2_frame_reg/shots/00265_right.png"),
                ("3", "kit2_frame_reg/shots/00266_right.png"), ("Movie 1", "kit2_memreg_tabs_movie/shots/00005_enter.png"),
-               ("S&Q 1", "kit2_memreg_tabs_sq_look/shots/00005_enter.png")]
+               ("S&Q 1", "kit2_memreg_tabs_sq_look/shots/00005_enter.png"),
+               ("Movie 1", "kit2_memreg_tabs3_mv_look/shots/00005_enter.png"),
+               ("Movie 2", "kit2_memreg_tabs3_mv_look/shots/00006_right.png"),
+               ("Movie 3", "kit2_memreg_tabs3_mv_look/shots/00007_right.png"),
+               ("S&Q 1", "kit2_memreg_tabs3_sq_look/shots/00005_enter.png"),
+               ("S&Q 2", "kit2_memreg_tabs3_sq_look/shots/00006_right.png"),
+               ("S&Q 3", "kit2_memreg_tabs3_sq_look/shots/00007_right.png"),
+               ("Time-lapse 1", "kit2_memreg_tabs3_tl_look/shots/00005_enter.png"),
+               ("Time-lapse 2", "kit2_memreg_tabs3_tl_look/shots/00006_right.png"),
+               ("Time-lapse 3", "kit2_memreg_tabs3_tl_look/shots/00007_right.png")]
 
 
 @pytest.mark.parametrize("slot, rel", SEEN_FRAMES)
@@ -667,12 +689,13 @@ def test_each_slot_seen_lit_is_measured_as_its_own_tab_on_the_cameras_frame(M, s
 
 
 def test_a_slot_whose_tab_has_not_been_seen_lit_is_refused_before_anything_connects(M, monkeypatch):
-    """Movie 2 and 3, S&Q 2 and 3 and the Time-lapse slots: no frame shows their tab lit on their family's screen, so
-    no registration goes there (never a tab assumed) until memreg_run --look-tabs records it; said before the link."""
-    assert set(M.SEEN_LIT) == {"1", "2", "3", "Movie 1", "S&Q 1"}
-    for slot in ("Movie 2", "Movie 3", "S&Q 2", "S&Q 3", "Time-lapse 1", "Time-lapse 2", "Time-lapse 3"):
-        assert "--look-tabs" in M.slot_unseen(slot) and "has not been seen lit" in M.slot_unseen(slot)
-    assert M.slot_unseen("Movie 1") == "" and M.slot_unseen("3") == ""
+    """Since memreg_tab_looks3 (2026-11-21) every one of the twelve slots has its tab seen lit; a slot SEEN_LIT did not
+    name would get no registration (never a tab assumed) until memreg_run --look-tabs recorded it, said before the
+    link."""
+    assert set(M.SEEN_LIT) == set(M.SLOTS)
+    assert all(M.slot_unseen(s) == "" for s in M.SLOTS)
+    monkeypatch.setattr(M, "SEEN_LIT", {k: v for k, v in M.SEEN_LIT.items() if k != "Time-lapse 1"})
+    assert "--look-tabs" in M.slot_unseen("Time-lapse 1") and "has not been seen lit" in M.slot_unseen("Time-lapse 1")
     monkeypatch.setattr(M.definitions, "active", lambda *a, **k: "none.json")
     monkeypatch.setattr(M, "read_json", lambda path: {"model": "ILCE-1M2"})
     monkeypatch.setattr(M.definitions, "with_evidence", lambda doc, *a, **k: doc)
@@ -831,7 +854,12 @@ def test_every_memory_section_s_registration_records_and_s_q_and_time_lapse_s_fo
     both = filled_file(tmp_path, "both.DAT", [1, 7])
     assert not_by_file.filled_left_of(both) == not_by_file.memory_left("ILCE-1M2", (1, 7))
     assert not_by_file.filled_left_of(tmp_path / "missing.DAT") == frozenset()
-    assert module("memreg_run", "provers").expected_keys("ILCE-1M2", 7) == {"set7:0x023c", "set7:0x11ab", "set7:0x11ad"}
+    # memreg_run's own restore: a Stills or Movie section's three; an S&Q or Time-lapse section's four, 0x0170 among
+    # them since sq1b (2026-11-21) showed set7:0x0170 left by the upload, as kit2_memmirror's set10 wrote it
+    run = module("memreg_run", "provers")
+    assert run.expected_keys("ILCE-1M2", 4) == {"set4:0x023c", "set4:0x11ab", "set4:0x11ad"}
+    assert run.expected_keys("ILCE-1M2", 7) == {"set7:0x023c", "set7:0x11ab", "set7:0x11ad", "set7:0x0170"}
+    assert run.expected_keys("ILCE-1M2", 10) == {"set10:0x023c", "set10:0x11ab", "set10:0x11ad", "set10:0x0170"}
 
 
 def test_upload_check_tolerates_a_slot_s_records_only_where_the_camera_shows_it_filled(tmp_path):
@@ -972,3 +1000,63 @@ def test_the_run_works_in_the_mode_it_is_given_so_a_kept_switch_does_not_refuse_
     with pytest.raises(SystemExit, match="on the Stills menu: give --in Stills"):
         M.main(["--aperture", "--slot", "2", "--in", "S&Q"] + allow)
     assert M.menu_of("Time-lapse") == "S&Q" and M.menu_of("Stills") == "Stills"
+
+
+def test_each_set_waits_for_fnumber_after_a_download_and_none_is_lost_to_the_window(M, monkeypatch):
+    """2026-11-21 08:52-09:28: after every settings download FNumber reads display only, and a set answers "not
+    writable now", for about 2 to 4 s; the runs set the next F-number 2.0 s after a registration's download and
+    counted fifteen values "not offered". Each set now goes after the run's way back to the shooting screen (`ready`)
+    and fnumber_settable; a "not writable now" is waited out and tried again, never counted as refused."""
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    link = ApertureLink(held=560, window=3)
+    done, said, register, download, stopped = aperture_world(link)
+
+    def downloaded(tag):
+        got = download(tag)
+        link.after_download()
+        return got
+    readies = []
+    lines, not_set, stop = M.register_apertures(link, [400, 450, 560], "1", 1, register, downloaded, stopped,
+                                                said.append, ready=lambda: readies.append(1))
+    assert done == [400, 450, 560] and not not_set and not stop
+    assert len(lines) == 6 and all(x["applied"] for x in lines)
+    assert len(readies) >= 3, "the way back to the shooting screen before each set"
+    assert not any("not offered" in s for s in said)
+
+
+def test_a_set_the_camera_refuses_is_still_a_refusal_but_a_window_that_never_ends_stops_the_run(M, monkeypatch):
+    """A refusal other than "not writable" (the camera kept another value) is recorded as before. FNumber that stays not
+    writable through every wait stops the registrations with the camera's report (fnumber_settable's Failed), never
+    fifteen values counted not offered."""
+    from prove_run import Failed
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    link = ApertureLink(held=560, refuse={450})
+    done, said, register, download, stopped = aperture_world(link)
+    lines, not_set, _ = M.register_apertures(link, [400, 450], "1", 1, register, download, stopped, said.append)
+    assert done == [400] and [x["value"] for x in not_set] == [450] and "kept another value" in not_set[0]["why"]
+    stuck = ApertureLink(held=560, window=10 ** 6)
+    stuck.after_download()
+    done, said, register, download, stopped = aperture_world(stuck)
+    with pytest.raises(Failed, match="does not take FNumber now"):
+        M.register_apertures(stuck, [400, 450], "1", 1, register, download, stopped, said.append)
+    assert done == [] and stuck.sets == []
+
+
+def test_the_put_back_waits_too_and_a_put_back_that_fails_stops_the_queue(M, monkeypatch, capsys):
+    """put_back_aperture waits for FNumber as each set does; where it still fails, prove_apertures ends with
+    EXIT_UNRESTORED (the live aperture is live state no settings file puts back: decision 15), so the chain and the queue
+    stop, saying the one command that puts it back, rather than exit 1 that the queue rolls past."""
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    link = ApertureLink(held=400, window=3)
+    link.after_download()
+    said = []
+    assert M.put_back_aperture(link, 560, said.append) is True and link.current == 560
+    stuck = ApertureLink(held=400, window=10 ** 6)
+    stuck.after_download()
+    assert M.put_back_aperture(stuck, 560, said.append) is False
+    assert any("kit/tools/sdk_set.py FNumber=560" in s and "the queue stops" in s for s in said)
+    from runner import EXIT_UNRESTORED
+    assert M.status_of(back=False, applied=2, lines=2, stopped=False, beyond=False, not_set=0) == EXIT_UNRESTORED
+    assert M.status_of(back=True, applied=2, lines=2, stopped=False, beyond=False, not_set=0) == 0
+    assert M.status_of(back=True, applied=2, lines=2, stopped=False, beyond=False, not_set=3) == 1
+    assert M.status_of(back=True, applied=0, lines=0, stopped=False, beyond=True, not_set=3) == 0

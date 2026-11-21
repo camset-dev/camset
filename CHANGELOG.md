@@ -240,6 +240,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **`memreg_run.py --aperture` reads FNumber again before it gives up:** its refusal then says what the camera reported
   (display only, how many F-numbers listed, the exposure mode) and points at the lens. It takes `--in`, so a slot or a
   look in Movie or S&Q runs behind a kept switch.
+- **`memreg_run.py --aperture` waits for the camera after each download before the next F-number:** a "not writable
+  now" is waited out, never counted as not offered, and a live aperture it cannot put back stops the queue. All twelve
+  memory slots are now registered where asked.
 - **`scale_run.py` takes `--in` too:** a scale in Movie or S&Q runs behind a kept switch, its `--set` rows set on that
   mode's menu.
 - **A grey reading no grey entry has measured says so, and is not trusted after the camera refuses it:** proof lines
