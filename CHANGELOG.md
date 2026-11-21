@@ -238,7 +238,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   `--look-tabs` records the others' tabs. Uploads leave a slot's registration records out of their count only where the
   camera's own download shows that slot filled.
 - **`memreg_run.py --aperture` reads FNumber again before it gives up:** its refusal then says what the camera reported
-  (display only, how many F-numbers listed, the exposure mode) and points at the lens.
+  (display only, how many F-numbers listed, the exposure mode) and points at the lens. It takes `--in`, so a slot or a
+  look in Movie or S&Q runs behind a kept switch.
 - **A grey reading no grey entry has measured says so, and is not trusted after the camera refuses it:** proof lines
   judged by a carousel's icon or a checklist's band say how, and a refusal after such an entry marks the row
   "misjudged" (runs/<model>_fw<fw>/grey_misjudged.jsonl), its entries no longer entered on that reading.
