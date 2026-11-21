@@ -434,15 +434,25 @@ def walk(cam, b: int, names: list, option: str) -> Walk:
 def step_to(cam, b: int, vals: list, target: str, names: list, option: str) -> None:
     """Box b (its cursor in it) stepped to `target` by its probe's values (Up order), every press followed by check 1
     (press_in, the hazard refused on the way); Failed where it reads a value not among them or the target never comes
-    up."""
+    up. After a press, OCR's reading counts alone only where that press can have brought it (the next value in its
+    direction, or the same one: an end, or a press the camera did not take); any other reading goes to the second
+    reader first (value_at's fits): OCR read close_zebra_sq's Range "±7" as "‡1" (±1, a value of the box), and the
+    stepping went round ±7 and ±8 until its presses ran out (kit2_pass2 275820, 2026-11-20)."""
     in_box(cam, option, names[b] if b < len(names) else None, b)
+    prev, key = None, None
     for _ in range(len(vals) + 1):
-        now = value_at(cam, b, target, lambda v: v in vals, need=f"stepping to {target!r}")
+        can = set(vals) if prev is None else {prev, _next(prev, key, vals)}
+
+        def fits(v, can=can):
+            return v in can
+        after = f" after {key} from {prev!r}" if prev is not None else ""
+        now = value_at(cam, b, target, fits, need=f"stepping to {target!r}{after}")
         if now == target:
             return
         if now not in vals:
             raise Failed(f"box {b}: read {now!r}, not one of its values ({getattr(cam.frame.path, 'name', '')})")
-        press_in(cam, "up" if vals.index(target) > vals.index(now) else "down", option, names, b, vals)
+        prev, key = now, ("up" if vals.index(target) > vals.index(now) else "down")
+        press_in(cam, key, option, names, b, vals)
     raise Failed(f"box {b}: {target!r} never came up")
 
 
