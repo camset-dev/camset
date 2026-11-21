@@ -238,6 +238,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A crawl walks the rows behind a question it answered with `--allow`:** Exposure Std. Adjust's five settings were
+  left unwalked behind it, so its proofs had no map.
 - **A lit one-letter row OCR cannot read (Color Depth's M, Y) is found when the frame before and the second reader
   agree on its label:** a proof made there carries `"row_by"` in `proofs.jsonl`, and the report takes its move of a
   record another row's proofs own as an open question, never as the row's setting.
