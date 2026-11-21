@@ -854,7 +854,12 @@ def test_every_memory_section_s_registration_records_and_s_q_and_time_lapse_s_fo
     both = filled_file(tmp_path, "both.DAT", [1, 7])
     assert not_by_file.filled_left_of(both) == not_by_file.memory_left("ILCE-1M2", (1, 7))
     assert not_by_file.filled_left_of(tmp_path / "missing.DAT") == frozenset()
-    assert module("memreg_run", "provers").expected_keys("ILCE-1M2", 7) == {"set7:0x023c", "set7:0x11ab", "set7:0x11ad"}
+    # memreg_run's own restore: a Stills or Movie section's three; an S&Q or Time-lapse section's four, 0x0170 among
+    # them since sq1b (2026-11-21) showed set7:0x0170 left by the upload, as kit2_memmirror's set10 wrote it
+    run = module("memreg_run", "provers")
+    assert run.expected_keys("ILCE-1M2", 4) == {"set4:0x023c", "set4:0x11ab", "set4:0x11ad"}
+    assert run.expected_keys("ILCE-1M2", 7) == {"set7:0x023c", "set7:0x11ab", "set7:0x11ad", "set7:0x0170"}
+    assert run.expected_keys("ILCE-1M2", 10) == {"set10:0x023c", "set10:0x11ab", "set10:0x11ad", "set10:0x0170"}
 
 
 def test_upload_check_tolerates_a_slot_s_records_only_where_the_camera_shows_it_filled(tmp_path):

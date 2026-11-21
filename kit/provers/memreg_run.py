@@ -204,8 +204,13 @@ def family_refused(cs, model: str, slot: str) -> str:
 
 
 def expected_keys(model: str, section: int) -> frozenset:
-    """The keys of the slot's records no settings file sets, which a registration writes (NOT_BY_FILE)."""
-    return frozenset(f"set{section}:{set_twins.hexid(r)}" for r in NOT_BY_FILE.get(model, ()))
+    """The keys of the slot's records no settings file sets, which a registration writes: NOT_BY_FILE's three, and in
+    an S&Q or Time-lapse section 0x0170 too (camkit.not_by_file.memory_left's SET_EXTRA). memreg_run's own restore
+    leaves these out and counts every other record. 2026-11-21: sq1b, the first S&Q registration since the owner's
+    reset, showed set7:0x0170 by key, left by the upload (0 -> 1), as the strict check of then meant it to; kit2_memmirror
+    00427-00436 wrote set10:0x0170 at a Time-lapse registration."""
+    from camkit.not_by_file import memory_left
+    return memory_left(model, (section,))
 
 
 def slot_filled(cs, model: str, section: int) -> bool:
