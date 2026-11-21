@@ -638,6 +638,14 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             if not final and axis_reading(cam, vals)[0] != k:
                 raise Failed(f"{name}: the axis is not on {vals[k]!r} ({axis_title(cam)!r})")
             return cam.frame.path.name, axis_title(cam), later(vlm_option, cam)
+        # an axis value --first names (a caller's word), and every one under --never-enter-grey, is judged before
+        # its Enter (greyed.choice_refused); the value the carousel opened on goes back as its put-back, as a list's
+        first_k = next((i for i, v in enumerate(vals) if option_key(v) == option_key(FIRST[name])), None) \
+            if FIRST.get(name) is not None else None
+        if not final and (greyed.NEVER_ENTER or k == first_k):
+            why = greyed.choice_refused(cam, name, axis_title(cam))
+            if why:
+                raise Failed(why)
         chosen, shown, seen_vlm = enter_chosen(cam, (cam.frame.path.name, axis_title(cam), later(vlm_option, cam)),
                                                axis_now)
         # the screen after OK, by the list job's step (proving.commit.after_ok): a refusal or a notice closed with MENU,

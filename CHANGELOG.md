@@ -218,6 +218,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **Every prover that chooses an entry by a caller's word judges it grey first:** an entry drawn grey, or one whose
+  drawing the kit's pixel readings cannot tell, is not entered, and the run stops saying which and why.
 - **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a
   grey option where it may, closes the list with MENU and stops, as it does where whether an option is grey cannot be told.
 - **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that

@@ -215,7 +215,12 @@ def open_option(cam, cycle, model, row: str, option: str) -> None:
 
 def enter_box(cam, index: int, names: list, option: str) -> None:
     """From the list with the option lit: Right into its boxes (the first box lit), then to box `index` of the row
-    `names` (go), every press followed by check 1."""
+    `names` (go), every press followed by check 1. The option, the caller's --option, is judged first: Right into
+    its boxes and the OK after choose it, so a greyed one (or one not told) is not entered."""
+    from proving.greyed import choice_refused
+    why = choice_refused(cam, option, option)
+    if why:
+        raise Failed(why)
     cam.press("right")
     in_box(cam, option, names[0] if names else None, 0)
     go(cam, option, names, 0, index)

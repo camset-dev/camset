@@ -588,6 +588,11 @@ def enter(cam, option: str, labels: list, b: int | None, count: int | None, want
         why = f"box {b} no longer reads {want!r}"
     if why:
         raise Failed(f"{option}: no Enter: {why} ({cam.frame.path.name})")
+    if b is None:                       # the base Enter on the option a caller names: never on a greyed one
+        from proving.greyed import choice_refused
+        why = choice_refused(cam, option, option)
+        if why:
+            raise Failed(why)
     chosen = cam.frame.path.name
     cam.press("enter")
     return chosen

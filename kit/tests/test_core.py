@@ -1606,6 +1606,8 @@ def test_axis_first_proves_from_the_value_it_chose(monkeypatch):
     value the axis held (10 Sec.) is proved as a change too; the last proof, back on the chosen value, changes nothing,
     and the carousel, which now opens on the axis option, is backed up by none (its saved title the chosen value).
     Without it, the held value is the one left unproved and the carousel is backed up to the option it opened on."""
+    from proving import greyed      # its made-up carousel frames draw no lit icon: the --first value reads white
+    monkeypatch.setattr(greyed, "choice_drawing", lambda cam: (False, None, "a made-up carousel frame"))
     vals = ["10 Sec. 3 Img.", "5 Sec. 3 Img.", "2 Sec. 3 Img."]
     job = {"path": ["Drive Mode"], "kind": "axis", "option": "Self-timer(Cont.)", "values": vals}
     start = _Dat("00001_start.DAT", {"option": 0, "axis": 0})

@@ -135,6 +135,24 @@ def rows_seen(request, monkeypatch):
     monkeypatch.setattr(first_open, "seen_record", lambda camera=None: _AllSeen())
 
 
+@pytest.fixture(autouse=True)
+def made_up_entries_white(request, monkeypatch):
+    """A made-up camera's frame holds no picture, so no pixel reading can judge the entry a prover is about to choose
+    (proving.greyed.choice_drawing, 2026-11-20): there it reads as drawn white, so each prover's own test tests what it
+    tests. A frame with a picture (a replayed camera frame) is judged as on the camera, and test_choice_grey judges
+    the reading itself, opting out with its own module name."""
+    if request.module.__name__ == "test_choice_grey":
+        return
+    from proving import greyed
+    real = greyed.choice_drawing
+
+    def drawing(cam):
+        if getattr(getattr(cam, "frame", None), "image", None) is None:
+            return False, None, "a made-up frame (no picture)"
+        return real(cam)
+    monkeypatch.setattr(greyed, "choice_drawing", drawing)
+
+
 class _AllSeen:
     """rows_seen's record: every row seen."""
     opened: set = set()

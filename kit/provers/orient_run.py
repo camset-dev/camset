@@ -155,6 +155,10 @@ def choose(cam, link, hdmi, run, cycle, model, row, k, labels, axes, i, v=None) 
     if safety.confirmation(full):
         raise Failed(f"the dialog reads like a confirmation ({safety.confirmation(full)}): no OK")
     chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)     # a second reader, kept with the proof
+    from proving.greyed import choice_refused
+    why = choice_refused(cam, row, str(opt))
+    if why:
+        raise Failed(why)
     cam.press("enter")
     row_frame = cam.frame.path.name
     # what the camera did with it (proving.commit.after_ok): a refusal or a notice closed with MENU, never OK, its words

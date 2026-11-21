@@ -238,6 +238,8 @@ def test_with_first_on_manual_center_chosen_after_it_is_proved_whatever_its_reco
     shows it (the change, or none) and the run does not fail on it, the last visit back on Manual writing nothing.
     Without --first, Center is never chosen after Manual: the last visit chooses Off with the axis moved back, and a
     flag that stays fails that visit's empty diff."""
+    from proving import greyed      # its made-up carousel frames draw no lit icon: the --first value reads white
+    monkeypatch.setattr(greyed, "choice_drawing", lambda cam: (False, None, "a made-up carousel frame"))
     cam = FramingStabilizer(sticky=sticky)
     P, link, downloads = proof_seams(monkeypatch, cam)
     monkeypatch.setitem(P.FIRST, JOB_KEY, "On: Manual")
