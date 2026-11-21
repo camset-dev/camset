@@ -88,6 +88,12 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the docs and the ledger's public form, the mapping found no menu row that changes such a record, so it does not know
   what the record holds, and a change to it is unproved and at your own risk. Which unmapped records never changed
   stays in the mapper's private ledger, never listed or counted in a public file (decision 27).
+- **The a1 II's definition says which rows the camera greys in a shooting mode or with an HDMI device connected:**
+  Time Code Run and Auto Slow Shutter are grey in S&Q; Audio Recording, Audio Rec Level, Auto Framing and Rec. Media
+  dur HDMI Output in S&Q and Time-lapse; Zoom Range in S&Q at 240fps and 120fps; Touch Func. in Shooting, its three AE
+  settings and Aspect Marker Level while HDMI Info. Display is On and an HDMI device is connected; and REC Control
+  while Time Code Output is Off. Zebra Level's Custom settings now stand in the Movie and S&Q menus too, and PP1's
+  Black Level and Remote Zoom Speed's Fixed Speed REC in S&Q.
 - **The a1 II's definition takes the night's proofs in Movie, S&Q and Time-lapse:** Picture Profile's rows, File
   Settings and the S&Q and Time-lapse frame-rate rows now stand in the S&Q menu, the look-alike rows Custom Key/Dial
   Set., Fn Menu Settings and Recording Media carry their icon's words, and Movie Interval Rec's fifteen Interval Times

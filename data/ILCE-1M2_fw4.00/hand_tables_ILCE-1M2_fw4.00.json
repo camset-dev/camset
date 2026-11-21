@@ -150,7 +150,8 @@
       "name": "Aspect Marker Level",
       "tab": "Shooting",
       "group": "Marker Display",
-      "inactive_when": {"record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off"}
+      "inactive_when": null,
+      "inactive_if": {"record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off", "hdmi_device": true}
     },
     "global:0x1479": {
       "name": "Aspect Marker Level (Playback)",
@@ -687,10 +688,38 @@
       "name": "Embed LUT File",
       "inactive_when": {"record": 4127, "name": "Log Shooting", "values": [0], "unlock": 1, "unlock_label": "On (Flexible ISO)"}
     },
-    "global:0x02e9": {"name": "Audio Recording", "modes": "movie"},
-    "global:0x0018": {"name": "Audio Input Master Level", "modes": "movie"},
-    "global:0x116e": {"name": "Auto Framing", "modes": "movie"},
-    "global:0x0498": {"name": "Movie HDMI Output Time Code", "modes": "still image, movie"}
+    "global:0x02e9": {"name": "Audio Recording", "modes": "movie", "grey_in": ["S&Q", "Time-lapse"]},
+    "global:0x0018": {"name": "Audio Input Master Level", "modes": "movie", "grey_in": ["S&Q", "Time-lapse"]},
+    "global:0x116e": {"name": "Auto Framing", "modes": "movie", "grey_in": ["S&Q", "Time-lapse"]},
+    "global:0x0498": {"name": "Movie HDMI Output Time Code", "modes": "still image, movie"},
+    "global:0x0476": {
+      "name": "Touch Func. in Shooting",
+      "inactive_if": {"record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off", "hdmi_device": true}
+    },
+    "global:0x1195": {
+      "name": "Touch Focus: AE",
+      "inactive_if": {"record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off", "hdmi_device": true}
+    },
+    "global:0x1196": {
+      "name": "Touch Tracking: AE",
+      "inactive_if": {"record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off", "hdmi_device": true}
+    },
+    "global:0x1197": {
+      "name": "Touch Shutter: AE",
+      "inactive_if": {"record": 1180, "name": "HDMI Info. Display", "values": [0], "unlock": 1, "unlock_label": "Off", "hdmi_device": true}
+    },
+    "global:0x0499": {
+      "name": "REC Control",
+      "inactive_when": {"record": 1176, "name": "Movie HDMI Output Time Code", "values": [1], "unlock": 0, "unlock_label": "On"}
+    },
+    "global:0x02ff": {
+      "name": "Zoom Range",
+      "inactive_if": {"record": 584, "name": "S&Q Frame Rate", "values": [0, 2], "unlock": 4, "unlock_label": "60fps", "family": ["S&Q"]}
+    },
+    "global:0x02f4": {"name": "Time Code Run", "grey_in": ["S&Q"]},
+    "global:0x16ab": {"name": "Time Code Run", "grey_in": ["S&Q"]},
+    "global:0x0332": {"name": "Auto Slow Shutter", "grey_in": ["S&Q"]},
+    "global:0x0492": {"name": "Rec. Media dur HDMI Output", "grey_in": ["S&Q", "Time-lapse"]}
   },
   "FILTER_FLAGS": {
     "global:0x1290": {
@@ -4440,6 +4469,186 @@
       "not_on_camera",
       null,
       "Never written on this camera: sets 4-12 are the Movie, S&Q and Time-lapse memories (1-3 each), and registering them leaves the raw stop values as they were; only Stills memories write them. Their F-number and shutter are proved."
+    ],
+    "global:0x0f9b[0]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[1]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[2]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[3]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[4]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[5]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[6]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[7]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[8]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[9]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[10]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[11]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[12]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[13]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[14]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[15]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[16]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0f9b[17]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[0]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[1]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[2]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[3]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[4]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[5]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[6]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[7]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[8]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[9]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[10]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[11]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[12]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[13]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[14]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[15]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[16]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
+    ],
+    "global:0x0fbb[17]": [
+      "not_on_camera",
+      null,
+      "Only Camera Settings Reset writes this copy, with Sony's base look for each look; changing a look's base look writes only the look in use, so the copy's other values are never written and no menu choice can prove them."
     ]
   },
   "CONTEXT_WORDS": {
@@ -4456,7 +4665,8 @@
     "Proxy Settings > Px Proxy File Format": "Proxy Settings > Proxy File Format",
     "S&Q Settings > S&Q Record Setting": "S&Q Settings > Record Setting",
     "Rec. Media Settings > Recording Media (Movie)": "Rec. Media Settings > Recording Media#1",
-    "S after still img crt": "after still img crt"
+    "S after still img crt": "after still img crt",
+    "Remote Zoom Speed > 1 Fixed Speed REC": "Remote Zoom Speed > Fixed Speed REC"
   },
   "MENUS": [
     {
