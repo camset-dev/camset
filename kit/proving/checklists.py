@@ -193,7 +193,7 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
             info = {"row": got["row"], "passed": True, "frame": got["frame"]}
         if cam.read().kind != "checklist" or cam.read().focus != "rows":
             raise Failed(f"{name}: Right opened {cam.read().kind}, not the checklist's rows")
-        at, changed_boxes = 0, []
+        at, changed_boxes, judged = 0, [], None     # judged: the uncalibrated reading the boxes went by (greyed)
         for box in sorted(boxes):                # Down only: the boxes in screen order
             for _ in range(box - at):
                 cam.press("down")
@@ -207,6 +207,7 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
                 why = greyed.choice_refused(cam, name, labels[box])
                 if why:
                     raise Failed(why)
+                judged = greyed.reading_of(cam) or judged
             before = check_state(cam)
             cam.press("enter")
             after = check_state(cam)
@@ -234,6 +235,13 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
             notice = {"text": text_n, "frame": cam.frame.path.name}
             print(f"   refused: {text_n[:90]!r}", flush=True)
             cam.cancel_to_menu()
+            from .commit import REFUSED_WORDS
+            if judged and any(b["ticked"] for b in changed_boxes) and REFUSED_WORDS.search(text_n):
+                # a box ticked on that the band read white, and the camera refused the OK with a refusal notice
+                # (REFUSED_WORDS, as an axis value's; an untick refused, as the last box of a list that needs one, or an
+                # unrelated notice, says nothing of grey): the row is marked misjudged
+                from . import greyed
+                greyed.mark_misjudged(name, judged, greyed.run_name(run), chosen, notice)
         elif s.kind != "shooting" and not same_place(place(cam), row_place):
             raise Failed(f"{name}: after OK the screen is {s.kind} ({cam.frame.path.name}), not the row")
         dat = link.download(f"{path[-1]}-box{index}")
@@ -245,6 +253,9 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
                "boxes": changed_boxes, "chosen_frame": chosen, "vlm": settled(seen_vlm), "row_frame": cam.frame.path.name, "dat": dat.name,
                "base": base_path.name, "notice": notice, "applied": not refused, **extra,
                **({"info_ok": info} if info else {}), "changes": changes_of(changes)}
+        if judged:
+            from . import greyed
+            rec["grey_judged"] = greyed.UNMEASURED[judged]
         out.write(json.dumps(rec) + "\n")
         out.flush()
         brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"

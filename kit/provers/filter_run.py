@@ -238,12 +238,20 @@ def grid_tick(cam, name: str, b: int):
     s = cam.read()
     if s.kind != "checklist" or s.focus != "rows" or s.row != b:
         raise Failed(f"{name}: the cursor is not on box {b} ({s.kind}, row {s.row}, {cam.frame.path.name})")
-    from proving.greyed import choice_refused
-    why = choice_refused(cam, name, f"box {b}")
+    from proving import greyed
+    why = greyed.choice_refused(cam, name, f"box {b}")
     if why:
         raise Failed(why)
+    judged, chosen = greyed.reading_of(cam), cam.frame.path.name
     before = check_state(cam)
     cam.press("enter")
+    if judged and not before and cam.read().kind == "notice":
+        # a box the band read white, ticked on, answered by a refusal notice (REFUSED_WORDS, as an axis value's): the
+        # row is marked misjudged; any other notice marks nothing
+        from proving.commit import REFUSED_WORDS
+        said = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
+        if REFUSED_WORDS.search(said):
+            greyed.mark_misjudged(name, judged, None, chosen, {"frame": cam.frame.path.name})
     after = check_state(cam)
     if before is None or after is None or after == before:
         raise Failed(f"{name}: Enter did not flip box {b} ({before} -> {after}, {cam.frame.path.name})")
@@ -410,6 +418,8 @@ def main():
         df = definitions.path(run.dir.parent.name)          # its box names are public (definitions.load_public)
         defn = definitions.load_public(df) if df.exists() else {}
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
+    from proving import greyed
+    greyed.say_marks()  # the grey readings this run will not enter on alone (proving.greyed's memory)
     hdmi = eyes_from_config(run)
     proofs, unrestored = 0, False
     try:

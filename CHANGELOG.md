@@ -218,6 +218,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A grey reading no grey entry has measured says so, and is not trusted after the camera refuses it:** proof lines
+  judged by a carousel's icon or a checklist's band say how, and a refusal after such an entry marks the row
+  "misjudged" (runs/<model>_fw<fw>/grey_misjudged.jsonl), its entries no longer entered on that reading.
+- **`kit/tools/grey_memory.py` lists the misjudged rows and lifts one:** `--measured ROW READING --why "..."` after a
+  measurement, and every run says at its start the marks it will apply.
 - **Every prover that chooses an entry by a caller's word judges it grey first:** an entry drawn grey, or one whose
   drawing the kit's pixel readings cannot tell, is not entered, and the run stops saying which and why.
 - **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a

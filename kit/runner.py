@@ -1359,6 +1359,8 @@ def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: fl
     try:
         if readers:
             check_readers()     # no reader listed: stop before the link opens, nothing pressed
+        from proving import greyed
+        greyed.say_marks()      # the grey readings this run will not enter on alone (proving.greyed's memory)
         with Link(run) as link:
             eyes.attach(link)
             start = session_start(link, eyes, start_why, start_tag, reach=reach, say=say_start, settle=settle,

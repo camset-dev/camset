@@ -187,12 +187,21 @@ def visit(cam, link, hdmi, cycle, model, h: int, cells: list) -> dict:
     flipped, refused = [], []
     for k in sorted(cells):
         to_item(cam, k)
-        from proving.greyed import choice_refused
-        why = choice_refused(cam, "Recall Custom hold", ITEMS[k])
+        from proving import greyed
+        item = f"Recall Custom hold {h} / {ITEMS[k]}"     # the memory's row: this hold's item, never every hold's
+        why = greyed.choice_refused(cam, item, ITEMS[k])
         if why:
             raise Failed(why)
+        judged, chosen = greyed.reading_of(cam), cam.frame.path.name
         before = tick(cam)
         cam.press("enter")
+        if judged and not before and cam.read().kind == "notice":
+            # a tick the band read white, put on, answered by a refusal notice (REFUSED_WORDS, as an axis value's):
+            # this hold's item is marked misjudged; any other notice, or a tick that did not flip, marks nothing
+            from proving.commit import REFUSED_WORDS
+            said = ocr.text_in(lines(cam), (0, 0, 640, 480))
+            if REFUSED_WORDS.search(said):
+                greyed.mark_misjudged(item, judged, None, chosen, {"frame": cam.frame.path.name})
         after = tick(cam)
         if before is None or after is None:
             raise Failed(f"cannot read {ITEMS[k]!r}'s tick ({before} -> {after}, {cam.frame.path.name})")

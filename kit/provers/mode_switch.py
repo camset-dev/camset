@@ -693,6 +693,8 @@ def main():
         sys.exit(f"--to {a.to!r}: one of {FAMILIES} or {sorted(MODES)}")
     cycle, model = load_scan(in_mode(a.scan, a.in_mode or "Stills"))
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
+    from proving import greyed
+    greyed.say_marks()  # the grey readings this run will not enter on alone (proving.greyed's memory)
     hdmi = eyes_from_config(run)
     start = after = None
     switch_failed = False           # a switch that did not happen exits 1, so --keep's chain does not go on in the old mode
