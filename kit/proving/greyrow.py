@@ -153,6 +153,25 @@ def bar_label(lit: str, label: str) -> str | None:
     return None
 
 
+def glued_label(lit: str, label: str, reader=None) -> str | None:
+    """`label` where OCR glued ONE stray letter onto it on the lit bar ("Time Code Outputa Off": a grey label lit, the
+    a1 II's HDMI Output Settings in S&Q and Time-lapse, kit2_greyrow 04405 and 04479 over both eyes) and the second
+    reader (`reader()`: its label for the lit bar, camkit.live.reader_label) reads the bar as that label exactly: two
+    signs, as a lit letter's (proving.screens.lit_letter); None otherwise, and with no reader. A longer word another row
+    could have ("Proxy Recordings") stays another label unless the reader reads the label alone."""
+    seen, want = safety.plain(lit), safety.plain(label)
+    if not seen or not want or reader is None or not seen.startswith(want):
+        return None
+    glued = seen[len(want):].split(" ", 1)[0]
+    if len(glued) != 1 or not glued.isalnum():
+        return None
+    try:
+        said = reader() or ""
+    except Exception:
+        return None
+    return label if safety.plain(said) == want else None
+
+
 def bar_refused(lit: str, path, seen) -> str:
     """Why the lit bar, as read now, may not be opened, or "": a bar that reads nothing (the never-open check cannot judge
     it), a never-open text (safety.never_open), or one the look lap's own list refuses (safety.look_lap_refused: what
@@ -231,15 +250,16 @@ def closed(path, seen, stored=None) -> str:
     return ""
 
 
-def open_refused(path, lit: str, seen, stored=None) -> str:
+def open_refused(path, lit: str, seen, stored=None, reader=None) -> str:
     """Why the Right may not go on the row at `path`, as an open of it would not if it were white, or "": closed(), the
     lit bar as read now judged the same way (never-open, the look lap's list), a bar that reads nothing, and the row
     itself not seen opened on this body (its first open is the crawl's procedure, camkit.first_open, which this run does
-    not make). Every reason only refuses."""
+    not make). The bar's label: bar_label, else glued_label with `reader` (the second reader's label for the lit bar).
+    Every reason only refuses."""
     why = closed(path, seen, stored) or bar_refused(lit, path, seen)
     if why:
         return why
-    drawn_as = bar_label(lit, path[-1])
+    drawn_as = bar_label(lit, path[-1]) or glued_label(lit, path[-1], reader)
     if drawn_as is None:
         return f"the lit row {str(lit).strip()!r} does not read as {path[-1]!r}, so its seen cannot be judged as drawn"
     if not first_open.drawn(seen)((*path[:-1], drawn_as)):     # the label the bar draws, as written in the records
@@ -348,7 +368,8 @@ def ask_why(cam, path, *, seen, tried: set, keys=None, stored=None, labels=(), s
         b = help_blocker(text, labels)
         say(f"{name}: its Help gives a reason, or words the kit does not take for none: no Right")
         return {**line, "outcome": REASON, **({"blocker": b} if b else {})}
-    refused = open_refused(path, lit_of(cam), seen, stored)
+    from camkit.live import reader_label
+    refused = open_refused(path, lit_of(cam), seen, stored, reader=lambda: reader_label(cam.frame.path)[0])
     if refused:
         say(f"{name}: its Help gives no reason; no Right: {refused}")
         return {**line, "outcome": HELP_ONLY, "why": refused}
