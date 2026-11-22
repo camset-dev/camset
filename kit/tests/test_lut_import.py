@@ -175,7 +175,9 @@ def test_only_a_cube_lut_under_the_clones_own_lut_folder_goes(luts, tmp_path):
            ".cube": [made(folder, "x.cub"), made(folder, "x.CUBE"), made(folder, "x.txt"), made(folder, "x.cube.txt")],
            "63": [made(folder, "a" * 59 + ".cube")],
            "period": [made(folder, ".x.cube")],
-           "character": [made(folder, "a!b.cube"), made(folder, "café.cube"), made(folder, "a:b.cube")],
+           # "a:b.cube" only off Windows, where no file name holds a colon and folder / "a:b.cube" is the drive a:'s
+           "character": [made(folder, "a!b.cube"), made(folder, "café.cube")] + ([made(folder, "a:b.cube")]
+                                                                                 if os.name != "nt" else []),
            "3,000,000": [made(folder, "big.cube", CUBE + " " * (L.LUT_MAX_BYTES - len(CUBE)))],
            "LUT_3D_SIZE": [made(folder, "words.cube", "only words\n"), made(folder, "nul.cube", "LUT_3D_SIZE 2\n\0")]}
     assert not L.lut_refused(made(folder, "a" * 58 + ".cube"))                     # 63 with ".cube": taken
