@@ -29,8 +29,7 @@ for that run (the playbook's section 1), the tool stops before anything connects
 camlink alike. The a1 II's owner allowed one import into User16 on 2026-11-19, "into an empty user place".
 
 Empty is what the camera's own Import/Edit table shows, seen: no property Sony documents tells an empty place from a
-held one, and DeleteUserBaseLook lists every place (the a1 II listed 1 to 16 and All on 2026-11-19 with all sixteen
-empty). The tool's `--seen-empty` names a frame of a look at Manage User LUTs > Import/Edit made with `kit/drive.py`
+held one, and DeleteUserBaseLook lists every place, held or empty, so it cannot tell them apart. The tool's `--seen-empty` names a frame of a look at Manage User LUTs > Import/Edit made with `kit/drive.py`
 (nothing chosen) on which the kit's own OCR reads User16's row as "User16: (No Import)", taken after the last import
 the camera was asked for and at most an hour before this one, on the same day; the frame, its SHA-256 and the row as read
 are logged. After an import the same look is made again, so the row's new reading is on record.

@@ -539,7 +539,7 @@ def test_every_question_to_a_reader_logs_how_long_it_took(monkeypatch, tmp_path)
     run = Run("asked", root=tmp_path)
     monkeypatch.setattr(vlm, "_RUN", run)
     monkeypatch.setattr(vlm, "_FAILING", set())
-    monkeypatch.setattr(vlm, "playing", lambda name: {"name": "b70"})
+    monkeypatch.setattr(vlm, "playing", lambda name: {"name": "lan"})
     monkeypatch.setattr(vlm, "local_only", lambda cfg, name: None)
     monkeypatch.setattr(vlm, "_SKIPPED", set())
 
@@ -558,7 +558,7 @@ def test_every_question_to_a_reader_logs_how_long_it_took(monkeypatch, tmp_path)
         vlm.ask_role("second", b"frame", "a question", 25)
     asked = [json.loads(x) for x in (run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
     asked = [e for e in asked if e["kind"] == "reader_asked"]
-    assert [(e["role"], e["reader"], e["answered"]) for e in asked] == [("second", "b70", True), ("second", "b70", False)]
+    assert [(e["role"], e["reader"], e["answered"]) for e in asked] == [("second", "lan", True), ("second", "lan", False)]
     assert all(isinstance(e["seconds"], float) and e["seconds"] >= 0 for e in asked)
     assert "Off" not in json.dumps(asked) and "a question" not in json.dumps(asked)
 

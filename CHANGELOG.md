@@ -98,7 +98,7 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   settings and Aspect Marker Level while HDMI Info. Display is On and an HDMI device is connected; and REC Control
   while Time Code Output is Off. Zebra Level's Custom settings now stand in the Movie and S&Q menus too, and PP1's
   Black Level and Remote Zoom Speed's Fixed Speed REC in S&Q.
-- **The a1 II's definition takes the night's proofs in Movie, S&Q and Time-lapse:** Picture Profile's rows, File
+- **The a1 II's definition takes new proofs in Movie, S&Q and Time-lapse:** Picture Profile's rows, File
   Settings and the S&Q and Time-lapse frame-rate rows now stand in the S&Q menu, the look-alike rows Custom Key/Dial
   Set., Fn Menu Settings and Recording Media carry their icon's words, and Movie Interval Rec's fifteen Interval Times
   are named and proved. It also says why five rows are greyed (Av/Tv Auto/Manual Switch and ISO Auto/Manual Set by
@@ -114,17 +114,17 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   and no longer a sample. Six rows take the names the camera draws (Proxy Recording, Proxy File Format, Proxy Rec.
   Settings, with Shutter Button, S&Q's Record Setting and the movie Recording Media row), and two value names are
   corrected to "Disp Specified Time Img." and "FTP Trans. (This Img.)".
-- **The a1 II's definition takes the evening's proofs of 2026-11-19:** S&Q's Record Setting for XAVC HS 4K at 24p and
+- **The a1 II's definition takes new proofs:** S&Q's Record Setting for XAVC HS 4K at 24p and
   120p and XAVC S HD at 30p, 24p and 120p, each a record of its own (the two named before for every rate are the 60p
   ones), and Framing Stabilizer's On: Center or On: Manual, the row greyed while Touch Operation is Off. A record that
   follows NTSC/PAL carries a reason in place of a proof, and the movie Recording Media row, Bracket Type's options and
   Playback's Aspect Marker Disp. take the camera's own places.
-- **The a1 II's definition takes the afternoon's proofs of 2026-11-19:** Bracket Type and its options' own records
+- **The a1 II's definition takes new proofs:** Bracket Type and its options' own records
   (proved with the drive mode dial on BRK), the movie rows of Recording Media and of Dial/Wheel's Separate M mode box,
   single-slot JPEG/HEIF Quality and Image Size, and Playback's Aspect Marker Level, until now an unknown record. Focus
   Bracket's Number of Shots takes 2 to 203, and each Custom box's size times 1000 is named as that box's, Custom 1's
   no longer taken for the box in use.
-- **The a1 II's definition takes the proofs of 2026-11-19:** ISO AUTO's movie Minimum and Maximum are walked in
+- **The a1 II's definition takes new proofs:** ISO AUTO's movie Minimum and Maximum are walked in
   Movie mode (ISO 100 to ISO 32000, a Maximum set below the Minimum pulling it down there too), Color Mode is proved
   on each profile with its Gamma on HLG, and My Menu's empty place and the Playback Filter flags' "Never set" are
   offered as values the camera holds from the factory. ISO in use and a memory-set flag the camera writes itself carry
@@ -356,8 +356,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   own record, which each line now keeps beside the title read.
 - **`carousel_fields_run.py` judges a box lit on the frame its title was read from,** as it judges the option: a box
   seen lit just after a Right and gone once the title settled no longer passes, so no walk ends on an empty look.
-- **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
-  `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
+- **The grey-row tests no longer pin what a live run folder holds:** every notice in a live run
+  folder's lines is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.
 - **`customshoot_values.py --follow ROW=OPTION,OPTION --record KEY` registers a Recall Custom hold as it stands with a
   live list row on each option in turn, in one session,** for a record the hold writes from a setting its screen does

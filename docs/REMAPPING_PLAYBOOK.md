@@ -61,7 +61,7 @@ your owner, and the default is no.
    3 says; ask yours. On 2026-11-20, asked whether each F-number may be set through the SDK (which moves the lens's
    diaphragm) and registered into the Camera Set. Memory slots, they said "Yes", then "go ahead with the run, obviously
    the lens could limit the aperture" and "if you can get the camera to do f-numbers out the range go for it"
-   (`kit/provers/memreg_run.py --aperture`, its empty slots filled for good by `--fill-empty-slot`; ask yours, the
+   (`kit/provers/memreg_run.py --aperture`, `--fill-empty-slot` makes a registration no settings file takes back; ask yours, the
    default is no).
 2. **Never run an action:**
    - format, delete, protect, rating, crop, copy;
@@ -460,7 +460,7 @@ Each line is a symptom, then its cause, then what to do.
   no page scan holds the Main page. The kit goes off it by the columns, Left, Down to the Shooting tab, Right, never an
   Enter or a press on its tiles (`kit/crawl_run.py`, `from_main`); or close the menu on another page by hand.
 - **Tabs or rows skipped at S&Q Frame Rate 1fps** → in that state the a1 II moved two tabs for some single presses
-  (2026-11-21: one press sent each, Focus to Network and Network to My Menu), and two 1fps row walks ended one row off.
+  (one press sent each, Focus to Network and Network to My Menu), and two 1fps row walks ended one row off.
   Every run now ends at its start download in that state, nothing more pressed (exit 7); a run whose own choice lands
   there (seen in its next download) presses nothing more but MENU and puts its start file back; a switch that would land
   there is not made, and neither `mode_switch.py --set` nor `drive.py` chooses it (`kit/camkit/slow_states.py`): set

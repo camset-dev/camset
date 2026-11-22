@@ -211,7 +211,7 @@ PROMPTS.update({
 # the census, its CANDIDATES). The second questions keep their text beside it.
 PROMPTS.update({
     # the lit box of a row of boxes near the bottom (Zebra Level's Custom boxes: Type, Standard, Range, Lower Limit),
-    # where "option" names the list's lit option instead; measured with the b70 reader on 2026-11-18, about 1 s a call:
+    # where "option" names the list's lit option instead; measured with a local reader, about 1 s a call:
     # kit2_pass2 241491 "64" (OCR read nothing), 241490 "65", 241440 "±10", 241426 "±3" (OCR read a Cyrillic З). Its
     # first wording said one box was orange, and on 241753 and 241754 (no box lit, the list's cursor on 70 and 75) the
     # reader answered "70+" and "75+": it may now say none is, {"value": null}, which is no answer (box_answer)

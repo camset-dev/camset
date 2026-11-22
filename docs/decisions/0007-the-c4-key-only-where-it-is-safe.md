@@ -11,8 +11,8 @@
 ## Context
 
 C4 is the trash button: in Playback, and wherever a picture is displayed, it deletes the picture; on the shooting
-screen it does whatever the body assigns to it, a change the kit must not make either (on the a1 II the owner saw it
-turn Touch Operation off and on). On some menu screens it is a harmless helper, which the screen's footer draws.
+screen it does whatever the body assigns to it, for example switching a setting off and on, a change
+the kit must not make either. On some menu screens it is a harmless helper, which the screen's footer draws.
 Focus Area's SET, a Creative Look's Reset and a Custom box editor's Reset are one owner's go-aheads for their own body,
 never a default, so a run sends one only with that owner's word for it.
 

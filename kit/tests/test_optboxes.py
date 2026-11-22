@@ -144,8 +144,8 @@ def test_the_range_walk_on_the_stored_frames_gives_1_to_10_with_5_held(monkeypat
     assert cam.presses == ["down"] * 5 + ["up"] * 10 and asked == list(said)
 
 
-# the second reader's answers to the box question (PROMPTS["box"]) on four frames of the probe, measured with the b70
-# reader on 2026-11-18: 241491 is the frame OCR read nothing in (Standard lit at 64, Range left on ±10)
+# the second reader's answers to the box question (PROMPTS["box"]) on four frames of the probe, measured with a local
+# reader: 241491 is the frame OCR read nothing in (Standard lit at 64, Range left on ±10)
 BOX_SAID = {"241491_down.png": "64", "241490_down.png": "65", "241440_up.png": "±10", "241426_down.png": "±3"}
 
 

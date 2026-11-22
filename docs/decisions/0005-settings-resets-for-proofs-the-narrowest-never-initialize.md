@@ -17,7 +17,7 @@
 Some records only a reset writes. Initialize and Reset Network Set. also wipe the network setup and access
 authentication, which takes the camera off the link; SSID/PW Reset does so for the camera's own network. On 2026-11-13
 the owner asked for those resets to be possible on their a1 II too, done as a run's last press with the restore by hand.
-What the camera does on Initialize is not known: it is an item of Setting Reset's dialog (kit2_csr, 00118_right.png),
+What the camera does on Initialize is not known: it is an item of Setting Reset's dialog, as the camera's own screen showed,
 and nobody has seen what Enter on it shows; nor has the kit seen what Right on Reset Network Set. or SSID/PW Reset shows.
 
 ## Decision
