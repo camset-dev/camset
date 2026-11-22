@@ -387,10 +387,10 @@ def test_the_rebuild_writes_until_the_write_changes_nothing_then_builds_and_bles
     assert "settled in 3 writes: write 3 changed nothing" in out and menu.read_text(encoding="utf-8") == "blessed"
     tail = out[out.index("written ("):]
     assert tail.startswith("written (4):")
-    for f in ("ev.json", "leads.json", "coverage.json", "menu.json"):
-        assert tail.count(str(tmp_path / f)) == 1, f
+    for f in ("ev.json", "leads.json", "coverage.json", "menu.json"):     # shown with forward slashes (paths.shown)
+        assert tail.count((tmp_path / f).as_posix()) == 1, f
     for f in ("def.json", "gen.ksy", "reset.json"):
-        assert str(tmp_path / f) not in tail, f
+        assert (tmp_path / f).as_posix() not in tail, f
     assert "rewritten unchanged: 2 files the steps wrote again byte for byte." in tail
 
 

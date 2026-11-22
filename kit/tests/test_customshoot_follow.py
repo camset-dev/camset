@@ -713,7 +713,7 @@ def test_a_stop_stops_put_back_like_any_run(lone, capsys):
     assert "refused menu" in lone["events"]
     out = capsys.readouterr().out
     assert "was not put back, because the run was told to stop; it differs from the start file" in out
-    assert f"--put-back --against {lone['ref']}" in out
+    assert f"--put-back --against {lone['ref'].as_posix()}" in out      # shown with forward slashes (paths.shown)
     lone["run"]._left = [Path("STOP")]
     assert exits(lambda: lone["go"]("--against", str(lone["ref"]))) == 4
 

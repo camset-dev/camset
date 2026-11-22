@@ -307,7 +307,8 @@ def test_a_private_file_in_data_is_refused_saying_to_move_it_by_hand(tmp_path, m
     with pytest.raises(datafiles.Refused) as e:
         datafiles.stop_if_left(cam, "the pass-2 report")
     words = str(e.value.code)
-    assert "move it by hand to" in words and str(tmp_path / "evidence" / cam / f"accepted_{cam}.json") in words
+    # the kit shows a path outside the clone with forward slashes (camkit.paths.shown), "C:/..." on Windows
+    assert "move it by hand to" in words and (tmp_path / "evidence" / cam / f"accepted_{cam}.json").as_posix() in words
     reset = old / f"settings_reset_{cam}.json"
     reset.write_text('{"test": "Reset by hand, 2026-01-02", "records": {}}', encoding="utf-8")
     said = " ".join(datafiles.evidence_in_public(reset))
