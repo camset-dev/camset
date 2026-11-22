@@ -242,6 +242,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A grey row whose lit label OCR reads with one stray letter gets its one Right when the second reader reads the
+  label:** Time Code Output ("Time Code Outputa") had only its Help asked.
 - **A carousel's axis credits a record only where one session took it through two values:** a record each session
   held at one value is the state the session entered, as when Intelligent Auto chosen alone in S&Q moved White
   Balance's record beside an older session's. A record another row owns that every option of a row credited one value
