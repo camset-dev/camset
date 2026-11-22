@@ -64,6 +64,8 @@ a setting, and folds or opens every group by a key. The a1 II's definition is fa
 
 ### The editor
 
+- **The editor takes url 2.5.9,** which clears advisory RUSTSEC-2026-0592 (a stack overflow on nested `blob:` URLs in
+  2.5.8); form_urlencoded moves to 1.2.3 with it.
 - **The camera's greys that depend on the shooting mode or an HDMI device:** where a definition gives them (`grey_in`,
   `inactive_if`), a row is dimmed in a menu whose modes the grey covers, and otherwise drawn as usual with "grey in S&Q"
   or "greyed with an HDMI device connected" beside it, in the window, its search list and the page alike. The details
