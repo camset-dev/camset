@@ -249,6 +249,9 @@ a setting, and folds or opens every group by a key. The a1 II's definition is fa
 
 ### The mapping kit
 
+- **A flat stretch of the footer no longer matches a key's glyph:** on x86-64 OpenCV scored a flat black window 0.90
+  to 1.0 against the footer's keys (arm64: 0.0), so a panel with no OK drawn was refused for stray ink rather than for
+  its missing OK; a flat window now scores nothing on any machine.
 - **A grey row whose lit label OCR reads with one stray letter gets its one Right when the second reader reads the
   label:** Time Code Output ("Time Code Outputa") had only its Help asked.
 - **A carousel's axis credits a record only where one session took it through two values:** a record each session

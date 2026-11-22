@@ -626,7 +626,7 @@ def menu_back_key(image) -> tuple | None:
     if g.ndim == 3:
         g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)
     t = screen._template("menu_back")
-    _, best, _, (x, y) = cv2.minMaxLoc(cv2.matchTemplate(g[FOOTER_TOP:480, :], t, cv2.TM_CCOEFF_NORMED))
+    _, best, _, (x, y) = cv2.minMaxLoc(screen._match(g[FOOTER_TOP:480, :], t))
     return (x, FOOTER_TOP + y, x + t.shape[1], FOOTER_TOP + y + t.shape[0]) if best > 0.9 else None
 
 

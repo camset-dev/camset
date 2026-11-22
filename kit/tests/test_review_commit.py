@@ -1028,6 +1028,22 @@ def test_a_panels_consent_refuses_any_screen_not_shaped_as_that_panel(tmp_path, 
         cam.press("enter")
 
 
+def test_a_flat_footer_matches_no_key_whatever_opencv_scores_there(monkeypatch):
+    """On x86-64 OpenCV scored a flat black window 0.90 to 1.0 against the footer's keys (arm64: 0.0), so footer_keys
+    found an OK key never drawn and the panel case above refused for stray ink instead of "offers no OK". A flat window
+    holds no glyph: with every place scored 1.0, as that noise can, a flat footer still finds no key."""
+    import cv2
+    import numpy as np
+
+    from camkit import live, screen
+    monkeypatch.setattr(cv2, "matchTemplate", lambda band, t, method: np.ones(
+        (band.shape[0] - t.shape[0] + 1, band.shape[1] - t.shape[1] + 1), np.float32))
+    for level in (0, 10, 200):                     # black, the screen's dark grey, all lit (_lit_key's 0/1 pixels)
+        a = np.full((480, 640, 3), level, np.uint8)
+        assert screen.footer_keys(a) == {} and screen.help_glyph(a) is None and live.menu_back_key(a) is None
+        assert screen._menu_back_alone(a) is None and screen._lit_key(a, "ok_key") == 0.0
+
+
 def test_a_panels_consent_answers_no_other_screen_nor_key(tmp_path, monkeypatch):
     """On a notice the panel's consent lifts nothing (the notice's own judgement stands); the trash button on the panel
     meets the shape check as ever; and only scale_run builds the consent."""

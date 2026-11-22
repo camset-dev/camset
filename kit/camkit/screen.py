@@ -318,6 +318,21 @@ def _template(name):
     return _TEMPLATES[name]
 
 
+def _match(band, t, spread: float = 1.0):
+    """cv2.matchTemplate's TM_CCOEFF_NORMED scores of template `t` at each place in `band`, those whose window is flat
+    (its grey's standard deviation under `spread`, as _glyph refuses a flat region) set to 0.0: there OpenCV divides by
+    a spread near zero and its score is rounding noise, 0.0 on arm64 but 0.90 to 1.0 on x86-64 (Ubuntu, Python 3.14,
+    cv2 5.1.0) over a synthetic footer's black, where footer_keys found an OK key never drawn. A flat window holds no
+    glyph, so only matches nothing drew are dropped."""
+    import cv2
+    r = cv2.matchTemplate(band, t, cv2.TM_CCOEFF_NORMED)
+    h, w = t.shape
+    sums = [np.pad(p, ((1, 0), (1, 0))).cumsum(0).cumsum(1) for p in (band.astype(np.float64), band.astype(np.float64) ** 2)]
+    s, q = (c[h:, w:] - c[:-h, w:] - c[h:, :-w] + c[:-h, :-w] for c in sums)
+    r[q / (h * w) - (s / (h * w)) ** 2 < spread ** 2] = 0.0
+    return r
+
+
 def _glyph(g, name, box, pad=6) -> float:
     """Best normalised correlation of the glyph template inside its region (+pad)."""
     import cv2
@@ -340,14 +355,13 @@ def help_glyph(image) -> str | None:
     popup offers Add to My Menu and In-Camera Guide) or "help_only" (trash and "?": the guide alone,
     the Playback tab's rows), else None. Every menu page of both scans shows one of them and no
     shooting frame does (2026-11-01): the Delete key is pressed only where one is drawn."""
-    import cv2
     g = np.asarray(image, np.float32)
     if g.ndim == 3:
         g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)      # as PIL's "L", the glyphs' cut
     band = g[415:480, :]
     best, name = 0.0, None
     for n in ("help_key", "help_only"):
-        sc = float(cv2.matchTemplate(band, _template(n), cv2.TM_CCOEFF_NORMED).max())
+        sc = float(_match(band, _template(n)).max())
         if sc > best:
             best, name = sc, n
     return name if best > 0.9 else None
@@ -371,7 +385,7 @@ def footer_keys(image) -> dict:
     band, out = g[415:480, :], {}
     for n in FOOTER_KEYS:
         t = _template(n)
-        _, best, _, (x, y) = cv2.minMaxLoc(cv2.matchTemplate(band, t, cv2.TM_CCOEFF_NORMED))
+        _, best, _, (x, y) = cv2.minMaxLoc(_match(band, t))
         if best > 0.9:
             out[n] = (x, 415 + y, x + t.shape[1], 415 + y + t.shape[0])
     return out
@@ -637,7 +651,6 @@ def _lit_key(a, name) -> float:
     it, but by light pixels alone (grey over 150, the band's and the template's): a key the camera outlines in black over
     a picture (the a1 II's "● OK" over Aspect Marker Level's sample photograph) is matched the same however light the
     picture behind its outline, where footer_keys' grey match falls as the picture lightens. 0.0 where nothing is lit."""
-    import cv2
     g = np.asarray(a, np.float32)
     if g.ndim == 3:
         g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)      # as PIL's "L", the glyphs' cut
@@ -645,7 +658,7 @@ def _lit_key(a, name) -> float:
     if not band.any():
         return 0.0
     t = (_template(name) > 150).astype(np.float32)
-    return float(np.nan_to_num(cv2.matchTemplate(band, t, cv2.TM_CCOEFF_NORMED)).max())
+    return float(np.nan_to_num(_match(band, t, spread=0.01)).max())    # 0/1 pixels: flat = all lit or none
 
 
 def _option_boxes(a, g, o) -> tuple | None:
@@ -735,7 +748,7 @@ def _menu_back_alone(a) -> tuple | None:
     if g.ndim == 3:
         g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)      # as PIL's "L", the glyph's cut
     t = _template("menu_back")
-    _, best, _, (x, y) = cv2.minMaxLoc(cv2.matchTemplate(g[415:480, :], t, cv2.TM_CCOEFF_NORMED))
+    _, best, _, (x, y) = cv2.minMaxLoc(_match(g[415:480, :], t))
     box = (x, 415 + y, x + t.shape[1], 415 + y + t.shape[0])
     return box if best > 0.9 and footer_ink_outside(a, [box]) is None else None
 
