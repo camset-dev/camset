@@ -90,6 +90,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   stays in the mapper's private ledger, never listed or counted in a public file (decision 27).
 - **The a1 II's definition widens the memory slots' aperture table:** a registered F-number now reads from F0.95 to
   F72, F1.3 among them. Exposure Std. Adjust and Color Depth's Magenta and Yellow now stand in the Movie and S&Q menus.
+- **The a1 II's definition names Intelligent Auto in S&Q and Time-lapse:** the exposure mode of S&Q Motion and of
+  Time-lapse now reads Intelligent Auto beside Program Auto, Aperture Priority, Shutter Priority and Manual Exposure.
 - **The a1 II's definition says which rows the camera greys in a shooting mode or with an HDMI device connected:**
   Time Code Run and Auto Slow Shutter are grey in S&Q; Audio Recording, Audio Rec Level, Auto Framing and Rec. Media
   dur HDMI Output in S&Q and Time-lapse; Zoom Range in S&Q at 240fps and 120fps; Touch Func. in Shooting, its three AE

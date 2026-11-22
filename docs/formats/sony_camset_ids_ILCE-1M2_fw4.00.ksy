@@ -3697,12 +3697,12 @@ enums:
         on the camera.'
     0x13e2:
       id: exposure_mode_13e2
-      doc: 'Exposure mode (S&Q Motion) [Shooting > Shooting Mode]: 2 Program Auto, 3 Aperture Priority, 4 Shutter
-        Priority, 5 Manual Exposure. live settings; 1 of 1 settings on it proved on the camera.'
+      doc: 'Exposure mode (S&Q Motion) [Shooting > Shooting Mode]: 0 Intelligent Auto, 2 Program Auto, 3 Aperture
+        Priority, 4 Shutter Priority, 5 Manual Exposure. live settings; 1 of 1 settings on it proved on the camera.'
     0x13e3:
       id: exposure_mode_13e3
-      doc: 'Exposure mode (time-lapse) [Shooting > Shooting Mode]: 2 Program Auto, 3 Aperture Priority, 4 Shutter
-        Priority, 5 Manual Exposure. live settings; 1 of 1 settings on it proved on the camera.'
+      doc: 'Exposure mode (time-lapse) [Shooting > Shooting Mode]: 0 Intelligent Auto, 2 Program Auto, 3 Aperture
+        Priority, 4 Shutter Priority, 5 Manual Exposure. live settings; 1 of 1 settings on it proved on the camera.'
     0x13ee:
       id: custom_wb_size_setting
       doc: 'Custom WB Size Setting [Exposure/Color > White Balance]: 0 Large, 1 Medium, 2 Small. live settings;
