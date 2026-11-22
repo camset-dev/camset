@@ -135,9 +135,10 @@ def misnamed(text: str, labels, doc: dict) -> str:
     the blocker's name, "" when it is. Where it names a row, what follows that label in the notice must be nothing, or
     start with a value the definition `doc` gives a setting of that name or row, as a whole word (the footer's OK left
     out, and anything OCR read past the value): "Focus Mode" taken from "... as follows Focus Mode Dial Set with Dial"
-    leaves "Dial Set with Dial", no value of Focus Mode. Where it
-    names no row, no row label or setting name of the definition may start what follows "as follows": a label the
-    rule's vocabulary lacks ("Shoot Mode", withheld as an Fn function too) would else go unnamed."""
+    leaves "Dial Set with Dial", no value of Focus Mode; one leading token of a single character is left out too, once,
+    where a value follows it (the value's icon, which OCR reads as a letter), and a longer one never. Where it names no
+    row, no row label or setting name of the definition may start what follows "as follows": a label the rule's
+    vocabulary lacks ("Shoot Mode", withheld as an Fn function too) would else go unnamed."""
     import re
 
     from camkit import coverage
@@ -150,7 +151,10 @@ def misnamed(text: str, labels, doc: dict) -> str:
                                                    coverage.plain((s.get("row") or [""])[-1]))}
         if not coverage.plain(tail).startswith(coverage.plain(got["row"])):
             return f"{got['row']!r} is not what {tail!r} starts with"
-        whole = not rest or any(rest == v or rest.startswith(v + " ") for v in values if v)
+        def starts(r: str) -> bool:
+            return any(r == v or r.startswith(v + " ") for v in values if v)
+        head, _, after = rest.partition(" ")
+        whole = not rest or starts(rest) or (len(head) == 1 and bool(after) and starts(after))
         return "" if whole else f"{got['row']!r} leaves {rest!r}, no value of it"
     known = [x for x in coverage.known_labels(doc)
              if coverage.plain(tail) == coverage.plain(x) or coverage.plain(tail).startswith(coverage.plain(x) + " ")]
@@ -213,6 +217,26 @@ def test_the_first_runs_blockers_are_named_whole_by_the_runner_labels_and_were_n
     assert misnamed(NOTICE.format("Log Shooting Off ~"), labels, doc) == "", "a stray mark after the value"
     assert misnamed(NOTICE.format("Log Shooting Sideways"), labels, doc) == "'Log Shooting' leaves 'sideways', no value of it"
     assert misnamed(NOTICE.format("Log Shooting Offset"), labels, doc).endswith("no value of it"), "a value only whole"
+
+
+def test_one_letter_in_front_of_the_blockers_value_is_its_icon_and_no_more(monkeypatch):
+    """The camera draws a value's icon in front of the value in a notice, and OCR may read it as one letter: misnamed
+    leaves out one token of a single character where a value of the blocker follows it, never two characters, and never
+    a letter before a word that is no value. The blocker and its value come from the definition at test time, looked up
+    as misnamed looks them up, so no value is written here (decision 16)."""
+    from camkit import coverage
+    import runner
+    doc = a1ii_definition()
+    monkeypatch.setattr(runner, "definition", lambda: doc)
+    labels = runner.blocker_labels({})
+    blocker, value = next((b, str(v[1])) for b in NAMED.values() for s in doc["settings"] for v in s.get("values") or []
+                          if str(v[1]).strip() and coverage.plain(b) in (coverage.plain(s.get("name") or ""),
+                                                                         coverage.plain((s.get("row") or [""])[-1])))
+    assert misnamed(NOTICE.format(f"{blocker} {value}"), labels, doc) == ""
+    assert misnamed(NOTICE.format(f"{blocker} q {value} • OK"), labels, doc) == "", "one letter: the value's icon"
+    assert misnamed(NOTICE.format(f"{blocker} qq {value}"), labels, doc).endswith("no value of it"), "two characters"
+    assert misnamed(NOTICE.format(f"{blocker} q Sideways"), labels, doc).endswith("no value of it"), "no value after it"
+    assert misnamed(NOTICE.format(f"{blocker} q"), labels, doc).endswith("no value of it"), "a letter and nothing"
 
 
 def test_the_runner_hands_blocker_of_the_blocker_labels(monkeypatch):
