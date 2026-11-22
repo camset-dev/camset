@@ -33,7 +33,7 @@ def luts(tmp_path, monkeypatch):
     folder = tmp_path / "First Last" / "clone" / "private" / "lut"
     lut = folder / "Look Pack" / NAME
     lut.parent.mkdir(parents=True)
-    lut.write_text(CUBE, encoding="utf-8")
+    lut.write_text(CUBE, encoding="utf-8", newline="\n")     # CUBE's bytes, the ones hashed here (no "\r\n" on Windows)
     monkeypatch.setattr(L, "LUT_DIR", folder)
     run = Run("kit2_lut", root=tmp_path / "runs" / "TEST-CAM_fw9.99")
     log = tmp_path / "received.txt"
@@ -152,7 +152,7 @@ def test_place_16_alone(luts):
 def made(folder: Path, name: str, text: str = CUBE) -> Path:
     p = folder / name
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text, encoding="utf-8")
+    p.write_text(text, encoding="utf-8", newline="\n")      # its size as len(text) says, on Windows too
     return p
 
 
@@ -188,6 +188,23 @@ def test_only_a_cube_lut_under_the_clones_own_lut_folder_goes(luts, tmp_path):
     assert not [raw for raw in received(log) if b"importlut" in raw]
     assert sum(e["kind"] == "lut_refused" for e in events(run)) == sum(len(f) for f in bad.values())
     assert "there is no folder" in L.lut_refused(lut, folder=folder.parent / "no lut here")
+
+
+def test_a_lut_with_windows_line_ends_goes_with_the_hash_of_its_own_bytes(luts):
+    """A .cube saved with "\r\n" line ends (as on Windows) is a .cube LUT's text all the same, and goes out with the
+    SHA-256 and size of the bytes in the file, never of the text they decode to."""
+    run, log, folder, _ = luts
+    crlf = folder / "Look Pack" / "crlf.cube"
+    crlf.write_bytes(CUBE.replace("\n", "\r\n").encode())
+    data = crlf.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    assert b"\r\n" in data and digest != hashlib.sha256(CUBE.encode()).hexdigest()
+    with opened(run) as link:
+        r = link.import_lut(crlf)
+        assert r["ok"] and r["sha256"] == digest
+    assert received(log)[0] == f"@1 importlut {quoted(crlf.resolve())} 16 {digest}\n".encode()
+    kept = [e for e in events(run) if e["kind"] == "lut_import"]
+    assert [(e["sha256"], e["bytes"]) for e in kept] == [(digest, len(data))]
 
 
 def test_a_line_written_by_hand_goes_through_the_same_guard(luts):
