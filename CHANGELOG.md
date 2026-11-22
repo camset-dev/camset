@@ -88,6 +88,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the docs and the ledger's public form, the mapping found no menu row that changes such a record, so it does not know
   what the record holds, and a change to it is unproved and at your own risk. Which unmapped records never changed
   stays in the mapper's private ledger, never listed or counted in a public file (decision 27).
+- **The a1 II's definition widens the memory slots' aperture table:** a registered F-number now reads from F0.95 to
+  F72, F1.3 among them. Exposure Std. Adjust and Color Depth's Magenta and Yellow now stand in the Movie and S&Q menus.
 - **The a1 II's definition says which rows the camera greys in a shooting mode or with an HDMI device connected:**
   Time Code Run and Auto Slow Shutter are grey in S&Q; Audio Recording, Audio Rec Level, Auto Framing and Rec. Media
   dur HDMI Output in S&Q and Time-lapse; Zoom Range in S&Q at 240fps and 120fps; Touch Func. in Shooting, its three AE
