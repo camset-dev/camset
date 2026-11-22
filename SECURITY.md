@@ -23,7 +23,7 @@ you want it to be.
 
 ## Releases and dependencies
 
-- From the release after 0.2.1, every package of a release, and its definition viewer, has its SHA-256 checksum in
+- From 0.3.0, every package of a release, and its definition viewer, has its SHA-256 checksum in
   the release's `SHA256SUMS` and GitHub build provenance, which says that the release workflow built it from this
   repository; the README's
   [Check a download](README.md#check-a-download) says how to check both.

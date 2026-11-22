@@ -26,12 +26,12 @@ yours.
 ## Get it
 
 The editor is on the [Releases page](https://github.com/camset-dev/camset/releases): a disk image for macOS on Apple
-silicon, a tarball for Linux and, since 0.2.1, a zip for Windows, with an installer beside it from the release after
-0.2.1. The README's [Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, which Windows
+silicon, a tarball for Linux and, since 0.2.1, a zip for Windows, with an installer beside it from
+0.3.0. The README's [Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, which Windows
 download to take, and how to open the macOS app or the Windows program the first time. Since 0.2.1 each release also
 carries the definition viewer as one file,
 [camset-viewer.html](https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html), to open in a
-browser with no internet. From the release after 0.2.1 each release lists the SHA-256 checksum of every package and
+browser with no internet. From 0.3.0 each release lists the SHA-256 checksum of every package and
 of the viewer in `SHA256SUMS`, and GitHub keeps each one's build provenance: the README's
 [Check a download](https://github.com/camset-dev/camset#check-a-download) says how to check that a download is the
 one the project built.
@@ -84,5 +84,5 @@ camera back.
 
 ## Version
 
-0.2.1, released 2026-11-13; 0.1.0 is withdrawn. What changed in each release is in the
+0.3.0, released 2026-11-22; 0.1.0 is withdrawn. What changed in each release is in the
 [changelog](https://github.com/camset-dev/camset/blob/main/CHANGELOG.md).

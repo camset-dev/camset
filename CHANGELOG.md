@@ -5,6 +5,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ## Unreleased
 
+## 0.3.0 (2026-11-22)
+
+The editor shows the camera's own menus for Still, Movie and S&Q and switches between them, says why the camera greys
+a setting, and folds or opens every group by a key. The a1 II's definition is far more complete.
+
 ### Read first
 
 - **The coverage ledger's public form is no longer committed:** `kit/tools/coverage.py --print` prints it from the

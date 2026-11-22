@@ -15,7 +15,7 @@ Two Windows files of each release on the project's [Releases page](https://githu
 
 - the editor's program, `camset_editor.exe`, which the Windows zip (`camset-editor-<version>-windows-x64.zip`) holds
   and the installer installs;
-- the installer, `camset-editor-<version>-windows-x64-setup.exe`, which releases carry from the one after 0.2.1.
+- the installer, `camset-editor-<version>-windows-x64-setup.exe`, which releases carry from 0.3.0.
 
 Both would be signed only when the release workflow,
 [`.github/workflows/editor-release.yml`](https://github.com/camset-dev/camset/blob/main/.github/workflows/editor-release.yml),
@@ -30,7 +30,7 @@ builds on their own computer from Sony's Camera Remote SDK and which no package 
 program, the camera definitions (each with its sample), the project's licence and the third-party licences page:
 nothing from Sony's SDK, and the program in them is the one the workflow built from this repository's source.
 
-Apart from code signing, from the release after 0.2.1 every package of a release, and its definition viewer, has its
+Apart from code signing, from 0.3.0 every package of a release, and its definition viewer, has its
 SHA-256 checksum in the release's `SHA256SUMS` and GitHub build provenance (an artifact attestation, signed through Sigstore, that the release
 workflow built it from this repository), which anyone can check
 ([Check a download](https://github.com/camset-dev/camset#check-a-download)). Neither is a code signature, and Windows

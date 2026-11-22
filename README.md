@@ -25,7 +25,7 @@ Take the latest release from the [Releases page](https://github.com/camset-dev/c
 - **Linux:** unpack the tarball and run `sh install.sh` in its folder. It installs for you alone, with no root, and
   adds a menu entry.
 - **Windows** (10 or 11, 64-bit, Intel or AMD): the installer, `camset-editor-<version>-windows-x64-setup.exe` (from
-  the release after 0.2.1), installs for you alone with no administrator rights; a newer installer updates it in
+  0.3.0), installs for you alone with no administrator rights; a newer installer updates it in
   place, and Settings > Apps uninstalls it. The zip, `camset-editor-<version>-windows-x64.zip`, installs nothing:
   unpack it and run `camset_editor.exe`, keeping the folder's files together. Neither touches
   [your own files](docs/EDITOR.md#what-the-editor-keeps-on-this-computer). Neither is signed yet
@@ -42,7 +42,7 @@ with Save/Load Settings > Load. Read the [warning](#warning) first. Without a ca
 
 ### Check a download
 
-From the release after 0.2.1, each release holds `SHA256SUMS`, the SHA-256 checksum of every package and of the
+From 0.3.0, each release holds `SHA256SUMS`, the SHA-256 checksum of every package and of the
 viewer. Download it into the folder with your file, and in a terminal there:
 
 - **macOS:** `shasum -a 256 -c --ignore-missing SHA256SUMS`

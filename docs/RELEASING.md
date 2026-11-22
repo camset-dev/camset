@@ -61,7 +61,7 @@ Each package carries the project's `LICENSE` and the third-party licences page (
 |---|---|---|
 | macOS | `sh packaging/build_macos_app.sh`: `Camset Editor.app` and a `.dmg` in `target/dist`, with only the tools macOS ships; bundle identifier `app.camset.editor` (`CAMSET_BUNDLE_ID` overrides it) | Apple silicon, ad-hoc signed; launched on the Mac that built it. A downloaded copy not yet tried. |
 | Linux | `sh packaging/build_linux.sh`: a tarball with the program, a menu entry, the icon and `install.sh` (per user, no root) | Built by the release workflow. The editor itself built and ran on Ubuntu 26.04 ([PORTING](PORTING.md)). A downloaded tarball and its `install.sh` not yet tried. |
-| Windows | The workflow's `Windows zip` step: `camset_editor.exe`, `definitions/`, `LICENSE.txt` and the licences page in one folder, zipped. Its `Windows installer` step: Inno Setup builds `camset-editor-<version>-windows-x64-setup.exe` from that folder with `packaging/windows/installer.iss` (`ISCC.exe /DAppVersion=<version> "/DAppCopyright=<copyright sentence>" packaging\windows\installer.iss`), whose notes say what it installs and what it never touches. Its `AppId` must never change: an upgrade finds the earlier install by it. | The editor built, tested and used on a Windows 11 PC (2026-11-12). The zip first shipped with 0.2.1; a downloaded zip not yet tried. The installer, tried on a Windows 11 PC on 2026-11-13, ships from the release after 0.2.1; `editor-ci.yml` compiles it on every pull request. Neither is signed. |
+| Windows | The workflow's `Windows zip` step: `camset_editor.exe`, `definitions/`, `LICENSE.txt` and the licences page in one folder, zipped. Its `Windows installer` step: Inno Setup builds `camset-editor-<version>-windows-x64-setup.exe` from that folder with `packaging/windows/installer.iss` (`ISCC.exe /DAppVersion=<version> "/DAppCopyright=<copyright sentence>" packaging\windows\installer.iss`), whose notes say what it installs and what it never touches. Its `AppId` must never change: an upgrade finds the earlier install by it. | The editor built, tested and used on a Windows 11 PC (2026-11-12). The zip first shipped with 0.2.1; a downloaded zip not yet tried. The installer, tried on a Windows 11 PC on 2026-11-13, ships from 0.3.0; `editor-ci.yml` compiles it on every pull request. Neither is signed. |
 
 Both Windows steps check the built file's version details (product name, version, description) and fail without them.
 
@@ -80,7 +80,7 @@ Both Windows steps check the built file's version details (product name, version
       and the installer).
    3. **attest:** `SHA256SUMS`, the checksum of every file the release attaches, and GitHub's build provenance for
       each (`actions/attest-build-provenance`, signed through Sigstore). Only this job may ask for the signing
-      identity and store attestations. It first runs for the release after 0.2.1.
+      identity and store attestations. It first runs for 0.3.0.
    4. **release:** a GitHub Release for the tag with the packages, `camset-viewer.html` (always under that name, so
       <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html> is the latest) and
       `SHA256SUMS`, once the files checksum to exactly its bytes.
