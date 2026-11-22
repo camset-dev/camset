@@ -762,16 +762,44 @@ def test_the_finding_is_kept_in_the_coverage_ledger_by_the_record_commands_it_pr
     assert "coverage.py --record" not in capsys.readouterr().out
 
 
+VENV_PYTHON = ".venv\\Scripts\\python" if os.name == "nt" else ".venv/bin/python"
+
+
+def split_line(line: str, windows: bool = os.name == "nt") -> list:
+    """A printed command's words as the shell it was printed for takes them: POSIX's rules, or Windows' for what
+    subprocess.list2cmdline writes (lut_import.record_commands there): a word with a space in double quotes, a
+    backslash kept as it is."""
+    import shlex
+    if not windows:
+        return shlex.split(line)
+    return [w[1:-1] if len(w) > 1 and w[0] == w[-1] == '"' else w for w in shlex.split(line, posix=False)]
+
+
+def test_the_record_commands_printed_on_windows_name_its_venv_and_split_back(monkeypatch, tmp_path):
+    """On Windows (os.name "nt", stood in here on any system) the record commands name the venv's python where Windows
+    puts it, .venv\\Scripts\\python, quoted by Windows' rules, and split back into the very words."""
+    import types
+
+    import lut_import as T
+    start, after = tmp_path / "dat" / "00001_start.DAT", tmp_path / "dat" / "00004_after-lut.DAT"
+    posix = T.record_commands(start, after, 16, True)
+    monkeypatch.setattr(T, "os", types.SimpleNamespace(name="nt"))
+    for line, theirs in zip(T.record_commands(start, after, 16, True), posix, strict=True):
+        words = split_line(line, windows=True)
+        assert words[:2] == [".venv\\Scripts\\python", "kit/tools/coverage.py"]
+        assert words[2:] == split_line(theirs, windows=False)[2:]
+        assert words[words.index("--path") + 1].startswith("Exposure/Color > Color/Tone > Manage User LUTs")
+
+
 def test_the_printed_record_command_writes_a_look_with_keys_alone(monkeypatch, luts, capsys):
     """The first printed command, run through kit/tools/coverage.py's own record(), writes one look by hand into the
     test's own looks file: the row, did act, the option, the records that changed by key alone, never a value."""
     import runpy
-    import shlex
     from camkit import coverage as ledger, paths
     assert tool(monkeypatch, luts, Camera()) == 0
     line = next(x.strip() for x in capsys.readouterr().out.splitlines() if "coverage.py --record" in x)
-    words = shlex.split(line)
-    assert words[:2] == [".venv/bin/python", "kit/tools/coverage.py"]
+    words = split_line(line)
+    assert words[:2] == [VENV_PYTHON, "kit/tools/coverage.py"]
     # the made-up camera has no definition: the ledger stood in by one that knows the tab and finds no row (record()
     # says so and records the look all the same)
     monkeypatch.setattr(ledger, "build", lambda camera, public=True: type("Led", (), {
