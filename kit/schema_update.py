@@ -1158,6 +1158,12 @@ def main():
                     if n.get("kind") == "conflict":
                         unresolved.append({"key": k, "row": row, "value": v, "label": labels[v], "camera": n["camera"]})
                     continue
+                if n.get("kind") == "conflict" and labels.get(v) and (k, v) not in CAROUSEL:
+                    # a conflict never reaches the definition as a name, whatever counts it: the name stands and the
+                    # conflict is the gate's open question until a person accepts it (or a hand table names the value)
+                    over[k][v] = "schema kept"
+                    unresolved.append({"key": k, "row": row, "value": v, "label": labels[v], "camera": n["camera"]})
+                    continue
                 new = CAROUSEL.get((k, v)) or clean(n["camera"])
                 if (k, v) in CAROUSEL:
                     over[k][v] = "hand table"

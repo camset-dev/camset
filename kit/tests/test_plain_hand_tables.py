@@ -279,6 +279,24 @@ def test_a_kept_label_keeps_the_definitions_names_and_its_conflict_goes_to_the_g
     assert R.hand_rules(("ILCE-1M2", "5.00")) == own, "another firmware's own tables (none), never the firmware 4.00's"
 
 
+def test_a_conflict_is_never_written_as_a_name_but_held_at_the_gate(tmp_path, monkeypatch, capsys):
+    """A conflict the report notes on a value the definition names (the camera's reading nothing like the name) never
+    reaches the definition as that value's name, whatever else counts it: the name stands, and the conflict is an open
+    question for the gate (--write refuses) until a person accepts it."""
+    c = Cam(tmp_path, monkeypatch)
+    c.report(ROWS[2:3])
+    c.write(capsys)
+    c.report([{**ROWS[2], "records": {"global:0x0050": rec({"A": 0, "Zq": 1}, "conflict", [
+        {"value": 1, "camera": "Zq", "schema": "B", "kind": "conflict"}])}}])
+    with pytest.raises(SystemExit, match="refused to write"):
+        c.write(capsys)
+    assert "1 conflict" in capsys.readouterr().out
+    c.accept({"kind": "conflict", "key": "global:0x0050", "value": 1})
+    c.write(capsys)
+    pub, _, _ = c.written()
+    assert next(s for s in pub["settings"] if s["key"] == "global:0x0050")["values"] == [[0, "A"], [1, "B"]]
+
+
 def test_write_stops_without_the_hand_evidence_the_tables_need(tmp_path, monkeypatch, capsys):
     """Any camera, as the ILCE-1M2: tables holding a hand proof's entry, a reason or a not-offered mark, and no hand
     evidence file here: --write stops before the definition is read, in plain words naming the file and how to say no
