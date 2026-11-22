@@ -140,6 +140,27 @@ def pytest_configure(config):
                                        "made_up_entries_white): a test that judges the reading itself")
 
 
+def github_annotation(nodeid: str, failure: str) -> str:
+    """GitHub's workflow command for one failed test, `::error title=<node id>::<the failure's first line, 300
+    characters at most>`, escaped as GitHub reads it (% CR LF as %25 %0D %0A; in the title : and , as %3A and %2C too).
+    GitHub shows a job's log only to those logged in, its annotations to anyone on the run page."""
+    def escape(s: str) -> str:
+        return s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    first = (failure.strip().splitlines() or [""])[0][:300]
+    return f"::error title={escape(nodeid).replace(':', '%3A').replace(',', '%2C')}::{escape(first)}"
+
+
+def pytest_terminal_summary(terminalreporter):
+    """Under GitHub Actions (GITHUB_ACTIONS=true), one annotation line per failed test (github_annotation); nothing
+    elsewhere."""
+    import os
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    for report in terminalreporter.stats.get("failed", []) + terminalreporter.stats.get("error", []):
+        crash = getattr(getattr(report, "longrepr", None), "reprcrash", None)
+        terminalreporter.write_line(github_annotation(report.nodeid, getattr(crash, "message", None) or str(report.longrepr)))
+
+
 @pytest.fixture(autouse=True)
 def made_up_entries_white(request, monkeypatch):
     """A made-up camera's frame holds no picture, so no pixel reading can judge the entry a prover is about to choose
