@@ -121,8 +121,11 @@ def test_the_link_marks_when_it_last_moved_and_the_camera_looks_by_it(tmp_path, 
         assert isinstance(first, float)
         lk.call("ping")
         assert lk.moved_at == first                 # a read moves nothing
+        # the press writes the mark afresh: checked against one set back, as Windows' monotonic clock steps about
+        # 16 ms and the press's reading can equal the download's
+        lk.moved_at = first - 1.0
         lk.press("menu")
-        assert lk.moved_at > first
+        assert lk.moved_at >= first
     seen = []
     cam = camera(tmp_path, monkeypatch, "list", "Drive Mode Single Shooting", "Single Shooting")
     monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: seen.append(moved_at) or ("", None))
