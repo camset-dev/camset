@@ -587,6 +587,24 @@ def test_no_part_walk_lists_a_value_only_its_start_accounts_for():
     assert not listed, [k for k, _ in listed]
 
 
+def test_no_conflict_of_the_report_names_a_value_of_the_shipped_definition():
+    """Opt-in, where the camera's runs are on this computer: a conflict pass 2's report notes on a value (the camera's
+    reading nothing like the definition's name) never reaches the shipped definition as that value's name, whatever the
+    gate counts: for each such note the definition still names the value as the report's schema did. The report is
+    the one the last pass read before it wrote (kit/rebuild.py)."""
+    report_file = ROOT / "runs" / A1 / "kit2_pass2" / "report.json"
+    if not report_file.exists():
+        pytest.skip("the a1 II's pass-2 report is not in this clone")
+    renamed = []
+    for e in json.loads(report_file.read_text(encoding="utf-8")):
+        for k, r in e["records"].items():
+            names = {v: lab for v, lab in (PUB_BY.get(k) or {}).get("values") or []}
+            renamed += [(k, n["value"], n["schema"], names[n["value"]]) for n in r.get("notes") or []
+                        if n.get("kind") == "conflict" and n.get("schema") and n.get("value") in names
+                        and names[n["value"]] != n["schema"]]
+    assert not renamed, renamed
+
+
 def test_a_refusal_names_the_blocking_setting_but_not_its_value():
     """fromdata.blocked_reason: a refused option's reason keeps the camera's words up to the blocking setting's name
     ("... not available as follows Gamma"), matched against the definition's setting names, and leaves out the value

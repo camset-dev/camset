@@ -211,7 +211,16 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
                                for n in r.get("notes") or [] if n.get("kind") == "conflict"]
                 continue
             labels = dict((v, lab) for v, lab in s.get("values") or [])
+            conflicts = {n["value"]: n for n in r.get("notes") or [] if n.get("kind") == "conflict"}
             for lab, v in r["proved"].items():
+                if not isinstance(v, (list, dict)) and v in conflicts and labels.get(v) and \
+                        (k, v) not in T.VALUE_FIXES and (k, v) not in T.CAROUSEL:
+                    # a conflict never reaches the definition as a name, whatever counts it: the name stands and the
+                    # conflict is the gate's open question until a person accepts it (or a hand table names the value)
+                    over[k][v] = "schema kept"
+                    unresolved.append({"key": k, "row": re.sub(r" \[field \d+\]$", "", e["row"]), "value": v,
+                                       "label": labels[v], "camera": conflicts[v].get("camera")})
+                    continue
                 # a label checked by hand stands (VALUE_FIXES), and a carousel's option takes its own name (CAROUSEL)
                 new = T.VALUE_FIXES.get((k, v)) or T.CAROUSEL.get((k, v)) or clean(lab)
                 if (k, v) in T.VALUE_FIXES or (k, v) in T.CAROUSEL:

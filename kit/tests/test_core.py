@@ -4266,6 +4266,44 @@ def test_an_axis_credits_the_value_it_held_to_its_last_visit(monkeypatch):
     assert R.axis_values(opts, main_keys=frozenset({full}))[key]["Standard"] == 5, "read from its own base file"
 
 
+def test_an_axis_row_of_two_sessions_credits_only_what_a_session_saw_take_two_values():
+    """Shoot Mode's S&Q Motion axis: one session entered S&Q from Stills, each axis value writing the records the mode
+    change moves (White Balance's 0x0367 to 1) beside its own exposure mode; a later session, already in S&Q, chose
+    Intelligent Auto alone and moved its exposure mode only. A record is the axis's where one session's tests took it
+    through two values, or the sessions wrote it two; one each session held at one value is the state the session
+    entered, never credited to the axis's labels. A label proved in two sessions keeps the line that wrote the record.
+    Made-up lines."""
+    import pass2_report as R
+    st, mode = "global:0x0367", "global:0x13e2"
+
+    def t(label, base, ch):
+        return {"kind": "axis", "label": label, "base": base, "final": False, "applied": True, "path": ["Shoot Mode"],
+                "changes": [{"key": k, "before": b, "after": a} for k, (b, a) in ch.items()]}
+    old = {i: t(lab, "old.DAT", {st: (0, 1), **({mode: (0, v)} if v else {})})
+           for i, (lab, v) in enumerate([("IA", None), ("P", 2), ("A", 3), ("S", 4), ("M", 5)])}
+    assert st not in R.axis_values(old) and R.axis_values(old)[mode] == {"P": 2, "A": 3, "S": 4, "M": 5}
+    got = R.axis_values({**old, 9: t("IA", "new.DAT", {mode: (2, 0)})})
+    assert st not in got, "the state the first session entered, never the axis's"
+    assert got[mode] == {"IA": 0, "P": 2, "A": 3, "S": 4, "M": 5}
+    two = {0: t("P", "one.DAT", {st: (0, 1)}), 1: t("A", "two.DAT", {st: (0, 4)})}
+    assert R.axis_values(two)[st] == {"P": 1, "A": 4}, "two sessions that wrote two values: the axis's, as before"
+
+
+def test_a_record_another_row_owns_that_every_option_credits_one_value_is_no_setting_of_the_row():
+    """A record another row's proofs own (`others`), which every option of a row credited one same value that the
+    definition names otherwise, moved with the state the row's choice put the camera in, not with the choice: a question
+    for a person ("not one to one"), which the writer leaves out (no name, no place) and the gate counts. A record the
+    row's options take through two values, one no other row owns, or one whose names agree, is judged as before."""
+    import pass2_report as R
+    s = {"values": [[0, "Auto"], [1, "Daylight"]]}
+    vals = {"P": 1, "A": 1, "S": 1, "M": 1}
+    assert R.moved_by_the_state("global:0x0367", vals, frozenset({"global:0x0367"}), s)
+    assert not R.moved_by_the_state("global:0x0367", vals, frozenset(), s)
+    assert not R.moved_by_the_state("global:0x0367", {"P": 1, "A": 0}, frozenset({"global:0x0367"}), s)
+    assert not R.moved_by_the_state("global:0x0367", {"Daylight": 1, "Daylight WB": 1}, frozenset({"global:0x0367"}), s)
+    assert not R.moved_by_the_state("global:0x0367", {"P": 1}, frozenset({"global:0x0367"}), s)
+
+
 def test_a_value_a_hand_rule_names_is_still_no_plain_options_write():
     """screen_records with kept_over: the records only a function's own screen wrote stay that screen's when the next
     option kept them, a hand rule naming them or not. Rating's copies (0x16bd...), which Rating Set's screen writes

@@ -474,6 +474,16 @@ def abbreviates(s: str, lab: str, vals: dict) -> bool:
     return q > 0 and all(fit(o) < q for o in vals if o != lab)
 
 
+def moved_by_the_state(key: str, vals: dict, owned: frozenset, s: dict) -> bool:
+    """Whether a row's credit of record `key` is the state its choice put the camera in, not the choice: a record
+    another row's proofs own (`owned`) that every option of the row, two or more, credited one same value, which the
+    definition `s` names otherwise (judge: a conflict). The report makes it a question for a person ("not one to one"):
+    the writer leaves it out, no name and no place, and the gate counts it."""
+    if key not in owned or len(vals) < 2 or len({json.dumps(v) for v in vals.values()}) != 1:
+        return False
+    return judge(vals, {v: lab for v, lab in s.get("values") or []})[0] == "conflict"
+
+
 def judge(vals: dict, known: dict) -> tuple:
     """(verdict, per-value notes) for one record: vals = proved {label: value}, known = schema {value: label}. Labels
     are compared as same_label and kept_close compare them, a decimal point or a fraction slash between digits kept:
@@ -1636,6 +1646,24 @@ def grid_independence(run: Path) -> list:
     return out
 
 
+def session_values_differ(sessions, key: str) -> bool:
+    """Whether an axis's tests took record `key` through two values: within one session (its base file), each test
+    that left the record alone holding that session's own value before, or between the values the sessions wrote. A
+    session that never wrote the record says nothing of it: it was already where the other session's tests put it (S&Q
+    Motion's Intelligent Auto chosen alone, in S&Q already, beside a session that entered S&Q from Stills and moved the
+    mode's own records, White Balance's 0x0367 among them, with every axis value: 2026-11-21)."""
+    written = set()
+    for ts in sessions:
+        before = next((c["before"] for o in ts for c in o["changes"] if c["key"] == key), None)
+        if before is None:
+            continue
+        held = {json.dumps(next((c["after"] for c in o["changes"] if c["key"] == key), before)) for o in ts}
+        if len(held) > 1:
+            return True
+        written |= {json.dumps(c["after"]) for o in ts for c in o["changes"] if c["key"] == key}
+    return len(written) > 1
+
+
 def axis_values(opts: dict, own: dict | None = None, names: dict | None = None,
                 main_keys: frozenset | None = None) -> dict:
     """A carousel option's second axis: every proof also chose the option itself, so a record that
@@ -1653,9 +1681,16 @@ def axis_values(opts: dict, own: dict | None = None, names: dict | None = None,
     tests = [o for o in opts.values() if not o.get("final") and o.get("applied") is not False]
     final = next((o for o in opts.values() if o.get("final")), None)
     keys = {c["key"] for o in tests for c in o["changes"]}
+    sessions = collections.defaultdict(list)
+    for o in tests:
+        sessions[o.get("base")].append(o)
     out = {}
     for key in keys:
-        got = {o["label"]: next((c["after"] for c in o["changes"] if c["key"] == key), None) for o in tests}
+        got = {}
+        for o in tests:                       # a label proved in two sessions keeps the line that wrote the record
+            v = next((c["after"] for c in o["changes"] if c["key"] == key), None)
+            if v is not None or o["label"] not in got:
+                got[o["label"]] = v
         before = next(c["before"] for o in tests for c in o["changes"] if c["key"] == key)
         filled = {lab: (before if v is None else v) for lab, v in got.items()}
         if len(tests) == 1:
@@ -1664,8 +1699,8 @@ def axis_values(opts: dict, own: dict | None = None, names: dict | None = None,
                 continue                              # a record the schema names after the carousel itself
             if own is None or (key in own and str(own[key]) == str(next(iter(filled.values())))):
                 continue                              # the option's own record (or nothing to tell by)
-        elif len(set(map(str, filled.values()))) <= 1:
-            continue                                  # the option's own record, not the axis's
+        elif not session_values_differ(sessions.values(), key):
+            continue                                  # the option's own record, or the state a session entered
         # the last visit proves everything went back; on the records the carousel's own options write too, its value
         # is the option the carousel opened on, not the axis value held (Focus Area's full-memory records hold both),
         # so no label there
@@ -2343,8 +2378,9 @@ def main():
         # a row found by its lit letter alone (proving.screens.lit_letter: "row_by" on its lines): its move of a record
         # another row's proofs own is no setting of its own, but a question for a person (2026-11-21)
         lit = [o for o in opts.values() if o.get("row_by") == "lit letter"]
-        others = frozenset(k for row, keys in owners.items() if base_row(row) != base_row(name) for k in keys) \
-            if lit else frozenset()
+        owned = frozenset(k for row, keys in owners.items() if base_row(row) != base_row(name) for k in keys)
+        others = owned if lit else frozenset()
+        plain = not any(o["kind"] == "checklist" or o.get("opens") == "picker" for o in opts.values())
         for key, vals in sorted(recs.items()):
             s = schema.get(key)
             mixed = not_one_to_one(proofs, name, key, vals, kinds, not_credited, label_of)
@@ -2354,6 +2390,11 @@ def main():
             if key in others and any(c["key"] == key for o in lit for c in o.get("changes") or []):
                 mixed.append({"value": None, "camera": name.split(" > ")[-1], "schema": None, "kind": "not one to one",
                               "why": "a row found by its lit letter alone moved a record another row's proofs own"})
+            if not mixed and plain and s is not None and not s.get("range") and \
+                    "view only" not in (s.get("note") or "").lower() and moved_by_the_state(key, vals, owned, s):
+                mixed.append({"value": None, "camera": ", ".join(sorted(map(str, vals))), "schema": None,
+                              "kind": "not one to one", "why": "every option of the row credited one value of a record "
+                              "another row's proofs own: the state the row's choice put the camera in, not the choice"})
             if mixed:
                 verdict, notes = "conflict", mixed
             elif s is None:

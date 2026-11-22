@@ -240,6 +240,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A carousel's axis credits a record only where one session took it through two values:** a record each session
+  held at one value is the state the session entered, as when Intelligent Auto chosen alone in S&Q moved White
+  Balance's record beside an older session's. A record another row owns that every option of a row credited one value
+  is a question for a person, and no conflict is ever written as a value's name: it waits at the gate.
 - **A proof line can be struck by hand, privately:** the pass-2 report leaves a line the mapper's
   `struck_proofs_<model>_fw<fw>.json` names (run, line, its own hash, why) out, says so each time, and refuses an
   entry that no longer matches its line.
