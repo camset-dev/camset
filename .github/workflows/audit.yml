@@ -16,7 +16,7 @@
 #
 # Nothing here builds or needs a secret, and the runner's Python gets pip-audit alone, never the kit's packages. The
 # actions are pinned by commit, with the release tag beside each, as in the other workflows; cargo-audit by the
-# version the pinned install-action carries a checksum for (0.22.2: install-action v2.90.3 lists no newer one), and
+# version the pinned install-action carries a checksum for (0.22.2, matching docs/RELEASING.md; v2.90.6 also lists 0.23.0), and
 # pip-audit by its version (PyPI, 2026-11-14).
 name: Dependency audit
 on:
@@ -56,7 +56,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # the stable branch: the current stable Rust
-      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
         with:
           tool: cargo-audit@0.22.2
       - name: Known vulnerabilities in the editor's crates (cargo audit, editor/Cargo.lock)
