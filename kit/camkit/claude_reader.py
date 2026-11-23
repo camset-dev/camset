@@ -23,6 +23,24 @@ import anthropic
 from .vlm import answered_model, cache_key, cached, keep, parse_json
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
+_CLAUDE_SLOTS_LOCK = threading.Lock()
+_CLAUDE_SLOTS: dict = {}
+
+
+def _claude_slots(model: str, parallel: int) -> threading.Semaphore:
+    """Shared request concurrency cap across ClaudeReader instances for the same model."""
+    key = (str(model), max(1, int(parallel)))
+    with _CLAUDE_SLOTS_LOCK:
+        sem = _CLAUDE_SLOTS.get(key)
+        if sem is None:
+            sem = _CLAUDE_SLOTS[key] = threading.Semaphore(key[1])
+        return sem
+
+
+def _clear_slots() -> None:
+    """Clear shared Claude semaphores (called from camkit.vlm.forget)."""
+    with _CLAUDE_SLOTS_LOCK:
+        _CLAUDE_SLOTS.clear()
 
 
 class ClaudeReader:
@@ -30,13 +48,23 @@ class ClaudeReader:
                  url=None):
         del kind, url                                   # the config's own fields, not the SDK's
         self.name, self.model, self.effort = name, model, effort
-        self.slots = threading.Semaphore(parallel)
+        self.slots = _claude_slots(model, parallel)
+        self._served = threading.local()
         self.client = anthropic.Anthropic(timeout=timeout)
+
+    @property
+    def served(self):
+        return getattr(self._served, "value", None)
+
+    @served.setter
+    def served(self, value):
+        self._served.value = value
 
     def ask(self, image: bytes, prompt: str) -> dict:
         """The answer, from the cache when this model has answered this question about this picture, else asked
         (answer) and kept under the model that answered it (a fallback's under its own: vlm.answered_model), unless
         refused."""
+        self.served = None
         key = cache_key(image, prompt, self.model)
         answer = cached(key)
         if answer is not None:
@@ -44,7 +72,7 @@ class ClaudeReader:
         answer = self.answer(image, prompt)
         if "_error" in answer:
             return answer
-        return keep(cache_key(image, prompt, answered_model(self.model, getattr(self, "served", None))), answer)
+        return keep(cache_key(image, prompt, answered_model(self.model, self.served)), answer)
 
     def answer(self, image: bytes, prompt: str, waits=None) -> dict:
         """The answer asked now, nothing looked up or kept (ask keeps it; camkit.vlm's start check asks this way). waits

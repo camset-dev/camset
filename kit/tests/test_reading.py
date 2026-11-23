@@ -159,12 +159,14 @@ def test_where_canonical_goes_further_than_the_guards_fold():
 
 
 def test_a_guard_takes_canonical_beside_the_reading_never_instead():
-    """As safety.fold, canonical can hide a slip: a circled one before "lnitialize" becomes a digit glued to the l,
-    and the l at a word's start is no longer read as an I. So a guard judges canonical beside the raw reading (it can
-    only add a refusal), never in its place; and every never-open label that is refused as read is refused cleaned
-    too, the slip apart."""
-    raw = f"{CIRCLED_ONE}lnitialize"
-    assert safety.never_open(raw) and canonical(raw) == "1lnitialize" and not safety.never_open(canonical(raw))
+    """As safety.fold, canonical can hide a slip: a circled one before "De1ete" becomes a digit glued to the D,
+    so a guard judges canonical beside the raw reading (it can only add a refusal), never in its place; and every
+    never-open label that is refused as read is refused cleaned too, the slip apart. "1lnitialize" is refused in both
+    forms now that initialize is matched in any word position."""
+    init_raw = f"{CIRCLED_ONE}lnitialize"
+    assert safety.never_open(init_raw) and canonical(init_raw) == "1lnitialize" and safety.never_open("1lnitialize")
+    raw = f"{CIRCLED_ONE}De1ete"
+    assert safety.never_open(raw) and canonical(raw) == "1De1ete" and not safety.never_open(canonical(raw))
     for t in (f"F{CYR_O}rmat", FULLWIDTH_FORMAT, f"Wi{NB_HYPHEN}Fi Direct", f"For{ZWSP}mat", f"{GREEK_IOTA_CAP}nitialize",
               "Forrnat", "Delete AII", "Format.", f"Pre{EN_DASH}AF"):
         assert safety.never_open(t) and safety.never_open(canonical(t)), t
@@ -2782,3 +2784,26 @@ def test_the_menus_census_leaves_out_the_icon_before_judging_a_row():
     assert t.add("menu row", "SAF Frame Move Amt", "AF Frame Move Amt", None, "label", rows, find=True) == "plain"
     assert t.add("menu row", "SAF Frame Move Amt", "AF Frame Move Amt", None, "label", rows) == "reader needed"
     assert t.c["icon left out"] == 1 and t.sites["menu row"]["plain"] == 1
+
+
+def test_number_key_normalizes_signed_zero_units_and_trailing_decimal_zeros():
+    """number_key equates signed zeros with trailing units and trims decimal trailing zeros without altering
+    integers or ratios."""
+    assert number_key("-0.0 EV") == number_key("+0.0 EV") == number_key("+-0.0 EV") == "0EV"
+    assert number_key("2.0") == "2" and number_key("2.00 EV") == "2EV"
+    assert number_key("1.50") == "1.5" and number_key("20") == "20"
+    assert number_key("1/250") == "1/250" and number_key("-0.5") == "-0.5"
+
+
+def test_reading_ask_rejects_error_and_forget_clears_memo(eyes, monkeypatch):
+    """reading.ask treats {'_error': ...} as no answer without memoizing, and vlm.forget() clears reading._MEMO."""
+    f = eyes.frame("00021_right.png")
+    answers = iter([{"_error": "refused"}, {"selected": "Single"}])
+    monkeypatch.setattr(reading, "_reader_answer",
+                        lambda img, q, timeout, role="second": (next(answers), "claude", "claude-opus-5-5"))
+    first = reading.ask(f, "option")
+    assert first.answer is None and "refused" in first.why and "error" in first.why
+    second = reading.ask(f, "option")
+    assert second.answer == {"selected": "Single"} and len(reading._MEMO) == 1
+    vlm.forget()
+    assert reading._MEMO == {}

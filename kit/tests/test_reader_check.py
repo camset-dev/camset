@@ -699,3 +699,104 @@ def test_the_tool_with_nothing_to_ask_or_a_malformed_entry_says_what_to_do(world
     camkit.CONFIG.unlink()
     assert reader_check.main([]) == reader_check.NOTHING_TO_ASK
     assert "No private/config.json" in capsys.readouterr().out and sent == []
+
+
+def test_ask_checks_serializes_same_url_runs_distinct_concurrently_and_honours_load_timeout(monkeypatch, tmp_path):
+    """Readers sharing an endpoint URL run sequentially during ask_checks, distinct URLs still run concurrently, and
+    optional load_timeout expands default CHECK_TIMEOUT without overriding explicit short timeouts."""
+    import time
+
+    monkeypatch.setattr(camkit, "CONFIG", tmp_path / "config.json")
+    vlm.forget()
+    active, max_same, timeouts = {}, 0, []
+    lock = threading.Lock()
+    both_started = threading.Barrier(2, timeout=2.0)
+
+    class Probe:
+        def __init__(self, name="", url="", timeout=None, **_):
+            self.name, self.url, self.timeout, self.served = name, url, timeout, None
+
+        def answer(self, image, prompt, waits=None):
+            nonlocal max_same
+            timeouts.append((self.name, self.timeout))
+            with lock:
+                cur = active[self.url] = active.get(self.url, 0) + 1
+                max_same = max(max_same, cur)
+            if self.url.endswith(":8001/v1") or self.url.endswith(":8005/v1"):
+                both_started.wait() if self.name in ("a1", "other") else time.sleep(0.02)
+            with lock:
+                active[self.url] -= 1
+            return {"text": "MENU 42"}
+
+    monkeypatch.setattr(vlm, "Reader", Probe)
+    cfgs = [{**local("a1", 8001), "load_timeout": 180}, local("a2", 8001), local("other", 8005)]
+    got = vlm.ask_checks(cfgs, b"png")
+    assert all(c.ok for c in got) and max_same == 1
+    assert ("a1", 180.0) in timeouts and ("a2", vlm.CHECK_TIMEOUT) in timeouts
+    timeouts.clear()
+    both_started.reset()
+    vlm.ask_checks([cfgs[0]], b"png", timeout=0.2)
+    assert timeouts == [("a1", 0.2)]
+
+
+def test_same_url_readers_never_stand_in_for_each_other(world, monkeypatch):
+    """verdict() and stand_in() skip candidates that share an endpoint URL with the failed reader."""
+    write, _ = world
+    same = [local("vllm", 8001, "qwen"), local("glm", 8001, "glm")]
+    write(same, roles={"second": "vllm", "third": "glm"})
+    checks = [vlm.Check("vllm", "openai-compatible", "qwen", False, ("second",), asked=True, error="timed out"),
+              vlm.Check("glm", "openai-compatible", "glm", False, ("third",), asked=True, ok=True, said="MENU 42")]
+    stand_ins, why = vlm.verdict(checks)
+    assert stand_ins == {} and "did not answer" in why
+
+    pinged = []
+    monkeypatch.setattr(vlm.Reader, "ping", lambda self: pinged.append(self.name))
+    assert vlm.stand_in("second", same[0]) is None and pinged == []
+
+
+def test_make_reader_shares_slots_and_reader_served_is_thread_local(tmp_path, monkeypatch):
+    """make_reader shares _SLOTS per (url, model, parallel) until forget(), Reader.served is thread-local, cache hits
+    clear served, and ask_role does not reset _DOWN on unusable answers."""
+    import numpy as np
+    from PIL import Image
+
+    monkeypatch.setattr(vlm, "CACHE", tmp_path / "cache")
+    monkeypatch.setattr(camkit, "CONFIG", tmp_path / "config.json")
+    vlm.forget()
+    cfg = {**local("vllm", 8001, "m"), "parallel": 2}
+    r1, r2 = vlm.make_reader(cfg), vlm.make_reader(cfg)
+    assert r1.slots is r2.slots
+    r3 = vlm.make_reader({**local("vllm2", 8001, "other"), "parallel": 2})
+    assert r3.slots is not r1.slots
+
+    buf = io.BytesIO()
+    Image.fromarray(np.full((8, 8, 3), 80, np.uint8)).save(buf, format="PNG")
+    png = buf.getvalue()
+    vlm.keep(vlm.cache_key(png, "p", "m"), {"ok": True})
+    r1.served = "stale-model"
+    assert r1.ask(png, "p") == {"ok": True} and r1.served is None
+
+    def worker():
+        r1.served = "worker-model"
+
+    th = threading.Thread(target=worker)
+    th.start()
+    th.join()
+    assert r1.served is None
+
+    vlm.forget()
+    assert vlm.make_reader(cfg).slots is not r1.slots
+
+    camkit.CONFIG.write_text(json.dumps({"readers": [cfg]}), encoding="utf-8")
+    replies = iter([{"_error": "refused"}, {"_unparsed": "oops"}])
+    monkeypatch.setattr(vlm, "Reader", lambda **kw: type("FakeUnusable", (), {
+        "name": kw["name"], "model": kw["model"], "served": None,
+        "ask": lambda self, img, pr: next(replies),
+    })())
+    assert vlm.ask_role("second", png, "p", 5) == {"_error": "refused"}
+    assert not vlm.reader_down("second")
+    assert vlm.ask_role("second", png, "p", 5) == {"_unparsed": "oops"}
+    assert vlm.reader_down("second")
+    with pytest.raises(vlm.ReaderDown):
+        vlm.ask_role("second", png, "p", 5)
+    vlm.forget()

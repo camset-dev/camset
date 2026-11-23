@@ -72,7 +72,7 @@ def asked_of(reader, cfg: dict, image: bytes) -> tuple:
         print(f"reader {name!r} failed {FAIL_RUN} times in a row ({a.get('_error') if isinstance(a, dict) else a}): "
               "it is asked nothing more in this run", flush=True)
     said = str(a.get("selected") or "").strip() if usable else ""
-    return said, vlm.answered_model(str(cfg.get("model") or ""), getattr(reader, "served", None)), bool(said)
+    return said, vlm.answered_model(str(cfg.get("model") or cfg.get("name") or ""), getattr(reader, "served", None)), bool(said)
 
 
 def down(cfg: dict) -> bool:
@@ -89,7 +89,13 @@ def families(line: dict) -> set:
     return {model_id(m) for m in read}
 
 
-def vote(line: dict, asking: list, image) -> tuple:
+def _shares_url(asking: list) -> bool:
+    """Whether any two configured third readers share an endpoint URL (requiring model-major execution)."""
+    urls = [vlm._reader_url(cfg) for cfg, _ in asking if vlm._reader_url(cfg)]
+    return len(urls) > len(set(urls))
+
+
+def vote(line: dict, asking: list, image, finalize: bool = True) -> tuple:
     """Today's third readers asked in turn about a line (asking: [(config, reader)]), each only while no reading stands
     by family and only where its family has read nothing on the line (families: the second reader's included), for by
     camkit.reading.standing's rule such a reader could make no reading stand. The first that answers goes under "omlx"
@@ -100,7 +106,7 @@ def vote(line: dict, asking: list, image) -> tuple:
     down counted with them; how many answered)."""
     picture, due, answered = None, 0, 0
     for cfg, reader in asking:
-        if settled(line) is not None or model_id(cfg.get("model")) in families(line):
+        if settled(line) is not None or model_id(cfg.get("model") or cfg.get("name")) in families(line):
             continue
         due += 1
         if down(cfg):                             # due, and down: as a reader that did not answer
@@ -116,9 +122,37 @@ def vote(line: dict, asking: list, image) -> tuple:
             line["models"]["omlx"] = model
         else:
             line.setdefault("voters", []).append({"reader": str(cfg["name"]), "model": model, "selected": said})
-    line.setdefault("omlx", "")
-    settle(line)
+        if not finalize:
+            settle(line)
+    if finalize:
+        line.setdefault("omlx", "")
+        settle(line)
     return due, answered
+
+
+def _ask_all(states: list, asking: list, read_image, on_missing=None) -> None:
+    """Ask `asking` about each line state: model-major when readers share a URL (one swap per model), else
+    frame-major."""
+    model_major = len(asking) > 1 and _shares_url(asking)
+    batches = [[pair] for pair in asking] if model_major else [asking]
+    for batch in batches:
+        for st in states:
+            if st.get("skip") or st["missing"]:
+                continue
+            try:
+                d, a = vote(st["line"], batch, lambda st=st: read_image(st), finalize=not model_major)
+            except FileNotFoundError:
+                st["missing"] = True
+                if on_missing is not None:
+                    on_missing(st)
+                continue
+            st["due"] += d
+            st["answered"] += a
+    if model_major:
+        for st in states:
+            if not st.get("skip") and not st["missing"]:
+                st["line"].setdefault("omlx", "")
+                settle(st["line"])
 
 
 def settle(line: dict) -> dict:
@@ -179,19 +213,24 @@ def main(argv=None):
     todo = [x for x in recs if not x["agreed"] and x["kind"] in ("list", "checklist", "sidelist")
             and x["frame"] not in done and x.get("network", safety.LIFT_NETWORK) == safety.LIFT_NETWORK]
     print(len(todo), "to tie-break", flush=True)
+    second_model = str(second.get("model") or second.get("name") or "")
+    states = [{
+        "x": x,
+        "line": {"frame": x["frame"], "path": x["path"], "index": x["index"], "ocr": x["ocr"],
+                 "vllm": str((x["vlm"] or {}).get("selected") or ""), "models": {"vllm": second_model}},
+        "due": 0, "answered": 0, "missing": False,
+    } for x in todo]
+    _ask_all(states, asking, lambda st: (run / "shots" / st["x"]["frame"]).read_bytes())
     unanswered, same, missing, alone = 0, 0, [], []
-    for i, x in enumerate(todo, 1):
-        line = {"frame": x["frame"], "path": x["path"], "index": x["index"], "ocr": x["ocr"],
-                "vllm": str((x["vlm"] or {}).get("selected") or ""), "models": {"vllm": str(second.get("model") or "")}}
-        try:
-            due, answered = vote(line, asking, lambda x=x: (run / "shots" / x["frame"]).read_bytes())
-        except FileNotFoundError:                 # the frame is gone: nobody can answer, a rerun asks again
-            missing.append(x["frame"])
+    for i, st in enumerate(states, 1):
+        line = st["line"]
+        if st["missing"]:                         # the frame is gone: nobody can answer, a rerun asks again
+            missing.append(st["x"]["frame"])
             continue
-        if not answered and (due or line["winner"] is None):
+        if not st["answered"] and (st["due"] or line["winner"] is None):
             # no third reader answered, or none of another family was there to ask: not written, so a rerun asks again
-            unanswered += bool(due)
-            same += not due
+            unanswered += bool(st["due"])
+            same += not st["due"]
             continue
         jsonl.append(run / "tiebreak.jsonl", line)
         alone += [line] if line.get("third_only") else []
@@ -238,21 +277,28 @@ def revote(run: Path, recs: list, asking: list, second: dict, was: str | None) -
                  "model the third reader ran when they were written, so that their \"omlx\" counts as that model's; "
                  "nothing asked, nothing written")
     network = {x["frame"]: x.get("network", safety.LIFT_NETWORK) for x in recs}
-    changed, asked_lines, unanswered, same, missing, out = 0, 0, 0, 0, [], []
-    for i, t in enumerate(lines, 1):
+    second_model = str(second.get("model") or second.get("name") or "")
+    states = []
+    for t in lines:
         line, named = dict(t), isinstance(t.get("models"), dict)
         if not named:
-            line["models"] = {"vllm": str(second.get("model") or ""), "omlx": was}
-        due = answered = 0
+            line["models"] = {"vllm": second_model, "omlx": was}
         asked = network.get(line["frame"], safety.LIFT_NETWORK) == safety.LIFT_NETWORK
-        try:
-            if asked:
-                due, answered = vote(line, asking, lambda line=line: (run / "shots" / line["frame"]).read_bytes())
-            else:                                 # never asked about: its winner by family, from what it holds
-                settle(line)
-        except FileNotFoundError:                 # the frame is gone: as a line nobody answered, said below
+        if not asked:                             # never asked about: its winner by family, from what it holds
+            settle(line)
+        states.append({"orig": t, "line": line, "named": named, "asked": asked, "skip": not asked,
+                       "due": 0, "answered": 0, "missing": False})
+
+    def _on_missing(st):
+        st["due"], st["answered"] = 1, 0
+
+    _ask_all(states, asking, lambda st: (run / "shots" / st["line"]["frame"]).read_bytes(), on_missing=_on_missing)
+    changed, asked_lines, unanswered, same, missing, out = 0, 0, 0, 0, [], []
+    for i, st in enumerate(states, 1):
+        t, line, named, asked = st["orig"], st["line"], st["named"], st["asked"]
+        if st["missing"]:                         # the frame is gone: as a line nobody answered, said below
             missing.append(t["frame"])
-            due, answered = 1, 0
+        due, answered = st["due"], st["answered"]
         if asked and not answered and (due or not named):
             # no third reader of today answered, or none of another family was there to ask a line that named no models:
             # the line as it was, its old winner with it, for a later --revote to ask

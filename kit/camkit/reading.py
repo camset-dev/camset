@@ -95,6 +95,7 @@ import hashlib
 import io
 import itertools
 import re
+import threading
 import unicodedata
 from dataclasses import dataclass, field
 from typing import NamedTuple
@@ -331,9 +332,12 @@ def number_key(text) -> str:
     t = re.sub(r"(?<!\d)\s+|\s+(?!\d)", "", t)
     t = re.sub(r"(?<!\d)[:,]|[:,](?!\d)", "", t)
     t = re.sub(r"[\u00B1\u2021#$&'()*;<=>?@\[\\\]^_`{}~]", "", t)
-    t = re.sub(r"^(?:\+-|-\+)(?=0+(?:\.0+)?%?$)", "", t)
+    t = re.sub(r"^(?:\+-|-\+)(?=0+(?:\.0+)?(?:%|[a-zA-Z]+)?$)", "", t)
     t = t.removesuffix("%").removeprefix("+")
-    return "0" if re.fullmatch(r"-?0+(?:\.0+)?", t) else t
+    t = re.sub(r"^(?P<head>-?\d+)\.(?P<frac>\d*[1-9])?0+(?P<unit>[a-zA-Z]*)$",
+               lambda m: f"{m['head']}{'.' + m['frac'] if m['frac'] else ''}{m['unit']}", t)
+    m = re.fullmatch(r"-?0+([a-zA-Z]*)", t)
+    return f"0{m.group(1)}" if m else t
 
 
 def _digit_of(c: str) -> str | None:
@@ -984,6 +988,7 @@ TIMEOUTS = {"guard": 25.0, "press": 25.0, "proof": 25.0, "find": 15.0}   # s the
 MAX_THIRD = 16                           # the third role's readers looked for at most (a guard against a fake that names endless ones)
 
 _MEMO: dict = {}                         # (role, the frame's SHA-1, the question) -> (answer, name, model)
+_MEMO_LOCK = threading.Lock()
 
 
 class Asked(NamedTuple):
@@ -995,9 +1000,15 @@ class Asked(NamedTuple):
     why: str
 
 
+def _clear_memo() -> None:
+    """Clear only this module's in-process answer memo."""
+    with _MEMO_LOCK:
+        _MEMO.clear()
+
+
 def forget() -> None:
     """The memo and the readers' latches cleared (a new run in the same process; the tests)."""
-    _MEMO.clear()
+    _clear_memo()
     vlm.forget_down()
 
 
@@ -1066,8 +1077,10 @@ def ask(frame, prompt: str, timeout: float = 25.0, role: str = "second") -> Aske
     question = vlm.PROMPTS[prompt]
     image = frame_bytes(frame)
     key = (role, hashlib.sha1(image).hexdigest(), prompt)
-    if key in _MEMO:
-        return Asked(*_MEMO[key], "")
+    with _MEMO_LOCK:
+        memo = _MEMO.get(key)
+    if memo is not None:
+        return Asked(*memo, "")
     try:
         answer, name, model = _reader_answer(image, question, timeout, role)
     except vlm.BlackFrame:
@@ -1076,9 +1089,12 @@ def ask(frame, prompt: str, timeout: float = 25.0, role: str = "second") -> Aske
         return Asked(None, None, None, "the reader did not answer just before (asked again after a pause)")
     except Exception as e:       # noqa: BLE001 - any failure is no answer here (vlm.ask_role's latch counts it)
         return Asked(None, None, None, vlm.scrub(f"the reader failed ({type(e).__name__}: {e})"[:300]))
-    if not isinstance(answer, dict) or "_unparsed" in answer:
+    if isinstance(answer, dict) and "_error" in answer:
+        return Asked(None, name, model, vlm.scrub(f"the reader returned an error ({answer['_error']})"[:300]))
+    if not vlm.usable(answer):
         return Asked(None, name, model, "the reader's answer was no JSON object")
-    _MEMO[key] = (answer, name, model)
+    with _MEMO_LOCK:
+        _MEMO[key] = (answer, name, model)
     return Asked(answer, name, model, "")
 
 

@@ -82,6 +82,22 @@ def built_readers() -> list:
     return [make_reader(r) for r in listed]
 
 
+def _same_url(first_reader, second_reader) -> bool:
+    """Whether two readers share the same server endpoint URL."""
+    u0 = str(getattr(first_reader, "url", "") or "").strip().rstrip("/").lower()
+    u1 = str(getattr(second_reader, "url", "") or "").strip().rstrip("/").lower()
+    return bool(u0) and u0 == u1
+
+
+def _write_result(out, counts: dict, res: dict) -> None:
+    out.write(json.dumps(res) + "\n")
+    out.flush()
+    counts[res["how"]] = counts.get(res["how"], 0) + 1
+    if res["how"] != "agreed":
+        print(f"{res['how']:26s} {res['frame']}\n   OCR {res['ocr'][:110]!r}\n   VLM {res['vlm'][:110]!r}",
+              flush=True)
+
+
 def main():
     if {"-h", "--help"} & set(sys.argv[1:]):     # before anything is read, connected or asked
         print(__doc__.strip())
@@ -100,28 +116,40 @@ def main():
                 todo.append({**r, "prompt": CAROUSEL_PROMPT if name == "carousel_help.jsonl" else PROMPT})
     print(f"{len(todo)} guides to read ({len(done)} read before)", flush=True)
 
+    def _safe_second(r):
+        try:
+            return ask(asked[1], r["frames"], r["prompt"]) if len(asked) > 1 else None
+        except Exception as e:                    # the local server may be off
+            print(f"   second reader: {type(e).__name__}: {str(e)[:60]}", flush=True)
+            return None
+
     def one(r):
         first = ask(asked[0], r["frames"], r["prompt"])
-
-        def second():
-            try:
-                return ask(asked[1], r["frames"], r["prompt"]) if len(asked) > 1 else None
-            except Exception as e:                    # the local server may be off
-                print(f"   second reader: {type(e).__name__}: {str(e)[:60]}", flush=True)
-                return None
-        text, how = decide(r["text"], first, second)
+        text, how = decide(r["text"], first, lambda: _safe_second(r))
         return {"frame": r["frames"][0], "frames": r["frames"], "ocr": r["text"], "vlm": first,
                 "text": text, "how": how}
 
     counts = {}
     with open(out_path, "a", encoding="utf-8", newline="\n") as out, ThreadPoolExecutor(8) as ex:
-        for res in ex.map(one, todo):
-            out.write(json.dumps(res) + "\n")
-            out.flush()
-            counts[res["how"]] = counts.get(res["how"], 0) + 1
-            if res["how"] != "agreed":
-                print(f"{res['how']:26s} {res['frame']}\n   OCR {res['ocr'][:110]!r}\n   VLM {res['vlm'][:110]!r}",
-                      flush=True)
+        if len(asked) > 1 and _same_url(asked[0], asked[1]):
+            disagreed = []
+            for r, first in zip(todo, ex.map(lambda r: ask(asked[0], r["frames"], r["prompt"]), todo), strict=True):
+                needed = [False]
+                text, how = decide(r["text"], first, lambda needed=needed: needed.__setitem__(0, True) or None)
+                if not needed[0]:
+                    _write_result(out, counts, {"frame": r["frames"][0], "frames": r["frames"], "ocr": r["text"],
+                                                "vlm": first, "text": text, "how": how})
+                else:
+                    disagreed.append((r, first))
+            if disagreed:
+                for (r, first), second in zip(disagreed, ex.map(lambda item: _safe_second(item[0]), disagreed),
+                                              strict=True):
+                    text, how = decide(r["text"], first, lambda s=second: s)
+                    _write_result(out, counts, {"frame": r["frames"][0], "frames": r["frames"], "ocr": r["text"],
+                                                "vlm": first, "text": text, "how": how})
+        else:
+            for res in ex.map(one, todo):
+                _write_result(out, counts, res)
     print(counts, flush=True)
 
 

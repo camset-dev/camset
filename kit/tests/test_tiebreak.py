@@ -140,9 +140,9 @@ def test_new_lines_ask_the_third_readers_in_turn_and_keep_each_reading_and_model
     tiebreak(b.run)
     got = lines(b.run)
     assert [t["winner"] for t in got] == ["Single", "Cont.", None, None]
-    assert b.asked == [("gemma", "00001_down.png"), ("gemma", "00002_down.png"), ("glm", "00002_down.png"),
-                       ("gemma", "00003_down.png"), ("glm", "00003_down.png"), ("gemma", "00004_down.png"),
-                       ("glm", "00004_down.png")]                             # omlx is the second's family: never
+    assert b.asked == [("gemma", "00001_down.png"), ("gemma", "00002_down.png"), ("gemma", "00003_down.png"),
+                       ("gemma", "00004_down.png"), ("glm", "00002_down.png"), ("glm", "00003_down.png"),
+                       ("glm", "00004_down.png")]                             # omlx is the second's family; model-major on same URL
     assert got[3]["third_only"] is True and not any("third_only" in t for t in got[:3])
     out = capsys.readouterr().out
     assert "1 lines third readers alone named" in out and "third readers alone: kit2_crawl 00004_down.png index 3" in out
@@ -241,8 +241,8 @@ def test_revote_asks_todays_third_readers_where_no_reading_stands_by_family_and_
     # line 4: Timer by gemma alone, the old third's Timer no vote now (its family read Cont. too)
     assert [t["winner"] for t in got] == ["Single", "Single", "Cont.", None, None]
     assert b.asked == [("gemma", "00001_down.png"), ("gemma", "00002_down.png"), ("gemma", "00003_down.png"),
-                       ("glm", "00003_down.png"), ("gemma", "00004_down.png"), ("glm", "00004_down.png"),
-                       ("gemma", "00005_down.png"), ("glm", "00005_down.png")]
+                       ("gemma", "00004_down.png"), ("gemma", "00005_down.png"), ("glm", "00003_down.png"),
+                       ("glm", "00004_down.png"), ("glm", "00005_down.png")]
     assert all(t["models"] == {"vllm": QWEN, "omlx": QWEN_OLD} for t in got)
     assert [t["omlx"] for t in got] == ["Cont.", "Single", "Cont.", "Timer", "Cont."]          # the old third's, kept
     assert got[2]["voters"] == [{"reader": "gemma", "model": GEMMA, "selected": "Timer"},
@@ -401,3 +401,56 @@ def test_a_missing_frame_is_an_option_nobody_answered(bench, capsys):
     assert [x["frame"] for x in lines(b.run)] == ["00001_down.png"]
     out = capsys.readouterr().out
     assert "1 whose frame is not under shots/" in out and "frame not under shots/: kit2_crawl 00002_down.png" in out
+
+
+def test_distinct_urls_stay_frame_major_in_tiebreak(bench):
+    """When third readers run on different server URLs, tiebreak preserves frame-major order."""
+    b = bench
+    b.config([lan("vllm", QWEN, host="127.0.0.1"), lan("gemma", GEMMA, host="127.0.0.2"),
+              lan("glm", GLM, host="127.0.0.3")],
+             roles={"second": "vllm", "third": ["gemma", "glm"]})
+    b.options(("00001_down.png", "Single", "Cont."), ("00002_down.png", "Single", "Cont."))
+    b.said.update({("gemma", "00001_down.png"): "Timer", ("glm", "00001_down.png"): "Cont.",
+                   ("gemma", "00002_down.png"): "Timer", ("glm", "00002_down.png"): "Single"})
+    tiebreak(b.run)
+    assert b.asked == [("gemma", "00001_down.png"), ("glm", "00001_down.png"),
+                       ("gemma", "00002_down.png"), ("glm", "00002_down.png")]
+    assert [t["winner"] for t in lines(b.run)] == ["Cont.", "Single"]
+
+
+def test_help_reads_uses_two_pass_order_on_shared_url(tmp_path, monkeypatch):
+    """help_reads batches all Pass 1 reads before Pass 2 when first and second readers share a URL."""
+    import help_reads
+    run = tmp_path / "kit2_help"
+    (run / "shots").mkdir(parents=True)
+    for name in ("agree.png", "diff.png"):
+        (run / "shots" / name).write_bytes(name.encode())
+    rows = [{"frames": ["agree.png"], "text": "Focus Area"}, {"frames": ["diff.png"], "text": "Drive Mode"}]
+    (run / "help.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    for empty in ("option_help.jsonl", "field_help.jsonl", "carousel_help.jsonl", "drive_help.jsonl"):
+        (run / empty).write_text("", encoding="utf-8")
+    calls = []
+
+    class FakeHelpReader:
+        def __init__(self, name, answers):
+            self.name, self.url, self.answers = name, "http://127.0.0.1:8080/v1", answers
+
+        def ask(self, image, prompt):
+            frame = image.decode()
+            calls.append((self.name, frame))
+            return {"text": self.answers[frame]}
+
+    monkeypatch.setattr(help_reads, "RUN", run)
+    monkeypatch.setattr(help_reads.runs, "private_if_marked", lambda p: None)
+    monkeypatch.setattr(help_reads.vlm, "local_only_runs", lambda p: [])
+    monkeypatch.setattr(help_reads, "built_readers", lambda: [
+        FakeHelpReader("r0", {"agree.png": "Focus Area", "diff.png": "Single"}),
+        FakeHelpReader("r1", {"agree.png": "unused", "diff.png": "Drive Mode"}),
+    ])
+    help_reads.main()
+    assert calls == [("r0", "agree.png"), ("r0", "diff.png"), ("r1", "diff.png")]
+    out = [json.loads(x) for x in (run / "help_reads.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert [(r["frame"], r["how"], r["text"]) for r in out] == [
+        ("agree.png", "agreed", "Focus Area"),
+        ("diff.png", "OCR and the second reader", "Drive Mode"),
+    ]

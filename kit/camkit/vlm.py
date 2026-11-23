@@ -46,6 +46,25 @@ from pathlib import Path
 from . import ConfigMissing, budget, config, paths
 
 CACHE = None          # the answers' folder when set (the tests); else the camera's, cache_dir()
+_STATE_LOCK = threading.RLock()
+_SLOTS: dict = {}
+
+
+def _slots(url: str, model: str, parallel: int) -> threading.Semaphore:
+    """Shared request concurrency cap across Reader instances targeting the same (url, model, parallel)."""
+    key = (url.rstrip("/"), str(model), max(1, int(parallel)))
+    with _STATE_LOCK:
+        sem = _SLOTS.get(key)
+        if sem is None:
+            sem = _SLOTS[key] = threading.Semaphore(key[2])
+        return sem
+
+
+def _reader_url(cfg: dict) -> str:
+    """Normalised endpoint URL for OpenAI-compatible readers, or '' for hosted/Anthropic readers."""
+    if not isinstance(cfg, dict) or cfg.get("kind") == "anthropic":
+        return ""
+    return str(cfg.get("url") or "").strip().rstrip("/").lower()
 
 
 def cache_dir() -> Path:
@@ -445,9 +464,15 @@ def check_readers() -> list:
         raise ConfigMissing(unreadable(e)) from None
     role_players()                  # any other fault is the kit's, raised as itself, still before the link
     reading.check_engines()
-    if _CHECKED is None:
-        _passed(start_check())
-    return list(_CHECKED)
+    with _STATE_LOCK:
+        checked = _CHECKED
+    if checked is None:
+        checks = start_check()
+        with _STATE_LOCK:
+            if _CHECKED is None:
+                _passed(checks)
+            checked = _CHECKED
+    return list(checked)
 
 
 # What reading private/config.json raises when the file is not JSON (ValueError), does not open (OSError) or is not
@@ -724,6 +749,14 @@ def reads_check_text(answer) -> bool:
     return _folded(text) == _folded(CHECK_TEXT)
 
 
+def _check_timeout(cfg: dict, timeout: float) -> float:
+    """Effective per-request timeout for the start check: honours cfg['load_timeout'] only when called with default
+    CHECK_TIMEOUT so explicit short timeouts stay intact."""
+    if timeout == CHECK_TIMEOUT and cfg.get("load_timeout") is not None:
+        return max(timeout, float(cfg["load_timeout"]))
+    return timeout
+
+
 def ask_check(cfg: dict, image: bytes, timeout: float = CHECK_TIMEOUT, roles: tuple = ()) -> Check:
     """One reader asked the start check's question about image (check_picture) through the request a run's question
     makes (make_reader, the reader's answer), with nothing looked up in or kept to the answers' cache; one whose url
@@ -734,12 +767,13 @@ def ask_check(cfg: dict, image: bytes, timeout: float = CHECK_TIMEOUT, roles: tu
     if refused:
         c.error, c.seconds = refused, 0.0
         return c
+    eff = _check_timeout(cfg, timeout)
     reader = None
     try:
-        reader = make_reader(cfg, timeout=timeout)
+        reader = make_reader(cfg, timeout=eff)
         answer = reader.answer(image, PROMPTS[CHECK_PROMPT], waits=CHECK_WAITS)
     except Exception as e:       # noqa: BLE001 - every failure is the reader's error, said
-        c.error = failure(e, timeout)
+        c.error = failure(e, eff)
     else:
         if not isinstance(answer, dict) or "_unparsed" in answer:
             raw = " ".join(str(answer.get("_unparsed", answer) if isinstance(answer, dict) else answer).split())
@@ -762,20 +796,32 @@ def ask_check(cfg: dict, image: bytes, timeout: float = CHECK_TIMEOUT, roles: tu
 
 
 def ask_checks(cfgs: list, image: bytes, timeout: float = CHECK_TIMEOUT, roles: dict | None = None) -> list:
-    """ask_check for each reader at once, in threads of their own, so that the check takes as long as the slowest
-    reader, not their sum: Checks in the order given. A reader still busy past the deadline (its tries and its pause
-    on a busy gateway) is no answer."""
+    """ask_check for each reader: distinct endpoints run at once in threads of their own, while readers sharing an
+    endpoint URL run sequentially in one thread so a swapping server is not hit with concurrent load requests."""
     roles = roles or {}
     out = [None] * len(cfgs)
     lock, closed = threading.Lock(), []
+    groups: dict = {}
+    for i, cfg in enumerate(cfgs):
+        url = _reader_url(cfg)
+        groups.setdefault(f"url:{url}" if url else f"solo:{i}", []).append((i, cfg))
 
-    def one(i, cfg):
-        c = ask_check(cfg, image, timeout, roles.get(cfg.get("name"), ()))
-        with lock:
-            if not closed:              # a reader that answers after the deadline changes nothing
-                out[i] = c
-    threads = [threading.Thread(target=one, args=(i, cfg), daemon=True) for i, cfg in enumerate(cfgs)]
-    deadline = time.monotonic() + timeout * len(CHECK_WAITS) + sum(w or 0 for w in CHECK_WAITS) + CHECK_SLACK
+    def run_group(items):
+        for i, cfg in items:
+            with lock:
+                if closed:
+                    return
+            c = ask_check(cfg, image, timeout, roles.get(cfg.get("name"), ()))
+            with lock:
+                if not closed:              # a reader that answers after the deadline changes nothing
+                    out[i] = c
+
+    def group_budget(items):
+        wait_sum = sum(w or 0 for w in CHECK_WAITS)
+        return sum(_check_timeout(cfg, timeout) * len(CHECK_WAITS) + wait_sum for _, cfg in items) + CHECK_SLACK
+
+    threads = [threading.Thread(target=run_group, args=(items,), daemon=True) for items in groups.values()]
+    deadline = time.monotonic() + max((group_budget(items) for items in groups.values()), default=CHECK_SLACK)
     for th in threads:
         th.start()
     for th in threads:
@@ -785,9 +831,10 @@ def ask_checks(cfgs: list, image: bytes, timeout: float = CHECK_TIMEOUT, roles: 
         got = list(out)
     for i, cfg in enumerate(cfgs):
         if got[i] is None:
+            eff = _check_timeout(cfg, timeout)
             got[i] = Check(str(cfg.get("name")), kind_of(cfg), shown_model(cfg.get("model")), paid(cfg),
                            tuple(roles.get(cfg.get("name"), ())), asked=True,
-                           error=f"{NO_ANSWER} within {timeout:g} s (timed out)")
+                           error=f"{NO_ANSWER} within {eff:g} s (timed out)")
     return got
 
 
@@ -899,7 +946,10 @@ def verdict(checks: list) -> tuple:
         not_local = own is not None and not own.asked and own.not_asked == NOT_LOCAL      # a --network run's
         if own is None or own.ok or (not own.asked and not not_local) or (name != "second" and several):
             continue
+        own_cfg = next((r for r in listed if str(r["name"]) == str(cfg["name"])), cfg)
+        own_url = _reader_url(own_cfg)
         sub = next((r for r in good if str(r["name"]) != own.name and may_stand_in(r)
+                    and (not own_url or _reader_url(r) != own_url)
                     and (local_reader(r) or not LOCAL_ONLY)), None)
         if sub is not None:
             stand_ins[name] = sub
@@ -954,9 +1004,10 @@ def _passed(checks: list) -> None:
             ".venv/bin/python kit/tools/reader_check.py asks the same question with no camera (docs/QUICKSTART.md, "
             "\"Choosing a reader\").")
     print("readers: " + "; ".join(f"{c.who()} {c.outcome()}" for c in checks), flush=True)
-    for c in checks:
-        if c.asked and not c.ok:
-            _SKIPPED.add(c.name)
+    with _STATE_LOCK:
+        for c in checks:
+            if c.asked and not c.ok:
+                _SKIPPED.add(c.name)
     players = keyed_players()
     for name, sub in stand_ins.items():
         own = next(c for c in checks if c.name == str(dict(players)[name]["name"]))
@@ -964,18 +1015,20 @@ def _passed(checks: list) -> None:
         print(f"reader {own.name!r} {'is not local' if own.not_asked == NOT_LOCAL else 'does not answer'}: "
               f"{sub['name']!r} stands in as the {name} reader for this run", flush=True)
     several = several_voters()
+    with _STATE_LOCK:
+        skipped = set(_SKIPPED)
     for name, cfg in players:
         own = next((c for c in checks if c.name == str(cfg["name"])), None)
         if own is None or name in stand_ins:
             continue
         if name == "second" or not several:
-            if own.name in _SKIPPED:
+            if own.name in skipped:
                 print(f"reader {own.name!r} does not answer and no local reader may stand in: the {name} reader's "
                       f"questions go unanswered for this run", flush=True)
             continue
-        if own.name not in _SKIPPED and own.not_asked != NOT_LOCAL:
+        if own.name not in skipped and own.not_asked != NOT_LOCAL:
             continue
-        left = [str(c["name"]) for k, c in players if k != "second" and str(c["name"]) not in _SKIPPED
+        left = [str(c["name"]) for k, c in players if k != "second" and str(c["name"]) not in skipped
                 and not (LOCAL_ONLY and not local_reader(c))]
         rest = (f"{', '.join(repr(n) for n in left)} vote{'s' if len(left) == 1 else ''} as the third reader"
                 f"{'s' if len(left) > 1 else ''} where OCR and the second reader differ" if left else
@@ -985,7 +1038,8 @@ def _passed(checks: list) -> None:
     same = one_family()
     if same:
         print(f"readers: {same}", flush=True)
-    _CHECKED = list(checks)
+    with _STATE_LOCK:
+        _CHECKED = list(checks)
 
 
 def one_family(skipped=None) -> str:
@@ -996,7 +1050,11 @@ def one_family(skipped=None) -> str:
     local reader. Such a third reader is not asked where the second reader has read the frame (camkit.reading's
     family_voted). Said at the start check, and by kit/tools/reader_check.py; it changes no role."""
     from . import reading
-    skipped = _SKIPPED if skipped is None else set(skipped)
+    if skipped is None:
+        with _STATE_LOCK:
+            skipped = set(_SKIPPED)
+    else:
+        skipped = set(skipped)
     try:
         second = playing("second")
         voting = [playing(key) for key in voter_keys()]
@@ -1049,9 +1107,10 @@ def failing(cfg: dict, e: BaseException, timeout: float | None = None, role: str
     caller, as ever. role: the role key it was asked under; one of several third readers gets no stand-in, and the
     words say so."""
     name = str(cfg.get("name"))
-    if name in _FAILING:
-        return
-    _FAILING.add(name)
+    with _STATE_LOCK:
+        if name in _FAILING:
+            return
+        _FAILING.add(name)
     why = failure(e, timeout)
     goes_on = ("the other third readers vote without it" if voter_index(role) is not None and several_voters() else
                "the readings go on with OCR alone or a local stand-in")
@@ -1064,13 +1123,21 @@ def failing(cfg: dict, e: BaseException, timeout: float | None = None, role: str
 
 def forget() -> None:
     """A run's readers' state cleared: the start check's verdict, the readers it skipped, the stand-ins, the failures
-    said, the latches and the run they are logged in (a new run in the same process; the tests)."""
+    said, the latches, shared slots, reading memo, and the run they are logged in (a new run in the same process;
+    the tests)."""
     global _CHECKED, _RUN, LOCAL_ONLY, HELD
-    _CHECKED, _RUN, LOCAL_ONLY, HELD = None, None, False, None
-    _SKIPPED.clear()
-    _FAILING.clear()
-    _STANDING_IN.clear()
-    forget_down()
+    with _STATE_LOCK:
+        _CHECKED, _RUN, LOCAL_ONLY, HELD = None, None, False, None
+        _SKIPPED.clear()
+        _FAILING.clear()
+        _STANDING_IN.clear()
+        _SLOTS.clear()
+        forget_down()
+    from . import reading
+    reading._clear_memo()
+    mod = sys.modules.get("camkit.claude_reader") or sys.modules.get("claude_reader")
+    if mod is not None and hasattr(mod, "_clear_slots"):
+        mod._clear_slots()
 
 
 DOWN_AFTER, DOWN_FOR = 2, 300.0          # failures in a row, then seconds a role's reader counts as unreachable
@@ -1089,12 +1156,14 @@ class ReaderDown(NoReader):
 
 def reader_down(role: str = "second") -> bool:
     """The latch: the reader playing role failed DOWN_AFTER times in a row less than DOWN_FOR seconds ago."""
-    return time.monotonic() < _DOWN.get(role, {}).get("until", 0.0)
+    with _STATE_LOCK:
+        return time.monotonic() < _DOWN.get(role, {}).get("until", 0.0)
 
 
 def forget_down() -> None:
     """Every role's latch cleared."""
-    _DOWN.clear()
+    with _STATE_LOCK:
+        _DOWN.clear()
 
 
 def black_image(image: bytes) -> bool:
@@ -1222,12 +1291,14 @@ _STANDING_IN: dict = {}        # role -> the reader config standing in for one t
 def assign_role(name: str, cfg: dict) -> None:
     """Give a role ("second", "third") to a configured reader for the rest of the process, as a stand-in is given one
     (kit/tools/reread_proofs.py --reader NAME)."""
-    _STANDING_IN[name] = cfg
+    with _STATE_LOCK:
+        _STANDING_IN[name] = cfg
 
 
 def standing_in(name: str) -> dict | None:
     """The config entry given a role for the process (assign_role) or standing in for it (stand_in), or None."""
-    return _STANDING_IN.get(name)
+    with _STATE_LOCK:
+        return _STANDING_IN.get(name)
 
 
 def playing(name: str) -> dict:
@@ -1245,9 +1316,15 @@ def reader_for(name: str, **override):
 
 def stand_in(name: str, failed: dict) -> dict | None:
     """After `failed` would not connect: the next local reader that answers a tiny request, kept for the role; never a
-    paid one (may_stand_in), nor one that did not answer the run's start check (check_readers)."""
+    paid one (may_stand_in), nor one sharing `failed`'s endpoint URL, nor one that did not answer the run's start check
+    (check_readers)."""
+    with _STATE_LOCK:
+        skipped = set(_SKIPPED)
+    failed_url = _reader_url(failed)
     for r in readers():
-        if r["name"] == failed.get("name") or not may_stand_in(r) or r["name"] in _SKIPPED:
+        if r["name"] == failed.get("name") or not may_stand_in(r) or r["name"] in skipped:
+            continue
+        if failed_url and _reader_url(r) == failed_url:
             continue
         if LOCAL_ONLY and not local_reader(r):          # not even the tiny request goes to it
             continue
@@ -1255,7 +1332,8 @@ def stand_in(name: str, failed: dict) -> dict | None:
             make_reader(r, timeout=20).ping()
         except Exception:
             continue
-        _STANDING_IN[name] = r
+        with _STATE_LOCK:
+            _STANDING_IN[name] = r
         print(f"reader {failed.get('name')!r} does not answer: {r['name']!r} stands in", flush=True)
         return r
     return None
@@ -1416,12 +1494,20 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     except NoReader:
         raise                    # nothing was sent: no failure of the reader's
     except Exception:
-        down = _DOWN.setdefault(name, {"fails": 0, "until": 0.0})
-        down["fails"] += 1
-        if down["fails"] >= DOWN_AFTER:
-            down["until"] = time.monotonic() + DOWN_FOR
+        with _STATE_LOCK:
+            down = _DOWN.setdefault(name, {"fails": 0, "until": 0.0})
+            down["fails"] += 1
+            if down["fails"] >= DOWN_AFTER:
+                down["until"] = time.monotonic() + DOWN_FOR
         raise
-    _DOWN.pop(name, None)
+    with _STATE_LOCK:
+        if usable(answer):
+            _DOWN.pop(name, None)
+        else:
+            down = _DOWN.setdefault(name, {"fails": 0, "until": 0.0})
+            down["fails"] += 1
+            if down["fails"] >= DOWN_AFTER:
+                down["until"] = time.monotonic() + DOWN_FOR
     return answer
 
 
@@ -1437,7 +1523,9 @@ def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     _LAST.model = None
     cfg = playing(name)
     local_only(cfg, name)
-    if str(cfg.get("name")) in _SKIPPED:
+    with _STATE_LOCK:
+        is_skipped = str(cfg.get("name")) in _SKIPPED
+    if is_skipped:
         raise NoReader(f"reader {cfg.get('name')!r} did not answer the run's start check, and no reader stands in for "
                        f"it: the {said(name)} reader's questions go unanswered for this run")
     t = time.monotonic()
@@ -1500,14 +1588,23 @@ def ask_named_reader(cfg: dict, image: bytes, prompt: str, cache, timeout: float
     return keep(key, reader.answer(image, prompt), cache)
 
 
-BUSY_WAITS = (2, 5, 15, None)    # s between a run's tries at a busy gateway (502/503/504), then it gives up
+BUSY_WAITS = (2, 5, 10, 15, 20, 25, 30, 30, 30, None)  # s between a run's tries at a busy gateway (>=150 s for cold loads/swaps)
 
 
 class Reader:
     def __init__(self, name, url, model, parallel=1, timeout=120, kind=None, api_key_env=None, **_):
         self.name, self.url, self.model, self.timeout = name, url.rstrip("/"), model, timeout
         self.api_key_env = api_key_env
-        self.slots = threading.Semaphore(parallel)
+        self.slots = _slots(self.url, self.model, parallel)
+        self._served = threading.local()
+
+    @property
+    def served(self):
+        return getattr(self._served, "value", None)
+
+    @served.setter
+    def served(self, value):
+        self._served.value = value
 
     def headers(self) -> dict:
         """A hosted service's entry names, in "api_key_env", the environment variable holding its key. The
@@ -1532,12 +1629,13 @@ class Reader:
     def ask(self, image: bytes, prompt: str) -> dict:
         """The answer, from the cache when this model has answered this question about this picture, else asked
         (answer) and kept under the model that answered it (keep, answered_model)."""
+        self.served = None
         key = cache_key(image, prompt, self.model)
         answer = cached(key)
         if answer is not None:
             return answer
         answer = self.answer(image, prompt)
-        return keep(cache_key(image, prompt, answered_model(self.model, getattr(self, "served", None))), answer)
+        return keep(cache_key(image, prompt, answered_model(self.model, self.served)), answer)
 
     def answer(self, image: bytes, prompt: str, waits: tuple = BUSY_WAITS) -> dict:
         """The answer asked now, nothing looked up or kept (ask keeps it; the start check asks this way). waits: the
