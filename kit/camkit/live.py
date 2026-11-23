@@ -217,6 +217,43 @@ def reader_label(path, timeout: float = READER_TIMEOUT) -> tuple[str, str]:
     return (label, "") if label else ("", "the vision reader gave the lit row no label")
 
 
+def _may_open_matches(text: str, safe_may: list, values=None, labels=None) -> bool:
+    """Whether `text` matches a non-refused name in `safe_may`: exact label, or label + valid/safe value tail,
+    without stripping real 2-letter prefixes ('IP', 'AF', 'PW', 'IR') from `may_open`."""
+    forms = [safety._plain_label(text)]
+    if not safety._two_letter_prefix(text):
+        cleaned = safety.clean_label(safety.fold(text))
+        if cleaned and cleaned not in forms:
+            forms.append(cleaned)
+    forms = [f for f in forms if f]
+    if not forms:
+        return False
+    vals = values if isinstance(values, dict) else {}
+    for m in safe_may:
+        name = safety._plain_label(m)
+        if not name:
+            continue
+        entries = [vs for k, vs in vals.items() if isinstance(k, str) and safety._plain_label(k) == name and vs]
+        known = [safety._value_form(v) for vs in entries for v in vs or ()
+                 if isinstance(v, str) and safety._value_form(v) and not safety._action_value(v)]
+        for r in forms:
+            if r == name:
+                return True
+            if not r.startswith(name + " "):
+                continue
+            rest = r[len(name) + 1:].strip()
+            if not rest:
+                return True
+            if entries:
+                if rest in known:
+                    return True
+                continue
+            if safety.unknown_tail(rest) and not safety._action_value(rest) \
+                    and (labels is None or not safety.other_label(r, labels, {name}, m)):
+                return True
+    return False
+
+
 def open_refused(lit: str, may_open=frozenset(), network=frozenset(), screens: bool = False, values=None,
                  readings=None, labels=None, look: bool = False, row=None) -> str:
     """Why a press may not open the lit row, or "": the row's text is never-open, and no name the run was given
@@ -248,10 +285,12 @@ def open_refused(lit: str, may_open=frozenset(), network=frozenset(), screens: b
     if why.startswith(safety.NETWORK + ":") and not look:
         return (f"the lit row {lit.strip()!r} is never opened ({why}; only a dated owner decision naming the row opens "
                 "it, with --network)")
-    # a name and the reading compared as the guards fold them: "Pre-AF" names a "Pre‑AF" read with a no-break hyphen
-    read = safety.clean_label(safety.fold(lit))
-    named = any(safety.clean_label(safety.fold(m)) and safety.clean_label(safety.fold(m)) in read for m in may_open)
-    if named and not safety.never_lifted(lit) and not safety.network_words(lit):
+    safe_may = [m for m in (may_open or ()) if m and not safety.allow_refused(m) and not safety.network_words(m)]
+    if (safe_may
+            and not any(safety.allow_refused(x) or safety.never_lifted(x) or safety.network_words(x)
+                        for x in (lit, *judged))
+            and all(not (safety.never_open(j) or safety.never_lifted(j))
+                    or _may_open_matches(j, safe_may, values, labels) for j in judged)):
         return ""
     if look:
         return (f"the lit row {lit.strip()!r} is not opened on a look lap ({why}): it is not the row the run is opening, "

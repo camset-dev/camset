@@ -335,13 +335,12 @@ def _match(band, t, spread: float = 1.0):
 
 def _glyph(g, name, box, pad=6) -> float:
     """Best normalised correlation of the glyph template inside its region (+pad)."""
-    import cv2
     x0, y0, x1, y1 = box
     sub = g[max(0, y0 - pad):y1 + pad, max(0, x0 - pad):x1 + pad].astype(np.float32)
     t = _template(name)
     if sub.shape[0] < t.shape[0] or sub.shape[1] < t.shape[1] or sub.std() < 1:
         return 0.0
-    return float(cv2.matchTemplate(sub, t, cv2.TM_CCOEFF_NORMED).max())
+    return float(_match(sub, t).max())
 
 
 def portrait_battery(image) -> bool:
@@ -474,11 +473,15 @@ def features(a: np.ndarray) -> dict:
     g = _grey(a)
     sat = _sat(a)
     o = _orange(a)
-    divider = max(float((g[5:420, x] > 140).mean()) for x in range(110, 115))
+    divider = max(float(((g[5:420, x] > 140) & (g[5:420, x - 4] < 120) & (g[5:420, x + 4] < 120)).mean())
+                  for x in range(110, 115))
     # a notice is framed by 1-px dim grey lines at x 30 and x 609
-    # (grey ~68 on OSD frames; thin lines come out ~15-20% dimmer over HDMI)
-    frame_l = max(float((g[25:400, x] > 40).mean()) for x in range(28, 33))
-    frame_r = max(float((g[25:400, x] > 40).mean()) for x in range(607, 612))
+    # (grey ~68 on OSD frames; thin lines come out ~15-20% dimmer over HDMI), darker on both sides
+    g16 = g.astype(np.int16)
+    frame_l = max(float(((g[25:400, x] > 40) & (g16[25:400, x] - g16[25:400, x - 4] > 15)
+                         & (g16[25:400, x] - g16[25:400, x + 4] > 15)).mean()) for x in range(28, 33))
+    frame_r = max(float(((g[25:400, x] > 40) & (g16[25:400, x] - g16[25:400, x - 4] > 15)
+                         & (g16[25:400, x] - g16[25:400, x + 4] > 15)).mean()) for x in range(607, 612))
     # a popup panel is framed by 1-px light lines at x 64/577 and y 9/470: grey ~102 on OSD frames,
     # ~85 on HDMI (scaling blurs 1-px lines; 2026-10-28), and the bottom line can be as faint as 70
     # (Color Space list, 2026-10-29); the panel's surroundings are 0
@@ -1175,9 +1178,9 @@ def _classify(f: dict) -> str:
         return "notice"
     if f["popup_frame"] > 0.8 and f["radios"] > 0:
         return "list"
-    if f["help_frame"] > 0.9 and f["tab_sat"] > 20:          # over a menu page: before "menu"
+    if f["help_frame"] > 0.9 and f["tab_sat"] > 20 and f["top_bar"] > 0.6:          # over a menu page: before "menu"
         return "helppop"
-    if f["divider"] > 0.85:
+    if f["divider"] > 0.85 and f["top_bar"] > 0.6:
         return "dialog"
     # the Creative Look strip is unmistakable; with its Look cell selected (x 14-91, orange, with ⌃)
     # the left column is colourful enough to pass as menu tabs (IN look, 2026-10-28)
@@ -1196,7 +1199,8 @@ def _classify(f: dict) -> str:
         # Fn Menu Settings' orange tile in the first column makes the left edge colourful
         if f["title_line"] > 0.9 and f["footer_line"] > 0.9 and _fn_tile(f):
             return "fnmenu"
-        return "menu"
+        if f["menu_bar_rows"] > 0:
+            return "menu"
     if f["sub_bar"] > 0.8 and (f["left_dark"] > 0.9 or f["dark_col"] > 0.95):
         return "submenu"
     if f["title_line"] > 0.9 and f["footer_line"] > 0.9 and _fn_tile(f):

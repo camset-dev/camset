@@ -348,6 +348,7 @@ _ACTIONS = [
     # Playback > Viewing: opens the continuous play of the card's pictures at once (kit2_fin_look_contplay 00019,
     # 2026-11-19); its opening acts (_ACTS_ON_OPEN)
     r"cont\. play for interval",
+    r"import", r"load settings",
 ]
 # Rows containing any of these: by hand only. The first part, the camera's identity, its connections and its region
 # (USB, language, NTSC/PAL, area and date, network identity: decision 8, and what a person types about themselves),
@@ -589,7 +590,7 @@ _ACTION_RE = _Rx(_ACTIONS, r"^(", r")[\s.:;,!?…]*$")
 # Words that make a row an action wherever they appear: every row named with "reset" is one
 # (Setting Reset, SSID/PW Reset, Forced File Number Reset...), and Picture Profile's settings have a
 # bare "Reset" row (2026-10-28)
-_ACTION_WORD_RE = _Rx([r"\breset\b"])
+_ACTION_WORD_RE = _Rx([r"\breset\b", r"initiali[sz]e"])
 _ANYWHERE_RE = _Rx(_ANYWHERE)
 _IDENTITY_RE = _Rx(_IDENTITY)
 _CREDENTIALS_RE = _Rx(_CREDENTIALS)
@@ -626,12 +627,26 @@ def fold(text) -> str:
 
 def deslip(t: str) -> str:
     """The usual OCR slips undone, for the never-open check only: "rn" read for "m" ("Forrnat"), a zero or a one
-    inside a word ("F0rmat", "De1ete"), and a lower-case L for a capital I at a word's start ("lnitialize"). The text
-    is not folded here: readings() judges the folded text as one more reading."""
+    inside a word ("F0rmat", "De1ete"), "al1"/"a11" ("Delete A11"), and a lower-case L or 1 for a capital I at a word's
+    start ("lnitialize", "1nitialize"). The text is not folded here: readings() judges the folded text as one more
+    reading."""
     t = t.replace("|", "l").replace("rn", "m")
     t = re.sub(r"(?<=[a-z])0|0(?=[a-z])", "o", t)
-    t = re.sub(r"(?<=[a-z])1(?=[a-z])", "l", t)
-    return re.sub(r"\bl(?=[bcdfghjkmnpqrstvwxz])", "i", t)
+    t = re.sub(r"(?<=[a-z])1+(?=[a-z])", lambda m: "l" * len(m.group(0)), t)
+    t = re.sub(r"(?<=[a-z]l)1\b|(?<=\ba)11\b", lambda m: "l" * len(m.group(0)), t)
+    return re.sub(r"\b[l1](?=[bcdfghjkmnpqrstvwxz])", "i", t)
+
+
+def _deslip_variants(t: str) -> list:
+    """The raw text and its primary deslip reading first, then 11->li / 11->l / internal 1->i alternates if '1' is in `t`."""
+    out = [t, deslip(t)]
+    if "1" in t:
+        li = re.sub(r"(?<=[a-z])11(?=[a-z])", "li", t)
+        single_l = re.sub(r"(?<=[a-z])1+(?=[a-z])", "l", t)
+        ii = re.sub(r"(?<=[a-z])1(?=[a-z-])", "i", t)
+        for v in (li, single_l, ii, re.sub(r"(?<=[a-z])1(?=[a-z-])", "i", li)):
+            out += [v, deslip(v)]
+    return out
 
 
 def clean_label(text: str) -> str:
@@ -639,6 +654,13 @@ def clean_label(text: str) -> str:
     t = re.sub(r"^[^A-Za-z0-9(]+", "", (text or "").strip())
     t = re.sub(r"^(?:[A-Za-z0-9]{1,2}\s+)(?=[A-Z(])|^[a-z](?=[A-Z])", "", t)
     return t.strip().lower()
+
+
+def _plain_label(text) -> str:
+    """A folded lower-case label with leading non-alphanumeric symbol glyphs stripped, keeping real 1-2 char words
+    ('IP', 'AF', 'PW', 'IR', 'My') intact."""
+    t = re.sub(r"^[^A-Za-z0-9(]+", "", fold(text).strip())
+    return " ".join(t.split()).casefold()
 
 
 def _capital_i(text: str) -> str:
@@ -682,8 +704,7 @@ def readings(text) -> list:
     a permission is judged in the plain view too (plain_view)."""
     out = []
     for s in _sources(text):
-        low = s.lower()
-        out += [low, deslip(low)]
+        out.extend(_deslip_variants(s.lower()))
     return list(dict.fromkeys(out))
 
 
@@ -693,7 +714,12 @@ def _pairs(label) -> list:
     pairs = []
     for s in _sources(label):
         text, raw = clean_label(s), s.lower()
-        pairs += [(text, raw), (deslip(text), deslip(raw))]
+        tv, rv = _deslip_variants(text), _deslip_variants(raw)
+        if len(tv) < len(rv):
+            tv += [deslip(text)] * (len(rv) - len(tv))
+        elif len(rv) < len(tv):
+            rv += [deslip(raw)] * (len(tv) - len(rv))
+        pairs.extend(zip(tv, rv, strict=True))
     return list(dict.fromkeys(pairs))
 
 
@@ -733,6 +759,15 @@ def _label_form(text) -> str:
     return clean_label(fold(text))
 
 
+_KNOWN_PREFIX_RE = re.compile(r"^(ip|af|pw|ir)\b")
+
+
+def _two_letter_prefix(text: str) -> str:
+    """Known real 2-letter word prefix (ip/af/pw/ir) at the start of a cleaned plain label, or ''."""
+    m = _KNOWN_PREFIX_RE.match(_plain_label(text))
+    return m.group(1) if m else ""
+
+
 def _value_form(text) -> str:
     """A value as row_judged compares it: folded (fold), spacing one space, case lowered; nothing cut off its start."""
     return " ".join(fold(text).split()).lower()
@@ -754,10 +789,12 @@ def row_judged(lit, values=None, labels=None) -> tuple:
     it is taken off."""
     text = str(lit or "")
     seen = _label_form(text)
+    prefix = _two_letter_prefix(text)
     told = values if isinstance(values, dict) else {}
     if not seen:
         return (text,)
     hits = [label for label, vs in told.items() if isinstance(label, str) and _label_form(label)
+            and _two_letter_prefix(label) == prefix
             and any(seen == f"{_label_form(label)} {_value_form(v)}" for v in vs or ()
                     if isinstance(v, str) and _value_form(v) and not _action_value(v))]
     if not hits:
@@ -1002,7 +1039,8 @@ def screen_refused(text: str, allow=()) -> str | None:
         if m:
             return (f"the screen reads {m.group(0)!r}: a Wi-Fi or Bluetooth setting or an address screen, never vouched "
                     "for (docs/decisions/0008)")
-    names = list(dict.fromkeys(n for n in (clean_label(fold(m)) for m in allow) if n))
+    allow = [m for m in allow or () if m and not allow_refused(m)]
+    names = list(dict.fromkeys(n for n in (_plain_label(m) for m in allow) if n))
     if not names:
         for r in readings(text):
             for why, rx in _SCREEN_WORDS:
@@ -1012,8 +1050,8 @@ def screen_refused(text: str, allow=()) -> str | None:
         return None
     spaced = set(plain_view(readings, text))
     # each name's own readings, from the name as given too (its case tells _camel where "SteadyShot" splits)
-    every = list(dict.fromkeys(f for m in allow for x in (fold(m), clean_label(fold(m))) for f in readings(x)
-                               if f.strip() and clean_label(fold(m))))
+    every = list(dict.fromkeys(f for m in allow for x in (fold(m), _plain_label(m)) for f in readings(x)
+                               if f.strip() and _plain_label(m)))
     for r in readings(text):
         covers = [(m.start(), m.end()) for f in (names if r in spaced else every) for m in re.finditer(re.escape(f), r)]
         for why, rx in _SCREEN_WORDS:
@@ -1069,17 +1107,21 @@ def allow_refused(label: str) -> str | None:
     if net:
         return (f"{net}: by hand only, and opened remotely only where a dated owner decision names the row (--network, "
                 "docs/decisions/0008); no --allow opens it")
+    if never_open(label):
+        never = owner_never_listed(label)
+        if never:
+            return f"{never}; no --allow opens it"
     return None
 
 
 def named(label: str, allow) -> bool:
     """Whether a run's --allow words (`allow`) name `label` itself, for a run that opens that one row only with its
-    owner's word: compared folded (fold), case and spacing aside, or as the guards clean a reading (clean_label, as
-    live.open_refused compares them), so "reg. custom shoot set" names Reg. Custom Shoot Set."""
+    owner's word: compared folded (fold), case and spacing aside, or with leading symbol noise stripped (_plain_label),
+    without stripping real 2-letter prefixes ('IP', 'AF', 'PW', 'IR')."""
     def said(x) -> str:
         return " ".join(fold(x).casefold().split())
-    want = {said(label), clean_label(fold(label))} - {""}
-    return any({said(x), clean_label(fold(x))} & want for x in allow or ())
+    want = {said(label), _plain_label(label)} - {""}
+    return any({said(x), _plain_label(x)} & want for x in allow or ())
 
 
 def allowance(labels, today: str | None = None) -> str:
@@ -1770,7 +1812,7 @@ def notice_kept(text, labels=(), values=None) -> str:
     t = _NOTICE_OK.sub("", " ".join(fold(text).split())).strip()
     m = _NOTICE_FOLLOWS.fullmatch(t)
     tail = t[m.start(2):].strip() if m else ""
-    if not t or "?" in t or confirmation_refused(t) or confirmation_refused(tail) or identity_screen(t) \
+    if not t or question_mark(t) or confirmation_refused(t) or confirmation_refused(tail) or identity_screen(t) \
             or never_lifted(t):
         return ""
     if any(rx.fullmatch(t.lower()) for rx in _NOTICE_SHAPES):
@@ -2229,7 +2271,7 @@ def profile_reset_complete(text: str, lit: str, second: str | None = None) -> st
     for what, said in ((t, "the screen"), (second, "the vision model's reading")):
         if what is None:
             continue
-        if "?" in what:
+        if question_mark(what):
             return f"{said} holds a question ({' '.join(what.split())!r})"
         if any(re.search(r"\bcancel\b", r) for r in readings(what)):
             return f"{said} offers Cancel ({' '.join(what.split())!r})"
@@ -2361,7 +2403,7 @@ def asks(text, lit) -> str | None:
     words are English words: on a camera in another language a carousel's buttons are caught by none of them, only by
     the question mark and the lit text."""
     t = str(text or "")
-    if "?" in t:
+    if question_mark(t):
         return "a question mark"
     named_out = _names_left_out(fold(t))
     if any(re.search(r"\bcancel\b", r) for r in readings(named_out)):
@@ -2867,7 +2909,7 @@ def own_question(kind, text, row) -> str | None:
     a reset's question was left open)."""
     if kind not in CONFIRM_KINDS:
         return None
-    asks = "?" in str(text or "")
+    asks = question_mark(text)
     said = action_confirmation(text, row) if asks or confirm_pair(text, "") else None
     if not said and asks:
         said = confirmation(text)
@@ -3285,7 +3327,7 @@ def owner_enter(row: str, cls, kind, lit, text, options=(), seen=()) -> tuple:
             return "", "confirm"
         body = _title_off(text, row)
         safe = (shown in {plain(o) for o in seen or ()} and not registers(row) and kind not in CONFIRM_KINDS
-                and "?" not in body and not confirmation_refused(body) and not action_confirmation(body, row)
+                and not question_mark(body) and not confirmation_refused(body) and not action_confirmation(body, row)
                 and not confirm_pair(text, row))
         return "", ("step" if safe else "final")
     if cls == LIFT_CREDENTIALS and kind not in LIST_KINDS:

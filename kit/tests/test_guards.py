@@ -2397,3 +2397,71 @@ def test_whole_screen_guards_refuse_white_balances_list_read_run_together():
     assert safety.screen_refused(text) and safety.identity_screen(text)
     assert drive.press_refused("enter", "", text, "dialog", vouched=True)
     assert safety.plain_view(safety.screen_refused, text) is None
+
+
+def test_import_load_settings_and_owner_never_allow_refusals():
+    """Import and Load Settings stay closed everywhere; OWNER_NEVER rows that never_open catches refuse --allow,
+    while ordinary rows without never_open (Recall Custom hold 1) remain allowed."""
+    for label in ("Import", "Load Settings"):
+        assert safety.never_open(label), label
+        assert safety.allow_refused(label), label
+        assert live.open_refused(label), label
+    for label in ("Version", "Cleaning Mode"):
+        assert safety.allow_refused(label), label
+    assert safety.allow_refused("Recall Custom hold 1") is None
+
+
+def test_deslip_variants_catch_digit_slips_without_breaking_numbered_labels():
+    """Leading and internal 1/11 OCR slips are undone for safety checks, while genuine alphanumeric suffixes stay."""
+    for label in ("1nitialize", "1mport", "Delete A11", "Delete Al1", "Initia11ze", "F1rmware",
+                  "Pa1ring", "W1-Fi Connect", "AF I11uminator"):
+        assert any((safety.never_open(label), safety.never_lifted(label), safety.owner_never_listed(label))), label
+    for keep in ("Slot1", "PP1", "PP11", "Custom1"):
+        assert safety.deslip(keep.lower()) == keep.lower(), keep
+
+
+def test_prefix_preservation_and_allow_filtering_in_guards():
+    """IP/AF/PW/IR prefixes are never stripped as icon noise in row_judged/named/screen_refused, and disallowed names
+    passed to screen_refused never lift words on the screen."""
+    vals = {"Address Setting": ["On"], "IP Address Setting": ["On"]}
+    assert safety.row_judged("IP Address Setting On", values=vals) == ("IP Address Setting",)
+    assert safety.row_judged("IP Address Setting On", values={"Address Setting": ["On"]}) == ("IP Address Setting On",)
+    assert not safety.named("Format", ["XY Format"])
+    assert not safety.named("Illuminator", ["AF Illuminator"])
+    assert not safety.named("Reset", ["PW Reset"])
+    assert safety.screen_refused("Format", allow=["Import"])
+    assert safety.screen_refused("Cleaning Mode", allow=["Cleaning Mode"])
+    assert safety.screen_refused("Reset", allow=["PW Reset"])
+
+
+def test_fullwidth_question_marks_are_caught_everywhere():
+    """Question marks beyond ASCII '?' (such as fullwidth '\\uff1f') are refused across all confirmation helpers."""
+    q = "\uff1f"
+    assert safety.notice_kept(f"Delete card{q}") == ""
+    assert safety.profile_reset_complete(f"Reset profile{q}", "OK")
+    assert safety.asks(f"Delete card{q}", "Cancel")
+    assert safety.own_question("dialog", f"Reset all{q}", "Reset")
+    action_cls = next(iter(safety.ACTION_CLASSES))
+    assert safety.owner_enter("Reset All", action_cls, "dialog", "Run",
+                              f"Reset All Run{q}", options=("Run",), seen=("Run",)) == ("", "final")
+
+
+def test_open_refused_blocks_never_lifted_and_substring_may_open_bypasses():
+    """live.open_refused catches Initialize and deslip Delete A11/Al1 variants, blocks never-lifted or prefix-stripped
+    may_open entries, and rejects substring and action-suffix bypasses."""
+    assert live.open_refused("Setting Initialize")
+    assert live.open_refused("Delete Al1")
+    assert live.open_refused("De1ete A11")
+    assert live.open_refused("Setting Reset", {"Set"})
+    assert live.open_refused("File Number Reset", {"File Number"})
+    assert live.open_refused("Test Flash", {"AF Test"})
+    assert live.open_refused("Alt Video Light", {"Video Light"})
+    assert live.open_refused("Video Light Mode", {"Light"})
+    assert live.open_refused("Format", {"XY Format"})
+    assert live.open_refused("Load Settings", {"Load"})
+    assert live.open_refused("Cleaning Mode", {"Cleaning"})
+    assert live.open_refused("Pixel Mapping", {"Pixel"})
+    assert live.open_refused("Preset Focus/Zoom", {"Preset"})
+    assert live.open_refused("Anti-Dust Function", {"Anti-Dust"})
+    assert live.open_refused("Pre\u2011AF  Off", {"Pre-AF"}) == ""
+    assert live.open_refused("Audio Signal Volume  3", {"Audio Signal Volume"}) == ""

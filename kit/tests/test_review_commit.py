@@ -1044,6 +1044,53 @@ def test_a_flat_footer_matches_no_key_whatever_opencv_scores_there(monkeypatch):
         assert screen._menu_back_alone(a) is None and screen._lit_key(a, "ok_key") == 0.0
 
 
+def test_glyph_rejects_flat_patch_despite_noisy_opencv_and_bright_corner(monkeypatch):
+    """_glyph uses _match so flat template windows still score 0.0 even when OpenCV returns 0.99 there while scoring
+    0.1 on the single non-flat corner window with g[y0, x0] = 255."""
+    import cv2
+    import numpy as np
+
+    from camkit import screen
+
+    def noisy_match(band, t, method):
+        out = np.full((band.shape[0] - t.shape[0] + 1, band.shape[1] - t.shape[1] + 1), 0.99, np.float32)
+        out[0, 0] = 0.1
+        return out
+
+    monkeypatch.setattr(cv2, "matchTemplate", noisy_match)
+    g = np.zeros((480, 640), np.float32)
+    x0, y0, _, _ = screen.BATTERY
+    g[y0, x0] = 255.0
+    assert screen._glyph(g, "battery", screen.BATTERY, pad=0) == pytest.approx(0.1)
+
+
+def test_classify_rejects_synthetic_battery_less_playback_and_shooting_frames():
+    """Uniform mid-bright frames, thick vertical bands around x=112, empty colourful top-bar frames, and bright-top help
+    frames stay unknown instead of misclassifying as notice, dialog, menu, or helppop."""
+    import numpy as np
+
+    from camkit import screen
+
+    mid_grey = np.full((480, 640, 3), 100, np.uint8)
+    assert screen.classify(screen.features(mid_grey)) == "unknown"
+
+    white_wall = np.zeros((480, 640, 3), np.uint8)
+    white_wall[:, 100:125] = 200
+    assert screen.classify(screen.features(white_wall)) == "unknown"
+
+    no_bar_menu = np.zeros((480, 640, 3), np.uint8)
+    no_bar_menu[45:425, 0:47] = (200, 120, 40)
+    assert screen.classify(screen.features(no_bar_menu)) == "unknown"
+
+    bright_help = np.zeros((480, 640, 3), np.uint8)
+    bright_help[2:38, :] = 120
+    bright_help[45:425, 0:47] = (200, 120, 40)
+    x0, y0, x1, y1 = screen.HELP_POP
+    bright_help[y0:y1, x0:x0 + 2] = 150
+    bright_help[y0:y1, x1 - 1:x1 + 1] = 150
+    assert screen.classify(screen.features(bright_help)) == "unknown"
+
+
 def test_a_panels_consent_answers_no_other_screen_nor_key(tmp_path, monkeypatch):
     """On a notice the panel's consent lifts nothing (the notice's own judgement stands); the trash button on the panel
     meets the shape check as ever; and only scale_run builds the consent."""
